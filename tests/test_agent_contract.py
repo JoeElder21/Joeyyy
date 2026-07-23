@@ -7,6 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 AGENT_PATH = ROOT / ".codex" / "agents" / "apex_chief_of_staff.toml"
 CONFIG_PATH = ROOT / ".codex" / "config.toml"
 PROTOCOL_PATH = ROOT / "docs" / "AGENT_COMMUNITY_PROTOCOL.md"
+REGISTRY_PATH = ROOT / "docs" / "AGENT_REGISTRY.md"
+INTAKE_PATH = ROOT / "templates" / "agent-intake.md"
+AUDIT_PATH = ROOT / "templates" / "weekly-agent-audit.md"
 
 
 class AgentContractTests(unittest.TestCase):
@@ -18,19 +21,44 @@ class AgentContractTests(unittest.TestCase):
             cls.config = tomllib.load(source)
         cls.instructions = cls.agent["developer_instructions"]
 
-    def test_required_agent_fields(self):
+    def assert_phrases(self, phrases):
+        for phrase in phrases:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.instructions)
+
+    def test_required_agent_fields_and_compatible_name(self):
         self.assertEqual(self.agent["name"], "apex_chief_of_staff")
-        self.assertTrue(self.agent["description"].strip())
+        self.assertIn("Agent 007", self.agent["description"])
         self.assertTrue(self.instructions.strip())
 
-    def test_agent_can_execute_without_its_old_approval_gate(self):
-        self.assertEqual(self.agent["sandbox_mode"], "workspace-write")
-        self.assertEqual(self.agent["approval_policy"], "never")
-        self.assertNotIn("<approval_boundary>", self.instructions)
-        self.assertNotIn("ask Joe for explicit approval", self.instructions)
+    def test_activation_contract(self):
+        self.assert_phrases([
+            "<identity_and_activation>",
+            'When Joe says "Activate Agent 007"',
+            '"Agent 007 activated."',
+            "Do not require a second invocation",
+            "operating mode, not a claim of omniscience",
+        ])
+
+    def test_cross_brain_governance(self):
+        self.assert_phrases([
+            "<brain_governance>",
+            "Agent 007 is the only cross-brain",
+            "APEX owns professional and firm context",
+            "JEOS owns personal context",
+            "Keep each brain's source records separate",
+            "Route domain writes through the owning brain's agent",
+            "Unknown ownership means investigate and flag",
+        ])
+
+    def test_lare_conflict_is_preserved(self):
+        self.assertIn("Preserve the current recorded LARE ownership conflict", self.instructions)
+        self.assertIn("do not silently choose or merge", self.instructions)
 
     def test_delegated_authority_covers_requested_actions(self):
-        required = [
+        self.assertEqual(self.agent["sandbox_mode"], "workspace-write")
+        self.assertEqual(self.agent["approval_policy"], "never")
+        self.assert_phrases([
             "<delegated_authority>",
             "send messages and emails",
             "calendar events",
@@ -38,32 +66,53 @@ class AgentContractTests(unittest.TestCase):
             "edit authorized external systems",
             "commit, and push code",
             "Do not ask Joe for per-action approval",
-        ]
-        for phrase in required:
-            with self.subTest(phrase=phrase):
-                self.assertIn(phrase, self.instructions)
+        ])
 
-    def test_agent_community_contract_is_present(self):
-        required = [
+    def test_agent_community_contract(self):
+        self.assert_phrases([
             "<agent_community>",
-            "delegate bounded work",
-            "Run independent work in parallel",
+            "smallest useful specialist team",
+            "delegation packet",
             "one designated writer",
             "Reconcile disagreements using evidence",
-        ]
-        for phrase in required:
-            with self.subTest(phrase=phrase):
-                self.assertIn(phrase, self.instructions)
+        ])
         self.assertTrue(PROTOCOL_PATH.is_file())
 
-    def test_context_boundary_is_preserved(self):
-        self.assertIn("APEX is professional and career context", self.instructions)
-        self.assertIn("JEOS is personal context", self.instructions)
-        self.assertIn("Keep them separate", self.instructions)
+    def test_registry_and_new_agent_intake(self):
+        self.assert_phrases([
+            "<agent_registry_and_intake>",
+            "New agents begin as candidates",
+            "read its complete Markdown, TOML, YAML",
+            "Do not blindly concatenate prompts",
+            "smallest reusable improvement",
+            "rollback point",
+        ])
+        self.assertTrue(REGISTRY_PATH.is_file())
+        self.assertTrue(INTAKE_PATH.is_file())
 
-    def test_memory_claims_are_guarded(self):
+    def test_reflection_and_error_learning(self):
+        self.assert_phrases([
+            "<reflection_and_self_improvement>",
+            "Log material errors",
+            "recurrence test",
+            "testable, versioned, and reversible",
+            "Propose new specialists",
+        ])
+
+    def test_weekly_audit_contract(self):
+        self.assert_phrases([
+            "<weekly_audit>",
+            "every registered agent",
+            "Compare APEX and JEOS",
+            "Analyze Agent 007's own decisions",
+            "Never manufacture metrics",
+        ])
+        self.assertTrue(AUDIT_PATH.is_file())
+
+    def test_memory_and_access_claims_are_guarded(self):
         self.assertIn("Treat Yaps Memory and every external connector as optional", self.instructions)
         self.assertIn("Never imply memory or connector access", self.instructions)
+        self.assertIn("Verify every agent, connector, skill, memory source", self.instructions)
 
     def test_default_close_is_actionable(self):
         self.assertIn("Joe's Next Move", self.instructions)
