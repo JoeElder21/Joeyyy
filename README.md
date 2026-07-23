@@ -47,6 +47,10 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/SPECIALIST_CORPS_PROTOCOL.md` — specialist isolation and operating system.
 - `docs/BRAIN_CADENCE_RUNBOOK.md` — daily, weekly, and monthly brain-specific orchestration.
 - `docs/SPECIALIST_ACCEPTANCE_TESTS.md` — static, shadow, activation, and value gates.
+- `docs/ECOSYSTEM_REPO_ANALYSIS.md` — ranked external-repository analysis and build/absorb/skip verdicts.
+- `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
+- `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
+- `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
 - `schemas/` — delegation, handoff, and roundtable packet contracts.
 - `templates/agent-intake.md` — new-agent onboarding and validation.
 - `templates/specialist-handoff.md` — human-readable specialist packet.
