@@ -21,4 +21,5 @@ jobs:
       - name: Validate Agent 007 and specialist contracts
         run: |
           python scripts/privacy_guard.py
+          python scripts/validate_specialist_corps.py
           python -m unittest discover -s tests -v

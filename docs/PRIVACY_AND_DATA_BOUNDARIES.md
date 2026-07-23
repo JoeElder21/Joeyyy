@@ -17,9 +17,9 @@ This repository is public. It stores only agent contracts, logical namespaces, s
 - Evidence references declare owner brain, source type, Agent 007 scope verification, and sensitivity; sensitivity may never be downgraded downstream.
 - APEX evidence stays in APEX namespaces and targets.
 - JEOS evidence stays in JEOS namespaces and targets.
-- Specialists receive only task-scoped evidence and never open opposite-brain or unknown sources.
+- Specialists receive only task-scoped, PacketGuard-validated evidence and no direct connector handles under this contract; Agent 007 or a runtime-enforced brain-scoped proxy performs retrieval.
 - Cross-brain dependencies use a minimized constraint packet created by Agent 007; raw source payloads do not cross.
-- Health or finance constraints that remain inside JEOS use a separate, expiring brain-private constraint packet created by Agent 007.
+- Private constraints that remain inside JEOS use a separate, expiring brain-private constraint packet created by Agent 007. Its `constraint_type:use_mode` pair must match the destination agent's exact manifest profile.
 - A writer lease names the only agent authorized to mutate a resource for a mission.
 - `scripts/packet_guard.py` rejects manifest, namespace, target, roundtable, and lease mismatches before execution.
 - Completion requires a schema-valid mutation result containing an affirmed expected-state match, observed state, readback evidence, a lease-bounded verification time, rollback method, verified rollback test, and rollback evidence.
@@ -31,4 +31,4 @@ This repository is public. It stores only agent contracts, logical namespaces, s
 - `scripts/privacy_guard.py` scans every tracked UTF-8 text file regardless of extension and rejects binary/non-UTF-8 payloads, Git LFS pointers, common document/media/archive types, credentials, and bearer tokens in this public source tree; CI runs it before the contract suite.
 - Shadow fixtures are synthetic. Runtime records are never copied into tests.
 
-Prompt contracts strengthen isolation, but hard connector isolation depends on runtime credentials, scopes, and write proxies. Agent 007 must verify the active environment before claiming that stronger guarantee.
+Prompt contracts strengthen isolation, but hard connector isolation depends on runtime credentials, scopes, and write proxies. No specialist may become `active` until Agent 007 verifies that an opposite-brain connector request cannot reach a connector in the selected runtime.

@@ -51,7 +51,7 @@ Mirroring provides a consistent operating grammar. It does not create shared ide
 7. Readback and rollback evidence before completed mutation claims.
 8. Valid schemas and positive/negative fixtures.
 9. Public-repository privacy scan.
-10. One controlled real mission before each specialist can move from shadow to active.
+10. One controlled real mission for every material mode before a specialist can move from shadow to active.
 
 ## Rollback
 

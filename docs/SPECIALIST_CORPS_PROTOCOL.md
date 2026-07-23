@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The v2 Specialist Corps gives APEX and JEOS the same five operating functions while preserving separate identities, evidence, memory, targets, and communication. Agent 007 remains the only cross-brain agent, final integrator, and routine executor.
+The v2.1 Specialist Corps gives APEX and JEOS the same five operating functions while preserving separate identities, evidence, memory, targets, and communication. Agent 007 remains the only cross-brain agent, final integrator, and routine executor.
 
 The five classes are:
 
@@ -83,9 +83,10 @@ JEOS role ownership is deliberately non-overlapping:
 - APEX namespace prefix: `APEX::`; target prefix: `APEX/`; roundtable: `APEX::Roundtable`.
 - JEOS namespace prefix: `JEOS::`; target prefix: `JEOS/`; roundtable: `JEOS::Roundtable`.
 - Every specialist has one unique namespace and an exact array of allowed targets in its brain manifest.
-- Specialists remain read-only during shadow stage and return proposed writes.
+- Specialists remain read-only during shadow stage, receive no direct connector handles under this contract, and return proposed writes. Agent 007 or a runtime-enforced brain proxy supplies only PacketGuard-validated evidence.
 - One schema-valid writer lease identifies the only writer for a canonical brain/target/resource across all missions; active leases must expire within 24 hours.
 - A completed mutation must conform to `schemas/mutation_result.schema.json` and include an explicit, exact expected-state match, observed state, readback evidence, a verification time inside the writer lease, rollback method, verified rollback test, and rollback evidence.
+- A specialist may become writer-eligible only after `active` or `value-proven` status, a versioned native sandbox change away from `read-only`, an allowlisted owner target, and a matching lease. Status alone grants nothing.
 - Private runtime memory never enters the public repository.
 
 ## Collaboration system
@@ -98,14 +99,16 @@ Specialists collaborate through:
 
 Agent 007 resolves each cycle:
 
-1. Run `python scripts/packet_guard.py <schema> <packet.json>` with the applicable lease, delegation, cross-brain constraint, brain-private constraint, and mutation-result ledgers. Missing required ledgers fail closed. Sensitivity, permitted actions, exact evidence records, mission/resource identity, and timestamps remain monotonic and delegation-bound; derived analysis belongs in findings and never invents a new source record.
-2. Deduplicate the mission and reject any active lease collision on the canonical brain/target/resource.
-3. Run independent analyses in parallel when useful.
-4. Route targeted same-brain challenges.
-5. Reconcile by evidence and preserve unresolved conflict.
-6. Execute or assign the authorized mutation.
-7. Read the target back and preserve rollback evidence.
-8. Record outcome, error, or reusable learning.
+1. Issue a v2.1 delegation with exactly one registered mode, stable definition-of-done IDs, registered required artifact types, and a deterministic mutation contract.
+2. Run `python scripts/packet_guard.py <schema> <packet.json>` with the applicable lease, delegation, cross-brain constraint, brain-private constraint, and mutation-result ledgers. Missing required ledgers fail closed. Sensitivity, permitted actions, exact evidence records, mission/resource identity, and timestamps remain monotonic and delegation-bound; derived analysis belongs in findings and never invents a new source record.
+3. Require a v2.1 handoff with typed artifact records, one validation result per stable criterion, and complete deterministic operation, artifact-record, idempotency, version, readback, rollback, writer, and lease fields for every proposed mutation.
+4. Deduplicate the mission and reject any active lease collision on the canonical brain/target/resource.
+5. Run independent analyses in parallel when useful.
+6. Route targeted same-brain challenges.
+7. Reconcile by evidence and preserve unresolved conflict.
+8. Execute or assign the authorized mutation.
+9. Read the target back and preserve rollback evidence.
+10. Record outcome, error, or reusable learning.
 
 Specialists invoked directly by Joe without a valid Agent 007 packet enter `direct_read_only` mode. They may use current-message text only and may not open attachments, search memory, call connectors, emit source evidence, propose canonical writes, or claim external completion. Unclassified direct content remains `restricted` until Agent 007 classifies it. PacketGuard enforces sentinel identifiers and a return-to-007 path.
 
@@ -115,6 +118,12 @@ Challenge freshness prevents unnecessary committee work:
 - Weekly JEOS reflection synthesis and capacity status must be seven days old or fresher. A current reflection synthesis may cite older dated observations needed for longitudinal patterns.
 - A documented material change overrides the normal freshness window.
 - Agent 007 invokes only the smallest team whose independent expertise changes the decision.
+
+## Routing and cadence
+
+Routing resolves in this order: brain boundary, explicit agent, canonical target owner, JEOS private-constraint profile when applicable, most-specific intent, cadence route, and Agent 007 fallback. Lower numeric intent precedence wins after the earlier rules.
+
+The authoritative sequences live in `config/specialist_corps.toml`, each brain manifest, and `docs/BRAIN_CADENCE_RUNBOOK.md`. They cover daily, weekly, and monthly cycles. These sequences are orchestration plans for an invoked session, not claims of scheduled or continuous work.
 
 ## Architecture patterns adopted
 
@@ -131,12 +140,12 @@ The reference images contribute architectural patterns:
 ## Lifecycle
 
 - `candidate`: proposed, not routed.
-- `shadow`: static contracts pass; advice and proposed writes only.
-- `active`: one controlled real mission passes boundary, accuracy, handoff, writer, and readback tests.
+- `shadow`: static contracts and synthetic packet tests pass; advice and proposed writes only.
+- `active`: every material mode passes a controlled real mission, boundary and accuracy gates, runtime connector-isolation verification, handoff validation, and readback where a mutation occurs.
 - `value-proven`: observed benefit remains positive after review, correction, maintenance, and failure burden.
 - `restricted`, `deprecated`, or `retired`: scope is limited or removed with a reversible record.
 
-All ten v2 agents deploy in shadow stage. Static tests do not prove real-world value.
+All ten v2.1 agents deploy in shadow stage. Static and synthetic packet tests do not invoke the named agents and do not prove real-world value.
 
 ## Completion truth
 

@@ -1,8 +1,4 @@
-sandbox_mode = "workspace-write"
-approval_policy = "never"
-
-[sandbox_workspace_write]
-network_access = true
+sandbox_mode = "read-only"
 
 [agents]
 enabled = true

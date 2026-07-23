@@ -244,6 +244,12 @@ class PacketGuard:
             errors.append(f"agent {agent} belongs to {expected['brain']}, not {packet['owner_brain']}")
         if packet["memory_namespace"] != expected["memory_namespace"]:
             errors.append(f"agent {agent} must use memory namespace {expected['memory_namespace']}")
+        if packet.get("schema_version") == "2.1":
+            mode = packet.get("mode")
+            if mode == "direct_read_only" and packet.get("invocation_mode") == "direct_read_only":
+                pass
+            elif mode not in expected.get("modes", []):
+                errors.append(f"mode {mode!r} is not registered for agent {agent}")
         return errors
 
     def _registered_target_errors(self, packet: dict[str, Any]) -> list[str]:
@@ -255,11 +261,44 @@ class PacketGuard:
         }
         targets.add(self.roundtable_targets[brain])
         errors: list[str] = []
-        if packet["writer_agent"] != "apex_chief_of_staff":
-            errors.append("shadow-stage writer must be Agent 007")
         if packet["write_target"] not in targets:
             errors.append(f"write target is not registered to the {brain} unit")
+        elif packet["writer_agent"] not in self._eligible_writers(
+            brain, packet["write_target"]
+        ):
+            errors.append(
+                "writer is not eligible for the target at the deployed lifecycle stage"
+            )
         return errors
+
+    def _target_owners(self, brain: str, target: str) -> list[str]:
+        return [
+            agent
+            for agent in self.rosters[brain]
+            if target in self.agents[agent]["write_targets"]
+        ]
+
+    def _eligible_writers(self, brain: str, target: str) -> set[str]:
+        eligible = {"apex_chief_of_staff"}
+        owners = self._target_owners(brain, target)
+        if len(owners) != 1:
+            return eligible
+        owner = owners[0]
+        meta = self.agents[owner]
+        if (
+            meta.get("status") not in {"active", "value-proven"}
+            or not meta.get("active_writer_eligible", False)
+        ):
+            return eligible
+        native_file = self.root / meta["file"]
+        try:
+            with native_file.open("rb") as source:
+                native = tomllib.load(source)
+        except (FileNotFoundError, tomllib.TOMLDecodeError):
+            return eligible
+        if native.get("sandbox_mode") != "read-only":
+            eligible.add(owner)
+        return eligible
 
     def _lease_match_errors(
         self,
@@ -282,7 +321,7 @@ class PacketGuard:
             "mission_id": packet["mission_id"],
             "resource_id": packet["resource_id"],
             "owner_brain": packet["owner_brain"],
-            "writer_agent": "apex_chief_of_staff",
+            "writer_agent": packet.get("writer_agent"),
             "write_target": target,
             "status": "active",
         }
@@ -433,18 +472,43 @@ class PacketGuard:
             errors.append(
                 "delegation with evidence requires action 'read_packet_evidence'"
             )
+        if packet.get("schema_version") == "2.1":
+            required_v21 = [
+                "mode",
+                "definition_of_done_ids",
+                "required_artifact_types",
+                "mutation_contract",
+            ]
+            for field in required_v21:
+                if field not in packet:
+                    errors.append(f"2.1 delegation requires field {field}")
+            criterion_ids = packet.get("definition_of_done_ids", [])
+            if len(criterion_ids) != len(packet["definition_of_done"]):
+                errors.append(
+                    "2.1 definition_of_done_ids must align one-to-one with definition_of_done"
+                )
+            if len(criterion_ids) != len(set(criterion_ids)):
+                errors.append("2.1 definition_of_done_ids must be unique")
+            requested_types = set(packet.get("required_artifact_types", []))
+            if not requested_types.issubset(set(meta.get("artifact_types", []))):
+                errors.append(
+                    "2.1 required artifact type is not registered to the selected agent"
+                )
         allowed_targets = set(meta["write_targets"])
         for target in packet["allowed_write_targets"]:
             if target not in allowed_targets:
                 errors.append(f"write target {target!r} is outside {packet['agent']}'s allowlist")
         if packet["allowed_write_targets"]:
-            if packet["writer_agent"] != "apex_chief_of_staff":
-                errors.append("shadow-stage writes require Agent 007 as writer")
+            target = packet["allowed_write_targets"][0]
+            if packet["writer_agent"] not in self._eligible_writers(brain, target):
+                errors.append(
+                    "delegation writer is not eligible for the target at the deployed stage"
+                )
             if not packet["writer_lease_id"]:
                 errors.append("a write-bearing delegation requires a writer lease")
             errors.extend(
                 self._lease_match_errors(
-                    packet, packet["allowed_write_targets"][0], active_leases
+                    packet, target, active_leases
                 )
             )
         elif packet["writer_agent"] is not None or packet["writer_lease_id"] is not None:
@@ -486,6 +550,10 @@ class PacketGuard:
         ]:
             if packet[field] != delegation[field]:
                 errors.append(f"handoff field {field} must match originating delegation")
+        if packet.get("schema_version") == "2.1" and packet.get("mode") != delegation.get(
+            "mode"
+        ):
+            errors.append("2.1 handoff mode must match originating delegation")
         return delegation, errors
 
     def _handoff_errors(
@@ -513,6 +581,9 @@ class PacketGuard:
                 "validation",
             ]:
                 if packet[field]:
+                    errors.append(f"boundary_blocked handoff must keep {field} empty")
+            for field in ["artifacts", "criterion_validation"]:
+                if packet.get(field):
                     errors.append(f"boundary_blocked handoff must keep {field} empty")
             if packet["blockers"] != [BOUNDARY_BLOCKER]:
                 errors.append(
@@ -556,6 +627,10 @@ class PacketGuard:
                 )
             if packet["recommended_next_handoff"] != "apex_chief_of_staff":
                 errors.append("direct_read_only handoff must return to Agent 007")
+            if packet.get("schema_version") == "2.1" and packet.get("mode") != (
+                "direct_read_only"
+            ):
+                errors.append("2.1 direct_read_only handoff mode must be direct_read_only")
         else:
             if packet["delegation_id"] is None:
                 errors.append("delegated handoff requires delegation_id")
@@ -604,6 +679,61 @@ class PacketGuard:
                         f"handoff field {field} requires delegated action {action!r}"
                     )
 
+        if packet.get("schema_version") == "2.1":
+            for field in ["mode", "artifacts", "criterion_validation"]:
+                if field not in packet:
+                    errors.append(f"2.1 handoff requires field {field}")
+            record_ids: set[str] = set()
+            artifact_types: set[str] = set()
+            delegated_source_refs = {item["source_ref"] for item in packet["evidence"]}
+            for artifact in packet.get("artifacts", []):
+                artifact_type = artifact["artifact_type"]
+                artifact_types.add(artifact_type)
+                if artifact_type not in set(meta.get("artifact_types", [])):
+                    errors.append(
+                        f"artifact type {artifact_type!r} is not registered to {packet['agent']}"
+                    )
+                for record in artifact["records"]:
+                    record_id = record["record_id"]
+                    if record_id in record_ids:
+                        errors.append(f"duplicate artifact record_id {record_id!r}")
+                    record_ids.add(record_id)
+                    if not record["fields"]:
+                        errors.append(
+                            f"artifact record {record_id!r} must contain structured fields"
+                        )
+                    if not set(record["source_refs"]).issubset(delegated_source_refs):
+                        errors.append(
+                            f"artifact record {record_id!r} cites undelegated evidence"
+                        )
+            criterion_items = packet.get("criterion_validation", [])
+            criterion_ids = [item["criterion_id"] for item in criterion_items]
+            if len(criterion_ids) != len(set(criterion_ids)):
+                errors.append("criterion_validation criterion_id values must be unique")
+            for item in criterion_items:
+                if not set(item["evidence_record_ids"]).issubset(record_ids):
+                    errors.append(
+                        f"criterion {item['criterion_id']!r} cites an unknown artifact record"
+                    )
+            if packet["status"] == "completed":
+                if not packet.get("artifacts"):
+                    errors.append("completed 2.1 handoff requires typed artifacts")
+                if delegation is not None:
+                    required_types = set(delegation["required_artifact_types"])
+                    if not required_types.issubset(artifact_types):
+                        errors.append(
+                            "completed 2.1 handoff is missing a required artifact type"
+                        )
+                    required_criteria = delegation["definition_of_done_ids"]
+                    if set(criterion_ids) != set(required_criteria):
+                        errors.append(
+                            "completed 2.1 handoff must validate every stable criterion ID"
+                        )
+                    if any(item["status"] != "passed" for item in criterion_items):
+                        errors.append(
+                            "completed 2.1 handoff requires every criterion to pass"
+                        )
+
         delegated_targets = set(delegation["allowed_write_targets"]) if delegation else set()
         for proposed in packet["proposed_writes"]:
             if proposed["target"] not in set(meta["write_targets"]):
@@ -612,8 +742,42 @@ class PacketGuard:
                 )
             if delegation is not None and proposed["target"] not in delegated_targets:
                 errors.append("proposed write exceeds originating delegation")
-            if proposed["writer_agent"] != "apex_chief_of_staff":
-                errors.append("shadow-stage proposed writes require Agent 007 as writer")
+            if proposed["writer_agent"] not in self._eligible_writers(
+                packet["owner_brain"], proposed["target"]
+            ):
+                errors.append(
+                    "proposed writer is not eligible for the target at the deployed stage"
+                )
+            if delegation is not None and proposed["writer_agent"] != delegation["writer_agent"]:
+                errors.append("proposed writer must match originating delegation")
+            if packet.get("schema_version") == "2.1":
+                required_proposal = [
+                    "operation",
+                    "record_type",
+                    "artifact_record_ids",
+                    "idempotency_key",
+                    "expected_version",
+                ]
+                for field in required_proposal:
+                    if field not in proposed:
+                        errors.append(f"2.1 proposed write requires field {field}")
+                if not set(proposed.get("artifact_record_ids", [])).issubset(record_ids):
+                    errors.append("2.1 proposed write cites an unknown artifact record")
+                if delegation is not None:
+                    allowed_operations = set(
+                        delegation["mutation_contract"]["allowed_operations"]
+                    )
+                    if proposed.get("operation") not in allowed_operations:
+                        errors.append(
+                            "2.1 proposed-write operation exceeds mutation contract"
+                        )
+                    if (
+                        delegation["mutation_contract"]["require_expected_version"]
+                        and proposed.get("expected_version") is None
+                    ):
+                        errors.append(
+                            "2.1 mutation contract requires an expected version"
+                        )
             lease_packet = {
                 **packet,
                 **proposed,
@@ -778,8 +942,12 @@ class PacketGuard:
         errors: list[str] = []
         if packet["write_target"] not in self.agents[owner]["write_targets"]:
             errors.append("memory target is outside the namespace owner's allowlist")
-        if packet["writer_agent"] != "apex_chief_of_staff":
-            errors.append("shadow-stage memory writer must be Agent 007")
+        if packet["writer_agent"] not in self._eligible_writers(
+            brain, packet["write_target"]
+        ):
+            errors.append(
+                "memory writer is not eligible for the target at the deployed stage"
+            )
         created_at = self._parse_timestamp(packet["created_at"], "created_at", errors)
         if created_at and created_at > datetime.now(timezone.utc) + timedelta(minutes=5):
             errors.append("memory record created_at is in the future")
@@ -855,6 +1023,28 @@ class PacketGuard:
             errors.append("brain-private sensitive constraints are JEOS-only")
         if packet["destination_agent"] not in self.rosters[packet["owner_brain"]]:
             errors.append("private constraint destination agent is outside owner brain")
+        else:
+            profile = (
+                f"{packet['constraint_type']}:{packet.get('use_mode')}"
+                if packet.get("use_mode")
+                else packet["constraint_type"]
+            )
+            allowed = set(
+                self.agents[packet["destination_agent"]].get(
+                    "private_constraint_profiles", []
+                )
+            )
+            if packet.get("schema_version") == "2.1":
+                if "use_mode" not in packet:
+                    errors.append("2.1 private constraint requires use_mode")
+                elif profile not in allowed:
+                    errors.append(
+                        "private constraint profile is not allowed for destination agent"
+                    )
+            elif not any(item.startswith(f"{packet['constraint_type']}:") for item in allowed):
+                errors.append(
+                    "private constraint type is not allowed for destination agent"
+                )
         if not re.fullmatch(r"[0-9a-f]{64}", packet["source_proof_hash"]):
             errors.append("source_proof_hash must be a lowercase SHA-256 digest")
         if "\n" in packet["constraint_summary"]:
