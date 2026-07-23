@@ -31,7 +31,7 @@
     "mission_id": {"type": "string", "minLength": 1},
     "resource_id": {"type": "string", "minLength": 1},
     "owner_brain": {"enum": ["APEX", "JEOS"]},
-    "writer_agent": {"const": "apex_chief_of_staff"},
+    "writer_agent": {"type": "string", "minLength": 1},
     "writer_lease_id": {"type": "string", "minLength": 1},
     "write_target": {"type": "string", "minLength": 1},
     "status": {"enum": ["attempted", "failed", "written", "verified", "rolled_back"]},

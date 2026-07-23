@@ -123,6 +123,62 @@ class PacketContractTests(unittest.TestCase):
             [],
         )
 
+    def v21_readonly_pair(self):
+        delegation = deepcopy(self.delegation)
+        delegation.update(
+            {
+                "schema_version": "2.1",
+                "allowed_write_targets": [],
+                "writer_agent": None,
+                "writer_lease_id": None,
+                "mode": "operating_campaign",
+                "definition_of_done_ids": ["campaign-source-proof"],
+                "required_artifact_types": ["campaign_map"],
+                "mutation_contract": {
+                    "allowed_operations": [],
+                    "require_idempotency_key": True,
+                    "require_expected_version": True,
+                },
+            }
+        )
+        handoff = deepcopy(self.handoff)
+        record_id = "campaign-map-record-1"
+        handoff.update(
+            {
+                "schema_version": "2.1",
+                "mode": "operating_campaign",
+                "artifacts": [
+                    {
+                        "artifact_type": "campaign_map",
+                        "records": [
+                            {
+                                "record_id": record_id,
+                                "record_type": "campaign_record",
+                                "source_refs": ["synthetic-goals-v1"],
+                                "as_of": None,
+                                "source_locator": "synthetic-goals-v1",
+                                "revision": "synthetic-v1",
+                                "content_hash": None,
+                                "fields": {"priority": "Source-backed priority one."},
+                                "confidence": "source-backed",
+                            }
+                        ],
+                    }
+                ],
+                "criterion_validation": [
+                    {
+                        "criterion_id": "campaign-source-proof",
+                        "status": "passed",
+                        "evidence_record_ids": [record_id],
+                        "note": "The campaign record cites delegated evidence.",
+                    }
+                ],
+                "proposed_writes": [],
+                "recommended_next_handoff": "apex_chief_of_staff",
+            }
+        )
+        return delegation, handoff
+
     def test_valid_delegation_and_handoff_are_bound_to_lease_and_origin(self):
         self.assertValid("delegation_packet.schema.json", self.delegation, [self.lease])
         self.assertValid(
@@ -130,6 +186,109 @@ class PacketContractTests(unittest.TestCase):
             self.handoff,
             [self.lease],
             delegations=[self.delegation],
+        )
+
+    def test_v21_typed_readonly_contract_is_mode_and_criterion_bound(self):
+        delegation, handoff = self.v21_readonly_pair()
+        self.assertValid("delegation_packet.schema.json", delegation)
+        self.assertValid(
+            "handoff_packet.schema.json",
+            handoff,
+            delegations=[delegation],
+        )
+
+        wrong_mode = deepcopy(delegation)
+        wrong_mode["mode"] = "unregistered_mode"
+        self.assertInvalid("delegation_packet.schema.json", wrong_mode)
+
+        missing_artifact = deepcopy(handoff)
+        missing_artifact["artifacts"] = []
+        self.assertInvalid(
+            "handoff_packet.schema.json",
+            missing_artifact,
+            delegations=[delegation],
+        )
+
+        wrong_criterion = deepcopy(handoff)
+        wrong_criterion["criterion_validation"][0]["criterion_id"] = "other-criterion"
+        self.assertInvalid(
+            "handoff_packet.schema.json",
+            wrong_criterion,
+            delegations=[delegation],
+        )
+
+        undelegated_source = deepcopy(handoff)
+        undelegated_source["artifacts"][0]["records"][0]["source_refs"] = [
+            "undelegated-source"
+        ]
+        self.assertInvalid(
+            "handoff_packet.schema.json",
+            undelegated_source,
+            delegations=[delegation],
+        )
+
+    def test_v21_deterministic_write_and_shadow_writer_eligibility(self):
+        delegation, handoff = self.v21_readonly_pair()
+        delegation.update(
+            {
+                "allowed_write_targets": ["APEX/Strategy-Campaigns"],
+                "writer_agent": "apex_chief_of_staff",
+                "writer_lease_id": "lease-1",
+                "mutation_contract": {
+                    "allowed_operations": ["upsert"],
+                    "require_idempotency_key": True,
+                    "require_expected_version": True,
+                },
+            }
+        )
+        handoff["proposed_writes"] = [
+            {
+                "target": "APEX/Strategy-Campaigns",
+                "expected_state": "One campaign row.",
+                "validation_readback": "Read by mission ID.",
+                "rollback": "Delete by mission ID.",
+                "writer_agent": "apex_chief_of_staff",
+                "writer_lease_id": "lease-1",
+                "operation": "upsert",
+                "record_type": "campaign_record",
+                "artifact_record_ids": ["campaign-map-record-1"],
+                "idempotency_key": "mission-1:resource-1:campaign-record-1",
+                "expected_version": "synthetic-v0",
+            }
+        ]
+        self.assertValid(
+            "delegation_packet.schema.json",
+            delegation,
+            [self.lease],
+        )
+        self.assertValid(
+            "handoff_packet.schema.json",
+            handoff,
+            [self.lease],
+            delegations=[delegation],
+        )
+
+        missing_version = deepcopy(handoff)
+        missing_version["proposed_writes"][0]["expected_version"] = None
+        self.assertInvalid(
+            "handoff_packet.schema.json",
+            missing_version,
+            [self.lease],
+            delegations=[delegation],
+        )
+
+        wrong_operation = deepcopy(handoff)
+        wrong_operation["proposed_writes"][0]["operation"] = "replace"
+        self.assertInvalid(
+            "handoff_packet.schema.json",
+            wrong_operation,
+            [self.lease],
+            delegations=[delegation],
+        )
+
+        self.assertEqual(
+            self.guard._eligible_writers("APEX", "APEX/Strategy-Campaigns"),
+            {"apex_chief_of_staff"},
         )
 
     def test_write_bearing_packets_fail_closed_without_ledgers(self):
@@ -650,6 +809,23 @@ class PacketContractTests(unittest.TestCase):
         }
         self.assertValid("cross_brain_constraint_packet.schema.json", cross)
         self.assertValid("brain_private_constraint_packet.schema.json", private)
+        private_v21 = deepcopy(private)
+        private_v21.update(
+            {
+                "schema_version": "2.1",
+                "use_mode": "life_planning",
+            }
+        )
+        self.assertValid("brain_private_constraint_packet.schema.json", private_v21)
+        wrong_profile = deepcopy(private_v21)
+        wrong_profile["use_mode"] = "capacity_only"
+        self.assertInvalid("brain_private_constraint_packet.schema.json", wrong_profile)
+        wrong_destination = deepcopy(private_v21)
+        wrong_destination["destination_agent"] = "jeos_reflection_forge"
+        self.assertInvalid(
+            "brain_private_constraint_packet.schema.json",
+            wrong_destination,
+        )
 
         delegation = {
             **deepcopy(self.delegation),

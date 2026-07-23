@@ -6,7 +6,7 @@ This is the canonical cross-brain index for agents governed by Agent 007. Brain-
 
 `candidate` → `shadow` → `active` → `value-proven` / `restricted` / `deprecated` / `retired`
 
-Static validation permits shadow operation. An agent becomes active only after its configuration, boundary behavior, handoff, writer-lease behavior, and one controlled real mission with readback evidence are recorded. Value-proven additionally requires observed net benefit after review, correction, maintenance, and failure burden.
+Static and synthetic packet validation permit shadow operation. An agent becomes active only after every material mode has controlled real-mission evidence, verified boundary behavior, runtime connector isolation, handoff accuracy, writer-lease behavior, and readback where a mutation occurs. Value-proven additionally requires observed net benefit after review, correction, maintenance, and failure burden.
 
 ## Agent 007 / APEX Chief of Staff
 
@@ -22,10 +22,10 @@ Static validation permits shadow operation. An agent becomes active only after i
 - Write targets: cross-brain governance plus owner-routed domain targets; one active writer lease per canonical brain/target/resource
 - Boundaries: sole cross-brain agent; preserve brain ownership; no unsupported access claims; no silent conflict merging; platform and professional controls remain in force
 - Handoff: `docs/AGENT_COMMUNITY_PROTOCOL.md` and `schemas/`
-- Validation: `tests/test_agent_contract.py` and `tests/test_specialist_corps.py`
+- Validation: `scripts/validate_specialist_corps.py`, `tests/test_agent_contract.py`, `tests/test_specialist_corps.py`, and `tests/test_local_validation.py`
 - Version: 2.1
 - Last audit: v2 mirrored-corps migration, 2026-07-23
-- Known errors: no v2 runtime evidence yet
+- Known errors: no v2.1 named-specialist runtime evidence yet
 
 ## APEX specialist unit
 
@@ -57,16 +57,16 @@ Brain-owned triggers, outputs, routes, and challenge pairs: `brains/jeos/agents.
 
 ## Shared specialist contract
 
-- Inputs: a schema-valid, brain-matched delegation packet and only its allowed evidence; direct invocation is contained to `direct_read_only`
-- Outputs: a schema-valid handoff with evidence, assumptions, challenges, proposed writes, validation, and next handoff
-- Tools/connectors/skills: inherited only when verified in the active runtime and permitted by the owner-brain packet
-- Write behavior: exact per-agent target arrays live in the manifests; proposed mutations only while shadow; the named writer lease controls one resource mutation
+- Inputs: a schema-valid v2.1, brain-matched, single-mode delegation packet and only its allowed evidence; direct invocation is contained to `direct_read_only`
+- Outputs: a schema-valid handoff with registered typed artifacts, stable criterion validation, evidence, assumptions, challenges, deterministic proposed writes, and next handoff
+- Tools/connectors/skills: specialists receive no direct connector handles under this contract; Agent 007 or a runtime-enforced brain proxy supplies PacketGuard-validated evidence
+- Write behavior: exact per-agent target arrays live in the manifests; proposed mutations only while shadow; Agent 007 holds the writer lease until a specialist is active or value-proven, its native sandbox is versioned away from read-only, and the exact target is allowlisted
 - Communication: same-brain asks, challenges, and handoffs only; Agent 007 is the sole bridge
-- Validation: `scripts/packet_guard.py` enforces relational packet rules; `schemas/mutation_result.schema.json` proves readback and rollback
+- Validation: `scripts/packet_guard.py` enforces relational packet rules; `scripts/validate_specialist_corps.py` validates synthetic contracts and boundary probes without invoking agents; `schemas/mutation_result.schema.json` proves readback and rollback
 - Privacy: runtime private evidence is never committed to this public repository
-- Version: 2.0.0
-- Last audit: static migration validation pending
-- Known errors: none observed; no v2 controlled mission has run
+- Version: 2.1.0
+- Last audit: v2.1 static and synthetic contract hardening, 2026-07-23
+- Known errors: no controlled real mission has run; named-agent behavior and runtime connector isolation remain unproven
 
 ## Retired callable roster and capability lineage
 
