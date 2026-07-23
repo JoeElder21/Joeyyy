@@ -38,7 +38,7 @@ Strengths: wraps both runtimes (Claude Code and Codex); Autopilots directly impl
 
 Bounded, non-production, on the Joeyyy repo only — no client-facing or permit work until the winner passes validation.
 
-1. Define the task set before starting (fixed ground truth, per the benchmarking pattern in `docs/ABSORBED_PATTERNS.md`): five tickets/issues drawn from the real backlog — e.g., draft a registry entry from an intake template, run the weekly-audit checklist against the repo, propose absorbed-pattern merges as diffs, one deliberately blocked task (missing input) to test notify-when-stuck, one recurring cadence job.
+1. The task set is pre-defined in `trial/` (fixed ground truth, per the benchmarking pattern in `docs/ABSORBED_PATTERNS.md`): five tickets drawn from the real backlog — a registry intake draft, a weekly-audit dry run, an absorbed-pattern merge proposal, one deliberately blocked task (missing input) to test notify-when-stuck, and one recurring cadence job. The ticket files are CAR-native and map one-to-one onto multica issues/Autopilots per `trial/README.md`.
 2. Metrics, defined up front, cost beside quality: tasks completed without intervention; correct notify-on-block behavior (did it ping only when genuinely stuck); durable state accuracy after a forced interruption/resume; wall-clock and token cost per task; setup + weekly upkeep time.
 3. Run Candidate B first (`multica setup` against Multica Cloud is the cheaper trial); run Candidate A second only if B fails a defining metric.
 4. Score per metric, not by impression; state each candidate's known weakness plainly in the results.

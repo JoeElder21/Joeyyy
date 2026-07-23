@@ -64,6 +64,8 @@ The system's bottleneck is not tools; it is that governance docs exist while exe
 
 ## Joe's decisions
 
-1. Execution layer: trial Multica Cloud or CAR first (see `docs/EXECUTION_LAYER_TRIAL.md`).
-2. civil3d-mcp: schedule the workstation build session (see `docs/CIVIL3D_MCP_BUILDOUT.md`).
-3. kody: deploy-and-maintain vs absorb-only for the memory layer (default: absorb-only, revisit next quarter).
+1. Execution layer: trial Multica Cloud or CAR first (see `docs/EXECUTION_LAYER_TRIAL.md`). — *Resolved 2026-07-23: trial proceeds, Multica Cloud first per the decision rule; fixed task set authored in `trial/`.*
+2. civil3d-mcp: schedule the workstation build session (see `docs/CIVIL3D_MCP_BUILDOUT.md`). — *Resolved 2026-07-23: build session scheduled.*
+3. kody: deploy-and-maintain vs absorb-only for the memory layer (default: absorb-only, revisit next quarter). — *Open; absorb-only default stands.*
+
+Related decisions resolved the same day on Joe's instruction: Agent 007's native sandbox restored to `workspace-write` as the sole mutation executor, and legacy v2.0 delegation/handoff packets are now rejected by PacketGuard unless explicitly validated as archived.

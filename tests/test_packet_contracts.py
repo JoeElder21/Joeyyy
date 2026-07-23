@@ -112,12 +112,18 @@ class PacketContractTests(unittest.TestCase):
         }
 
     def assertValid(self, schema_name, packet, leases=None, **kwargs):
+        # The 2.0 baseline fixtures exercise relational rules as archived
+        # packets, so validation runs with historical=True by default; the
+        # legacy-rejection gate has its own dedicated tests below. The flag
+        # has no effect on 2.1 packets.
+        kwargs.setdefault("historical", True)
         self.assertEqual(
             self.guard.validate(schema_name, packet, leases, **kwargs),
             [],
         )
 
     def assertInvalid(self, schema_name, packet, leases=None, **kwargs):
+        kwargs.setdefault("historical", True)
         self.assertNotEqual(
             self.guard.validate(schema_name, packet, leases, **kwargs),
             [],
@@ -225,6 +231,37 @@ class PacketContractTests(unittest.TestCase):
             "handoff_packet.schema.json",
             undelegated_source,
             delegations=[delegation],
+        )
+
+    def test_v20_packets_are_rejected_for_new_delegations_and_handoffs(self):
+        delegation_errors = self.guard.validate(
+            "delegation_packet.schema.json", self.delegation, [self.lease]
+        )
+        self.assertTrue(
+            any("legacy" in error for error in delegation_errors), delegation_errors
+        )
+        handoff_errors = self.guard.validate(
+            "handoff_packet.schema.json",
+            self.handoff,
+            [self.lease],
+            delegations=[self.delegation],
+        )
+        self.assertTrue(
+            any("legacy" in error for error in handoff_errors), handoff_errors
+        )
+
+    def test_v21_delegation_rejects_downgraded_handoff_even_as_historical(self):
+        delegation, handoff = self.v21_readonly_pair()
+        downgraded = deepcopy(handoff)
+        downgraded["schema_version"] = "2.0"
+        errors = self.guard.validate(
+            "handoff_packet.schema.json",
+            downgraded,
+            delegations=[delegation],
+            historical=True,
+        )
+        self.assertTrue(
+            any("must use schema_version 2.1" in error for error in errors), errors
         )
 
     def test_v21_completed_artifact_records_require_source_evidence(self):
@@ -970,10 +1007,18 @@ class PacketContractTests(unittest.TestCase):
                 "--leases",
                 str(lease_path),
             ]
-            valid = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            legacy = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(legacy.returncode, 0, legacy.stdout + legacy.stderr)
+            self.assertIn("legacy", legacy.stdout)
+            historical_command = command + ["--historical"]
+            valid = subprocess.run(
+                historical_command, cwd=ROOT, capture_output=True, text=True
+            )
             self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
             packet_path.write_text("{}", encoding="utf-8")
-            invalid = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            invalid = subprocess.run(
+                historical_command, cwd=ROOT, capture_output=True, text=True
+            )
             self.assertNotEqual(invalid.returncode, 0)
 
 

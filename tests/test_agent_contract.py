@@ -56,7 +56,9 @@ class AgentContractTests(unittest.TestCase):
         self.assertIn("do not silently choose or merge", self.instructions)
 
     def test_delegated_authority_covers_requested_actions(self):
-        self.assertEqual(self.agent["sandbox_mode"], "read-only")
+        # Agent 007 is the sole write-capable native agent; specialists stay
+        # read-only (asserted per-agent in test_specialist_corps).
+        self.assertEqual(self.agent["sandbox_mode"], "workspace-write")
         self.assertNotIn("approval_policy", self.agent)
         self.assert_phrases([
             "<delegated_authority>",

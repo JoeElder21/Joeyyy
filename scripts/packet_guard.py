@@ -107,6 +107,7 @@ class PacketGuard:
         constraint_packets: Iterable[Any] | None = None,
         private_constraint_packets: Iterable[Any] | None = None,
         mutation_results: Iterable[Any] | None = None,
+        historical: bool = False,
     ) -> list[str]:
         if schema_name not in self.schemas:
             return [f"$: unknown schema {schema_name}"]
@@ -116,6 +117,17 @@ class PacketGuard:
         errors.extend(self._identifier_errors(packet))
         if errors:
             return errors
+
+        if (
+            not historical
+            and schema_name
+            in ("delegation_packet.schema.json", "handoff_packet.schema.json")
+            and packet.get("schema_version") == "2.0"
+        ):
+            return [
+                "schema_version 2.0 is legacy: new delegation and handoff packets "
+                "require 2.1; pass historical=True only when validating archived packets"
+            ]
 
         leases = list(active_leases or [])
         delegation_ledger = list(delegations or [])
@@ -141,6 +153,7 @@ class PacketGuard:
                 delegation_ledger,
                 constraints,
                 private_constraints,
+                historical=historical,
             )
         if schema_name == "roundtable_memo.schema.json":
             return self._roundtable_errors(
@@ -149,6 +162,7 @@ class PacketGuard:
                 delegation_ledger,
                 constraints,
                 private_constraints,
+                historical=historical,
             )
         if schema_name == "writer_lease.schema.json":
             return self._writer_lease_errors(packet)
@@ -522,6 +536,8 @@ class PacketGuard:
         delegations: list[dict[str, Any]],
         constraints: list[dict[str, Any]],
         private_constraints: list[dict[str, Any]],
+        *,
+        historical: bool = False,
     ) -> tuple[dict[str, Any] | None, list[str]]:
         delegation_id = packet["delegation_id"]
         matches = [
@@ -538,6 +554,7 @@ class PacketGuard:
             active_leases,
             constraint_packets=constraints,
             private_constraint_packets=private_constraints,
+            historical=historical,
         )
         if errors:
             return None, [f"originating delegation invalid: {item}" for item in errors]
@@ -563,6 +580,8 @@ class PacketGuard:
         delegations: list[dict[str, Any]],
         constraints: list[dict[str, Any]],
         private_constraints: list[dict[str, Any]],
+        *,
+        historical: bool = False,
     ) -> list[str]:
         errors = self._agent_relationship_errors(packet)
         if errors:
@@ -641,8 +660,17 @@ class PacketGuard:
                     delegations,
                     constraints,
                     private_constraints,
+                    historical=historical,
                 )
                 errors.extend(delegation_errors)
+                if (
+                    delegation is not None
+                    and delegation.get("schema_version") == "2.1"
+                    and packet.get("schema_version") != "2.1"
+                ):
+                    errors.append(
+                        "handoff for a 2.1 delegation must use schema_version 2.1"
+                    )
 
         if delegation is not None:
             if (
@@ -810,6 +838,8 @@ class PacketGuard:
         delegations: list[dict[str, Any]],
         constraints: list[dict[str, Any]],
         private_constraints: list[dict[str, Any]],
+        *,
+        historical: bool = False,
     ) -> list[str]:
         brain = packet["owner_brain"]
         errors: list[str] = []
@@ -846,6 +876,7 @@ class PacketGuard:
             delegations,
             constraints,
             private_constraints,
+            historical=historical,
         )
         errors.extend(delegation_errors)
         if delegation is not None:
@@ -1214,10 +1245,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--constraints", help="JSON array of cross-brain constraints")
     parser.add_argument("--private-constraints", help="JSON array of brain-private constraints")
     parser.add_argument("--mutation-results", help="JSON array of mutation results")
+    parser.add_argument(
+        "--historical",
+        action="store_true",
+        help="Accept legacy 2.0 delegation/handoff packets (archived packets only)",
+    )
     args = parser.parse_args(argv)
 
     guard = PacketGuard()
     kwargs = {
+        "historical": args.historical,
         "active_leases": _read_json(args.leases) if args.leases else None,
         "delegations": _read_json(args.delegations) if args.delegations else None,
         "constraint_packets": _read_json(args.constraints) if args.constraints else None,
