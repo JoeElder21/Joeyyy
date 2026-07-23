@@ -56,8 +56,10 @@ class AgentContractTests(unittest.TestCase):
         self.assertIn("do not silently choose or merge", self.instructions)
 
     def test_delegated_authority_covers_requested_actions(self):
+        # Agent 007 is the sole write-capable native agent; specialists stay
+        # read-only (asserted per-agent in test_specialist_corps).
         self.assertEqual(self.agent["sandbox_mode"], "workspace-write")
-        self.assertEqual(self.agent["approval_policy"], "never")
+        self.assertNotIn("approval_policy", self.agent)
         self.assert_phrases([
             "<delegated_authority>",
             "send messages and emails",
@@ -118,10 +120,10 @@ class AgentContractTests(unittest.TestCase):
         self.assertIn("Joe's Next Move", self.instructions)
         self.assertIn("no more than three ordered actions", self.instructions)
 
-    def test_project_autonomy_and_network_are_enabled(self):
-        self.assertEqual(self.config["sandbox_mode"], "workspace-write")
-        self.assertEqual(self.config["approval_policy"], "never")
-        self.assertTrue(self.config["sandbox_workspace_write"]["network_access"])
+    def test_project_defaults_are_read_only_and_do_not_bypass_approval(self):
+        self.assertEqual(self.config["sandbox_mode"], "read-only")
+        self.assertNotIn("approval_policy", self.config)
+        self.assertNotIn("sandbox_workspace_write", self.config)
 
     def test_multi_agent_support_is_enabled_and_bounded(self):
         agents = self.config["agents"]
