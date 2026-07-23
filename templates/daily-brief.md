@@ -10,24 +10,28 @@ A short summary of the day, including the single most important outcome.
 
 ## What Matters Now
 
-| Priority | Action | Owner | Timing | Dependency | Why it matters |
-| --- | --- | --- | --- | --- | --- |
+| Priority | Action | Owner | Timing | Dependency | Status | Why it matters |
+| --- | --- | --- | --- | --- | --- | --- |
 
 ## Meetings and Deadlines
 
-List confirmed commitments, preparation needs, conflicts, and timing risks.
+List confirmed commitments, preparation needs, conflicts, and timing risks. Resolve routine conflicts when the correct action is supported by evidence.
 
-## Decisions Needed
+## Actions Completed
 
-List decisions Joe must make, the available options, and the recommended choice with evidence.
+List messages sent, calendar or task changes, external-system edits, code changes, and delegated work completed. Include the target and verified result.
+
+## Decisions Made or Needed
+
+List decisions made within delegated authority and any decision that remains blocked by missing information or an explicit high-impact scope boundary.
+
+## Agent Handoffs
+
+List specialists used, their assignments, status, and the evidence or result returned.
 
 ## Risks and Blockers
 
 List only material risks, their likely effect, and the smallest preventive action.
-
-## Drafts or Proposed Actions
-
-Preview communications or external actions. Do not execute them.
 
 ## Missing Information
 
@@ -35,7 +39,8 @@ List gaps that materially affect the plan and the fastest way to resolve each.
 
 ## Joe's Next Move
 
+Include only when Joe still has an action to take.
+
 1. 
 2. 
 3. 
-

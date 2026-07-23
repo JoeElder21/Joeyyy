@@ -1,3 +1,10 @@
-[agents]
-max_concurrent_threads_per_session = 4
+sandbox_mode = "workspace-write"
+approval_policy = "never"
 
+[sandbox_workspace_write]
+network_access = true
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 8
+interrupt_message = true
