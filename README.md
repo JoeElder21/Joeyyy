@@ -1,35 +1,40 @@
-# APEX Chief of Staff
+# Agent 007 — APEX Chief of Staff
 
-APEX Chief of Staff is a native Codex custom agent for Joe Elder's professional command center. It converts authorized project context into priorities, delegates work to specialist agents, executes routine actions, validates results, and reports what changed.
+Agent 007 is Joe Elder's cross-brain Chief of Staff, agent governor, and multi-agent orchestrator. It oversees APEX and Joe's Brain/JEOS, keeps their domain records separate, delegates to owner agents and specialists, executes authorized work, validates results, and improves the agent ecosystem from evidence.
 
-The agent now uses delegated autonomy. Within Joe's requested outcome and the tools available in the active session, it may send communications, manage calendars and tasks, edit authorized external systems, and change, test, commit, or push code without asking for per-action approval. It also coordinates specialist agents as a working community through scoped handoffs and a single-writer rule.
+## Activate
 
-Codex runtime permissions, connected-service permissions, administrator policies, and tool-enforced controls still apply. The configuration cannot grant access to a service that has not been connected or override a mandatory provider restriction.
+Say:
 
-## Start here
+`Activate Agent 007. <mission>`
 
-1. Open this repository as the active project in Codex.
-2. Select an execution-capable permission mode for the parent session when the Codex surface exposes one.
-3. Ask: `Use apex_chief_of_staff to complete today's APEX priorities. Delegate specialist work where useful and execute routine actions.`
-4. Review the completion report, action log, and any true runtime blockers.
+The personal Agent 007 skill makes that phrase portable across chats where the skill is available. In this repository, the native custom-agent name remains `apex_chief_of_staff` for compatibility.
 
-See [docs/APEX_CHIEF_OF_STAFF.md](docs/APEX_CHIEF_OF_STAFF.md) for the operating contract and [docs/AGENT_COMMUNITY_PROTOCOL.md](docs/AGENT_COMMUNITY_PROTOCOL.md) for collaboration rules.
+## What changed
+
+- Universal Agent 007 activation phrase and operating identity.
+- Cross-brain comparison and governance without merging APEX and JEOS.
+- Owner-agent routing and one designated writer per shared resource.
+- Agent registry, candidate validation, and new-agent intake.
+- Controlled capability absorption from new agent files.
+- Error ledger, root-cause repair, reflection, and recurrence tests.
+- Weekly self, specialist, brain, and ecosystem audits.
+- Autonomous routine execution within Joe's requested mission and available tools.
+
+Runtime permissions, connected-service permissions, administrator policies, professional obligations, and mandatory tool controls still apply. No prompt can create access that is not connected or verified.
 
 ## Repository map
 
-- `.codex/agents/apex_chief_of_staff.toml` — native Codex custom-agent definition.
-- `.codex/config.toml` — project-scoped autonomy, networking, and multi-agent settings.
-- `AGENTS.md` — durable repository guidance for Codex.
-- `docs/APEX_CHIEF_OF_STAFF.md` — scope, delegated authority, and invocation examples.
-- `docs/AGENT_COMMUNITY_PROTOCOL.md` — multi-agent delegation and handoff protocol.
-- `templates/daily-brief.md` — daily briefing and completed-action structure.
-- `templates/project-intake.md` — structured intake and execution map.
-- `tests/test_agent_contract.py` — automated validation of autonomy and coordination requirements.
-
-## Memory and connected tools
-
-The agent can use only the tools and connectors available in the active Codex session. Yaps Memory is optional and must be connected separately. The agent must never claim that a connector, memory source, or delegated agent is available until the active session verifies it.
+- `.codex/agents/apex_chief_of_staff.toml` — native Agent 007 custom-agent definition.
+- `.codex/config.toml` — project autonomy, networking, and multi-agent settings.
+- `AGENTS.md` — durable activation and repository guidance.
+- `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
+- `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.
+- `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status.
+- `templates/agent-intake.md` — new-agent onboarding and validation.
+- `templates/weekly-agent-audit.md` — weekly ecosystem review.
+- `tests/test_agent_contract.py` — contract validation.
 
 ## Validation
 
-Run `python -m unittest discover -s tests -v`. GitHub Actions runs the same contract checks on pushes to `main` and on pull requests.
+Run `python -m unittest discover -s tests -v`. GitHub Actions runs the same checks on pushes to `main` and pull requests.
