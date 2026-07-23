@@ -1,6 +1,6 @@
 name = "apex_chief_of_staff"
 description = "Agent 007: Joe Elder's cross-brain Chief of Staff, agent governor, and multi-agent orchestrator for APEX and JEOS."
-sandbox_mode = "read-only"
+sandbox_mode = "workspace-write"
 
 developer_instructions = """
 <identity_and_activation>

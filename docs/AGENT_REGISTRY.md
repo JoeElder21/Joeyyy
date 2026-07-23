@@ -20,6 +20,7 @@ Static and synthetic packet validation permit shadow operation. An agent becomes
 - Outputs: integrated plan, delegated work, verified actions, brain sync, registry changes, error learning, audit report
 - Tools/connectors/skills: only those verified in the active runtime; never assumed from configuration
 - Write targets: cross-brain governance plus owner-routed domain targets; one active writer lease per canonical brain/target/resource
+- Native sandbox: `workspace-write` — Agent 007 is the sole write-capable native agent and executes all mutations while specialists remain `read-only` (restored 2026-07-23 on Joe's instruction; the v2.1 hardening had left no configured writer)
 - Boundaries: sole cross-brain agent; preserve brain ownership; no unsupported access claims; no silent conflict merging; platform and professional controls remain in force
 - Handoff: `docs/AGENT_COMMUNITY_PROTOCOL.md` and `schemas/`
 - Validation: `scripts/validate_specialist_corps.py`, `tests/test_agent_contract.py`, `tests/test_specialist_corps.py`, and `tests/test_local_validation.py`
@@ -62,7 +63,7 @@ Brain-owned triggers, outputs, routes, and challenge pairs: `brains/jeos/agents.
 - Tools/connectors/skills: specialists receive no direct connector handles under this contract; Agent 007 or a runtime-enforced brain proxy supplies PacketGuard-validated evidence
 - Write behavior: exact per-agent target arrays live in the manifests; proposed mutations only while shadow; Agent 007 holds the writer lease until a specialist is active or value-proven, its native sandbox is versioned away from read-only, and the exact target is allowlisted
 - Communication: same-brain asks, challenges, and handoffs only; Agent 007 is the sole bridge
-- Validation: `scripts/packet_guard.py` enforces relational packet rules; `scripts/validate_specialist_corps.py` validates synthetic contracts and boundary probes without invoking agents; `schemas/mutation_result.schema.json` proves readback and rollback
+- Validation: `scripts/packet_guard.py` enforces relational packet rules and rejects legacy 2.0 delegation and handoff packets unless explicitly validated as archived (`historical=True`); `scripts/validate_specialist_corps.py` validates synthetic contracts and boundary probes without invoking agents; `schemas/mutation_result.schema.json` proves readback and rollback
 - Privacy: runtime private evidence is never committed to this public repository
 - Version: 2.1.0
 - Last audit: v2.1 static and synthetic contract hardening, 2026-07-23
@@ -87,6 +88,33 @@ The v1 agents were shadow-stage definitions. Their native TOMLs are removed from
 | `jeos_lifewright` | `jeos_lifestyle_systems_builder` |
 
 See `docs/ROSTER_MIGRATION_2026-07-23.md` for the reversible migration record.
+
+## Candidate infrastructure and tools
+
+External tools under evaluation for the ecosystem. These are not agents; they are infrastructure that agents would use. None may be treated as available until validated in its target environment. Source analysis: `docs/ECOSYSTEM_REPO_ANALYSIS.md` (2026-07-23).
+
+### Civil 3D MCP connector (barbosaihan/civil3d-mcp)
+
+- Status: candidate
+- Owner layer: APEX (Civil 3D workflow automation)
+- Purpose: let Claude query and edit live Civil 3D drawings through MCP meta-tools (`civil3d_query`, `civil3d_execute`, `civil3d_skills`)
+- Validation gate: build on the Civil 3D workstation per `docs/CIVIL3D_MCP_BUILDOUT.md`; read-only queries on copies of project DWGs must pass before any write use
+- Boundaries: write operations follow the one-designated-writer rule; production DWGs require explicit task-level instruction
+- Rollback: remove the MCP server entry from Claude config and unload the plugin (no persistent state)
+
+### Execution layer (codex-autorunner OR multica — one, not both)
+
+- Status: candidate, pending Joe's platform pick
+- Owner layer: Agent 007 governance (task dispatch for repo-based agent work)
+- Purpose: run queued agent work unattended with notify-when-stuck; see `docs/EXECUTION_LAYER_TRIAL.md`
+- Validation gate: bounded trial on non-production tasks (registry maintenance, doc audits) before any client-facing work
+
+### Deferred / watch list
+
+- kentcdodds/kody — cross-brain memory/secrets/scheduler layer; absorb-only for now, revisit next quarter
+- citrolabs/ego-lite — permit-portal agent browser; blocked on Windows support, revisit on release
+- max-sixty/worktrunk — install when multiple agents edit this repo concurrently
+- ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
 
 ## Intake rule
 
