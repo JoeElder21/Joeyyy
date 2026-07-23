@@ -1,0 +1,116 @@
+version = "2.0.0"
+brain = "APEX"
+owner = "Agent 007"
+namespace_prefix = "APEX::"
+write_target_prefix = "APEX/"
+roundtable_namespace = "APEX::Roundtable"
+roundtable_write_target = "APEX/Roundtable"
+private_data_runtime_only = true
+roster = ["apex_war_architect", "apex_deal_engine", "apex_delivery_commander", "apex_intelligence_forge", "apex_systems_blacksmith"]
+
+[agents.apex_war_architect]
+class_id = "strategy"
+roster_id = "APEX-15"
+status = "shadow"
+native_file = ".codex/agents/apex_war_architect.toml"
+memory_namespace = "APEX::Strategy-Campaigns::apex_war_architect"
+write_targets = ["APEX/Strategy-Campaigns", "APEX/Decision-Log", "APEX/Career-Evidence"]
+triggers = ["weekly operating plan", "professional strategy", "campaign", "bottleneck", "career direction"]
+outputs = ["campaign map", "priority stack", "decision brief", "stop-delegate-postpone list"]
+responsibility = "Professional outcomes, priorities, campaigns, and strategic anchors."
+
+[agents.apex_deal_engine]
+class_id = "opportunity_momentum"
+roster_id = "APEX-16"
+status = "shadow"
+native_file = ".codex/agents/apex_deal_engine.toml"
+memory_namespace = "APEX::Opportunity-Pipeline::apex_deal_engine"
+write_targets = ["APEX/Opportunity-Pipeline", "APEX/Professional-Follow-Ups", "APEX/Proposal-Control"]
+triggers = ["lead", "proposal", "pursuit", "follow-up", "dormant opportunity", "revenue action"]
+outputs = ["deduplicated pipeline", "opportunity score", "next-best action", "follow-up draft"]
+responsibility = "Pre-award opportunities, observable relationship evidence, proposals, and follow-up."
+
+[agents.apex_delivery_commander]
+class_id = "execution_capacity"
+roster_id = "APEX-17"
+status = "shadow"
+native_file = ".codex/agents/apex_delivery_commander.toml"
+memory_namespace = "APEX::Delivery-Control::apex_delivery_commander"
+write_targets = ["APEX/Delivery-Control", "APEX/Project-Controls", "APEX/QA-Risk", "APEX/Commitment-Register"]
+triggers = ["active project", "deadline", "dependency", "blocker", "quality risk", "revision delta"]
+outputs = ["delivery board", "critical path", "risk packet", "technical or quantitative verification packet"]
+responsibility = "Committed-work state, dependencies, throughput, technical QA, and quantity validation."
+
+[agents.apex_intelligence_forge]
+class_id = "intelligence_reflection"
+roster_id = "APEX-18"
+status = "shadow"
+native_file = ".codex/agents/apex_intelligence_forge.toml"
+memory_namespace = "APEX::Intelligence-Decisions::apex_intelligence_forge"
+write_targets = ["APEX/Intelligence-Decisions", "APEX/Source-Index", "APEX/Meeting-Briefs", "APEX/Reusable-Playbooks"]
+triggers = ["meeting prep", "decision brief", "source synthesis", "contradiction", "stale information", "playbook"]
+outputs = ["source map", "executive brief", "contradiction register", "decision matrix", "playbook"]
+responsibility = "Unstructured intake, source normalization, decision intelligence, and outcome learning."
+
+[agents.apex_systems_blacksmith]
+class_id = "systems_automation"
+roster_id = "APEX-19"
+status = "shadow"
+native_file = ".codex/agents/apex_systems_blacksmith.toml"
+memory_namespace = "APEX::Systems-Registry::apex_systems_blacksmith"
+write_targets = ["APEX/Systems-Registry", "APEX/Automation-Backlog", "APEX/SOP-Library", "APEX/Tooling-Change-Log"]
+triggers = ["repeated manual work", "SOP", "template", "script", "automation", "workflow infrastructure"]
+outputs = ["process map", "net-value score", "system design", "tests", "rollout and rollback plan"]
+responsibility = "Stable repeated-work systems, observed value, maintenance, and reversible automation."
+
+[[routes]]
+intent = "direction priorities strategy campaigns bottlenecks professional growth"
+agent = "apex_war_architect"
+
+[[routes]]
+intent = "leads proposals pursuits follow-ups opportunities revenue"
+agent = "apex_deal_engine"
+
+[[routes]]
+intent = "active projects deadlines dependencies blockers quality quantities revisions"
+agent = "apex_delivery_commander"
+
+[[routes]]
+intent = "files notes meetings evidence decisions contradictions summaries playbooks"
+agent = "apex_intelligence_forge"
+
+[[routes]]
+intent = "process SOP template script automation infrastructure"
+agent = "apex_systems_blacksmith"
+
+[[challenge_pairs]]
+agents = ["apex_war_architect", "apex_intelligence_forge"]
+purpose = "Strategic direction versus source-backed reality."
+
+[[challenge_pairs]]
+agents = ["apex_war_architect", "apex_deal_engine"]
+purpose = "Strategic direction versus observable opportunity evidence."
+
+[[challenge_pairs]]
+agents = ["apex_war_architect", "apex_delivery_commander"]
+purpose = "Strategic ambition versus delivery capacity and execution reality."
+
+[[challenge_pairs]]
+agents = ["apex_deal_engine", "apex_delivery_commander"]
+purpose = "Opportunity promises versus delivery capacity."
+
+[[challenge_pairs]]
+agents = ["apex_delivery_commander", "apex_intelligence_forge"]
+purpose = "Execution state versus current source truth."
+
+[[challenge_pairs]]
+agents = ["apex_deal_engine", "apex_intelligence_forge"]
+purpose = "Opportunity outcomes and promises versus dated source evidence."
+
+[[challenge_pairs]]
+agents = ["apex_systems_blacksmith", "apex_delivery_commander", "apex_intelligence_forge"]
+purpose = "Automate only stable, evidenced professional repetition."
+
+[[challenge_pairs]]
+agents = ["apex_systems_blacksmith", "apex_intelligence_forge", "apex_war_architect"]
+purpose = "Observed system value and maintenance burden versus current strategic campaigns."

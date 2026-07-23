@@ -19,7 +19,7 @@ List confirmed commitments, preparation needs, conflicts, and timing risks. Reso
 
 ## Actions Completed
 
-List messages sent, calendar or task changes, external-system edits, code changes, and delegated work completed. Include the target and verified result.
+List messages sent, calendar or task changes, external-system edits, code changes, and delegated work completed. Include the target, writer lease, readback, rollback, and verified result.
 
 ## Decisions Made or Needed
 
@@ -27,7 +27,7 @@ List decisions made within delegated authority and any decision that remains blo
 
 ## Agent Handoffs
 
-List specialists used, their assignments, status, and the evidence or result returned.
+List specialists used, owner brain, namespace, assignment, challenge or handoff, status, and evidence returned.
 
 ## Risks and Blockers
 

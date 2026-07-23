@@ -1,0 +1,104 @@
+version = "2.0.0"
+brain = "JEOS"
+owner = "Agent 007"
+namespace_prefix = "JEOS::"
+write_target_prefix = "JEOS/"
+roundtable_namespace = "JEOS::Roundtable"
+roundtable_write_target = "JEOS/Roundtable"
+private_data_runtime_only = true
+roster = ["jeos_life_architect", "jeos_momentum_engine", "jeos_energy_director", "jeos_reflection_forge", "jeos_lifestyle_systems_builder"]
+
+[agents.jeos_life_architect]
+class_id = "strategy"
+roster_id = "JEOS-14"
+status = "shadow"
+native_file = ".codex/agents/jeos_life_architect.toml"
+memory_namespace = "JEOS::Life-Architecture::jeos_life_architect"
+write_targets = ["JEOS/Life-Architecture", "JEOS/Personal-Decision-Log", "JEOS/Commitment-Radar", "JEOS/Weekly-Life-Plan"]
+triggers = ["personal strategy", "weekly life plan", "goal alignment", "routine design", "commitment radar"]
+outputs = ["life-domain map", "weekly plan", "priority stack", "commitment radar"]
+responsibility = "Personal outcomes, priorities, and daily or weekly anchors."
+routine_time_budget = "weekly review <= 10 minutes"
+
+[agents.jeos_momentum_engine]
+class_id = "opportunity_momentum"
+roster_id = "JEOS-15"
+status = "shadow"
+native_file = ".codex/agents/jeos_momentum_engine.toml"
+memory_namespace = "JEOS::Momentum-Queue::jeos_momentum_engine"
+write_targets = ["JEOS/Momentum-Queue", "JEOS/Habit-Loops", "JEOS/Study-Repetition", "JEOS/Completion-Evidence"]
+triggers = ["daily action", "habit", "procrastination", "backlog", "restart", "study practice"]
+outputs = ["activation queue", "next-action plan", "habit protocol", "study repetition update"]
+responsibility = "Personal next actions, activation queue, habit loops, and study repetition."
+routine_time_budget = "daily queue preparation <= 3 minutes"
+
+[agents.jeos_energy_director]
+class_id = "execution_capacity"
+roster_id = "JEOS-16"
+status = "shadow"
+native_file = ".codex/agents/jeos_energy_director.toml"
+memory_namespace = "JEOS::Energy-Capacity::jeos_energy_director"
+write_targets = ["JEOS/Energy-Capacity", "JEOS/Recovery-Windows", "JEOS/Peak-Window-Map", "JEOS/Schedule-Constraints"]
+triggers = ["capacity", "energy", "overload", "recovery", "peak window", "schedule feasibility"]
+outputs = ["capacity map", "peak-window map", "energy-leak finding", "one adjustment"]
+responsibility = "Personal capacity constraints and optional task placement."
+routine_time_budget = "daily capacity pass <= 2 minutes"
+
+[agents.jeos_reflection_forge]
+class_id = "intelligence_reflection"
+roster_id = "JEOS-17"
+status = "shadow"
+native_file = ".codex/agents/jeos_reflection_forge.toml"
+memory_namespace = "JEOS::Reflection-Ledger::jeos_reflection_forge"
+write_targets = ["JEOS/Reflection-Ledger", "JEOS/Pattern-Hypotheses", "JEOS/Lessons-and-Rules", "JEOS/Growth-Experiments"]
+triggers = ["weekly review", "journal", "voice note", "pattern", "faith reflection", "lesson"]
+outputs = ["evidence-labeled reflection", "pattern hypothesis", "lesson", "growth experiment"]
+responsibility = "Evidence-labeled lived learning, faith reflection, and growth experiments."
+routine_time_budget = "weekly reflection or examen <= 10 minutes"
+
+[agents.jeos_lifestyle_systems_builder]
+class_id = "systems_automation"
+roster_id = "JEOS-18"
+status = "shadow"
+native_file = ".codex/agents/jeos_lifestyle_systems_builder.toml"
+memory_namespace = "JEOS::Lifestyle-Systems-Registry::jeos_lifestyle_systems_builder"
+write_targets = ["JEOS/Lifestyle-Systems-Registry", "JEOS/Life-Admin-Automations", "JEOS/Checklist-Library", "JEOS/Maintenance-and-Renewal-Map"]
+triggers = ["personal admin", "errand", "maintenance", "travel", "renewal", "subscription", "bill", "budget admin", "checklist", "automation"]
+outputs = ["process map", "net-value score", "life-system design", "duplicate controls", "rollout and rollback plan"]
+responsibility = "Stable recurring personal-administration systems and automation."
+
+[[routes]]
+intent = "personal direction goals routines commitments weekly monthly planning"
+agent = "jeos_life_architect"
+
+[[routes]]
+intent = "actions habits procrastination backlog study follow-through restart"
+agent = "jeos_momentum_engine"
+
+[[routes]]
+intent = "time energy overload recovery bandwidth peak windows"
+agent = "jeos_energy_director"
+
+[[routes]]
+intent = "journal notes screenshots voice reflection patterns faith lessons"
+agent = "jeos_reflection_forge"
+
+[[routes]]
+intent = "errands maintenance travel renewals subscriptions bills budget personal admin checklist automation"
+agent = "jeos_lifestyle_systems_builder"
+
+[[challenge_pairs]]
+agents = ["jeos_life_architect", "jeos_reflection_forge"]
+purpose = "Intended direction versus a reflection synthesis dated within seven days; the synthesis may cite older longitudinal observations."
+
+[[challenge_pairs]]
+agents = ["jeos_momentum_engine", "jeos_energy_director"]
+purpose = "Execution pressure versus sustainable capacity; use same-day evidence for a daily plan."
+
+[[challenge_pairs]]
+agents = ["jeos_momentum_engine", "jeos_lifestyle_systems_builder"]
+purpose = "Prove stable repetition before automation."
+
+[[challenge_pairs]]
+agents = ["jeos_life_architect", "jeos_momentum_engine", "jeos_energy_director"]
+purpose = "Direction, activation, and feasible placement; Agent 007 alone integrates the canonical plan."
