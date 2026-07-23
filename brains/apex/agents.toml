@@ -1,0 +1,176 @@
+version = "2.1.0"
+brain = "APEX"
+owner = "Agent 007"
+namespace_prefix = "APEX::"
+write_target_prefix = "APEX/"
+roundtable_namespace = "APEX::Roundtable"
+roundtable_write_target = "APEX/Roundtable"
+private_data_runtime_only = true
+roster = ["apex_war_architect", "apex_deal_engine", "apex_delivery_commander", "apex_intelligence_forge", "apex_systems_blacksmith"]
+
+[routing]
+resolution_order = ["brain_boundary", "explicit_agent", "canonical_target_owner", "most_specific_intent", "cadence_route", "agent_007_fallback"]
+lower_precedence_wins = true
+ambiguous_policy = "Select one primary agent; add same-brain advisers only when their independent evidence materially changes the result; Agent 007 integrates."
+
+[agents.apex_war_architect]
+class_id = "strategy"
+roster_id = "APEX-15"
+status = "shadow"
+native_file = ".codex/agents/apex_war_architect.toml"
+memory_namespace = "APEX::Strategy-Campaigns::apex_war_architect"
+write_targets = ["APEX/Strategy-Campaigns", "APEX/Decision-Log", "APEX/Career-Evidence"]
+triggers = ["weekly operating plan", "professional strategy", "campaign", "bottleneck", "career direction"]
+outputs = ["campaign map", "priority stack", "decision brief", "stop-delegate-postpone list"]
+responsibility = "Professional outcomes, priorities, campaigns, and strategic anchors."
+modes = ["operating_campaign", "career_integration", "delegation_topology"]
+artifact_types = ["campaign_map", "decision_brief", "delegation_topology"]
+active_writer_eligible = true
+connector_policy = "packet_only_no_direct_connectors"
+
+[agents.apex_deal_engine]
+class_id = "opportunity_momentum"
+roster_id = "APEX-16"
+status = "shadow"
+native_file = ".codex/agents/apex_deal_engine.toml"
+memory_namespace = "APEX::Opportunity-Pipeline::apex_deal_engine"
+write_targets = ["APEX/Opportunity-Pipeline", "APEX/Professional-Follow-Ups", "APEX/Proposal-Control"]
+triggers = ["lead", "proposal", "pursuit", "follow-up", "dormant opportunity", "revenue action"]
+outputs = ["deduplicated pipeline", "opportunity score", "next-best action", "follow-up draft"]
+responsibility = "Pre-award opportunities, observable relationship evidence, proposals, and follow-up."
+modes = ["pipeline_triage", "reactivation", "proposal_control"]
+artifact_types = ["opportunity_pipeline", "follow_up_plan", "proposal_checkpoint"]
+active_writer_eligible = true
+connector_policy = "packet_only_no_direct_connectors"
+
+[agents.apex_delivery_commander]
+class_id = "execution_capacity"
+roster_id = "APEX-17"
+status = "shadow"
+native_file = ".codex/agents/apex_delivery_commander.toml"
+memory_namespace = "APEX::Delivery-Control::apex_delivery_commander"
+write_targets = ["APEX/Delivery-Control", "APEX/Project-Controls", "APEX/QA-Risk", "APEX/Commitment-Register"]
+triggers = ["active project", "deadline", "dependency", "blocker", "quality risk", "revision delta"]
+outputs = ["delivery board", "critical path", "risk packet", "technical or quantitative verification packet"]
+responsibility = "Committed-work state, dependencies, throughput, technical QA, and quantity validation."
+modes = ["delivery_control", "technical_qa", "quantity_delta", "cost_evidence"]
+artifact_types = ["delivery_board", "qa_risk_packet", "quantity_delta", "cost_evidence"]
+active_writer_eligible = true
+connector_policy = "packet_only_no_direct_connectors"
+
+[agents.apex_intelligence_forge]
+class_id = "intelligence_reflection"
+roster_id = "APEX-18"
+status = "shadow"
+native_file = ".codex/agents/apex_intelligence_forge.toml"
+memory_namespace = "APEX::Intelligence-Decisions::apex_intelligence_forge"
+write_targets = ["APEX/Intelligence-Decisions", "APEX/Source-Index", "APEX/Source-Cursors", "APEX/Meeting-Briefs", "APEX/Reusable-Playbooks"]
+triggers = ["meeting prep", "decision brief", "source synthesis", "contradiction", "stale information", "playbook"]
+outputs = ["source map", "executive brief", "contradiction register", "decision matrix", "playbook"]
+responsibility = "Unstructured intake, source normalization, decision intelligence, and outcome learning."
+modes = ["intake_normalization", "source_replay", "decision_brief", "meeting_brief", "playbook"]
+artifact_types = ["intelligence_brief", "contradiction_register", "source_cursor", "playbook"]
+active_writer_eligible = true
+connector_policy = "packet_only_no_direct_connectors"
+
+[agents.apex_systems_blacksmith]
+class_id = "systems_automation"
+roster_id = "APEX-19"
+status = "shadow"
+native_file = ".codex/agents/apex_systems_blacksmith.toml"
+memory_namespace = "APEX::Systems-Registry::apex_systems_blacksmith"
+write_targets = ["APEX/Systems-Registry", "APEX/Automation-Backlog", "APEX/SOP-Library", "APEX/Tooling-Change-Log"]
+triggers = ["repeated manual work", "SOP", "template", "script", "automation", "workflow infrastructure"]
+outputs = ["process map", "net-value score", "system design", "tests", "rollout and rollback plan"]
+responsibility = "Stable repeated-work systems, observed value, maintenance, and reversible automation."
+modes = ["process_diagnosis", "system_design", "shadow_validation", "value_review"]
+artifact_types = ["system_design", "automation_assessment", "value_review"]
+active_writer_eligible = true
+connector_policy = "packet_only_no_direct_connectors"
+
+[[routes]]
+route_id = "apex.strategy"
+precedence = 50
+cadences = ["weekly", "monthly"]
+intent = "direction priorities strategy campaigns bottlenecks professional growth"
+agent = "apex_war_architect"
+entry_condition = "Use when the primary decision is what professional outcome or campaign to prioritize."
+
+[[routes]]
+route_id = "apex.opportunity"
+precedence = 20
+cadences = ["daily", "weekly", "monthly"]
+intent = "leads proposals pursuits follow-ups opportunities revenue"
+agent = "apex_deal_engine"
+entry_condition = "Use for pre-award opportunity state, not committed-project delivery."
+
+[[routes]]
+route_id = "apex.delivery"
+precedence = 10
+cadences = ["daily", "weekly", "monthly"]
+intent = "active projects deadlines dependencies blockers quality quantities revisions"
+agent = "apex_delivery_commander"
+entry_condition = "Use for committed work; select exactly one delivery mode per delegation."
+
+[[routes]]
+route_id = "apex.intelligence"
+precedence = 30
+cadences = ["daily", "weekly", "monthly", "event"]
+intent = "files notes meetings evidence decisions contradictions summaries playbooks"
+agent = "apex_intelligence_forge"
+entry_condition = "Use when source normalization or current evidence is the controlling need."
+
+[[routes]]
+route_id = "apex.systems"
+precedence = 40
+cadences = ["weekly", "monthly"]
+intent = "process SOP template script automation infrastructure"
+agent = "apex_systems_blacksmith"
+entry_condition = "Use only after stable repetition or material recurring error is evidenced."
+
+[[cadence_routes]]
+cadence = "daily"
+order = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine"]
+integrator = "apex_chief_of_staff"
+
+[[cadence_routes]]
+cadence = "weekly"
+order = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine", "apex_war_architect", "apex_systems_blacksmith"]
+integrator = "apex_chief_of_staff"
+
+[[cadence_routes]]
+cadence = "monthly"
+order = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine", "apex_systems_blacksmith", "apex_war_architect"]
+integrator = "apex_chief_of_staff"
+
+[[challenge_pairs]]
+agents = ["apex_war_architect", "apex_intelligence_forge"]
+purpose = "Strategic direction versus source-backed reality."
+
+[[challenge_pairs]]
+agents = ["apex_war_architect", "apex_deal_engine"]
+purpose = "Strategic direction versus observable opportunity evidence."
+
+[[challenge_pairs]]
+agents = ["apex_war_architect", "apex_delivery_commander"]
+purpose = "Strategic ambition versus delivery capacity and execution reality."
+
+[[challenge_pairs]]
+agents = ["apex_deal_engine", "apex_delivery_commander"]
+purpose = "Opportunity promises versus delivery capacity."
+
+[[challenge_pairs]]
+agents = ["apex_delivery_commander", "apex_intelligence_forge"]
+purpose = "Execution state versus current source truth."
+
+[[challenge_pairs]]
+agents = ["apex_deal_engine", "apex_intelligence_forge"]
+purpose = "Opportunity outcomes and promises versus dated source evidence."
+
+[[challenge_pairs]]
+agents = ["apex_systems_blacksmith", "apex_delivery_commander", "apex_intelligence_forge"]
+purpose = "Automate only stable, evidenced professional repetition."
+
+[[challenge_pairs]]
+agents = ["apex_systems_blacksmith", "apex_intelligence_forge", "apex_war_architect"]
+purpose = "Observed system value and maintenance burden versus current strategic campaigns."

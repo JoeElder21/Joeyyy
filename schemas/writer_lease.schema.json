@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JoeElder21/Joeyyy/schemas/writer_lease.schema.json",
+  "title": "Agent 007 Writer Lease",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lease_id",
+    "mission_id",
+    "resource_id",
+    "owner_brain",
+    "writer_agent",
+    "write_target",
+    "issued_by",
+    "issued_at",
+    "expires_at",
+    "status",
+    "expected_state",
+    "validation_readback",
+    "rollback",
+    "sensitivity"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "lease_id": {"type": "string", "minLength": 1},
+    "mission_id": {"type": "string", "minLength": 1},
+    "resource_id": {"type": "string", "minLength": 1},
+    "owner_brain": {"enum": ["APEX", "JEOS"]},
+    "writer_agent": {"type": "string", "minLength": 1},
+    "write_target": {"type": "string", "minLength": 1},
+    "issued_by": {"const": "apex_chief_of_staff"},
+    "issued_at": {"type": "string", "minLength": 1},
+    "expires_at": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "released", "revoked"]},
+    "expected_state": {"type": "string", "minLength": 1},
+    "validation_readback": {"type": "string", "minLength": 1},
+    "rollback": {"type": "string", "minLength": 1},
+    "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]}
+  }
+}

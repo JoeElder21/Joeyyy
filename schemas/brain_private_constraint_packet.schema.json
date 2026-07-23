@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JoeElder21/Joeyyy/schemas/brain_private_constraint_packet.schema.json",
+  "title": "Agent 007 Brain-Private Sensitive Constraint Packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "packet_id",
+    "created_by",
+    "mission_id",
+    "resource_id",
+    "owner_brain",
+    "destination_agent",
+    "constraint_type",
+    "constraint_summary",
+    "allowed_uses",
+    "permitted_actions",
+    "raw_source_payload_included",
+    "source_proof_hash",
+    "sensitivity",
+    "issued_at",
+    "replay_policy",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_version": {"enum": ["2.0", "2.1"]},
+    "packet_id": {"type": "string", "minLength": 1},
+    "created_by": {"const": "apex_chief_of_staff"},
+    "mission_id": {"type": "string", "minLength": 1},
+    "resource_id": {"type": "string", "minLength": 1},
+    "owner_brain": {"const": "JEOS"},
+    "destination_agent": {"type": "string", "minLength": 1},
+    "constraint_type": {
+      "enum": ["health_limit", "finance_limit", "schedule_limit", "accessibility", "support_need", "recurring_admin", "renewal_schedule", "other"]
+    },
+    "constraint_summary": {"type": "string", "minLength": 1, "maxLength": 240},
+    "use_mode": {
+      "enum": [
+        "life_planning",
+        "relationship_support",
+        "activation_accommodation",
+        "study_accommodation",
+        "capacity_only",
+        "reflection_accommodation",
+        "life_admin",
+        "financial_admin"
+      ]
+    },
+    "allowed_uses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1, "maxLength": 160}
+    },
+    "permitted_actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": ["analyze", "read_packet_evidence", "draft", "propose", "challenge", "handoff"]
+      }
+    },
+    "raw_source_payload_included": {"const": false},
+    "source_proof_hash": {"type": "string", "minLength": 32},
+    "sensitivity": {"enum": ["internal", "confidential", "restricted"]},
+    "issued_at": {"type": "string", "minLength": 1},
+    "replay_policy": {"const": "single_mission_resource"},
+    "expires_at": {"type": "string", "minLength": 1}
+  }
+}

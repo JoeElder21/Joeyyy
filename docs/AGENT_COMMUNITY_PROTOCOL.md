@@ -4,25 +4,34 @@
 
 Agent 007 is the cross-brain coordinator and final integrator. APEX and JEOS owner agents protect their domains. Specialist agents contribute bounded expertise, evidence, validation, or implementation.
 
+Agent 007's mirrored-class routing lives in `config/specialist_corps.toml`. Brain-owned rosters, namespaces, targets, routes, and challenge pairs live in `brains/apex/agents.toml` and `brains/jeos/agents.toml`. Every specialist is read-only by default and receives no direct connector handles under this contract. While the corps is in shadow stage, Agent 007 alone holds the writer lease.
+
 ## Delegation packet
 
 Every delegated task states:
 
-1. Mission and definition of done.
-2. Owner brain and allowed evidence.
-3. Allowed actions, prohibited expansion, deadline, dependencies, and risk flags.
-4. Whether the specialist is advisory, verifier, or designated writer.
-5. Required return format and validation evidence.
+1. Delegation, mission, and canonical resource IDs plus stable definition-of-done IDs.
+2. Exactly one registered mode and one or more registered required artifact types.
+3. Owner brain and structured, Agent 007-verified evidence references.
+4. Allowed actions, prohibited expansion, deadline, dependencies, and risk flags.
+5. The exact agent, memory namespace, zero-or-one allowed write target, eligible writer agent, and writer lease.
+6. Deterministic mutation contract, required return format, and validation evidence.
+
+Machine-valid delegations use `schemas/delegation_packet.schema.json`; writer authority uses `schemas/writer_lease.schema.json`.
 
 ## Handoff packet
 
 Every specialist returns:
 
-- Status: completed, partial, or blocked.
-- Findings and actions completed.
-- Evidence, sources, tests, and tool results.
+- Copied delegation, mission, resource, agent, brain, memory, and mode identity.
+- Invocation mode, `external_actions_performed=false`, and status.
+- Registered typed artifacts plus structured delegation-bounded evidence and tests.
 - Assumptions, conflicts, and unresolved risks.
+- Exactly one evidence-linked validation result per stable definition-of-done ID.
+- Zero-or-one deterministic proposed write within delegated scope.
 - Recommended next handoff, if any.
+
+Machine-valid returns use `schemas/handoff_packet.schema.json`.
 
 ## Coordination rules
 
@@ -32,6 +41,10 @@ Every specialist returns:
 - Reconcile disagreements with evidence. Preserve unresolved positions for Joe rather than silently averaging them.
 - Pass only task-relevant context; never pass credentials, secrets, or unrelated private information.
 - Do not claim an agent received or completed a handoff unless the active session confirms it.
+- Specialists may challenge one another only inside the same brain and only with task-relevant evidence.
+- A challenge does not grant access, writer authority, or permission to enlarge scope.
+- Agent 007 chooses the final route, records unresolved disagreement, and verifies any resulting mutation.
+- Mirrored counterparts may not communicate directly; a shared class ID is not a bridge.
 
 ## Brain routing
 
@@ -40,6 +53,38 @@ Every specialist returns:
 - Agent 007 may read both and coordinate both.
 - Agent 007 may write cross-brain governance records required by Joe's mission, followed by read-back verification and matching logs in both brains.
 - Unknown ownership is a blocker to mutation, not an invitation to guess.
+- APEX and JEOS specialists never communicate directly with one another. Agent 007 may translate a shared dependency into a minimal constraint packet without disclosing the source brain's private context.
+- Only Agent 007 may create that packet, using `schemas/cross_brain_constraint_packet.schema.json`.
+- A cross-brain packet is scoped to one destination agent, mission, and resource; it expires within seven days and cannot be replayed.
+- Private constraints that stay inside JEOS use `schemas/brain_private_constraint_packet.schema.json`, also minimized, scoped, expiring, and created only by Agent 007. The destination's exact `constraint_type:use_mode` profile must be registered.
+
+## Live and asynchronous collaboration
+
+When the runtime supports live subagents, Agent 007 sends bounded delegation and handoff packets. The active environment—not a configuration promise—determines available concurrency, tools, and connectors.
+
+When specialists are not simultaneously running, each brain may use its own append-only roundtable:
+
+- APEX roundtable: APEX specialists only.
+- JEOS roundtable: JEOS specialists only.
+- Memo format: `schemas/roundtable_memo.schema.json`.
+- Agent 007 may inspect both roundtables but may not copy private content between them.
+- Roundtables preserve questions, challenges, conflicts, owners, and resolution evidence; they are not autonomous background workers.
+
+There is no claim of continuous operation. An agent works only when invoked by an active runtime or scheduled system that has been verified.
+
+## Lifecycle and designated writing
+
+1. `candidate`: definition exists but is not routed.
+2. `shadow`: static contracts and synthetic packet tests pass; outputs are advisory.
+3. `active`: every material mode passes a controlled real mission, boundary and accuracy checks, runtime connector-isolation verification, handoff validation, and readback where mutation occurs.
+4. `value-proven`: observed benefit remains positive after review, correction, and maintenance burden.
+5. `restricted`, `deprecated`, or `retired`: scope is limited or removed with a reversible record.
+
+One active writer lease owns every canonical brain/target/resource across all missions. Parallel specialists may analyze the same mission, but only Agent 007 may mutate the canonical target while the corps is in shadow stage. A specialist becomes writer-eligible only after active/value-proven status, a versioned native sandbox change away from read-only, an allowlisted owner target, and a matching lease. Every external write requires a verified mutation-result packet before completion is claimed.
+
+## Public-repository privacy
+
+This repository stores sanitized instructions, schemas, tests, and synthetic fixtures. Private Drive content, personal facts, employer or client records, credentials, and connector identifiers are retrieved only at runtime, minimized to the mission, and never copied into public source control.
 
 ## Agent intake
 
@@ -48,8 +93,8 @@ Use `templates/agent-intake.md` for every new or materially changed agent.
 1. Read the full instruction/configuration files and directly referenced operating files.
 2. Check purpose, owner brain, triggers, dependencies, write targets, boundaries, handoffs, validation, duplication, and conflicts.
 3. Register the agent as `candidate` in `docs/AGENT_REGISTRY.md`.
-4. Test the agent's contract and one realistic handoff.
-5. Mark it `active` only after validation evidence exists.
+4. Test the agent's contract and each material mode with realistic handoffs.
+5. Mark it `active` only after controlled real-mission and runtime isolation evidence exists.
 
 ## Capability absorption
 

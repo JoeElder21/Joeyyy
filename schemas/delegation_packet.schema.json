@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JoeElder21/Joeyyy/schemas/delegation_packet.schema.json",
+  "title": "Agent 007 Delegation Packet v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "delegation_id",
+    "mission_id",
+    "resource_id",
+    "agent",
+    "owner_brain",
+    "memory_namespace",
+    "roundtable_namespace",
+    "mission",
+    "definition_of_done",
+    "allowed_evidence",
+    "allowed_read_namespaces",
+    "allowed_write_targets",
+    "prohibited_scope",
+    "allowed_actions",
+    "writer_agent",
+    "writer_lease_id",
+    "approval_level",
+    "sensitivity",
+    "return_schema"
+  ],
+  "properties": {
+    "schema_version": {"enum": ["2.0", "2.1"]},
+    "delegation_id": {"type": "string", "minLength": 1},
+    "mission_id": {"type": "string", "minLength": 1},
+    "resource_id": {"type": "string", "minLength": 1},
+    "agent": {"type": "string", "minLength": 1},
+    "owner_brain": {"enum": ["APEX", "JEOS"]},
+    "memory_namespace": {"type": "string", "minLength": 1},
+    "roundtable_namespace": {"type": "string", "minLength": 1},
+    "mission": {"type": "string", "minLength": 1},
+    "definition_of_done": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "allowed_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_ref",
+          "owner_brain",
+          "source_type",
+          "scope_verified_by",
+          "sensitivity"
+        ],
+        "properties": {
+          "source_ref": {"type": "string", "minLength": 1},
+          "owner_brain": {"enum": ["APEX", "JEOS"]},
+          "source_type": {
+            "enum": ["attachment", "runtime_record", "connector_record", "synthetic", "cross_brain_constraint", "brain_private_constraint"]
+          },
+          "scope_verified_by": {"const": "apex_chief_of_staff"},
+          "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]}
+        }
+      }
+    },
+    "allowed_read_namespaces": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "allowed_write_targets": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "prohibited_scope": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "allowed_actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": ["analyze", "read_packet_evidence", "draft", "propose", "challenge", "handoff"]
+      }
+    },
+    "writer_agent": {"type": ["string", "null"]},
+    "writer_lease_id": {"type": ["string", "null"]},
+    "deadline": {"type": ["string", "null"]},
+    "dependencies": {"type": "array", "items": {"type": "string"}},
+    "risk_flags": {"type": "array", "items": {"type": "string"}},
+    "approval_level": {"enum": ["L0", "L1", "L2", "L3", "L4"]},
+    "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]},
+    "return_schema": {"const": "schemas/handoff_packet.schema.json"}
+    ,
+    "mode": {"type": "string", "minLength": 1},
+    "definition_of_done_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"
+      }
+    },
+    "required_artifact_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "[a-z][a-z0-9_]{0,63}"
+      }
+    },
+    "mutation_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed_operations",
+        "require_idempotency_key",
+        "require_expected_version"
+      ],
+      "properties": {
+        "allowed_operations": {
+          "type": "array",
+          "items": {
+            "enum": ["append", "upsert", "patch", "replace", "disable"]
+          }
+        },
+        "require_idempotency_key": {"type": "boolean"},
+        "require_expected_version": {"type": "boolean"}
+      }
+    }
+  }
+}

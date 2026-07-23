@@ -23,7 +23,10 @@
 - Connectors:
 - Skills:
 - Memory sources:
+- Logical memory namespace:
 - Allowed write targets:
+- Brain roundtable namespace:
+- Writer-lease requirement:
 - Prohibited targets:
 - Professional or privacy risks:
 
@@ -42,8 +45,11 @@
 - Configuration parsed:
 - Boundary test:
 - Handoff test:
+- Namespace and target test:
+- Writer-lease collision test:
 - Tool/access verification:
 - Designated-writer test:
+- Readback and rollback test:
 - Failure and rollback test:
 - Evidence:
 

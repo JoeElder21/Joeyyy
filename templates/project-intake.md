@@ -23,7 +23,7 @@
 
 ## Agent Plan
 
-List specialist assignments, delegation packets, designated writers, and required handoffs.
+List specialist assignments, owner brain, memory namespace, resource ID, delegation packets, writer leases, and required same-brain handoffs.
 
 ## Communication and System Actions
 
@@ -31,7 +31,7 @@ List recipients or systems, timing, action status, and validation result. Execut
 
 ## Completion Log
 
-List completed changes, tests or checks, failures, and recovery actions.
+List completed changes, tests or checks, readback evidence, rollback evidence, failures, and recovery actions.
 
 ## Joe's Next Move
 
