@@ -1,7 +1,10 @@
-version = "1.0.0"
+version = "2.0.0"
 deployed_on = "2026-07-23"
-apex_roster = ["apex_grademaster", "apex_countwise", "apex_signalkeeper", "apex_ascent_90", "apex_forgewright"]
-jeos_roster = ["jeos_examiner", "jeos_tempo", "jeos_shepherd", "jeos_hearthkeeper", "jeos_lifewright"]
+rollback_parent = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
+apex_brain_manifest = "brains/apex/agents.toml"
+jeos_brain_manifest = "brains/jeos/agents.toml"
+apex_roster = ["apex_war_architect", "apex_deal_engine", "apex_delivery_commander", "apex_intelligence_forge", "apex_systems_blacksmith"]
+jeos_roster = ["jeos_life_architect", "jeos_momentum_engine", "jeos_energy_director", "jeos_reflection_forge", "jeos_lifestyle_systems_builder"]
 
 [governance]
 sole_cross_brain_agent = "apex_chief_of_staff"
@@ -9,178 +12,345 @@ default_specialist_sandbox = "read-only"
 designated_executor = "apex_chief_of_staff"
 communication_mode = "live Agent 007 handoffs plus separate brain-private append-only roundtables"
 repository_visibility = "public"
-private_context_policy = "Retrieve minimum authorized context at runtime; never commit private Drive facts."
+private_context_policy = "Retrieve minimum authorized context at runtime; never commit private APEX or JEOS source data."
 continuous_runtime_claim = false
+writer_lease_required = true
+readback_required = true
+packet_guard = "scripts/packet_guard.py"
+mutation_result_schema = "schemas/mutation_result.schema.json"
+brain_private_constraint_schema = "schemas/brain_private_constraint_packet.schema.json"
+single_writer_scope = "owner brain + write target + canonical resource across all missions"
+apex_roundtable_write_target = "APEX/Roundtable"
+jeos_roundtable_write_target = "JEOS/Roundtable"
 
 [lifecycle]
 stages = ["candidate", "shadow", "active", "value-proven", "restricted", "deprecated", "retired"]
 deployed_stage = "shadow"
 active_gate = "Static contract tests plus one controlled real mission with evidence and readback."
-value_gate = "Observed net value after review, correction, and maintenance burden."
+value_gate = "Observed net value after review, correction, maintenance, and failure burden."
 
-[agents.apex_grademaster]
+[mirrored_classes.strategy]
+apex = "apex_war_architect"
+jeos = "jeos_life_architect"
+
+[mirrored_classes.opportunity_momentum]
+apex = "apex_deal_engine"
+jeos = "jeos_momentum_engine"
+
+[mirrored_classes.execution_capacity]
+apex = "apex_delivery_commander"
+jeos = "jeos_energy_director"
+
+[mirrored_classes.intelligence_reflection]
+apex = "apex_intelligence_forge"
+jeos = "jeos_reflection_forge"
+
+[mirrored_classes.systems_automation]
+apex = "apex_systems_blacksmith"
+jeos = "jeos_lifestyle_systems_builder"
+
+[agents.apex_war_architect]
+brain = "APEX"
+class_id = "strategy"
+roster_id = "APEX-15"
+status = "shadow"
+file = ".codex/agents/apex_war_architect.toml"
+brain_manifest = "brains/apex/agents.toml"
+memory_namespace = "APEX::Strategy-Campaigns::apex_war_architect"
+write_targets = ["APEX/Strategy-Campaigns", "APEX/Decision-Log", "APEX/Career-Evidence"]
+purpose = "Professional strategy, campaigns, priorities, and bottleneck decisions."
+writer = "apex_chief_of_staff"
+
+[agents.apex_deal_engine]
+brain = "APEX"
+class_id = "opportunity_momentum"
+roster_id = "APEX-16"
+status = "shadow"
+file = ".codex/agents/apex_deal_engine.toml"
+brain_manifest = "brains/apex/agents.toml"
+memory_namespace = "APEX::Opportunity-Pipeline::apex_deal_engine"
+write_targets = ["APEX/Opportunity-Pipeline", "APEX/Professional-Follow-Ups", "APEX/Proposal-Control"]
+purpose = "Professional opportunities, proposals, follow-ups, and ethical revenue acceleration."
+writer = "apex_chief_of_staff"
+
+[agents.apex_delivery_commander]
+brain = "APEX"
+class_id = "execution_capacity"
+roster_id = "APEX-17"
+status = "shadow"
+file = ".codex/agents/apex_delivery_commander.toml"
+brain_manifest = "brains/apex/agents.toml"
+memory_namespace = "APEX::Delivery-Control::apex_delivery_commander"
+write_targets = ["APEX/Delivery-Control", "APEX/Project-Controls", "APEX/QA-Risk", "APEX/Commitment-Register"]
+purpose = "Active-project throughput, dependencies, technical and quantitative quality risk."
+writer = "apex_chief_of_staff"
+
+[agents.apex_intelligence_forge]
+brain = "APEX"
+class_id = "intelligence_reflection"
+roster_id = "APEX-18"
+status = "shadow"
+file = ".codex/agents/apex_intelligence_forge.toml"
+brain_manifest = "brains/apex/agents.toml"
+memory_namespace = "APEX::Intelligence-Decisions::apex_intelligence_forge"
+write_targets = ["APEX/Intelligence-Decisions", "APEX/Source-Index", "APEX/Meeting-Briefs", "APEX/Reusable-Playbooks"]
+purpose = "Professional evidence normalization, decision briefs, contradictions, and playbooks."
+writer = "apex_chief_of_staff"
+
+[agents.apex_systems_blacksmith]
+brain = "APEX"
+class_id = "systems_automation"
+roster_id = "APEX-19"
+status = "shadow"
+file = ".codex/agents/apex_systems_blacksmith.toml"
+brain_manifest = "brains/apex/agents.toml"
+memory_namespace = "APEX::Systems-Registry::apex_systems_blacksmith"
+write_targets = ["APEX/Systems-Registry", "APEX/Automation-Backlog", "APEX/SOP-Library", "APEX/Tooling-Change-Log"]
+purpose = "Professional SOP, template, tooling, workflow, and automation design."
+writer = "apex_chief_of_staff"
+
+[agents.jeos_life_architect]
+brain = "JEOS"
+class_id = "strategy"
+roster_id = "JEOS-14"
+status = "shadow"
+file = ".codex/agents/jeos_life_architect.toml"
+brain_manifest = "brains/jeos/agents.toml"
+memory_namespace = "JEOS::Life-Architecture::jeos_life_architect"
+write_targets = ["JEOS/Life-Architecture", "JEOS/Personal-Decision-Log", "JEOS/Commitment-Radar", "JEOS/Weekly-Life-Plan"]
+purpose = "Personal strategy, goal alignment, routines, commitments, and life planning."
+writer = "apex_chief_of_staff"
+
+[agents.jeos_momentum_engine]
+brain = "JEOS"
+class_id = "opportunity_momentum"
+roster_id = "JEOS-15"
+status = "shadow"
+file = ".codex/agents/jeos_momentum_engine.toml"
+brain_manifest = "brains/jeos/agents.toml"
+memory_namespace = "JEOS::Momentum-Queue::jeos_momentum_engine"
+write_targets = ["JEOS/Momentum-Queue", "JEOS/Habit-Loops", "JEOS/Study-Repetition", "JEOS/Completion-Evidence"]
+purpose = "Personal action activation, habits, study, follow-through, and recovery."
+writer = "apex_chief_of_staff"
+
+[agents.jeos_energy_director]
+brain = "JEOS"
+class_id = "execution_capacity"
+roster_id = "JEOS-16"
+status = "shadow"
+file = ".codex/agents/jeos_energy_director.toml"
+brain_manifest = "brains/jeos/agents.toml"
+memory_namespace = "JEOS::Energy-Capacity::jeos_energy_director"
+write_targets = ["JEOS/Energy-Capacity", "JEOS/Recovery-Windows", "JEOS/Peak-Window-Map", "JEOS/Schedule-Constraints"]
+purpose = "Personal capacity, peak-window placement, recovery, and sustainable output."
+writer = "apex_chief_of_staff"
+
+[agents.jeos_reflection_forge]
+brain = "JEOS"
+class_id = "intelligence_reflection"
+roster_id = "JEOS-17"
+status = "shadow"
+file = ".codex/agents/jeos_reflection_forge.toml"
+brain_manifest = "brains/jeos/agents.toml"
+memory_namespace = "JEOS::Reflection-Ledger::jeos_reflection_forge"
+write_targets = ["JEOS/Reflection-Ledger", "JEOS/Pattern-Hypotheses", "JEOS/Lessons-and-Rules", "JEOS/Growth-Experiments"]
+purpose = "Personal reflection, pattern hypotheses, lessons, faith mode, and growth experiments."
+writer = "apex_chief_of_staff"
+
+[agents.jeos_lifestyle_systems_builder]
+brain = "JEOS"
+class_id = "systems_automation"
+roster_id = "JEOS-18"
+status = "shadow"
+file = ".codex/agents/jeos_lifestyle_systems_builder.toml"
+brain_manifest = "brains/jeos/agents.toml"
+memory_namespace = "JEOS::Lifestyle-Systems-Registry::jeos_lifestyle_systems_builder"
+write_targets = ["JEOS/Lifestyle-Systems-Registry", "JEOS/Life-Admin-Automations", "JEOS/Checklist-Library", "JEOS/Maintenance-and-Renewal-Map"]
+purpose = "Personal administration, bills and subscriptions, checklists, reminders, routines, and automation design."
+writer = "apex_chief_of_staff"
+
+[retired.apex_grademaster]
 brain = "APEX"
 roster_id = "APEX-10"
-status = "shadow"
-file = ".codex/agents/apex_grademaster.toml"
-purpose = "Terrain, grading, drainage, and accessibility QA."
-writer = "Agent 007 or existing APEX owner"
+status = "retired"
+replaced_by = ["apex_delivery_commander"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.apex_countwise]
+[retired.apex_countwise]
 brain = "APEX"
 roster_id = "APEX-11"
-status = "shadow"
-file = ".codex/agents/apex_countwise.toml"
-purpose = "Reproducible quantities, cost evidence, and revision cascades."
-writer = "Agent 007 or existing APEX owner"
+status = "retired"
+replaced_by = ["apex_delivery_commander", "apex_intelligence_forge"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.apex_signalkeeper]
+[retired.apex_signalkeeper]
 brain = "APEX"
 roster_id = "APEX-12"
-status = "shadow"
-file = ".codex/agents/apex_signalkeeper.toml"
-purpose = "Project intake, change propagation, and register-feed mutation packets."
-writer = "Existing APEX truth, controls, or communications owner"
+status = "retired"
+replaced_by = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.apex_ascent_90]
+[retired.apex_ascent_90]
 brain = "APEX"
 roster_id = "APEX-13"
-status = "shadow"
-file = ".codex/agents/apex_ascent_90.toml"
-purpose = "Professional integration and career-evidence stewardship."
-writer = "Agent 007 or existing APEX career owner"
+status = "retired"
+replaced_by = ["apex_war_architect", "apex_intelligence_forge"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.apex_forgewright]
+[retired.apex_forgewright]
 brain = "APEX"
 roster_id = "APEX-14"
-status = "shadow"
-file = ".codex/agents/apex_forgewright.toml"
-purpose = "APEX systems and automation design."
-writer = "Agent 007-assigned implementation writer"
+status = "retired"
+replaced_by = ["apex_systems_blacksmith"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.jeos_examiner]
+[retired.jeos_examiner]
 brain = "JEOS"
 roster_id = "JEOS-09"
-status = "shadow"
-file = ".codex/agents/jeos_examiner.toml"
-purpose = "LARE retrieval practice and readiness."
-writer = "Agent 007 or existing JEOS study owner"
+status = "retired"
+replaced_by = ["jeos_momentum_engine"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.jeos_tempo]
+[retired.jeos_tempo]
 brain = "JEOS"
 roster_id = "JEOS-10"
-status = "shadow"
-file = ".codex/agents/jeos_tempo.toml"
-purpose = "Capacity, cadence, and consistency governance."
-writer = "Agent 007 or existing JEOS planning owner"
+status = "retired"
+replaced_by = ["jeos_energy_director"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.jeos_shepherd]
+[retired.jeos_shepherd]
 brain = "JEOS"
 roster_id = "JEOS-11"
-status = "shadow"
-file = ".codex/agents/jeos_shepherd.toml"
-purpose = "Faith formation and examen."
-writer = "Agent 007 or existing JEOS faith-memory owner"
+status = "retired"
+replaced_by = ["jeos_reflection_forge"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.jeos_hearthkeeper]
+[retired.jeos_hearthkeeper]
 brain = "JEOS"
 roster_id = "JEOS-12"
-status = "shadow"
-file = ".codex/agents/jeos_hearthkeeper.toml"
-purpose = "Relationship commitments and family logistics."
-writer = "Agent 007 or existing JEOS relationships owner"
+status = "retired"
+replaced_by = ["jeos_life_architect", "jeos_momentum_engine"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[agents.jeos_lifewright]
+[retired.jeos_lifewright]
 brain = "JEOS"
 roster_id = "JEOS-13"
-status = "shadow"
-file = ".codex/agents/jeos_lifewright.toml"
-purpose = "JEOS systems and automation design."
-writer = "Agent 007-assigned implementation writer"
+status = "retired"
+replaced_by = ["jeos_lifestyle_systems_builder"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
-[bench.apex_rainmaker]
+[retired.apex_rainmaker]
 brain = "APEX"
-status = "dormant"
-native_file = ""
-purpose = "On-demand side-practice stewardship."
-reason = "Useful but lower current-load return than SIGNALKEEPER; preserved as a recoverable bench concept."
+status = "retired"
+replaced_by = ["apex_deal_engine"]
+rollback_commit = "4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c"
 
 [[routes]]
-intent = "grading drainage accessibility technical QA"
+intent = "professional strategy priorities campaigns goals bottlenecks career direction"
 brain = "APEX"
-agent = "apex_grademaster"
+agent = "apex_war_architect"
 
 [[routes]]
-intent = "takeoff quantity cost evidence revision delta"
+intent = "leads proposals pursuits follow-ups dormant opportunities revenue action"
 brain = "APEX"
-agent = "apex_countwise"
+agent = "apex_deal_engine"
 
 [[routes]]
-intent = "project intake meeting email revised-set change propagation register feed"
+intent = "active projects deadlines dependencies blockers quality risk grading quantities revisions"
 brain = "APEX"
-agent = "apex_signalkeeper"
+agent = "apex_delivery_commander"
 
 [[routes]]
-intent = "professional onboarding process learning verified wins career evidence"
+intent = "professional files notes meetings evidence decisions contradictions summaries playbooks"
 brain = "APEX"
-agent = "apex_ascent_90"
+agent = "apex_intelligence_forge"
 
 [[routes]]
-intent = "professional automation skill script template system"
+intent = "professional process SOP template script automation infrastructure"
 brain = "APEX"
-agent = "apex_forgewright"
+agent = "apex_systems_blacksmith"
 
 [[routes]]
-intent = "LARE study retrieval drill spaced repetition readiness"
+intent = "personal strategy goals routines commitments weekly monthly life planning"
 brain = "JEOS"
-agent = "jeos_examiner"
+agent = "jeos_life_architect"
 
 [[routes]]
-intent = "capacity cadence overload consistency recovery constraint"
+intent = "personal actions habits procrastination backlog study follow-through restart"
 brain = "JEOS"
-agent = "jeos_tempo"
+agent = "jeos_momentum_engine"
 
 [[routes]]
-intent = "faith scripture reflection examen character"
+intent = "personal time energy overload recovery bandwidth peak windows"
 brain = "JEOS"
-agent = "jeos_shepherd"
+agent = "jeos_energy_director"
 
 [[routes]]
-intent = "relationship family commitment confirmed date presence plan"
+intent = "personal journal notes screenshots voice reflection patterns faith lessons"
 brain = "JEOS"
-agent = "jeos_hearthkeeper"
+agent = "jeos_reflection_forge"
 
 [[routes]]
-intent = "personal automation checklist tracker reminder system"
+intent = "personal errands maintenance travel renewals subscriptions bills budget admin checklist automation"
 brain = "JEOS"
-agent = "jeos_lifewright"
+agent = "jeos_lifestyle_systems_builder"
 
 [[challenge_pairs]]
 brain = "APEX"
-agents = ["apex_grademaster", "apex_countwise"]
-purpose = "Technical intent versus quantity and cost consequence."
+agents = ["apex_war_architect", "apex_intelligence_forge"]
+purpose = "Strategic direction versus source-backed reality."
 
 [[challenge_pairs]]
 brain = "APEX"
-agents = ["apex_signalkeeper", "apex_grademaster", "apex_countwise"]
-purpose = "Source change, technical review, and downstream delta closure."
+agents = ["apex_war_architect", "apex_deal_engine"]
+purpose = "Strategic direction versus observable opportunity evidence."
 
 [[challenge_pairs]]
 brain = "APEX"
-agents = ["apex_ascent_90", "apex_forgewright"]
-purpose = "Automation time versus higher-value professional learning."
+agents = ["apex_war_architect", "apex_delivery_commander"]
+purpose = "Strategic ambition versus delivery capacity and execution reality."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_deal_engine", "apex_delivery_commander"]
+purpose = "Opportunity promises versus delivery capacity."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_delivery_commander", "apex_intelligence_forge"]
+purpose = "Execution state versus current source truth."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_deal_engine", "apex_intelligence_forge"]
+purpose = "Opportunity outcomes and promises versus dated source evidence."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_systems_blacksmith", "apex_delivery_commander", "apex_intelligence_forge"]
+purpose = "Automate only stable, evidenced professional repetition."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_systems_blacksmith", "apex_intelligence_forge", "apex_war_architect"]
+purpose = "Observed system value and maintenance burden versus current strategic campaigns."
 
 [[challenge_pairs]]
 brain = "JEOS"
-agents = ["jeos_examiner", "jeos_tempo"]
-purpose = "Study intensity versus sustainable capacity."
+agents = ["jeos_life_architect", "jeos_reflection_forge"]
+purpose = "Intended direction versus a reflection synthesis dated within seven days; the synthesis may cite older longitudinal observations."
 
 [[challenge_pairs]]
 brain = "JEOS"
-agents = ["jeos_shepherd", "jeos_hearthkeeper"]
-purpose = "Values alignment versus practical relationship follow-through."
+agents = ["jeos_momentum_engine", "jeos_energy_director"]
+purpose = "Execution pressure versus sustainable capacity; use same-day evidence for a daily plan."
 
 [[challenge_pairs]]
 brain = "JEOS"
-agents = ["jeos_tempo", "jeos_lifewright"]
-purpose = "Stable habit before automation."
+agents = ["jeos_momentum_engine", "jeos_lifestyle_systems_builder"]
+purpose = "Prove stable repetition before automation."
+
+[[challenge_pairs]]
+brain = "JEOS"
+agents = ["jeos_life_architect", "jeos_momentum_engine", "jeos_energy_director"]
+purpose = "Direction, activation, and feasible placement; Agent 007 alone integrates the canonical plan."

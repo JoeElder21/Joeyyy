@@ -34,10 +34,13 @@ The personal Agent 007 skill supplies cross-chat activation. This project suppli
 
 - Use the smallest useful specialist team and one designated writer per shared resource.
 - Follow `docs/AGENT_COMMUNITY_PROTOCOL.md` for delegation, handoffs, conflict resolution, registry intake, capability absorption, error learning, and weekly audits.
-- Follow `config/specialist_corps.toml` for the canonical five-agent APEX roster, five-agent JEOS roster, routing, challenge pairs, lifecycle, and dormant bench.
+- Follow `config/specialist_corps.toml` for Agent 007's cross-brain mirrored-class routing and lifecycle.
+- Follow `brains/apex/agents.toml` and `brains/jeos/agents.toml` for the brain-owned rosters, logical memory namespaces, proposed write targets, routes, and challenge pairs.
 - APEX specialists may communicate only inside APEX. JEOS specialists may communicate only inside JEOS. Agent 007 is the sole cross-brain agent.
-- Specialists default to read-only analysis and proposed writes. Agent 007 or an existing owner executes and verifies mutations.
-- Use the JSON schemas in `schemas/` for delegation, handoff, and brain-private roundtable packets.
+- Mirrored counterparts share only a functional class. They have separate prompts, evidence, memory, write targets, roundtables, and may not communicate directly.
+- Specialists default to read-only analysis and proposed writes. While they are in shadow stage, Agent 007 alone executes and verifies mutations.
+- Use the JSON schemas in `schemas/` for delegation, handoff, memory, writer-lease, cross-brain-constraint, and brain-private roundtable packets.
+- Issue one active writer lease per canonical brain/target/resource across all missions. Report a mutation complete only after schema-valid readback and rollback evidence.
 - Register every new agent in `docs/AGENT_REGISTRY.md` and validate it before active use.
 - Read new agent instruction files completely; extract only compatible, reusable capabilities.
 - Every persistent improvement must be evidence-led, tested, versioned, reversible, and recorded with a rollback point.

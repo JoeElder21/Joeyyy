@@ -1,16 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/JoeElder21/Joeyyy/schemas/handoff_packet.schema.json",
-  "title": "Specialist Handoff Packet",
+  "title": "Specialist Handoff Packet v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
+    "delegation_id",
     "mission_id",
+    "resource_id",
     "agent",
     "owner_brain",
+    "memory_namespace",
+    "invocation_mode",
+    "external_actions_performed",
     "status",
     "findings",
     "evidence",
+    "tests",
     "assumptions",
     "blockers",
     "challenges",
@@ -21,18 +28,68 @@
     "recommended_next_handoff"
   ],
   "properties": {
+    "schema_version": {"const": "2.0"},
+    "delegation_id": {"type": ["string", "null"]},
     "mission_id": {"type": "string", "minLength": 1},
+    "resource_id": {"type": "string", "minLength": 1},
     "agent": {"type": "string", "minLength": 1},
     "owner_brain": {"enum": ["APEX", "JEOS"]},
+    "memory_namespace": {"type": "string", "minLength": 1},
+    "invocation_mode": {"enum": ["delegated", "direct_read_only"]},
+    "external_actions_performed": {"const": false},
     "status": {"enum": ["completed", "partial", "blocked", "boundary_blocked"]},
     "findings": {"type": "array", "items": {"type": "string"}},
-    "actions_completed": {"type": "array", "items": {"type": "string"}},
-    "evidence": {"type": "array", "items": {"type": "string"}},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_ref",
+          "owner_brain",
+          "source_type",
+          "scope_verified_by",
+          "sensitivity"
+        ],
+        "properties": {
+          "source_ref": {"type": "string", "minLength": 1},
+          "owner_brain": {"enum": ["APEX", "JEOS"]},
+          "source_type": {
+            "enum": ["attachment", "runtime_record", "connector_record", "synthetic", "cross_brain_constraint", "brain_private_constraint"]
+          },
+          "scope_verified_by": {"const": "apex_chief_of_staff"},
+          "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]}
+        }
+      }
+    },
     "tests": {"type": "array", "items": {"type": "string"}},
     "assumptions": {"type": "array", "items": {"type": "string"}},
     "blockers": {"type": "array", "items": {"type": "string"}},
     "challenges": {"type": "array", "items": {"type": "string"}},
-    "proposed_writes": {"type": "array", "items": {"type": "string"}},
+    "proposed_writes": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target",
+          "expected_state",
+          "validation_readback",
+          "rollback",
+          "writer_agent",
+          "writer_lease_id"
+        ],
+        "properties": {
+          "target": {"type": "string", "minLength": 1},
+          "expected_state": {"type": "string", "minLength": 1},
+          "validation_readback": {"type": "string", "minLength": 1},
+          "rollback": {"type": "string", "minLength": 1},
+          "writer_agent": {"type": "string", "minLength": 1},
+          "writer_lease_id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "validation": {"type": "array", "items": {"type": "string"}},
     "confidence": {"enum": ["confirmed", "source-backed", "judgment", "assumption", "unknown"]},
     "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]},

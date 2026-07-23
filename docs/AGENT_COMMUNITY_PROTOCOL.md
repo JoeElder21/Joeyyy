@@ -4,28 +4,29 @@
 
 Agent 007 is the cross-brain coordinator and final integrator. APEX and JEOS owner agents protect their domains. Specialist agents contribute bounded expertise, evidence, validation, or implementation.
 
-The canonical roster and intent routing live in `config/specialist_corps.toml`. Every specialist is read-only by default. Agent 007 or an existing brain owner is the designated writer.
+Agent 007's mirrored-class routing lives in `config/specialist_corps.toml`. Brain-owned rosters, namespaces, targets, routes, and challenge pairs live in `brains/apex/agents.toml` and `brains/jeos/agents.toml`. Every specialist is read-only by default. While the corps is in shadow stage, Agent 007 alone holds the writer lease.
 
 ## Delegation packet
 
 Every delegated task states:
 
-1. Mission and definition of done.
-2. Owner brain and allowed evidence.
+1. Delegation, mission, and canonical resource IDs plus definition of done.
+2. Owner brain and structured, Agent 007-verified evidence references.
 3. Allowed actions, prohibited expansion, deadline, dependencies, and risk flags.
-4. Whether the specialist is advisory, verifier, or designated writer.
+4. The exact agent, memory namespace, zero-or-one allowed write target, writer agent, and writer lease.
 5. Required return format and validation evidence.
 
-Machine-valid delegations use `schemas/delegation_packet.schema.json`.
+Machine-valid delegations use `schemas/delegation_packet.schema.json`; writer authority uses `schemas/writer_lease.schema.json`.
 
 ## Handoff packet
 
 Every specialist returns:
 
-- Status: completed, partial, or blocked.
-- Findings and actions completed.
-- Evidence, sources, tests, and tool results.
+- Copied delegation, mission, resource, agent, brain, and memory identity.
+- Invocation mode, `external_actions_performed=false`, and status.
+- Findings plus structured delegation-bounded evidence and tests.
 - Assumptions, conflicts, and unresolved risks.
+- Zero-or-one source-linked proposed write within delegated scope.
 - Recommended next handoff, if any.
 
 Machine-valid returns use `schemas/handoff_packet.schema.json`.
@@ -41,6 +42,7 @@ Machine-valid returns use `schemas/handoff_packet.schema.json`.
 - Specialists may challenge one another only inside the same brain and only with task-relevant evidence.
 - A challenge does not grant access, writer authority, or permission to enlarge scope.
 - Agent 007 chooses the final route, records unresolved disagreement, and verifies any resulting mutation.
+- Mirrored counterparts may not communicate directly; a shared class ID is not a bridge.
 
 ## Brain routing
 
@@ -50,6 +52,9 @@ Machine-valid returns use `schemas/handoff_packet.schema.json`.
 - Agent 007 may write cross-brain governance records required by Joe's mission, followed by read-back verification and matching logs in both brains.
 - Unknown ownership is a blocker to mutation, not an invitation to guess.
 - APEX and JEOS specialists never communicate directly with one another. Agent 007 may translate a shared dependency into a minimal constraint packet without disclosing the source brain's private context.
+- Only Agent 007 may create that packet, using `schemas/cross_brain_constraint_packet.schema.json`.
+- A cross-brain packet is scoped to one destination agent, mission, and resource; it expires within seven days and cannot be replayed.
+- Sensitive health or finance context that stays inside JEOS uses `schemas/brain_private_constraint_packet.schema.json`, also minimized, scoped, expiring, and created only by Agent 007.
 
 ## Live and asynchronous collaboration
 
@@ -73,7 +78,7 @@ There is no claim of continuous operation. An agent works only when invoked by a
 4. `value-proven`: observed benefit remains positive after review, correction, and maintenance burden.
 5. `restricted`, `deprecated`, or `retired`: scope is limited or removed with a reversible record.
 
-One designated writer owns every mutable file, event, message, task, register, or external record. Parallel specialists may analyze the same mission, but only the assigned writer mutates the canonical target. Every external write requires readback before completion is claimed.
+One active writer lease owns every canonical brain/target/resource across all missions. Parallel specialists may analyze the same mission, but only Agent 007 may mutate the canonical target while the corps is in shadow stage. Every external write requires a verified mutation-result packet before completion is claimed.
 
 ## Public-repository privacy
 

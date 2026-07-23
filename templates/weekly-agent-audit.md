@@ -5,6 +5,8 @@
 - Period:
 - Evidence available through:
 - Agents and systems inspected:
+- Callable roster versus brain manifests:
+- Namespace and write-target inventory:
 - Evidence unavailable:
 
 ## Executive scorecard
@@ -16,6 +18,14 @@ Use evidence, not invented numbers.
 | Agent 007 |  |  |  |  |  |  |  |
 | APEX |  |  |  |  |  |  |  |
 | JEOS |  |  |  |  |  |  |  |
+
+## Writer and memory controls
+
+- Duplicate or conflicting writer leases:
+- Completed writes missing readback:
+- Missing rollback evidence:
+- Namespace or target boundary failures:
+- Cross-brain constraint packets reviewed:
 
 ## Agent-by-agent findings
 
