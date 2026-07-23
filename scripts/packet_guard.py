@@ -702,6 +702,10 @@ class PacketGuard:
                         errors.append(
                             f"artifact record {record_id!r} must contain structured fields"
                         )
+                    if packet["status"] == "completed" and not record["source_refs"]:
+                        errors.append(
+                            f"artifact record {record_id!r} in a completed handoff requires source evidence"
+                        )
                     if not set(record["source_refs"]).issubset(delegated_source_refs):
                         errors.append(
                             f"artifact record {record_id!r} cites undelegated evidence"

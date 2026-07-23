@@ -227,6 +227,20 @@ class PacketContractTests(unittest.TestCase):
             delegations=[delegation],
         )
 
+    def test_v21_completed_artifact_records_require_source_evidence(self):
+        delegation, handoff = self.v21_readonly_pair()
+        unsourced = deepcopy(handoff)
+        unsourced["artifacts"][0]["records"][0]["source_refs"] = []
+        errors = self.guard.validate(
+            "handoff_packet.schema.json",
+            unsourced,
+            delegations=[delegation],
+        )
+        self.assertTrue(
+            any("requires source evidence" in error for error in errors),
+            errors,
+        )
+
     def test_v21_deterministic_write_and_shadow_writer_eligibility(self):
         delegation, handoff = self.v21_readonly_pair()
         delegation.update(
