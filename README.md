@@ -21,8 +21,12 @@ See [docs/APEX_CHIEF_OF_STAFF.md](docs/APEX_CHIEF_OF_STAFF.md) for the operating
 - `docs/APEX_CHIEF_OF_STAFF.md` — scope, workflow, safety boundaries, and invocation examples.
 - `templates/daily-brief.md` — stable daily briefing structure.
 - `templates/project-intake.md` — structured intake for new assignments.
+- `tests/test_agent_contract.py` — automated validation of the agent's required safety and operating boundaries.
 
 ## Memory and connected tools
 
 The agent can use tools and connectors available in the active Codex session. Yaps Memory is optional and must be connected separately. The agent must never claim that a connector or memory source is available until the active session verifies it.
 
+## Validation
+
+Run `python -m unittest discover -s tests -v`. GitHub Actions runs the same contract checks on pushes to `main` and on pull requests.
