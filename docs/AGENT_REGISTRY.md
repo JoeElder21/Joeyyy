@@ -28,6 +28,33 @@ An agent becomes active only after its configuration, boundaries, handoff, and v
 - Last audit: pending first scheduled audit
 - Known errors: none recorded in this repository
 
+## Candidate infrastructure and tools
+
+External tools under evaluation for the ecosystem. These are not agents; they are infrastructure that agents would use. None may be treated as available until validated in its target environment. Source analysis: `docs/ECOSYSTEM_REPO_ANALYSIS.md` (2026-07-23).
+
+### Civil 3D MCP connector (barbosaihan/civil3d-mcp)
+
+- Status: candidate
+- Owner layer: APEX (Civil 3D workflow automation)
+- Purpose: let Claude query and edit live Civil 3D drawings through MCP meta-tools (`civil3d_query`, `civil3d_execute`, `civil3d_skills`)
+- Validation gate: build on the Civil 3D workstation per `docs/CIVIL3D_MCP_BUILDOUT.md`; read-only queries on copies of project DWGs must pass before any write use
+- Boundaries: write operations follow the one-designated-writer rule; production DWGs require explicit task-level instruction
+- Rollback: remove the MCP server entry from Claude config and unload the plugin (no persistent state)
+
+### Execution layer (codex-autorunner OR multica — one, not both)
+
+- Status: candidate, pending Joe's platform pick
+- Owner layer: Agent 007 governance (task dispatch for repo-based agent work)
+- Purpose: run queued agent work unattended with notify-when-stuck; see `docs/EXECUTION_LAYER_TRIAL.md`
+- Validation gate: bounded trial on non-production tasks (registry maintenance, doc audits) before any client-facing work
+
+### Deferred / watch list
+
+- kentcdodds/kody — cross-brain memory/secrets/scheduler layer; absorb-only for now, revisit next quarter
+- citrolabs/ego-lite — permit-portal agent browser; blocked on Windows support, revisit on release
+- max-sixty/worktrunk — install when multiple agents edit this repo concurrently
+- ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding another entry. Do not treat a name mentioned in conversation as a deployed agent until its configuration and callable environment are verified.
