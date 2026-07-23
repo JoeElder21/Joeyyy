@@ -4,6 +4,8 @@
 
 Agent 007 is the cross-brain coordinator and final integrator. APEX and JEOS owner agents protect their domains. Specialist agents contribute bounded expertise, evidence, validation, or implementation.
 
+The canonical roster and intent routing live in `config/specialist_corps.toml`. Every specialist is read-only by default. Agent 007 or an existing brain owner is the designated writer.
+
 ## Delegation packet
 
 Every delegated task states:
@@ -13,6 +15,8 @@ Every delegated task states:
 3. Allowed actions, prohibited expansion, deadline, dependencies, and risk flags.
 4. Whether the specialist is advisory, verifier, or designated writer.
 5. Required return format and validation evidence.
+
+Machine-valid delegations use `schemas/delegation_packet.schema.json`.
 
 ## Handoff packet
 
@@ -24,6 +28,8 @@ Every specialist returns:
 - Assumptions, conflicts, and unresolved risks.
 - Recommended next handoff, if any.
 
+Machine-valid returns use `schemas/handoff_packet.schema.json`.
+
 ## Coordination rules
 
 - Use the smallest useful team and run independent work in parallel when it improves speed or coverage.
@@ -32,6 +38,9 @@ Every specialist returns:
 - Reconcile disagreements with evidence. Preserve unresolved positions for Joe rather than silently averaging them.
 - Pass only task-relevant context; never pass credentials, secrets, or unrelated private information.
 - Do not claim an agent received or completed a handoff unless the active session confirms it.
+- Specialists may challenge one another only inside the same brain and only with task-relevant evidence.
+- A challenge does not grant access, writer authority, or permission to enlarge scope.
+- Agent 007 chooses the final route, records unresolved disagreement, and verifies any resulting mutation.
 
 ## Brain routing
 
@@ -40,6 +49,35 @@ Every specialist returns:
 - Agent 007 may read both and coordinate both.
 - Agent 007 may write cross-brain governance records required by Joe's mission, followed by read-back verification and matching logs in both brains.
 - Unknown ownership is a blocker to mutation, not an invitation to guess.
+- APEX and JEOS specialists never communicate directly with one another. Agent 007 may translate a shared dependency into a minimal constraint packet without disclosing the source brain's private context.
+
+## Live and asynchronous collaboration
+
+When the runtime supports live subagents, Agent 007 sends bounded delegation and handoff packets. The active environment—not a configuration promise—determines available concurrency, tools, and connectors.
+
+When specialists are not simultaneously running, each brain may use its own append-only roundtable:
+
+- APEX roundtable: APEX specialists only.
+- JEOS roundtable: JEOS specialists only.
+- Memo format: `schemas/roundtable_memo.schema.json`.
+- Agent 007 may inspect both roundtables but may not copy private content between them.
+- Roundtables preserve questions, challenges, conflicts, owners, and resolution evidence; they are not autonomous background workers.
+
+There is no claim of continuous operation. An agent works only when invoked by an active runtime or scheduled system that has been verified.
+
+## Lifecycle and designated writing
+
+1. `candidate`: definition exists but is not routed.
+2. `shadow`: static contract tests pass; outputs are advisory.
+3. `active`: one controlled real mission passes boundary, accuracy, handoff, and readback tests.
+4. `value-proven`: observed benefit remains positive after review, correction, and maintenance burden.
+5. `restricted`, `deprecated`, or `retired`: scope is limited or removed with a reversible record.
+
+One designated writer owns every mutable file, event, message, task, register, or external record. Parallel specialists may analyze the same mission, but only the assigned writer mutates the canonical target. Every external write requires readback before completion is claimed.
+
+## Public-repository privacy
+
+This repository stores sanitized instructions, schemas, tests, and synthetic fixtures. Private Drive content, personal facts, employer or client records, credentials, and connector identifiers are retrieved only at runtime, minimized to the mission, and never copied into public source control.
 
 ## Agent intake
 

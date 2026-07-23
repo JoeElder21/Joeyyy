@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JoeElder21/Joeyyy/schemas/handoff_packet.schema.json",
+  "title": "Specialist Handoff Packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mission_id",
+    "agent",
+    "owner_brain",
+    "status",
+    "findings",
+    "evidence",
+    "assumptions",
+    "blockers",
+    "challenges",
+    "proposed_writes",
+    "validation",
+    "confidence",
+    "sensitivity",
+    "recommended_next_handoff"
+  ],
+  "properties": {
+    "mission_id": {"type": "string", "minLength": 1},
+    "agent": {"type": "string", "minLength": 1},
+    "owner_brain": {"enum": ["APEX", "JEOS"]},
+    "status": {"enum": ["completed", "partial", "blocked", "boundary_blocked"]},
+    "findings": {"type": "array", "items": {"type": "string"}},
+    "actions_completed": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "tests": {"type": "array", "items": {"type": "string"}},
+    "assumptions": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "challenges": {"type": "array", "items": {"type": "string"}},
+    "proposed_writes": {"type": "array", "items": {"type": "string"}},
+    "validation": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["confirmed", "source-backed", "judgment", "assumption", "unknown"]},
+    "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]},
+    "recommended_next_handoff": {"type": ["string", "null"]}
+  }
+}

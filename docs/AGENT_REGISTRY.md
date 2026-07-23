@@ -4,9 +4,9 @@ This is the canonical index for agents governed by Agent 007. Add one entry per 
 
 ## Lifecycle
 
-`candidate` → `active` → `restricted` / `deprecated` / `retired`
+`candidate` → `shadow` → `active` → `value-proven` / `restricted` / `deprecated` / `retired`
 
-An agent becomes active only after its configuration, boundaries, handoff, and validation evidence are recorded.
+Static validation permits shadow operation. An agent becomes active only after its configuration, boundaries, handoff, and one controlled real mission with readback evidence are recorded. Value-proven status additionally requires observed net benefit after review, correction, and maintenance burden.
 
 ## Registered agents
 
@@ -27,6 +27,44 @@ An agent becomes active only after its configuration, boundaries, handoff, and v
 - Version: 2.0
 - Last audit: pending first scheduled audit
 - Known errors: none recorded in this repository
+
+## APEX specialist unit
+
+All APEX specialists are brain-locked, read-only by default, and currently in shadow stage. They may exchange task-relevant challenges only within APEX. Agent 007 or an existing APEX owner remains the designated writer.
+
+| Agent | Roster ID | Specialty | Primary challenge |
+|---|---|---|---|
+| `apex_grademaster` / GRADEMASTER | APEX-10 | Terrain, grading, drainage, and accessibility QA | COUNTWISE |
+| `apex_countwise` / COUNTWISE | APEX-11 | Reproducible quantities, cost evidence, and revision cascades | GRADEMASTER |
+| `apex_signalkeeper` / SIGNALKEEPER | APEX-12 | Project intake, change propagation, and register-feed mutation packets | GRADEMASTER and COUNTWISE |
+| `apex_ascent_90` / ASCENT-90 | APEX-13 | Professional integration and career-evidence stewardship | FORGEWRIGHT |
+| `apex_forgewright` / FORGEWRIGHT | APEX-14 | Professional systems and automation design | ASCENT-90 |
+
+Configuration files live in `.codex/agents/`. Acceptance gates are defined in `docs/SPECIALIST_ACCEPTANCE_TESTS.md`.
+
+## JEOS specialist unit
+
+All JEOS specialists are brain-locked, read-only by default, and currently in shadow stage. They may exchange task-relevant challenges only within JEOS. Agent 007 or an existing JEOS owner remains the designated writer.
+
+| Agent | Roster ID | Specialty | Primary challenge |
+|---|---|---|---|
+| `jeos_examiner` / EXAMINER | JEOS-09 | LARE retrieval practice and evidence-based readiness | TEMPO |
+| `jeos_tempo` / TEMPO | JEOS-10 | Capacity, cadence, overload, and consistency governance | EXAMINER and LIFEWRIGHT |
+| `jeos_shepherd` / SHEPHERD | JEOS-11 | Sourced faith formation and concise examen | HEARTHKEEPER |
+| `jeos_hearthkeeper` / HEARTHKEEPER | JEOS-12 | Confirmed relationship commitments and family logistics | SHEPHERD and TEMPO |
+| `jeos_lifewright` / LIFEWRIGHT | JEOS-13 | Personal systems and automation design | TEMPO |
+
+Configuration files live in `.codex/agents/`. Acceptance gates are defined in `docs/SPECIALIST_ACCEPTANCE_TESTS.md`.
+
+## Dormant bench
+
+### RAINMAKER
+
+- Owner brain: APEX only
+- Status: dormant
+- Purpose: on-demand side-practice stewardship
+- Decision: preserve the concept without a native active file. Current Drive evidence shows that project-change intake has greater recurring load and broader applicability, so SIGNALKEEPER occupies the fifth core APEX seat.
+- Reactivation gate: repeated, measurable side-practice demand that exceeds the value of a current core seat or justifies a sixth specialist.
 
 ## Intake rule
 

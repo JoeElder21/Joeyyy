@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JoeElder21/Joeyyy/schemas/roundtable_memo.schema.json",
+  "title": "Brain-Private Specialist Roundtable Memo",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "memo_id",
+    "timestamp",
+    "owner_brain",
+    "from_agent",
+    "to_agents",
+    "subject",
+    "message_type",
+    "evidence",
+    "confidence",
+    "designated_writer",
+    "status",
+    "approval_level",
+    "sensitivity",
+    "resolution"
+  ],
+  "properties": {
+    "memo_id": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "minLength": 1},
+    "owner_brain": {"enum": ["APEX", "JEOS"]},
+    "from_agent": {"type": "string", "minLength": 1},
+    "to_agents": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "subject": {"type": "string", "minLength": 1},
+    "message_type": {"enum": ["ask", "challenge", "handoff", "information", "conflict"]},
+    "body": {"type": "string"},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["confirmed", "source-backed", "judgment", "assumption", "unknown"]},
+    "owner": {"type": ["string", "null"]},
+    "due": {"type": ["string", "null"]},
+    "designated_writer": {"type": ["string", "null"]},
+    "status": {"enum": ["open", "acknowledged", "resolved", "blocked"]},
+    "approval_level": {"enum": ["L0", "L1", "L2", "L3", "L4"]},
+    "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]},
+    "resolution": {"type": ["string", "null"]},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  }
+}

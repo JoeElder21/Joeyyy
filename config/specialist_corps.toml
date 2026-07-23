@@ -1,0 +1,186 @@
+version = "1.0.0"
+deployed_on = "2026-07-23"
+apex_roster = ["apex_grademaster", "apex_countwise", "apex_signalkeeper", "apex_ascent_90", "apex_forgewright"]
+jeos_roster = ["jeos_examiner", "jeos_tempo", "jeos_shepherd", "jeos_hearthkeeper", "jeos_lifewright"]
+
+[governance]
+sole_cross_brain_agent = "apex_chief_of_staff"
+default_specialist_sandbox = "read-only"
+designated_executor = "apex_chief_of_staff"
+communication_mode = "live Agent 007 handoffs plus separate brain-private append-only roundtables"
+repository_visibility = "public"
+private_context_policy = "Retrieve minimum authorized context at runtime; never commit private Drive facts."
+continuous_runtime_claim = false
+
+[lifecycle]
+stages = ["candidate", "shadow", "active", "value-proven", "restricted", "deprecated", "retired"]
+deployed_stage = "shadow"
+active_gate = "Static contract tests plus one controlled real mission with evidence and readback."
+value_gate = "Observed net value after review, correction, and maintenance burden."
+
+[agents.apex_grademaster]
+brain = "APEX"
+roster_id = "APEX-10"
+status = "shadow"
+file = ".codex/agents/apex_grademaster.toml"
+purpose = "Terrain, grading, drainage, and accessibility QA."
+writer = "Agent 007 or existing APEX owner"
+
+[agents.apex_countwise]
+brain = "APEX"
+roster_id = "APEX-11"
+status = "shadow"
+file = ".codex/agents/apex_countwise.toml"
+purpose = "Reproducible quantities, cost evidence, and revision cascades."
+writer = "Agent 007 or existing APEX owner"
+
+[agents.apex_signalkeeper]
+brain = "APEX"
+roster_id = "APEX-12"
+status = "shadow"
+file = ".codex/agents/apex_signalkeeper.toml"
+purpose = "Project intake, change propagation, and register-feed mutation packets."
+writer = "Existing APEX truth, controls, or communications owner"
+
+[agents.apex_ascent_90]
+brain = "APEX"
+roster_id = "APEX-13"
+status = "shadow"
+file = ".codex/agents/apex_ascent_90.toml"
+purpose = "Professional integration and career-evidence stewardship."
+writer = "Agent 007 or existing APEX career owner"
+
+[agents.apex_forgewright]
+brain = "APEX"
+roster_id = "APEX-14"
+status = "shadow"
+file = ".codex/agents/apex_forgewright.toml"
+purpose = "APEX systems and automation design."
+writer = "Agent 007-assigned implementation writer"
+
+[agents.jeos_examiner]
+brain = "JEOS"
+roster_id = "JEOS-09"
+status = "shadow"
+file = ".codex/agents/jeos_examiner.toml"
+purpose = "LARE retrieval practice and readiness."
+writer = "Agent 007 or existing JEOS study owner"
+
+[agents.jeos_tempo]
+brain = "JEOS"
+roster_id = "JEOS-10"
+status = "shadow"
+file = ".codex/agents/jeos_tempo.toml"
+purpose = "Capacity, cadence, and consistency governance."
+writer = "Agent 007 or existing JEOS planning owner"
+
+[agents.jeos_shepherd]
+brain = "JEOS"
+roster_id = "JEOS-11"
+status = "shadow"
+file = ".codex/agents/jeos_shepherd.toml"
+purpose = "Faith formation and examen."
+writer = "Agent 007 or existing JEOS faith-memory owner"
+
+[agents.jeos_hearthkeeper]
+brain = "JEOS"
+roster_id = "JEOS-12"
+status = "shadow"
+file = ".codex/agents/jeos_hearthkeeper.toml"
+purpose = "Relationship commitments and family logistics."
+writer = "Agent 007 or existing JEOS relationships owner"
+
+[agents.jeos_lifewright]
+brain = "JEOS"
+roster_id = "JEOS-13"
+status = "shadow"
+file = ".codex/agents/jeos_lifewright.toml"
+purpose = "JEOS systems and automation design."
+writer = "Agent 007-assigned implementation writer"
+
+[bench.apex_rainmaker]
+brain = "APEX"
+status = "dormant"
+native_file = ""
+purpose = "On-demand side-practice stewardship."
+reason = "Useful but lower current-load return than SIGNALKEEPER; preserved as a recoverable bench concept."
+
+[[routes]]
+intent = "grading drainage accessibility technical QA"
+brain = "APEX"
+agent = "apex_grademaster"
+
+[[routes]]
+intent = "takeoff quantity cost evidence revision delta"
+brain = "APEX"
+agent = "apex_countwise"
+
+[[routes]]
+intent = "project intake meeting email revised-set change propagation register feed"
+brain = "APEX"
+agent = "apex_signalkeeper"
+
+[[routes]]
+intent = "professional onboarding process learning verified wins career evidence"
+brain = "APEX"
+agent = "apex_ascent_90"
+
+[[routes]]
+intent = "professional automation skill script template system"
+brain = "APEX"
+agent = "apex_forgewright"
+
+[[routes]]
+intent = "LARE study retrieval drill spaced repetition readiness"
+brain = "JEOS"
+agent = "jeos_examiner"
+
+[[routes]]
+intent = "capacity cadence overload consistency recovery constraint"
+brain = "JEOS"
+agent = "jeos_tempo"
+
+[[routes]]
+intent = "faith scripture reflection examen character"
+brain = "JEOS"
+agent = "jeos_shepherd"
+
+[[routes]]
+intent = "relationship family commitment confirmed date presence plan"
+brain = "JEOS"
+agent = "jeos_hearthkeeper"
+
+[[routes]]
+intent = "personal automation checklist tracker reminder system"
+brain = "JEOS"
+agent = "jeos_lifewright"
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_grademaster", "apex_countwise"]
+purpose = "Technical intent versus quantity and cost consequence."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_signalkeeper", "apex_grademaster", "apex_countwise"]
+purpose = "Source change, technical review, and downstream delta closure."
+
+[[challenge_pairs]]
+brain = "APEX"
+agents = ["apex_ascent_90", "apex_forgewright"]
+purpose = "Automation time versus higher-value professional learning."
+
+[[challenge_pairs]]
+brain = "JEOS"
+agents = ["jeos_examiner", "jeos_tempo"]
+purpose = "Study intensity versus sustainable capacity."
+
+[[challenge_pairs]]
+brain = "JEOS"
+agents = ["jeos_shepherd", "jeos_hearthkeeper"]
+purpose = "Values alignment versus practical relationship follow-through."
+
+[[challenge_pairs]]
+brain = "JEOS"
+agents = ["jeos_tempo", "jeos_lifewright"]
+purpose = "Stable habit before automation."

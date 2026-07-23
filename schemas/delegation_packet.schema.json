@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JoeElder21/Joeyyy/schemas/delegation_packet.schema.json",
+  "title": "Agent 007 Delegation Packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mission_id",
+    "agent",
+    "owner_brain",
+    "mission",
+    "definition_of_done",
+    "allowed_evidence",
+    "prohibited_scope",
+    "allowed_actions",
+    "designated_writer",
+    "approval_level",
+    "return_schema"
+  ],
+  "properties": {
+    "mission_id": {"type": "string", "minLength": 1},
+    "agent": {"type": "string", "minLength": 1},
+    "owner_brain": {"enum": ["APEX", "JEOS"]},
+    "mission": {"type": "string", "minLength": 1},
+    "definition_of_done": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "allowed_evidence": {"type": "array", "items": {"type": "string"}},
+    "prohibited_scope": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "allowed_actions": {"type": "array", "items": {"type": "string"}},
+    "designated_writer": {"type": "boolean"},
+    "writer_target": {"type": ["string", "null"]},
+    "deadline": {"type": ["string", "null"]},
+    "dependencies": {"type": "array", "items": {"type": "string"}},
+    "risk_flags": {"type": "array", "items": {"type": "string"}},
+    "approval_level": {"enum": ["L0", "L1", "L2", "L3", "L4"]},
+    "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]},
+    "return_schema": {"const": "schemas/handoff_packet.schema.json"}
+  }
+}
