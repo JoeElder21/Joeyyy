@@ -62,6 +62,18 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
 
+    def test_integration_roadmap_keeps_gates_and_conflicts_visible(self):
+        text = (ROOT / "docs" / "INTEGRATION_ROADMAP.md").read_text(encoding="utf-8")
+        for phrase in [
+            "candidate-unverified",
+            "Recorded conflict",
+            "## Phase 1",
+            "## Phase 5",
+            "## Rollback",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
     def test_registry_tracks_candidate_infrastructure(self):
         text = REGISTRY_PATH.read_text(encoding="utf-8")
         for phrase in [
