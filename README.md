@@ -48,6 +48,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/BRAIN_CADENCE_RUNBOOK.md` — daily, weekly, and monthly brain-specific orchestration.
 - `docs/SPECIALIST_ACCEPTANCE_TESTS.md` — static, shadow, activation, and value gates.
 - `docs/ECOSYSTEM_REPO_ANALYSIS.md` — ranked external-repository analysis and build/absorb/skip verdicts.
+- `docs/FRAMEWORK_INTEGRATION_PROGRAM.md` — framework integration sequence, AutoGen-first implementation, deployment gates, and Google Drive publication record.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
@@ -56,6 +57,8 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `templates/specialist-handoff.md` — human-readable specialist packet.
 - `templates/weekly-agent-audit.md` — weekly ecosystem review.
 - `scripts/validate_specialist_corps.py` — honest static and synthetic v2.1 packet validation.
+- `runtime/autogen_groupchat.py` — brain-private AutoGen GroupChat planning adapter.
+- `requirements-runtime.txt` — opt-in runtime integration dependency set.
 - `tests/test_agent_contract.py` — contract validation.
 - `tests/test_specialist_corps.py` — roster, isolation, schema, privacy, and registry validation.
 - `tests/test_local_validation.py` — validates the harness result and its no-runtime claims.
