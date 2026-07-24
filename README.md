@@ -73,7 +73,8 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/trusted_launcher.py` — user-signed, one-time launch grants for write-capable mounts; denial paths proven by tests.
 - `docs/CIVIL3D_FIRST_WRITE_TEST.md` — the separately-approved synthetic disposable DWG first-write protocol.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
-- `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation; the cadence engine (`cadence.py`) building validated delegation plans from the brain manifests plus the real TICKET-005 hygiene sweep, and its Prefect scheduling layer (`cadence_flow.py`).
+- `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation; the cadence engine (`cadence.py`) building validated delegation plans from the brain manifests plus the real TICKET-005 hygiene sweep, and its Prefect scheduling layer (`cadence_flow.py`); the writer-lease registry and serialized mutation admission (`writer_lease.py`) with Celery per-key queues (`lease_queue.py`); the graphiti memory-trial harness (`memory_trial.py`).
+- `docs/RECONCILIATION_2026-07-24.md` — cross-stream ownership record: canonical homes for lifecycle/cadence/leases, ticket-4 absorption, memory-layer decision rule, drift locks.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
