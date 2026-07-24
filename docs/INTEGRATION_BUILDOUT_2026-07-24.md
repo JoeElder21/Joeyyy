@@ -60,7 +60,7 @@ Install results are environment-specific: run `python scripts/verify_runtime_sta
 
 ## First build tickets (execution order)
 
-1. **Lifecycle StateGraph** — encode `candidate → shadow → active → value-proven → restricted → deprecated → retired` as a LangGraph `StateGraph` whose shadow→active edge enforces the acceptance gates in `docs/SPECIALIST_ACCEPTANCE_TESTS.md`. Human-in-the-loop checkpoint at every high-impact boundary.
+1. **Lifecycle StateGraph** — *delivered 2026-07-24.* `runtime/lifecycle.py` encodes the stage machine and gates (4, 11, 20, 21) as stdlib-pure fail-closed functions; `runtime/lifecycle_graph.py` wires them into a LangGraph `StateGraph` that interrupts for Joe's approval before any promotion to active, and approval never bypasses the evidence gates. Validated by `tests/test_lifecycle.py` in both stdlib and full-stack environments.
 2. **Cadence flow** — implement one cadence route (weekly APEX) as a Prefect flow whose tasks emit the existing artifact types; wire TICKET-002/TICKET-005 to it.
 3. **Writer-lease queue** — prototype Celery per-target queues enforcing `single_writer_scope`; a mutation packet is only consumed from its target's queue.
 4. **Challenge-pair debate** — wire one challenge pair (apex_war_architect vs apex_intelligence_forge) as an AutoGen two-agent exchange terminated by Agent 007 on artifact validity.
