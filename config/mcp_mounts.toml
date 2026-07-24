@@ -1,0 +1,58 @@
+# Approved MCP server mounts — the executable form of
+# connector_policy = "packet_only_no_direct_connectors".
+#
+# A specialist's entire tool surface is the servers mounted for it here.
+# Anything not listed is not reachable. Reference servers come from
+# modelcontextprotocol/servers; custom servers are registered in
+# docs/AGENT_REGISTRY.md with their own build-out guides.
+#
+# verify_offline = true  -> scripts/verify_mcp_mounts.py can launch the
+# server in-container and list its tools with no credentials.
+# activation = "..."     -> what unlocks the mount when credentials or a
+# workstation are required.
+
+[[mounts]]
+name = "governance"
+command = ["python", "scripts/governance_mcp_server.py"]
+agents = ["*"]
+purpose = "Packet validation, fail-closed admission, return validation, audit verification, roster."
+verify_offline = true
+
+[[mounts]]
+name = "filesystem"
+command = ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
+agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
+purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
+verify_offline = true
+
+[[mounts]]
+name = "github"
+command = ["docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
+agents = ["apex_systems_blacksmith", "apex_chief_of_staff"]
+purpose = "Repo reads/writes through a proper MCP interface, not raw git in prompts."
+verify_offline = false
+activation = "GITHUB_PERSONAL_ACCESS_TOKEN in the runtime env store."
+
+[[mounts]]
+name = "postgres"
+command = ["npx", "-y", "@modelcontextprotocol/server-postgres"]
+agents = ["apex_intelligence_forge", "apex_deal_engine", "apex_chief_of_staff"]
+purpose = "Structured data (opportunity pipeline, project register, evidence sources) queryable via one MCP interface."
+verify_offline = false
+activation = "Postgres connection string appended to the command at mount time."
+
+[[mounts]]
+name = "gdrive"
+command = ["npx", "-y", "@modelcontextprotocol/server-gdrive"]
+agents = ["apex_intelligence_forge", "apex_chief_of_staff"]
+purpose = "Google Drive documents through MCP; pairs with the Drive command-center records."
+verify_offline = false
+activation = "One-time OAuth flow on Joe's machine (GDRIVE_CREDENTIALS_PATH); the session-level Drive MCP connector already proves the MCP-to-Drive path end to end."
+
+[[mounts]]
+name = "civil3d"
+command = ["node", "build/index.js"]
+agents = ["apex_delivery_commander", "apex_systems_blacksmith", "apex_chief_of_staff"]
+purpose = "Live Civil 3D session access; see docs/CIVIL3D_MCP_BUILDOUT.md."
+verify_offline = false
+activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session scheduled)."

@@ -136,6 +136,14 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: no credentials stored or read; namespace writes require the owner agent plus a PacketGuard-valid active writer lease; cross-brain reads route through Agent 007 only
 - Rollback: per `docs/DATA_MEMORY_LAYERS.md`
 
+### Orchestration and connectors (autogen, langgraph, MCP reference servers, aps-sdk, logseq)
+
+- Status: shadow (graphs, debates, knowledge graph, and two MCP mounts verified working offline; model clients, external mounts, and APS calls activation-gated)
+- Owner layer: Agent 007 governance — executable lifecycle/cadence/HITL state machines (`scripts/orchestration_graphs.py`), manifest-registered debates and selector chats (`scripts/group_debate.py`), the approved-MCP-mounts registry (`config/mcp_mounts.toml`), APS credential-readiness (`scripts/aps_credential_check.mjs`), and the JEOS knowledge graph (`scripts/jeos_knowledge.py`)
+- Validation gate: full suite green stdlib-side; all orchestration tests pass in the pinned venv including a live offline debate run, lifecycle gate enforcement, HITL pause/resume, and real MCP stdio probes of the governance and filesystem mounts
+- Boundaries: no credentials stored or read; the JEOS graph is unreadable by APEX agents; mounts not listed are not reachable
+- Rollback: per `docs/ORCHESTRATION_AND_CONNECTORS.md`
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick

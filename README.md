@@ -62,6 +62,12 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/memory_layer.py` — governed memory gateway on the mem0 scope model: leased namespace writes, open in-brain reads, verify-before-write.
 - `scripts/crew_bridge.py` — roster-to-crewAI bridge: fail-closed task admission, single-brain crews, 007 as the integration step.
 - `docs/DATA_MEMORY_LAYERS.md` — data and memory layers record: llama_index, mem0, crewAI.
+- `scripts/orchestration_graphs.py` — LangGraph state machines: lifecycle with acceptance-gate guards, manifest cadence runs, human-in-the-loop irreversible boundary.
+- `scripts/group_debate.py` — AutoGen challenge-pair debates, cadence chats, and the dynamic selector over each brain.
+- `scripts/jeos_knowledge.py` — governed JEOS knowledge graph in Logseq format: writer-locked targets, brain-locked reads, tag queries, backlinks.
+- `config/mcp_mounts.toml` + `scripts/verify_mcp_mounts.py` — approved MCP server mounts per the connector policy, with live stdio verification.
+- `scripts/aps_credential_check.mjs` — APS readiness check completing validation-gate steps 2–3 once credentials exist.
+- `docs/ORCHESTRATION_AND_CONNECTORS.md` — orchestration and connectors record: AutoGen, LangGraph, MCP servers, APS, Logseq.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.

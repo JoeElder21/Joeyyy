@@ -21,10 +21,13 @@ no network calls.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.agent_runtime import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.agent_runtime import (  # noqa: E402
     AuditLedger,
     HandoffRejected,
     admit_delegation,
