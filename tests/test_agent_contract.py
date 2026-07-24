@@ -73,7 +73,7 @@ class AgentContractTests(unittest.TestCase):
     def test_agent_community_contract(self):
         self.assert_phrases([
             "<agent_community>",
-            "smallest useful specialist team",
+            "full registered corps",
             "delegation packet",
             "one designated writer",
             "Reconcile disagreements using evidence",

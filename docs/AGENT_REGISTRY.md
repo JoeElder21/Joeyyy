@@ -116,6 +116,15 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - max-sixty/worktrunk — install when multiple agents edit this repo concurrently
 - ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
 
+## Dream-team charter modes (2026-07-24)
+
+Registered on Joe's direct instruction and refined the same day per his decision: dream-team roles are **modes of the existing ten-specialist corps**, not separate agents. Forty charter modes (37 APEX across six layers, 3 JEOS personal-command; Joe's JEOS roster message truncated after five names and the remainder registers on arrival) are chartered in `config/dream_team_roster.toml`, validated by `tests/test_dream_team.py`.
+
+- The corps remains ten specialists plus Agent 007. Each charter mode extends the remit of the v2.1 specialist of its class (e.g., Contrarian Analyst is a charter mode of `apex_intelligence_forge`).
+- Charter modes are staffing vocabulary, not v2.1 contract modes: packet-bound contract modes in `brains/*/agents.toml` are unchanged, and a charter mode gains typed packets and acceptance tests only through the normal acceptance process.
+- Charter modes carry no write targets, connectors, or routes of their own; brain locks, writer leases, and specialist stages apply exactly as before.
+- Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the v2.1 specialists themselves; the other three v2.1 JEOS specialists remain rostered unchanged.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

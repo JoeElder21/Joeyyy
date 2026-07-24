@@ -1,0 +1,364 @@
+# Dream-team charter modes — registered 2026-07-24 on Joe's direct instruction,
+# refined the same day: dream-team roles are MODES of the existing v2.1
+# mirrored corps, not separate registered agents. The corps stays ten
+# specialists plus Agent 007.
+#
+# Joe's roster names 42 APEX and 5 JEOS roles (the JEOS list arrived truncated
+# after #5; the remainder registers when Joe supplies it). Seven names are the
+# v2.1 specialists themselves. The other forty are charter modes below, each
+# owned by the specialist of its class. A charter mode extends the owning
+# specialist's remit for mission staffing; it is NOT a v2.1 contract mode —
+# packet-bound contract modes stay exactly as defined in brains/*/agents.toml,
+# and a charter mode is promoted into a contract mode (with typed packets and
+# acceptance tests) only through the normal acceptance process. Charter modes
+# carry no write targets, connectors, or routes of their own.
+
+version = "2.0.0"
+authorized_by = "Joe Elder, 2026-07-24 directive (roles-as-modes refinement)"
+kind = "charter_mode"
+valid_owner_classes = [
+    "strategy",
+    "opportunity_momentum",
+    "execution_capacity",
+    "intelligence_reflection",
+    "systems_automation",
+]
+
+[apex]
+brain = "APEX"
+# Dream-team names that ARE v2.1 specialists (no mode needed).
+existing_rostered = [
+    "apex_war_architect",
+    "apex_deal_engine",
+    "apex_delivery_commander",
+    "apex_intelligence_forge",
+    "apex_systems_blacksmith",
+]
+
+[[apex.charter_modes]]
+mode = "decision_tribunal"
+name = "APEX Decision Tribunal"
+layer = "executive_command"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Stress-tests major decisions, risks, assumptions, and second-order effects."
+
+[[apex.charter_modes]]
+mode = "operations_auditor"
+name = "APEX Operations Auditor"
+layer = "executive_command"
+owner_class = "systems_automation"
+owner_agent = "apex_systems_blacksmith"
+charter = "Finds inefficiency, drag, weak handoffs, repeat breakdowns, and scale friction."
+
+[[apex.charter_modes]]
+mode = "institutional_memory_curator"
+name = "APEX Institutional Memory Curator"
+layer = "executive_command"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Turns old files, wins, failures, and projects into reusable firm intelligence."
+
+[[apex.charter_modes]]
+mode = "relationship_quarterback"
+name = "APEX Relationship Quarterback"
+layer = "revenue_growth"
+owner_class = "opportunity_momentum"
+owner_agent = "apex_deal_engine"
+charter = "Maintains strategic relationships, warm leads, introductions, and trust continuity."
+
+[[apex.charter_modes]]
+mode = "offer_innovator"
+name = "APEX Offer Innovator"
+layer = "revenue_growth"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Designs new offers, packaging, positioning, and monetization systems."
+
+[[apex.charter_modes]]
+mode = "negotiation_strategist"
+name = "APEX Negotiation Strategist"
+layer = "revenue_growth"
+owner_class = "opportunity_momentum"
+owner_agent = "apex_deal_engine"
+charter = "Prepares leverage maps, pricing positions, and negotiation scenarios."
+
+[[apex.charter_modes]]
+mode = "market_recon_unit"
+name = "APEX Market Recon Unit"
+layer = "revenue_growth"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Monitors industry shifts, competitors, trends, and emerging opportunity windows."
+
+[[apex.charter_modes]]
+mode = "brand_signal_director"
+name = "APEX Brand Signal Director"
+layer = "revenue_growth"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Strengthens authority, market perception, visibility, and strategic reputation."
+
+[[apex.charter_modes]]
+mode = "referral_multiplier"
+name = "APEX Referral Multiplier"
+layer = "revenue_growth"
+owner_class = "opportunity_momentum"
+owner_agent = "apex_deal_engine"
+charter = "Designs systems that turn clients, allies, and results into more business."
+
+[[apex.charter_modes]]
+mode = "retention_engineer"
+name = "APEX Retention Engineer"
+layer = "revenue_growth"
+owner_class = "opportunity_momentum"
+owner_agent = "apex_deal_engine"
+charter = "Improves client stickiness, renewals, repeat work, and long-term value extraction."
+
+[[apex.charter_modes]]
+mode = "client_experience_designer"
+name = "APEX Client Experience Designer"
+layer = "delivery_execution"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Designs a premium intake-to-delivery-to-retention client journey."
+
+[[apex.charter_modes]]
+mode = "quality_assurance_marshal"
+name = "APEX Quality Assurance Marshal"
+layer = "delivery_execution"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Protects quality, consistency, completeness, and reputation-critical standards."
+
+[[apex.charter_modes]]
+mode = "deadline_enforcer"
+name = "APEX Deadline Enforcer"
+layer = "delivery_execution"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Pushes deadlines, sequences deliverables, and prevents slippage."
+
+[[apex.charter_modes]]
+mode = "bottleneck_hunter"
+name = "APEX Bottleneck Hunter"
+layer = "delivery_execution"
+owner_class = "systems_automation"
+owner_agent = "apex_systems_blacksmith"
+charter = "Finds where Joe, team, tools, or process are constraining output."
+
+[[apex.charter_modes]]
+mode = "resource_allocator"
+name = "APEX Resource Allocator"
+layer = "delivery_execution"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Assigns time, attention, tools, and people to the highest-value uses."
+
+[[apex.charter_modes]]
+mode = "escalation_controller"
+name = "APEX Escalation Controller"
+layer = "delivery_execution"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Handles urgent issues, project collisions, client heat, and operational instability."
+
+[[apex.charter_modes]]
+mode = "research_librarian"
+name = "APEX Research Librarian"
+layer = "intelligence_thinking"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Builds a usable internal knowledge system from notes, docs, and prior work."
+
+[[apex.charter_modes]]
+mode = "pattern_detector"
+name = "APEX Pattern Detector"
+layer = "intelligence_thinking"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Identifies repeating wins, repeated errors, market patterns, and operating blind spots."
+
+[[apex.charter_modes]]
+mode = "scenario_simulator"
+name = "APEX Scenario Simulator"
+layer = "intelligence_thinking"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Models outcomes before big moves, changes, hires, launches, or commitments."
+
+[[apex.charter_modes]]
+mode = "contrarian_analyst"
+name = "APEX Contrarian Analyst"
+layer = "intelligence_thinking"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Challenges weak thinking and provides informed internal opposition."
+
+[[apex.charter_modes]]
+mode = "opportunity_miner"
+name = "APEX Opportunity Miner"
+layer = "intelligence_thinking"
+owner_class = "opportunity_momentum"
+owner_agent = "apex_deal_engine"
+charter = "Surfaces hidden value inside overlooked contacts, assets, work, and information."
+
+[[apex.charter_modes]]
+mode = "talent_marshal"
+name = "APEX Talent Marshal"
+layer = "leadership_scale"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Evaluates hires, collaborators, delegation targets, and role design needs."
+
+[[apex.charter_modes]]
+mode = "delegation_commander"
+name = "APEX Delegation Commander"
+layer = "leadership_scale"
+owner_class = "systems_automation"
+owner_agent = "apex_systems_blacksmith"
+charter = "Moves work away from Joe into the correct systems, people, or agents."
+
+[[apex.charter_modes]]
+mode = "org_designer"
+name = "APEX Org Designer"
+layer = "leadership_scale"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Defines structure, responsibilities, lanes, and scaling architecture."
+
+[[apex.charter_modes]]
+mode = "accountability_chief"
+name = "APEX Accountability Chief"
+layer = "leadership_scale"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Tracks promises, decisions, ownership, and follow-through across the business."
+
+[[apex.charter_modes]]
+mode = "culture_framer"
+name = "APEX Culture Framer"
+layer = "leadership_scale"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Protects standards, operating principles, and quality of internal collaboration."
+
+[[apex.charter_modes]]
+mode = "training_architect"
+name = "APEX Training Architect"
+layer = "leadership_scale"
+owner_class = "systems_automation"
+owner_agent = "apex_systems_blacksmith"
+charter = "Turns repeatable expertise into onboarding, teaching, and internal playbooks."
+
+[[apex.charter_modes]]
+mode = "productization_lab"
+name = "APEX Productization Lab"
+layer = "creation_innovation"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Turns services, knowledge, and methods into scalable assets and products."
+
+[[apex.charter_modes]]
+mode = "ip_foundry"
+name = "APEX IP Foundry"
+layer = "creation_innovation"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Extracts frameworks, concepts, methods, and proprietary process assets."
+
+[[apex.charter_modes]]
+mode = "creative_strategist"
+name = "APEX Creative Strategist"
+layer = "creation_innovation"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Generates bold campaign concepts, positioning angles, and differentiated moves."
+
+[[apex.charter_modes]]
+mode = "experiment_director"
+name = "APEX Experiment Director"
+layer = "creation_innovation"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Designs controlled tests for offers, pricing, workflows, and strategic hypotheses."
+
+[[apex.charter_modes]]
+mode = "venture_scout"
+name = "APEX Venture Scout"
+layer = "creation_innovation"
+owner_class = "opportunity_momentum"
+owner_agent = "apex_deal_engine"
+charter = "Identifies adjacent ventures, partnerships, and expansion plays."
+
+[[apex.charter_modes]]
+mode = "risk_sentinel"
+name = "APEX Risk Sentinel"
+layer = "protection_governance"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Flags operational, reputational, strategic, and execution risks early."
+
+[[apex.charter_modes]]
+mode = "compliance_tracker"
+name = "APEX Compliance Tracker"
+layer = "protection_governance"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Keeps required standards, obligations, and process controls visible."
+
+[[apex.charter_modes]]
+mode = "reputation_guardian"
+name = "APEX Reputation Guardian"
+layer = "protection_governance"
+owner_class = "strategy"
+owner_agent = "apex_war_architect"
+charter = "Watches for reputational exposure and protects external trust."
+
+[[apex.charter_modes]]
+mode = "conflict_mapper"
+name = "APEX Conflict Mapper"
+layer = "protection_governance"
+owner_class = "intelligence_reflection"
+owner_agent = "apex_intelligence_forge"
+charter = "Tracks internal contradictions across plans, promises, priorities, and records."
+
+[[apex.charter_modes]]
+mode = "recovery_planner"
+name = "APEX Recovery Planner"
+layer = "protection_governance"
+owner_class = "execution_capacity"
+owner_agent = "apex_delivery_commander"
+charter = "Designs recovery routes when a launch, deal, client, or system goes sideways."
+
+[jeos]
+brain = "JEOS"
+# Dream-team names that ARE v2.1 specialists (no mode needed).
+existing_rostered = [
+    "jeos_life_architect",
+    "jeos_momentum_engine",
+]
+
+[[jeos.charter_modes]]
+mode = "commitment_gatekeeper"
+name = "JEOS Commitment Gatekeeper"
+layer = "personal_command"
+owner_class = "strategy"
+owner_agent = "jeos_life_architect"
+charter = "Screens new obligations before Joe says yes."
+
+[[jeos.charter_modes]]
+mode = "focus_protector"
+name = "JEOS Focus Protector"
+layer = "personal_command"
+owner_class = "execution_capacity"
+owner_agent = "jeos_energy_director"
+charter = "Guards attention from distraction, fragmentation, and noise."
+
+[[jeos.charter_modes]]
+mode = "identity_guardian"
+name = "JEOS Identity Guardian"
+layer = "personal_command"
+owner_class = "intelligence_reflection"
+owner_agent = "jeos_reflection_forge"
+charter = "Protects alignment between behavior, values, standards, and desired self."
