@@ -52,6 +52,8 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/INTEGRATION_BUILDOUT_2026-07-24.md` — runtime integration record: installed stack tiers, registered workstation deployments, flagged items, and first build tickets.
 - `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`) and the resolved version lock.
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
+- `scripts/agent_runtime.py` — governed-handoff runtime bridge on the OpenAI Agents SDK: fail-closed packet admission, brain-locked topology, hash-chained audit ledger.
+- `docs/AGENT_RUNTIME_BRIDGE.md` — runtime-bridge record: contract-to-runtime mapping, measured dispatch-overhead reduction, boundaries, and rollback.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.

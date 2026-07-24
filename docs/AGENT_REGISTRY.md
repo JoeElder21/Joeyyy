@@ -111,6 +111,15 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: APS credentials live only in the runtime env/secret store, never in chat or this repository; any write scope follows the one-designated-writer rule
 - Rollback: remove the connector configuration and revoke the APS app credentials (no persistent state in this repository)
 
+### Agent runtime bridge (openai/openai-agents-python)
+
+- Status: shadow (code and tests merged; live `Runner` execution not yet activated)
+- Owner layer: Agent 007 governance — runtime enforcement of the delegation and handoff contracts
+- Purpose: make handoffs executable and fail-closed — `scripts/agent_runtime.py` wires PacketGuard into the SDK's `handoff()` so an invalid, misaddressed, legacy, or brain-crossing packet cannot transfer control, with every admission, rejection, and return validation auto-logged to a hash-chained audit ledger
+- Validation gate: 131-test suite green stdlib-side; 39/39 in the full-stack venv including live fail-closed `on_invoke_handoff` proofs; live-mission activation follows the shadow-stage acceptance gates and requires Joe's instruction plus runtime credentials
+- Boundaries: no API keys stored or read; audit ledger carries packet metadata only; topology is 007 → specialists and specialists → 007 exclusively
+- Rollback: delete `scripts/agent_runtime.py`, `tests/test_agent_runtime.py`, and `docs/AGENT_RUNTIME_BRIDGE.md`; no persistent state beyond user-created ledgers
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick
