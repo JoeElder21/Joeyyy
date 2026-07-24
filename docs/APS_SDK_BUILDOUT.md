@@ -63,8 +63,11 @@ Agents must not claim an SDK surface that does not exist; cite this section when
 
 The runnable harness for steps 2–5 lives in `connectors/aps/` (see its README): `npm run gate`
 executes the steps in order, fails closed with no network call when credentials are absent, and
-writes per-step evidence JSON locally (gitignored). Step 5 spot-checks extracted properties against
-the synthetic test model's own validated ground truth (`connectors/aps/testdata/make_test_model.py`).
+writes per-step evidence JSON locally (gitignored). Its full run uploads only its checked-in
+synthetic model to a fresh transient bucket and removes the object and bucket after validation.
+Step 3 is a separately authorized three-legged, explicitly named personally owned sandbox-hub read;
+it never enumerates hubs with the two-legged app token. Step 5 spot-checks extracted properties
+against the synthetic test model's own validated ground truth (`connectors/aps/testdata/make_test_model.py`).
 
 The registry entry stays `candidate` until every step below has recorded evidence:
 
