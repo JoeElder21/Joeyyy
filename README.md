@@ -52,6 +52,8 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
+- `docs/AUTOGEN_INTEGRATION.md` — bounded Microsoft AutoGen runtime-adapter contract, validation, and Drive-record handoff.
+- `runtime/autogen_orchestrator.py` — optional AutoGen `ConversableAgent`/`GroupChatManager` cadence adapter; requires a verified host runtime.
 - `schemas/` — delegation, handoff, and roundtable packet contracts.
 - `templates/agent-intake.md` — new-agent onboarding and validation.
 - `templates/specialist-handoff.md` — human-readable specialist packet.
@@ -72,6 +74,8 @@ python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 python -m unittest discover -s tests -v
 ```
+
+For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. This repository does not contain model configuration or connector credentials.
 
 GitHub Actions runs the same checks on pushes to `main` and pull requests.
 
