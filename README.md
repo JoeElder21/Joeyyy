@@ -54,6 +54,10 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
 - `scripts/agent_runtime.py` — governed-handoff runtime bridge on the OpenAI Agents SDK: fail-closed packet admission, brain-locked topology, hash-chained audit ledger.
 - `docs/AGENT_RUNTIME_BRIDGE.md` — runtime-bridge record: contract-to-runtime mapping, measured dispatch-overhead reduction, boundaries, and rollback.
+- `scripts/claude_runtime.py` — Claude-native governed dispatch: typed Anthropic tool definitions, fail-closed ToolUseBlock handling, mission streaming.
+- `scripts/governance_mcp_server.py` — governance MCP server making the packet-only connector policy enforceable.
+- `scripts/packet_models.py` — pydantic packet models generated at import time from the canonical JSON schemas.
+- `docs/RUNTIME_NATIVE_LAYERS.md` — native runtime layers record: Anthropic SDK, MCP, pydantic implementations and the gated LangChain absorption.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.

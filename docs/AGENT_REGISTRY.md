@@ -120,6 +120,14 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: no API keys stored or read; audit ledger carries packet metadata only; topology is 007 → specialists and specialists → 007 exclusively
 - Rollback: delete `scripts/agent_runtime.py`, `tests/test_agent_runtime.py`, and `docs/AGENT_RUNTIME_BRIDGE.md`; no persistent state beyond user-created ledgers
 
+### Native runtime layers (anthropic-sdk-python, mcp python-sdk, pydantic, langchain)
+
+- Status: shadow (three layers implemented and tested offline; langchain absorbed, activation-gated)
+- Owner layer: Agent 007 governance — Claude-native dispatch (`scripts/claude_runtime.py`), enforceable connector isolation (`scripts/governance_mcp_server.py`), typed packets generated from the canonical schemas (`scripts/packet_models.py`)
+- Validation gate: full suite green stdlib-side with skips by design; all native-runtime tests pass in the pinned full-stack venv; live activation (streaming missions, mounted MCP clients, summary memory) requires Joe's instruction plus runtime credentials
+- Boundaries: no credentials stored or read; specialists' tool surface under the connector policy is MCP servers only
+- Rollback: per `docs/RUNTIME_NATIVE_LAYERS.md`
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick
