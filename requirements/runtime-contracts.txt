@@ -1,0 +1,8 @@
+# Gap 3 — policy enforcement at runtime + connector baseline.
+# Canonical sources: pydantic/pydantic, python-jsonschema/jsonschema,
+# samuelcolvin/rtoml, modelcontextprotocol/python-sdk, anthropics/anthropic-sdk-python.
+pydantic
+jsonschema
+rtoml
+mcp
+anthropic

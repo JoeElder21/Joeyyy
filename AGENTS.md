@@ -32,7 +32,7 @@ The personal Agent 007 skill supplies cross-chat activation. This project suppli
 
 ## Agent community and improvement
 
-- Use the smallest useful specialist team and one designated writer per shared resource.
+- Staff each mission from the full registered corps, scaling the team to the mission, and keep one designated writer per shared resource. (Amended 2026-07-24 on Joe's direct instruction, superseding the former smallest-useful-team rule; the dream-team roles are charter modes of the ten specialists, registered in `config/dream_team_roster.toml` per Joe's roles-as-modes decision.)
 - Follow `docs/AGENT_COMMUNITY_PROTOCOL.md` for delegation, handoffs, conflict resolution, registry intake, capability absorption, error learning, and weekly audits.
 - Follow `config/specialist_corps.toml` for Agent 007's cross-brain mirrored-class routing and lifecycle.
 - Follow `brains/apex/agents.toml` and `brains/jeos/agents.toml` for the brain-owned rosters, logical memory namespaces, proposed write targets, routes, and challenge pairs.

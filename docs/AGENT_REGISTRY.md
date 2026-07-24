@@ -102,6 +102,15 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: write operations follow the one-designated-writer rule; production DWGs require explicit task-level instruction
 - Rollback: remove the MCP server entry from Claude config and unload the plugin (no persistent state)
 
+### APS cloud connector (autodesk-platform-services/aps-sdk-node)
+
+- Status: candidate
+- Owner layer: APEX (cloud project-file and model-data access; the cloud leg of the Civil 3D / engineering MCP layer)
+- Purpose: give APEX agents read access to BIM 360/ACC file trees (`data-management`) and element-level model properties/quantities (`model-derivative`) through the official APS Node.js SDK; headless cloud automation later via the Design Automation REST API (no SDK package exists for it — see the capability corrections in `docs/APS_SDK_BUILDOUT.md`)
+- Validation gate: per `docs/APS_SDK_BUILDOUT.md` — sandbox-only, read-only scopes first; employer/client hub access requires explicit task-level authorization
+- Boundaries: APS credentials live only in the runtime env/secret store, never in chat or this repository; any write scope follows the one-designated-writer rule
+- Rollback: remove the connector configuration and revoke the APS app credentials (no persistent state in this repository)
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick
@@ -123,6 +132,15 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - citrolabs/ego-lite — permit-portal agent browser; blocked on Windows support, revisit on release
 - max-sixty/worktrunk — install when multiple agents edit this repo concurrently
 - ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
+
+## Dream-team charter modes (2026-07-24)
+
+Registered on Joe's direct instruction and refined the same day per his decision: dream-team roles are **modes of the existing ten-specialist corps**, not separate agents. Forty charter modes (37 APEX across six layers, 3 JEOS personal-command; Joe's JEOS roster message truncated after five names and the remainder registers on arrival) are chartered in `config/dream_team_roster.toml`, validated by `tests/test_dream_team.py`.
+
+- The corps remains ten specialists plus Agent 007. Each charter mode extends the remit of the v2.1 specialist of its class (e.g., Contrarian Analyst is a charter mode of `apex_intelligence_forge`).
+- Charter modes are staffing vocabulary, not v2.1 contract modes: packet-bound contract modes in `brains/*/agents.toml` are unchanged, and a charter mode gains typed packets and acceptance tests only through the normal acceptance process.
+- Charter modes carry no write targets, connectors, or routes of their own; brain locks, writer leases, and specialist stages apply exactly as before.
+- Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the v2.1 specialists themselves; the other three v2.1 JEOS specialists remain rostered unchanged.
 
 ## Intake rule
 
