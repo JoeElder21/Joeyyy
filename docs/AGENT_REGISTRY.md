@@ -128,6 +128,14 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: no credentials stored or read; specialists' tool surface under the connector policy is MCP servers only
 - Rollback: per `docs/RUNTIME_NATIVE_LAYERS.md`
 
+### Data and memory layers (llama_index, mem0, crewAI)
+
+- Status: shadow (governance gateways implemented and tested offline; vector embeddings, mem0 backend, and crew kickoff activation-gated)
+- Owner layer: Agent 007 governance — governed evidence indexes (`scripts/evidence_index.py`), leased memory gateway on the mem0 scope model (`scripts/memory_layer.py`), roster-to-crew bridge with fail-closed admission (`scripts/crew_bridge.py`)
+- Validation gate: full suite green stdlib-side with skips by design; all layer tests pass in the pinned full-stack venv (leased writes, brain locks, writer locks, crew admission)
+- Boundaries: no credentials stored or read; namespace writes require the owner agent plus a PacketGuard-valid active writer lease; cross-brain reads route through Agent 007 only
+- Rollback: per `docs/DATA_MEMORY_LAYERS.md`
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick

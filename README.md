@@ -58,6 +58,10 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/governance_mcp_server.py` — governance MCP server making the packet-only connector policy enforceable.
 - `scripts/packet_models.py` — pydantic packet models generated at import time from the canonical JSON schemas.
 - `docs/RUNTIME_NATIVE_LAYERS.md` — native runtime layers record: Anthropic SDK, MCP, pydantic implementations and the gated LangChain absorption.
+- `scripts/evidence_index.py` — governed evidence indexes on llama_index: designated-writer writes, brain-locked retrieval.
+- `scripts/memory_layer.py` — governed memory gateway on the mem0 scope model: leased namespace writes, open in-brain reads, verify-before-write.
+- `scripts/crew_bridge.py` — roster-to-crewAI bridge: fail-closed task admission, single-brain crews, 007 as the integration step.
+- `docs/DATA_MEMORY_LAYERS.md` — data and memory layers record: llama_index, mem0, crewAI.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
