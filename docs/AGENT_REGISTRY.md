@@ -108,6 +108,7 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Owner layer: Agent 007 governance (task dispatch for repo-based agent work)
 - Purpose: run queued agent work unattended with notify-when-stuck; see `docs/EXECUTION_LAYER_TRIAL.md`
 - Validation gate: bounded trial on non-production tasks (registry maintenance, doc audits) before any client-facing work
+- Launch gate: every activation attempt must pass through `runtime/trusted_launcher.py` with a user-signed one-time grant; replayed or unsigned requests are denied
 
 ### Deferred / watch list
 

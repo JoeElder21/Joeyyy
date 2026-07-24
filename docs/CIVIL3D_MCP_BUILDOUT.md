@@ -68,7 +68,8 @@ The registry entry stays `candidate` until every step below has recorded evidenc
 2. `civil3d_skills` with `action: "list"` returns the template library (categories: surfaces, alignments, points, geometry, drawing, workflows).
 3. **Read-only proof on copies**: `civil3d_query` operations on copies of real project DWGs — list surfaces, drawing metadata, a surface elevation or cut/fill volume via the documented skill templates — with results spot-checked against Civil 3D's own reports.
 4. Sandbox probe: confirm a blocked operation (e.g., a network request) is actually rejected.
-5. Only after 1–4: a single `civil3d_execute` write on a scratch copy, verified by readback, then rolled back by discarding the copy.
+5. Only after 1–4: a separately approved manual test using a **synthetic disposable DWG** and one `civil3d_execute` write, verified by readback, then rolled back by discarding the file.
+6. Run every activation attempt through `runtime/trusted_launcher.py` with a user-signed one-time grant; launch requests without a valid grant must be denied before any tool runs.
 
 ## Governance boundaries
 

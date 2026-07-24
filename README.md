@@ -58,6 +58,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `templates/weekly-agent-audit.md` — weekly ecosystem review.
 - `scripts/validate_specialist_corps.py` — honest static and synthetic v2.1 packet validation.
 - `runtime/autogen_groupchat.py` — brain-private AutoGen GroupChat planning adapter.
+- `runtime/trusted_launcher.py` — user-signed one-time grant launcher for constrained external tool activation.
 - `requirements-runtime.txt` — opt-in runtime integration dependency set.
 - `tests/test_agent_contract.py` — contract validation.
 - `tests/test_specialist_corps.py` — roster, isolation, schema, privacy, and registry validation.
