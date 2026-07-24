@@ -151,6 +151,31 @@ class GroupDebateTests(unittest.TestCase):
         self.assertEqual(names, list(route["order"]) + [route["integrator"]])
 
 
+class GroupChatPlanTests(unittest.TestCase):
+    """Planner is stdlib (no SDK needed) — ported from Codex PR #11."""
+
+    def test_plan_uses_canonical_roster_order_and_subsets(self):
+        from scripts.group_debate import plan_brain_chat
+
+        plan = plan_brain_chat(
+            "APEX", ["apex_intelligence_forge", "apex_deal_engine"]
+        )
+        self.assertEqual(
+            plan.speaker_order, ("apex_deal_engine", "apex_intelligence_forge")
+        )
+        self.assertEqual(plan.manager, CHIEF)
+
+    def test_plan_rejects_mixed_brain_unknown_and_empty(self):
+        from scripts.group_debate import DebateRefused, plan_brain_chat
+
+        with self.assertRaises(DebateRefused):
+            plan_brain_chat("APEX", ["apex_war_architect", "jeos_life_architect"])
+        with self.assertRaises(DebateRefused):
+            plan_brain_chat("JEOS", ["not_registered"])
+        with self.assertRaises(DebateRefused):
+            plan_brain_chat("JEOS", [])
+
+
 class JeosKnowledgeGraphTests(unittest.TestCase):
     def _graph(self, tmp: str) -> JeosKnowledgeGraph:
         return JeosKnowledgeGraph(

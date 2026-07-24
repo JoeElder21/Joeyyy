@@ -33,6 +33,49 @@ class DebateRefused(Exception):
     """The requested debate or chat violates the manifest governance."""
 
 
+from dataclasses import dataclass  # noqa: E402
+import tomllib  # noqa: E402
+
+
+@dataclass(frozen=True)
+class GroupChatPlan:
+    """Validated, brain-private speaking plan produced before any agent
+    is constructed (ported from the Codex PR #11 adapter onto the modern
+    stack). Participants are a subset of one brain's canonical roster;
+    speaker order follows the roster order in config/specialist_corps.toml."""
+
+    brain: str
+    participants: tuple[str, ...]
+    speaker_order: tuple[str, ...]
+    manager: str = CHIEF
+
+
+def plan_brain_chat(
+    brain: str,
+    participants: list[str] | tuple[str, ...],
+    root: Path = ROOT,
+) -> GroupChatPlan:
+    """Deterministic dry-run planning with fail-closed boundary checks."""
+    if brain not in ("APEX", "JEOS"):
+        raise DebateRefused("brain must be APEX or JEOS")
+    with (root / "config" / "specialist_corps.toml").open("rb") as source:
+        corps = tomllib.load(source)
+    roster_order = corps[f"{brain.lower()}_roster"]
+    requested = tuple(dict.fromkeys(participants))
+    if not requested:
+        raise DebateRefused("a group chat needs at least one specialist")
+    unknown = [name for name in requested if name not in roster_order]
+    if unknown:
+        raise DebateRefused(
+            f"brain-private chat rejects non-{brain} participants: {unknown}"
+        )
+    return GroupChatPlan(
+        brain=brain,
+        participants=requested,
+        speaker_order=tuple(n for n in roster_order if n in requested),
+    )
+
+
 try:  # degrade cleanly when the runtime stack is not installed
     from autogen_agentchat.agents import AssistantAgent
     from autogen_agentchat.teams import RoundRobinGroupChat, SelectorGroupChat
@@ -104,6 +147,19 @@ if AUTOGEN_AVAILABLE:
         order = list(route["order"]) + [route["integrator"]]
         agents = [_assistant(name, roster[name], model_client) for name in order]
         return RoundRobinGroupChat(agents, max_turns=len(order))
+
+    def build_planned_chat(
+        plan: GroupChatPlan,
+        model_client,
+        root: Path = ROOT,
+    ) -> "RoundRobinGroupChat":
+        """Construct the chat a validated plan describes, in plan order."""
+        roster = load_roster(root)
+        agents = [
+            _assistant(name, roster[name], model_client)
+            for name in plan.speaker_order
+        ]
+        return RoundRobinGroupChat(agents, max_turns=max(2, len(agents) * 2))
 
     def build_selector_chat(
         brain: str,
