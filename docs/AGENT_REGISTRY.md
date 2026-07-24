@@ -63,7 +63,7 @@ Brain-owned triggers, outputs, routes, and challenge pairs: `brains/jeos/agents.
 - Tools/connectors/skills: specialists receive no direct connector handles under this contract; Agent 007 or a runtime-enforced brain proxy supplies PacketGuard-validated evidence
 - Write behavior: exact per-agent target arrays live in the manifests; proposed mutations only while shadow; Agent 007 holds the writer lease until a specialist is active or value-proven, its native sandbox is versioned away from read-only, and the exact target is allowlisted
 - Communication: same-brain asks, challenges, and handoffs only; Agent 007 is the sole bridge
-- Validation: `scripts/packet_guard.py` enforces relational packet rules and rejects legacy 2.0 delegation and handoff packets unless explicitly validated as archived (`historical=True`); `scripts/validate_specialist_corps.py` validates synthetic contracts and boundary probes without invoking agents; `schemas/mutation_result.schema.json` proves readback and rollback
+- Validation: `scripts/packet_guard.py` enforces relational packet rules and rejects legacy 2.0 delegation, handoff, and brain-private constraint packets unless explicitly validated as archived (`historical=True`); `scripts/validate_specialist_corps.py` validates synthetic contracts and boundary probes without invoking agents; `schemas/mutation_result.schema.json` proves readback and rollback
 - Privacy: runtime private evidence is never committed to this public repository
 - Version: 2.1.0
 - Last audit: v2.1 static and synthetic contract hardening, 2026-07-23

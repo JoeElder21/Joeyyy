@@ -233,6 +233,71 @@ class PacketContractTests(unittest.TestCase):
             delegations=[delegation],
         )
 
+    def test_candidate_lease_collides_with_ledgered_active_lease(self):
+        candidate = deepcopy(self.lease)
+        candidate["lease_id"] = "lease-2"
+        errors = self.guard.validate(
+            "writer_lease.schema.json", candidate, [self.lease]
+        )
+        self.assertTrue(any("collides" in error for error in errors), errors)
+
+    def test_v21_passed_criterion_requires_artifact_evidence(self):
+        delegation, handoff = self.v21_readonly_pair()
+        unevidenced = deepcopy(handoff)
+        unevidenced["criterion_validation"][0]["evidence_record_ids"] = []
+        errors = self.guard.validate(
+            "handoff_packet.schema.json",
+            unevidenced,
+            delegations=[delegation],
+        )
+        self.assertTrue(
+            any("passed without artifact evidence" in error for error in errors),
+            errors,
+        )
+
+    def test_v20_private_constraint_is_rejected_unless_historical(self):
+        now = datetime.now(timezone.utc)
+        issued = (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+        expires = (now + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+        private = {
+            "schema_version": "2.0",
+            "packet_id": "private-legacy-1",
+            "created_by": "apex_chief_of_staff",
+            "mission_id": "mission-jeos",
+            "resource_id": "resource-jeos",
+            "owner_brain": "JEOS",
+            "destination_agent": "jeos_life_architect",
+            "constraint_type": "finance_limit",
+            "constraint_summary": "Use a low-cost option.",
+            "allowed_uses": ["Compare options within the limit."],
+            "permitted_actions": [
+                "analyze",
+                "read_packet_evidence",
+                "draft",
+                "propose",
+                "challenge",
+                "handoff",
+            ],
+            "raw_source_payload_included": False,
+            "source_proof_hash": "c" * 64,
+            "sensitivity": "confidential",
+            "issued_at": issued,
+            "replay_policy": "single_mission_resource",
+            "expires_at": expires,
+        }
+        errors = self.guard.validate(
+            "brain_private_constraint_packet.schema.json", private
+        )
+        self.assertTrue(any("legacy" in error for error in errors), errors)
+        self.assertEqual(
+            self.guard.validate(
+                "brain_private_constraint_packet.schema.json",
+                private,
+                historical=True,
+            ),
+            [],
+        )
+
     def test_v20_packets_are_rejected_for_new_delegations_and_handoffs(self):
         delegation_errors = self.guard.validate(
             "delegation_packet.schema.json", self.delegation, [self.lease]
