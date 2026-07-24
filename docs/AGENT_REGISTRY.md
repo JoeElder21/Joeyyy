@@ -116,6 +116,15 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - max-sixty/worktrunk — install when multiple agents edit this repo concurrently
 - ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
 
+## Dream-team corps expansion (2026-07-24)
+
+Registered on Joe's direct instruction, superseding the former smallest-useful-team doctrine. Forty candidate agents (37 APEX across six layers, 3 JEOS personal-command; Joe's JEOS roster message truncated after five names and the remainder registers on arrival) are chartered in `config/dream_team_roster.toml`, validated by `tests/test_dream_team.py`.
+
+- Status: all `candidate`. No write targets, connectors, routes, native definitions, or runtime invocation until each is promoted through the normal lifecycle with its own native file and acceptance tests.
+- Governance: each candidate is mentored by one of the five mirrored classes; the mentor class's v2.1 specialist speaks for the charter until promotion. Brain locks apply unchanged.
+- Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the existing v2.1 corps and stay exactly as governed above; the other three v2.1 JEOS specialists remain rostered unchanged.
+- Promotion order is mission-driven: a candidate is promoted when a real mission needs its charter more than the mentor class can serve it.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

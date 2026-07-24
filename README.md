@@ -52,6 +52,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/INTEGRATION_BUILDOUT_2026-07-24.md` — runtime integration record: installed stack tiers, registered workstation deployments, flagged items, and first build tickets.
 - `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`) and the resolved version lock.
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
+- `config/dream_team_roster.toml` — dream-team corps expansion: 40 candidate-stage agents registered 2026-07-24 on Joe's instruction, mentored by the v2.1 mirrored classes until promoted.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.

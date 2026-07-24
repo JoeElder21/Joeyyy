@@ -68,6 +68,6 @@ Install results are environment-specific: run `python scripts/verify_runtime_sta
 
 Each ticket lands as its own reviewed change with tests; none of these are active until their specialists pass the shadow→active gate.
 
-## Dream-team roster (message 5) — held, not actioned
+## Dream-team roster (message 5) — resolved 2026-07-24
 
-The 42-agent APEX + 5+-agent JEOS roster is a governance expansion, not a dependency, and it conflicts with the standing "smallest useful specialist team" rule. Open question recorded for Joe: are these 42 registered agents (each needing intake, lifecycle, and acceptance gates) or 42 modes distributed across the existing 10-specialist corps? Default recommendation: modes first — the runtime stack above must exist before a larger corps is governable at all.
+Joe resolved the held question by direct instruction ("YOLO"), overriding the former smallest-useful-team rule. The full roster is registered at candidate stage in `config/dream_team_roster.toml` (37 new APEX + 3 new JEOS candidates; ten names were already the v2.1 corps), the doctrine in `AGENTS.md` and the Agent 007 native contract is amended to full-corps mission staffing, and `tests/test_dream_team.py` validates the expansion. Candidates carry no write targets, connectors, or routes until individually promoted through the lifecycle. The privacy guard, brain locks, writer leases, and high-impact boundaries were explicitly retained — they protect Joe and are CI-enforced, and the override was read as targeting the conservatism rails, not the safety rails.

@@ -1,0 +1,324 @@
+# Dream-team corps expansion — registered 2026-07-24 on Joe's direct instruction
+# ("YOLO", overriding the prior smallest-team doctrine; AGENTS.md amended the same day).
+#
+# Joe's roster names 42 APEX and 5 JEOS agents (the JEOS list arrived truncated
+# after #5; the remainder registers when Joe supplies it). Ten of the named
+# agents are the existing v2.1 mirrored corps and stay governed exactly as
+# before. The other forty register here at candidate stage: named, chartered,
+# brain-locked, and mentored by one of the five mirrored classes until each is
+# promoted through the normal lifecycle (candidate -> shadow -> active) with a
+# native definition and acceptance tests of its own. Candidate agents hold no
+# write targets, no connectors, and no routes; the mentor class's v2.1
+# specialist speaks for the charter until promotion.
+
+version = "1.0.0"
+authorized_by = "Joe Elder, 2026-07-24 directive"
+stage = "candidate"
+valid_mentor_classes = [
+    "strategy",
+    "opportunity_momentum",
+    "execution_capacity",
+    "intelligence_reflection",
+    "systems_automation",
+]
+
+[apex]
+brain = "APEX"
+# Dream-team names already rostered as v2.1 shadow specialists.
+existing_rostered = [
+    "apex_war_architect",
+    "apex_deal_engine",
+    "apex_delivery_commander",
+    "apex_intelligence_forge",
+    "apex_systems_blacksmith",
+]
+
+[[apex.candidates]]
+id = "apex_decision_tribunal"
+name = "APEX Decision Tribunal"
+layer = "executive_command"
+mentor_class = "intelligence_reflection"
+charter = "Stress-tests major decisions, risks, assumptions, and second-order effects."
+
+[[apex.candidates]]
+id = "apex_operations_auditor"
+name = "APEX Operations Auditor"
+layer = "executive_command"
+mentor_class = "systems_automation"
+charter = "Finds inefficiency, drag, weak handoffs, repeat breakdowns, and scale friction."
+
+[[apex.candidates]]
+id = "apex_institutional_memory_curator"
+name = "APEX Institutional Memory Curator"
+layer = "executive_command"
+mentor_class = "intelligence_reflection"
+charter = "Turns old files, wins, failures, and projects into reusable firm intelligence."
+
+[[apex.candidates]]
+id = "apex_relationship_quarterback"
+name = "APEX Relationship Quarterback"
+layer = "revenue_growth"
+mentor_class = "opportunity_momentum"
+charter = "Maintains strategic relationships, warm leads, introductions, and trust continuity."
+
+[[apex.candidates]]
+id = "apex_offer_innovator"
+name = "APEX Offer Innovator"
+layer = "revenue_growth"
+mentor_class = "strategy"
+charter = "Designs new offers, packaging, positioning, and monetization systems."
+
+[[apex.candidates]]
+id = "apex_negotiation_strategist"
+name = "APEX Negotiation Strategist"
+layer = "revenue_growth"
+mentor_class = "opportunity_momentum"
+charter = "Prepares leverage maps, pricing positions, and negotiation scenarios."
+
+[[apex.candidates]]
+id = "apex_market_recon_unit"
+name = "APEX Market Recon Unit"
+layer = "revenue_growth"
+mentor_class = "intelligence_reflection"
+charter = "Monitors industry shifts, competitors, trends, and emerging opportunity windows."
+
+[[apex.candidates]]
+id = "apex_brand_signal_director"
+name = "APEX Brand Signal Director"
+layer = "revenue_growth"
+mentor_class = "strategy"
+charter = "Strengthens authority, market perception, visibility, and strategic reputation."
+
+[[apex.candidates]]
+id = "apex_referral_multiplier"
+name = "APEX Referral Multiplier"
+layer = "revenue_growth"
+mentor_class = "opportunity_momentum"
+charter = "Designs systems that turn clients, allies, and results into more business."
+
+[[apex.candidates]]
+id = "apex_retention_engineer"
+name = "APEX Retention Engineer"
+layer = "revenue_growth"
+mentor_class = "opportunity_momentum"
+charter = "Improves client stickiness, renewals, repeat work, and long-term value extraction."
+
+[[apex.candidates]]
+id = "apex_client_experience_designer"
+name = "APEX Client Experience Designer"
+layer = "delivery_execution"
+mentor_class = "execution_capacity"
+charter = "Designs a premium intake-to-delivery-to-retention client journey."
+
+[[apex.candidates]]
+id = "apex_quality_assurance_marshal"
+name = "APEX Quality Assurance Marshal"
+layer = "delivery_execution"
+mentor_class = "execution_capacity"
+charter = "Protects quality, consistency, completeness, and reputation-critical standards."
+
+[[apex.candidates]]
+id = "apex_deadline_enforcer"
+name = "APEX Deadline Enforcer"
+layer = "delivery_execution"
+mentor_class = "execution_capacity"
+charter = "Pushes deadlines, sequences deliverables, and prevents slippage."
+
+[[apex.candidates]]
+id = "apex_bottleneck_hunter"
+name = "APEX Bottleneck Hunter"
+layer = "delivery_execution"
+mentor_class = "systems_automation"
+charter = "Finds where Joe, team, tools, or process are constraining output."
+
+[[apex.candidates]]
+id = "apex_resource_allocator"
+name = "APEX Resource Allocator"
+layer = "delivery_execution"
+mentor_class = "execution_capacity"
+charter = "Assigns time, attention, tools, and people to the highest-value uses."
+
+[[apex.candidates]]
+id = "apex_escalation_controller"
+name = "APEX Escalation Controller"
+layer = "delivery_execution"
+mentor_class = "execution_capacity"
+charter = "Handles urgent issues, project collisions, client heat, and operational instability."
+
+[[apex.candidates]]
+id = "apex_research_librarian"
+name = "APEX Research Librarian"
+layer = "intelligence_thinking"
+mentor_class = "intelligence_reflection"
+charter = "Builds a usable internal knowledge system from notes, docs, and prior work."
+
+[[apex.candidates]]
+id = "apex_pattern_detector"
+name = "APEX Pattern Detector"
+layer = "intelligence_thinking"
+mentor_class = "intelligence_reflection"
+charter = "Identifies repeating wins, repeated errors, market patterns, and operating blind spots."
+
+[[apex.candidates]]
+id = "apex_scenario_simulator"
+name = "APEX Scenario Simulator"
+layer = "intelligence_thinking"
+mentor_class = "intelligence_reflection"
+charter = "Models outcomes before big moves, changes, hires, launches, or commitments."
+
+[[apex.candidates]]
+id = "apex_contrarian_analyst"
+name = "APEX Contrarian Analyst"
+layer = "intelligence_thinking"
+mentor_class = "intelligence_reflection"
+charter = "Challenges weak thinking and provides informed internal opposition."
+
+[[apex.candidates]]
+id = "apex_opportunity_miner"
+name = "APEX Opportunity Miner"
+layer = "intelligence_thinking"
+mentor_class = "opportunity_momentum"
+charter = "Surfaces hidden value inside overlooked contacts, assets, work, and information."
+
+[[apex.candidates]]
+id = "apex_talent_marshal"
+name = "APEX Talent Marshal"
+layer = "leadership_scale"
+mentor_class = "strategy"
+charter = "Evaluates hires, collaborators, delegation targets, and role design needs."
+
+[[apex.candidates]]
+id = "apex_delegation_commander"
+name = "APEX Delegation Commander"
+layer = "leadership_scale"
+mentor_class = "systems_automation"
+charter = "Moves work away from Joe into the correct systems, people, or agents."
+
+[[apex.candidates]]
+id = "apex_org_designer"
+name = "APEX Org Designer"
+layer = "leadership_scale"
+mentor_class = "strategy"
+charter = "Defines structure, responsibilities, lanes, and scaling architecture."
+
+[[apex.candidates]]
+id = "apex_accountability_chief"
+name = "APEX Accountability Chief"
+layer = "leadership_scale"
+mentor_class = "execution_capacity"
+charter = "Tracks promises, decisions, ownership, and follow-through across the business."
+
+[[apex.candidates]]
+id = "apex_culture_framer"
+name = "APEX Culture Framer"
+layer = "leadership_scale"
+mentor_class = "strategy"
+charter = "Protects standards, operating principles, and quality of internal collaboration."
+
+[[apex.candidates]]
+id = "apex_training_architect"
+name = "APEX Training Architect"
+layer = "leadership_scale"
+mentor_class = "systems_automation"
+charter = "Turns repeatable expertise into onboarding, teaching, and internal playbooks."
+
+[[apex.candidates]]
+id = "apex_productization_lab"
+name = "APEX Productization Lab"
+layer = "creation_innovation"
+mentor_class = "strategy"
+charter = "Turns services, knowledge, and methods into scalable assets and products."
+
+[[apex.candidates]]
+id = "apex_ip_foundry"
+name = "APEX IP Foundry"
+layer = "creation_innovation"
+mentor_class = "intelligence_reflection"
+charter = "Extracts frameworks, concepts, methods, and proprietary process assets."
+
+[[apex.candidates]]
+id = "apex_creative_strategist"
+name = "APEX Creative Strategist"
+layer = "creation_innovation"
+mentor_class = "strategy"
+charter = "Generates bold campaign concepts, positioning angles, and differentiated moves."
+
+[[apex.candidates]]
+id = "apex_experiment_director"
+name = "APEX Experiment Director"
+layer = "creation_innovation"
+mentor_class = "intelligence_reflection"
+charter = "Designs controlled tests for offers, pricing, workflows, and strategic hypotheses."
+
+[[apex.candidates]]
+id = "apex_venture_scout"
+name = "APEX Venture Scout"
+layer = "creation_innovation"
+mentor_class = "opportunity_momentum"
+charter = "Identifies adjacent ventures, partnerships, and expansion plays."
+
+[[apex.candidates]]
+id = "apex_risk_sentinel"
+name = "APEX Risk Sentinel"
+layer = "protection_governance"
+mentor_class = "intelligence_reflection"
+charter = "Flags operational, reputational, strategic, and execution risks early."
+
+[[apex.candidates]]
+id = "apex_compliance_tracker"
+name = "APEX Compliance Tracker"
+layer = "protection_governance"
+mentor_class = "execution_capacity"
+charter = "Keeps required standards, obligations, and process controls visible."
+
+[[apex.candidates]]
+id = "apex_reputation_guardian"
+name = "APEX Reputation Guardian"
+layer = "protection_governance"
+mentor_class = "strategy"
+charter = "Watches for reputational exposure and protects external trust."
+
+[[apex.candidates]]
+id = "apex_conflict_mapper"
+name = "APEX Conflict Mapper"
+layer = "protection_governance"
+mentor_class = "intelligence_reflection"
+charter = "Tracks internal contradictions across plans, promises, priorities, and records."
+
+[[apex.candidates]]
+id = "apex_recovery_planner"
+name = "APEX Recovery Planner"
+layer = "protection_governance"
+mentor_class = "execution_capacity"
+charter = "Designs recovery routes when a launch, deal, client, or system goes sideways."
+
+[jeos]
+brain = "JEOS"
+# Dream-team names already rostered as v2.1 shadow specialists. Joe's JEOS
+# roster message truncated after agent #5; further candidates register when
+# the remainder arrives.
+existing_rostered = [
+    "jeos_life_architect",
+    "jeos_momentum_engine",
+]
+
+[[jeos.candidates]]
+id = "jeos_commitment_gatekeeper"
+name = "JEOS Commitment Gatekeeper"
+layer = "personal_command"
+mentor_class = "strategy"
+charter = "Screens new obligations before Joe says yes."
+
+[[jeos.candidates]]
+id = "jeos_focus_protector"
+name = "JEOS Focus Protector"
+layer = "personal_command"
+mentor_class = "execution_capacity"
+charter = "Guards attention from distraction, fragmentation, and noise."
+
+[[jeos.candidates]]
+id = "jeos_identity_guardian"
+name = "JEOS Identity Guardian"
+layer = "personal_command"
+mentor_class = "intelligence_reflection"
+charter = "Protects alignment between behavior, values, standards, and desired self."
