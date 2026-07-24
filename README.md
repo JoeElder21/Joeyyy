@@ -59,7 +59,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `templates/specialist-handoff.md` — human-readable specialist packet.
 - `templates/weekly-agent-audit.md` — weekly ecosystem review.
 - `scripts/validate_specialist_corps.py` — honest static and synthetic v2.1 packet validation.
-- `runtime/autogen_groupchat.py` — brain-private AutoGen GroupChat planning adapter.
+- `runtime/autogen_groupchat.py` — legacy planning/prototype adapter; governed runtime callers use `runtime/autogen_orchestrator.py`.
 - `requirements-runtime.txt` — opt-in runtime integration dependency set.
 - `tests/test_agent_contract.py` — contract validation.
 - `tests/test_specialist_corps.py` — roster, isolation, schema, privacy, and registry validation.
@@ -67,7 +67,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 
 ## Validation
 
-Run:
+Repository validation and the optional AutoGen adapter require Python 3.11 or 3.12. Run:
 
 ```bash
 python scripts/privacy_guard.py
@@ -75,9 +75,9 @@ python scripts/validate_specialist_corps.py
 python -m unittest discover -s tests -v
 ```
 
-For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. This repository does not contain model configuration or connector credentials.
+For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. The dependency uses Microsoft's official `autogen-agentchat` distribution and remains pinned to the legacy 0.2 API. This repository does not contain model configuration or connector credentials.
 
-GitHub Actions runs the same checks on pushes to `main` and pull requests.
+GitHub Actions validates Python 3.11 and 3.12, installs the pinned adapter dependency, and runs the same checks plus a no-model AutoGen lifecycle smoke test on pushes to `main` and pull requests.
 
 The harness parses the configuration and validates synthetic v2.1 packets and fail-closed boundary probes. It does not invoke named agents, call connectors, complete real missions, or prove output quality.
 

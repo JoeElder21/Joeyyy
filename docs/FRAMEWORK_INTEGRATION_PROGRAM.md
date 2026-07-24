@@ -14,7 +14,7 @@ This is the implementation and deployment record for the nine repositories named
 
 | Order | Upstream | Operational responsibility | Repository implementation / deployment gate |
 | --- | --- | --- | --- |
-| 1 | microsoft/autogen | Brain-private multi-agent discussion | `runtime/autogen_groupchat.py` creates a `ConversableAgent`/`GroupChat` plan from the canonical roster; it rejects mixed-brain participants. Attach only packet handlers and validate every return. This legacy API requires a Python runtime supported by the selected `pyautogen` release. |
+| 1 | microsoft/autogen | Brain-private multi-agent discussion | `runtime/autogen_orchestrator.py` creates a governed `ConversableAgent`/`GroupChatManager` cadence from the canonical manifests; it rejects mixed-brain participants, forged plans, and direct tool configuration. Attach only packet handlers and validate every return. The selected official `autogen-agentchat` 0.2 release and repository tooling support Python 3.11–3.12 together. |
 | 2 | langchain-ai/langgraph | Lifecycle and cadence state machines | Model the lifecycle and cadence routes as graph state; edge guards must require every active-gate evidence item. Pause at an approval node for high-impact work. |
 | 3 | crewAIInc/crewAI | Role/task composition | Generate each Crew agent from the native TOML role/purpose/modes and bind expected output to its declared artifact type. Run mirrored APEX and JEOS crews independently. |
 | 4 | PrefectHQ/prefect | Retried, observable cadence flows | Wrap one delegated specialist call per task and a same-brain cadence per flow. Deployment may schedule only after a runtime destination and failure/rollback route are verified. |
