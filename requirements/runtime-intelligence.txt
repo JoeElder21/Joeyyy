@@ -1,0 +1,3 @@
+# Prompt-as-program compilation for agent contract optimization.
+# Canonical source: stanfordnlp/dspy.
+dspy

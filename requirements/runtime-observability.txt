@@ -1,0 +1,7 @@
+# Weekly-audit observability + task runner.
+# Canonical sources: open-telemetry/opentelemetry-python, Arize-AI/phoenix
+# (otel client only; the full Phoenix server is a workstation deployment),
+# taskipy/taskipy.
+opentelemetry-sdk
+arize-phoenix-otel
+taskipy
