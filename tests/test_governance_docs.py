@@ -69,6 +69,8 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
             "Recorded conflict",
             "## Phase 1",
             "## Phase 5",
+            "## Verification record — 2026-07-24",
+            "LangKit",
             "## Rollback",
         ]:
             with self.subTest(phrase=phrase):
