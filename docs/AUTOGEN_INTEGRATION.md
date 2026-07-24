@@ -4,15 +4,16 @@
 
 This is the first implementation record in the eight-repository incorporation program. The repository now contains `runtime/autogen_orchestrator.py`, a tested adapter for the Microsoft AutoGen 0.2 `ConversableAgent`, `GroupChat`, and `GroupChatManager` APIs. It converts the existing, versioned brain manifests into a bounded group-chat plan; it does **not** promote a shadow specialist or claim that a model, connector, Google Drive, or AutoGen runtime is available.
 
-The optional runtime dependency is pinned in `requirements.txt` for Python 3.8–3.12, the supported range for the legacy AutoGen API used by this adapter. An operator installs it only in a verified runtime and supplies the authorized `llm_config`; no credential, model configuration, connector identifier, or private source data belongs in this repository.
+The official legacy `autogen-agentchat` 0.2 distribution supports Python 3.8 through versions below 3.13. This repository requires Python 3.11 or newer because the adapter and PacketGuard use the standard-library `tomllib` module, so the supported combination is Python 3.11–3.12. `requirements.txt` pins Microsoft's official distribution to the legacy 0.2 API. An operator installs it only in a verified runtime and supplies the authorized `llm_config`; no credential, model configuration, connector identifier, or private source data belongs in this repository.
 
 ## Runtime behavior
 
-1. Agent 007 calls `plan_cadence(brain, cadence)`. The adapter reads the matching brain manifest and uses its `cadence_routes.order` as the specialist speaking order.
-2. `validate_delegations()` requires exactly one new, schema-valid v2.1 delegation packet for every selected specialist. Packets must belong to the requested brain; mixed-brain chats fail before AutoGen objects are built.
-3. `build_group_chat()` creates one `ConversableAgent` per selected specialist with no human input and no code execution. The supplied system-message factory must expose only packet-authorized evidence.
-4. The `GroupChat` uses the cadence order as its deterministic speaker selector. Manifest-defined same-brain challenge pairs are carried into the plan for the runtime prompt/policy layer; no APEX/JEOS specialist can debate directly.
-5. Agent 007 calls `initiate_chat()` against the `GroupChatManager`, then integrates the advisory handoffs. Existing PacketGuard, writer-lease, readback, rollback, and high-impact approval rules remain authoritative.
+1. Agent 007 calls `plan_cadence(brain, cadence)`. The adapter reads the matching brain manifest, uses `cadence_routes.order` as the specialist-only speaking order, and requires the route's `integrator` to match the governed Agent 007 identity.
+2. `validate_delegations()` materializes the supplied iterable once and requires exactly one new, schema-valid v2.1 delegation packet for every selected specialist. Duplicate, missing, extra, or mixed-brain packets fail before AutoGen objects are built.
+3. `build_group_chat()` creates one `ConversableAgent` per selected specialist with no human input and no code execution. The supplied system-message factory must expose only packet-authorized evidence. Every eligible manifest challenge group and its purpose is appended to the affected specialists' mandatory prompt policy.
+4. The `GroupChat` ignores the external Agent 007 mission and manager notes when counting specialist turns. It selects each specialist object once in manifest order, budgets one entry round plus one round per specialist, and terminates without model-based `"auto"` fallback. Agent 007 remains outside the brain-private `GroupChat`.
+5. `initiate_chat()` verifies the completed specialist order, then explicitly invokes the manifest-declared Agent 007 for a terminal integration turn and returns both the raw group result and the integration in `MissionResult`.
+6. Specialist messages remain untrusted advisory output. The verified host and Agent 007 must parse and PacketGuard-validate outbound handoff packets before any mutation; writer leases, readback, rollback, and high-impact approval rules are host/integrator obligations and are not inferred from transcript completion.
 
 ## Operational invocation
 
@@ -27,16 +28,17 @@ specialists, manager = orchestrator.build_group_chat(
     llm_config=verified_runtime_llm_config,
     system_message_factory=packet_to_brain_locked_prompt,
 )
-result = orchestrator.initiate_chat(agent_007, manager, mission)
+result = orchestrator.initiate_chat(agent_007, manager, mission, plan=plan)
+final_output = result.integration
 ```
 
-This call is intentionally unavailable until the caller has a verified AutoGen installation, model configuration, Agent 007 runtime object, and packet-authorized evidence. It does not schedule background work and it does not write to Drive.
+This call is intentionally unavailable until the caller has a verified AutoGen installation, model configuration, manifest-matching Agent 007 runtime object, and packet-authorized evidence. The adapter supplies no scheduler, connector, or mutation function and does not validate free-form specialist text as a handoff packet. Any capability registered separately on the caller-supplied Agent 007 object remains the verified host's responsibility.
 
 ## Evidence, validation, and rollback
 
-- Unit tests assert the APEX daily route, the terminal Agent 007 integration turn, eligible same-brain challenge pair, invalid brain/cadence rejection, exact participant matching, and cross-brain packet rejection.
+- Unit tests exercise generator-backed delegation input, duplicate rejection, manifest-integrator drift, forged-plan rejection, deterministic specialist selection after the external mission, every eligible challenge policy, full round budgeting, incomplete transcript rejection, and the explicit terminal Agent 007 turn. CI also runs the lifecycle through the installed official AutoGen 0.2 classes with deterministic synthetic replies and no model or connector.
 - The complete repository suite remains the static and synthetic validation baseline. A controlled real mission for each material specialist mode is still required for lifecycle promotion.
-- Rollback: remove `runtime/autogen_orchestrator.py`, `tests/test_autogen_orchestrator.py`, this record, and the `pyautogen` requirement; restore this integration's commit parent. No source-memory or external mutation is made by the adapter.
+- Rollback: revert the follow-up fix commit, or remove `runtime/autogen_orchestrator.py`, `tests/test_autogen_orchestrator.py`, this record, and the `autogen-agentchat` requirement. The adapter itself provisions no source-memory or external-mutation capability; separately registered Agent 007 callbacks remain outside this guarantee.
 
 ## Google Drive record
 

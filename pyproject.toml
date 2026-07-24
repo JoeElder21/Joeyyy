@@ -1,4 +1,4 @@
 [tool.taskipy.tasks]
-validate = "python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python scripts/privacy_guard.py"
+validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python -m unittest discover -s tests -v"
 test = "python -m unittest discover -s tests -v"
 autogen-preflight = "python scripts/autogen_challenge_pair.py --brain APEX --agents apex_war_architect apex_intelligence_forge --mission-id synthetic-autogen-preflight --evidence-ref synthetic://apex/challenge-input"

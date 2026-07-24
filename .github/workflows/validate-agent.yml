@@ -11,13 +11,19 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
+      - name: Install the official AutoGen 0.2 runtime
+        run: python -m pip install -r requirements.txt
       - name: Validate Agent 007 and specialist contracts
         run: |
           python scripts/privacy_guard.py
