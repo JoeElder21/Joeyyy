@@ -1,4 +1,4 @@
-"""Structural validation for the dream-team corps expansion roster."""
+"""Structural validation for the dream-team charter-mode roster."""
 
 from __future__ import annotations
 
@@ -15,75 +15,86 @@ class DreamTeamRosterTests(unittest.TestCase):
         cls.roster = tomllib.loads(
             (ROOT / "config" / "dream_team_roster.toml").read_text(encoding="utf-8")
         )
-        cls.corps = tomllib.loads(
-            (ROOT / "config" / "specialist_corps.toml").read_text(encoding="utf-8")
-        )
+        cls.brains = {
+            brain: tomllib.loads(
+                (ROOT / "brains" / brain / "agents.toml").read_text(encoding="utf-8")
+            )
+            for brain in ("apex", "jeos")
+        }
 
-    def _candidates(self, brain: str) -> list[dict]:
-        return self.roster[brain].get("candidates", [])
+    def _modes(self, brain: str) -> list[dict]:
+        return self.roster[brain].get("charter_modes", [])
 
-    def test_every_candidate_is_candidate_stage_and_brain_locked(self) -> None:
-        self.assertEqual(self.roster["stage"], "candidate")
+    def test_roster_kind_is_charter_mode_not_agent(self) -> None:
+        self.assertEqual(self.roster["kind"], "charter_mode")
+        for brain in ("apex", "jeos"):
+            self.assertNotIn("candidates", self.roster[brain])
+
+    def test_every_charter_mode_is_brain_locked_to_its_owner(self) -> None:
         for brain, prefix in (("apex", "apex_"), ("jeos", "jeos_")):
-            for candidate in self._candidates(brain):
+            rostered = set(self.brains[brain]["roster"])
+            for mode in self._modes(brain):
                 self.assertTrue(
-                    candidate["id"].startswith(prefix),
-                    f"{candidate['id']} violates the {brain} brain lock",
+                    mode["owner_agent"].startswith(prefix),
+                    f"{mode['mode']} owner violates the {brain} brain lock",
+                )
+                self.assertIn(
+                    mode["owner_agent"],
+                    rostered,
+                    f"{mode['mode']} owner is not a rostered {brain} specialist",
                 )
                 for forbidden in ("write_targets", "connectors", "routes", "status"):
                     self.assertNotIn(
                         forbidden,
-                        candidate,
-                        f"candidate {candidate['id']} must not carry {forbidden} before promotion",
+                        mode,
+                        f"charter mode {mode['mode']} must not carry {forbidden}",
                     )
 
-    def test_candidate_ids_are_unique_and_chartered(self) -> None:
-        ids = [c["id"] for b in ("apex", "jeos") for c in self._candidates(b)]
+    def test_owner_class_matches_the_owning_specialist(self) -> None:
+        valid = set(self.roster["valid_owner_classes"])
+        for brain in ("apex", "jeos"):
+            agents = self.brains[brain]["agents"]
+            for mode in self._modes(brain):
+                self.assertIn(mode["owner_class"], valid, mode["mode"])
+                owner = agents[mode["owner_agent"]]
+                self.assertEqual(
+                    owner["class_id"],
+                    mode["owner_class"],
+                    f"{mode['mode']} owner_class does not match {mode['owner_agent']}",
+                )
+
+    def test_mode_ids_are_unique_and_chartered(self) -> None:
+        ids = [m["mode"] for b in ("apex", "jeos") for m in self._modes(b)]
         self.assertEqual(len(ids), len(set(ids)))
         for brain in ("apex", "jeos"):
-            for candidate in self._candidates(brain):
-                self.assertTrue(candidate["charter"].strip())
-                self.assertTrue(candidate["name"].strip())
-                self.assertTrue(candidate["layer"].strip())
-
-    def test_mentor_classes_are_valid(self) -> None:
-        valid = set(self.roster["valid_mentor_classes"])
-        for brain in ("apex", "jeos"):
-            for candidate in self._candidates(brain):
-                self.assertIn(candidate["mentor_class"], valid, candidate["id"])
+            existing_contract_modes = {
+                contract_mode
+                for agent in self.brains[brain]["agents"].values()
+                for contract_mode in agent.get("modes", [])
+            }
+            for mode in self._modes(brain):
+                self.assertTrue(mode["charter"].strip())
+                self.assertTrue(mode["name"].strip())
+                self.assertTrue(mode["layer"].strip())
+                self.assertNotIn(
+                    mode["mode"],
+                    existing_contract_modes,
+                    f"{mode['mode']} collides with a v2.1 contract mode",
+                )
 
     def test_existing_rostered_agents_match_the_v21_corps(self) -> None:
-        v21_agents = set()
-        for key, value in self.corps.items():
-            if isinstance(value, dict) and "agents" in value:
-                v21_agents.update(value["agents"])
-        flat = {
-            name
-            for name in self._flatten_strings(self.corps)
-            if name.startswith(("apex_", "jeos_"))
-        }
-        known = v21_agents | flat
         for brain in ("apex", "jeos"):
+            rostered = set(self.brains[brain]["roster"])
             for name in self.roster[brain]["existing_rostered"]:
-                self.assertIn(name, known, f"{name} is not a known v2.1 specialist")
+                self.assertIn(name, rostered, f"{name} is not a rostered v2.1 specialist")
 
     def test_roster_counts_match_joes_directive(self) -> None:
-        # 42 APEX named minus 5 already rostered = 37 candidates; JEOS message
-        # truncated after 5 named, 2 already rostered = 3 candidates.
-        self.assertEqual(len(self._candidates("apex")), 37)
+        # 42 APEX named minus 5 that are v2.1 specialists = 37 charter modes;
+        # JEOS message truncated after 5 named, 2 already specialists = 3 modes.
+        self.assertEqual(len(self._modes("apex")), 37)
         self.assertEqual(len(self.roster["apex"]["existing_rostered"]), 5)
-        self.assertEqual(len(self._candidates("jeos")), 3)
+        self.assertEqual(len(self._modes("jeos")), 3)
         self.assertEqual(len(self.roster["jeos"]["existing_rostered"]), 2)
-
-    @classmethod
-    def _flatten_strings(cls, value) -> list[str]:
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, dict):
-            return [item for v in value.values() for item in cls._flatten_strings(v)]
-        if isinstance(value, list):
-            return [item for v in value for item in cls._flatten_strings(v)]
-        return []
 
 
 if __name__ == "__main__":
