@@ -27,8 +27,8 @@ This is the implementation and deployment record for the nine repositories named
 ## AutoGen first mission path
 
 1. Agent 007 determines one owner brain and selects the smallest needed same-brain specialist set.
-2. `plan_group_chat()` reads `config/specialist_corps.toml`, preserves roster/cadence ordering, and rejects cross-brain or unknown participants.
-3. A verified deployment calls `build_group_chat()` with its own LLM configuration, attaches packet-only execution handlers, and starts the chat from Agent 007 using `initiate_chat()`.
+2. `plan_group_chat()` reads `config/specialist_corps.toml`, preserves canonical roster order by default or the selected cadence-route order when `cadence` is supplied, and rejects cross-brain, unknown, or route-excluded participants.
+3. A verified deployment calls `build_group_chat()` with its own LLM configuration. The execution boundary revalidates every public plan against the current manifest before attaching packet-only handlers and starting the chat from Agent 007 using `initiate_chat()`.
 4. Each response is validated as `handoff_packet.schema.json`; invalid output is returned for correction or the mission is blocked.
 5. Agent 007 creates the only permitted cross-brain comparison from minimized, valid outputs. Any proposed write follows the existing lease/readback/rollback protocol.
 
