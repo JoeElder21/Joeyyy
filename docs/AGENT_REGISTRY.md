@@ -118,6 +118,14 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Purpose: run queued agent work unattended with notify-when-stuck; see `docs/EXECUTION_LAYER_TRIAL.md`
 - Validation gate: bounded trial on non-production tasks (registry maintenance, doc audits) before any client-facing work
 
+### Integration roadmap, Phases 1–5 (15 external platforms)
+
+- Status: candidate (identity and maturity verified 2026-07-24; adoption still requires full per-item intake). Exception: LangKit verified stale with an overstated PII claim — its Phase 1 slot is open pending a maintained substitute. Verification table: `docs/INTEGRATION_ROADMAP.md`
+- Owner layer: Agent 007 governance; per-item target layers in `docs/INTEGRATION_ROADMAP.md`
+- Purpose: add the runtime enforcement and automation (prompt optimization, schema enforcement, sandboxing, privacy monitoring, memory, scheduling, document intake, reasoning patterns, AEC data exchange) that makes the existing contracts real
+- Validation gate: full intake per item before any adoption; recorded conflicts (memory-layer decision, execution-trial precedence) stay visible until Joe resolves them
+- Rollback: the roadmap grants no access; each adopted item records its own rollback at intake
+
 ### Deferred / watch list
 
 - kentcdodds/kody — cross-brain memory/secrets/scheduler layer; absorb-only for now, revisit next quarter
