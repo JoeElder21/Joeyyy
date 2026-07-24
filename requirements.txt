@@ -2,5 +2,5 @@
 # The adapter remains importable without this package so repository-only
 # validation never creates an unverified connector or model-access claim.
 # Repository tooling and PacketGuard require Python 3.11–3.12.
-# Use Microsoft's maintained distribution for the legacy AutoGen 0.2 API.
+# Use Microsoft's official distribution for the legacy AutoGen 0.2 API.
 autogen-agentchat>=0.2.35,<0.3; python_version >= "3.11" and python_version < "3.13"
