@@ -151,6 +151,14 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: spans carry packet metadata only, never packet content or credentials
 - Rollback: delete `scripts/cadence_flows.py`, `scripts/observability.py`, and `tests/test_cadence_observability.py`
 
+### Trusted launcher (grant-gated mount activation)
+
+- Status: shadow (all denial paths proven by tests; first live grant happens on Joe's workstation)
+- Owner layer: Agent 007 governance — authority separated from execution: write-capable MCP mounts (`require_grant = true` in `config/mcp_mounts.toml`) start only through `scripts/trusted_launcher.py` with a Joe-signed, single-use, time-boxed grant; every authorization and denial lands in the hash-chained launcher ledger
+- Validation gate: `tests/test_trusted_launcher.py` proves denial without a grant, for unregistered mounts, tampered signatures, expired grants, reused nonces, and wrong-mount grants; the civil3d first live use follows `docs/CIVIL3D_FIRST_WRITE_TEST.md`
+- Boundaries: the signing key lives outside the repository (0600, Joe's machine); agents cannot mint grants
+- Rollback: delete the launcher, its tests, and the grant flags; mounts revert to registered-not-launchable
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick

@@ -20,6 +20,7 @@ verify_offline = true
 
 [[mounts]]
 name = "filesystem"
+require_grant = true
 command = ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
 agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
 purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
@@ -27,6 +28,7 @@ verify_offline = true
 
 [[mounts]]
 name = "github"
+require_grant = true
 command = ["docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
 agents = ["apex_systems_blacksmith", "apex_chief_of_staff"]
 purpose = "Repo reads/writes through a proper MCP interface, not raw git in prompts."
@@ -35,6 +37,7 @@ activation = "GITHUB_PERSONAL_ACCESS_TOKEN in the runtime env store."
 
 [[mounts]]
 name = "postgres"
+require_grant = true
 command = ["npx", "-y", "@modelcontextprotocol/server-postgres"]
 agents = ["apex_intelligence_forge", "apex_deal_engine", "apex_chief_of_staff"]
 purpose = "Structured data (opportunity pipeline, project register, evidence sources) queryable via one MCP interface."
@@ -43,6 +46,7 @@ activation = "Postgres connection string appended to the command at mount time."
 
 [[mounts]]
 name = "gdrive"
+require_grant = true
 command = ["npx", "-y", "@modelcontextprotocol/server-gdrive"]
 agents = ["apex_intelligence_forge", "apex_chief_of_staff"]
 purpose = "Google Drive documents through MCP; pairs with the Drive command-center records."
@@ -51,6 +55,7 @@ activation = "One-time OAuth flow on Joe's machine (GDRIVE_CREDENTIALS_PATH); th
 
 [[mounts]]
 name = "civil3d"
+require_grant = true
 command = ["node", "build/index.js"]
 agents = ["apex_delivery_commander", "apex_systems_blacksmith", "apex_chief_of_staff"]
 purpose = "Live Civil 3D session access; see docs/CIVIL3D_MCP_BUILDOUT.md."
