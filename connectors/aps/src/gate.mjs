@@ -29,9 +29,8 @@ const READ_SCOPES = [Scopes.DataRead, Scopes.ViewablesRead];
 const STEP4_SCOPES = [...READ_SCOPES, Scopes.DataWrite, Scopes.DataCreate, Scopes.BucketCreate, Scopes.BucketRead];
 
 function credentials() {
-  const clientId = process.env.APS_CLIENT_ID;
-  const clientSecret = process.env.APS_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
+  const { APS_CLIENT_ID: id, APS_CLIENT_SECRET: secret } = process.env;
+  if (!id || !secret) {
     console.error(
       "GATE BLOCKED (fail closed): APS_CLIENT_ID / APS_CLIENT_SECRET are not set.\n" +
       "Step 1 of the gate is a human step: create the APS app at aps.autodesk.com\n" +
@@ -39,7 +38,7 @@ function credentials() {
     );
     process.exit(2);
   }
-  return { clientId, clientSecret };
+  return { id, secret };
 }
 
 const evidence = { started: new Date().toISOString(), steps: [] };
@@ -51,9 +50,9 @@ function record(step, name, ok, detail) {
 }
 
 async function token(scopes) {
-  const { clientId, clientSecret } = credentials();
+  const { id, secret } = credentials();
   const auth = new AuthenticationClient();
-  const t = await auth.getTwoLeggedToken(clientId, clientSecret, scopes);
+  const t = await auth.getTwoLeggedToken(id, secret, scopes);
   return t.access_token;
 }
 
@@ -96,7 +95,7 @@ async function step3() {
 async function step4() {
   const accessToken = await token(STEP4_SCOPES);
   const modelPath = process.env.APS_TEST_MODEL ?? DEFAULT_MODEL;
-  const bucketKey = process.env.APS_TEST_BUCKET ?? `eld-aps-gate-${createHash("sha256").update(credentials().clientId).digest("hex").slice(0, 10)}`;
+  const bucketKey = process.env.APS_TEST_BUCKET ?? `eld-aps-gate-${createHash("sha256").update(credentials().id).digest("hex").slice(0, 10)}`;
   const oss = new OssClient();
 
   try {
