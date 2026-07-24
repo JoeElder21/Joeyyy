@@ -102,6 +102,15 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: write operations follow the one-designated-writer rule; production DWGs require explicit task-level instruction
 - Rollback: remove the MCP server entry from Claude config and unload the plugin (no persistent state)
 
+### APS cloud connector (autodesk-platform-services/aps-sdk-node)
+
+- Status: candidate
+- Owner layer: APEX (cloud project-file and model-data access; the cloud leg of the Civil 3D / engineering MCP layer)
+- Purpose: give APEX agents read access to BIM 360/ACC file trees (`data-management`) and element-level model properties/quantities (`model-derivative`) through the official APS Node.js SDK; headless cloud automation later via the Design Automation REST API (no SDK package exists for it — see the capability corrections in `docs/APS_SDK_BUILDOUT.md`)
+- Validation gate: per `docs/APS_SDK_BUILDOUT.md` — sandbox-only, read-only scopes first; employer/client hub access requires explicit task-level authorization
+- Boundaries: APS credentials live only in the runtime env/secret store, never in chat or this repository; any write scope follows the one-designated-writer rule
+- Rollback: remove the connector configuration and revoke the APS app credentials (no persistent state in this repository)
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick
