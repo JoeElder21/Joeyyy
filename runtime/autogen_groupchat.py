@@ -25,6 +25,7 @@ class GroupChatPlan:
     participants: tuple[str, ...]
     speaker_order: tuple[str, ...]
     manager: str = CHIEF_OF_STAFF
+    cadence: str | None = None
 
 
 def load_manifest(root: Path = ROOT) -> dict[str, Any]:
@@ -36,6 +37,7 @@ def plan_group_chat(
     brain: str,
     participants: Iterable[str],
     *,
+    cadence: str | None = None,
     manifest: dict[str, Any] | None = None,
 ) -> GroupChatPlan:
     """Return a deterministic GroupChat plan or reject a boundary violation."""
@@ -51,8 +53,41 @@ def plan_group_chat(
         raise ValueError(f"brain-private GroupChat rejects non-{brain} agents: {invalid}")
     if any(loaded["agents"][agent]["brain"] != brain for agent in requested):
         raise ValueError("GroupChat participants must belong to the declared brain")
-    order = tuple(agent for agent in roster if agent in requested)
-    return GroupChatPlan(brain=brain, participants=requested, speaker_order=order)
+    order_source = roster
+    if cadence is not None:
+        matching_routes = [
+            route
+            for route in loaded["cadence_routes"]
+            if route["brain"] == brain and route["cadence"] == cadence
+        ]
+        if len(matching_routes) != 1:
+            raise ValueError(f"no unique {brain} cadence route exists for {cadence!r}")
+        order_source = matching_routes[0]["order"]
+        outside_route = [agent for agent in requested if agent not in order_source]
+        if outside_route:
+            raise ValueError(
+                f"{brain} {cadence!r} cadence excludes participants: {outside_route}"
+            )
+    order = tuple(agent for agent in order_source if agent in requested)
+    return GroupChatPlan(
+        brain=brain,
+        participants=requested,
+        speaker_order=order,
+        cadence=cadence,
+    )
+
+
+def validate_group_chat_plan(
+    plan: GroupChatPlan, *, manifest: dict[str, Any] | None = None
+) -> None:
+    """Reject a manually constructed or stale plan at the execution boundary."""
+    expected = plan_group_chat(
+        plan.brain, plan.participants, cadence=plan.cadence, manifest=manifest
+    )
+    if plan != expected:
+        raise ValueError(
+            "GroupChat plan does not match the current brain-private manifest route"
+        )
 
 
 def build_group_chat(
@@ -60,6 +95,7 @@ def build_group_chat(
     llm_config: dict[str, Any] | bool,
     *,
     system_message_factory: Callable[[str], str] | None = None,
+    manifest: dict[str, Any] | None = None,
 ) -> tuple[Any, Any, dict[str, Any]]:
     """Build, but do not start, legacy AutoGen ConversableAgent GroupChat.
 
@@ -68,6 +104,8 @@ def build_group_chat(
     Importing AutoGen here means a missing runtime dependency fails clearly at
     execution rather than silently falling back to an ungoverned simulation.
     """
+    validate_group_chat_plan(plan, manifest=manifest)
+
     from autogen import ConversableAgent, GroupChat, GroupChatManager
 
     make_message = system_message_factory or (
