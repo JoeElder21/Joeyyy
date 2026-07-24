@@ -94,6 +94,7 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
             "docs/ABSORBED_PATTERNS.md",
             "docs/CIVIL3D_MCP_BUILDOUT.md",
             "docs/EXECUTION_LAYER_TRIAL.md",
+            "docs/INTEGRATION_ROADMAP.md",
         ]:
             with self.subTest(doc=name):
                 self.assertIn(name, text)
