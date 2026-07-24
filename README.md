@@ -52,6 +52,26 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/INTEGRATION_BUILDOUT_2026-07-24.md` — runtime integration record: installed stack tiers, registered workstation deployments, flagged items, and first build tickets.
 - `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`) and the resolved version lock.
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
+- `scripts/agent_runtime.py` — governed-handoff runtime bridge on the OpenAI Agents SDK: fail-closed packet admission, brain-locked topology, hash-chained audit ledger.
+- `docs/AGENT_RUNTIME_BRIDGE.md` — runtime-bridge record: contract-to-runtime mapping, measured dispatch-overhead reduction, boundaries, and rollback.
+- `scripts/claude_runtime.py` — Claude-native governed dispatch: typed Anthropic tool definitions, fail-closed ToolUseBlock handling, mission streaming.
+- `scripts/governance_mcp_server.py` — governance MCP server making the packet-only connector policy enforceable.
+- `scripts/packet_models.py` — pydantic packet models generated at import time from the canonical JSON schemas.
+- `docs/RUNTIME_NATIVE_LAYERS.md` — native runtime layers record: Anthropic SDK, MCP, pydantic implementations and the gated LangChain absorption.
+- `scripts/evidence_index.py` — governed evidence indexes on llama_index: designated-writer writes, brain-locked retrieval.
+- `scripts/memory_layer.py` — governed memory gateway on the mem0 scope model: leased namespace writes, open in-brain reads, verify-before-write.
+- `scripts/crew_bridge.py` — roster-to-crewAI bridge: fail-closed task admission, single-brain crews, 007 as the integration step.
+- `docs/DATA_MEMORY_LAYERS.md` — data and memory layers record: llama_index, mem0, crewAI.
+- `scripts/orchestration_graphs.py` — LangGraph state machines: lifecycle with acceptance-gate guards, manifest cadence runs, human-in-the-loop irreversible boundary.
+- `scripts/group_debate.py` — AutoGen challenge-pair debates, cadence chats, and the dynamic selector over each brain.
+- `scripts/jeos_knowledge.py` — governed JEOS knowledge graph in Logseq format: writer-locked targets, brain-locked reads, tag queries, backlinks.
+- `config/mcp_mounts.toml` + `scripts/verify_mcp_mounts.py` — approved MCP server mounts per the connector policy, with live stdio verification.
+- `scripts/aps_credential_check.mjs` — APS readiness check completing validation-gate steps 2–3 once credentials exist.
+- `docs/ORCHESTRATION_AND_CONNECTORS.md` — orchestration and connectors record: AutoGen, LangGraph, MCP servers, APS, Logseq.
+- `scripts/cadence_flows.py` — cadence routes as Prefect flows with cron deployment specs; steps audit-logged.
+- `scripts/observability.py` — OpenTelemetry spans over governed operations with a weekly-review aggregator; Phoenix export at activation.
+- `scripts/trusted_launcher.py` — user-signed, one-time launch grants for write-capable mounts; denial paths proven by tests.
+- `docs/CIVIL3D_FIRST_WRITE_TEST.md` — the separately-approved synthetic disposable DWG first-write protocol.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.

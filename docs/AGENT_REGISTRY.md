@@ -111,6 +111,54 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: APS credentials live only in the runtime env/secret store, never in chat or this repository; any write scope follows the one-designated-writer rule
 - Rollback: remove the connector configuration and revoke the APS app credentials (no persistent state in this repository)
 
+### Agent runtime bridge (openai/openai-agents-python)
+
+- Status: shadow (code and tests merged; live `Runner` execution not yet activated)
+- Owner layer: Agent 007 governance — runtime enforcement of the delegation and handoff contracts
+- Purpose: make handoffs executable and fail-closed — `scripts/agent_runtime.py` wires PacketGuard into the SDK's `handoff()` so an invalid, misaddressed, legacy, or brain-crossing packet cannot transfer control, with every admission, rejection, and return validation auto-logged to a hash-chained audit ledger
+- Validation gate: 131-test suite green stdlib-side; 39/39 in the full-stack venv including live fail-closed `on_invoke_handoff` proofs; live-mission activation follows the shadow-stage acceptance gates and requires Joe's instruction plus runtime credentials
+- Boundaries: no API keys stored or read; audit ledger carries packet metadata only; topology is 007 → specialists and specialists → 007 exclusively
+- Rollback: delete `scripts/agent_runtime.py`, `tests/test_agent_runtime.py`, and `docs/AGENT_RUNTIME_BRIDGE.md`; no persistent state beyond user-created ledgers
+
+### Native runtime layers (anthropic-sdk-python, mcp python-sdk, pydantic, langchain)
+
+- Status: shadow (three layers implemented and tested offline; langchain absorbed, activation-gated)
+- Owner layer: Agent 007 governance — Claude-native dispatch (`scripts/claude_runtime.py`), enforceable connector isolation (`scripts/governance_mcp_server.py`), typed packets generated from the canonical schemas (`scripts/packet_models.py`)
+- Validation gate: full suite green stdlib-side with skips by design; all native-runtime tests pass in the pinned full-stack venv; live activation (streaming missions, mounted MCP clients, summary memory) requires Joe's instruction plus runtime credentials
+- Boundaries: no credentials stored or read; specialists' tool surface under the connector policy is MCP servers only
+- Rollback: per `docs/RUNTIME_NATIVE_LAYERS.md`
+
+### Data and memory layers (llama_index, mem0, crewAI)
+
+- Status: shadow (governance gateways implemented and tested offline; vector embeddings, mem0 backend, and crew kickoff activation-gated)
+- Owner layer: Agent 007 governance — governed evidence indexes (`scripts/evidence_index.py`), leased memory gateway on the mem0 scope model (`scripts/memory_layer.py`), roster-to-crew bridge with fail-closed admission (`scripts/crew_bridge.py`)
+- Validation gate: full suite green stdlib-side with skips by design; all layer tests pass in the pinned full-stack venv (leased writes, brain locks, writer locks, crew admission)
+- Boundaries: no credentials stored or read; namespace writes require the owner agent plus a PacketGuard-valid active writer lease; cross-brain reads route through Agent 007 only
+- Rollback: per `docs/DATA_MEMORY_LAYERS.md`
+
+### Orchestration and connectors (autogen, langgraph, MCP reference servers, aps-sdk, logseq)
+
+- Status: shadow (graphs, debates, knowledge graph, and two MCP mounts verified working offline; model clients, external mounts, and APS calls activation-gated)
+- Owner layer: Agent 007 governance — executable lifecycle/cadence/HITL state machines (`scripts/orchestration_graphs.py`), manifest-registered debates and selector chats (`scripts/group_debate.py`), the approved-MCP-mounts registry (`config/mcp_mounts.toml`), APS credential-readiness (`scripts/aps_credential_check.mjs`), and the JEOS knowledge graph (`scripts/jeos_knowledge.py`)
+- Validation gate: full suite green stdlib-side; all orchestration tests pass in the pinned venv including a live offline debate run, lifecycle gate enforcement, HITL pause/resume, and real MCP stdio probes of the governance and filesystem mounts
+- Boundaries: no credentials stored or read; the JEOS graph is unreadable by APEX agents; mounts not listed are not reachable
+- Rollback: per `docs/ORCHESTRATION_AND_CONNECTORS.md`
+
+### Cadence scheduling and observability (prefect, opentelemetry/phoenix)
+
+- Status: shadow (flows execute locally with audit logging; span capture and weekly-review aggregation proven offline; Prefect work-pool schedules and the Phoenix collector are activation steps)
+- Owner layer: Agent 007 governance — manifest cadence routes as Prefect flows with cron deployment specs (`scripts/cadence_flows.py`); OpenTelemetry spans over admissions and returns with a weekly-review aggregator (`scripts/observability.py`)
+- Boundaries: spans carry packet metadata only, never packet content or credentials
+- Rollback: delete `scripts/cadence_flows.py`, `scripts/observability.py`, and `tests/test_cadence_observability.py`
+
+### Trusted launcher (grant-gated mount activation)
+
+- Status: shadow (all denial paths proven by tests; first live grant happens on Joe's workstation)
+- Owner layer: Agent 007 governance — authority separated from execution: write-capable MCP mounts (`require_grant = true` in `config/mcp_mounts.toml`) start only through `scripts/trusted_launcher.py` with a Joe-signed, single-use, time-boxed grant; every authorization and denial lands in the hash-chained launcher ledger
+- Validation gate: `tests/test_trusted_launcher.py` proves denial without a grant, for unregistered mounts, tampered signatures, expired grants, reused nonces, and wrong-mount grants; the civil3d first live use follows `docs/CIVIL3D_FIRST_WRITE_TEST.md`
+- Boundaries: the signing key lives outside the repository (0600, Joe's machine); agents cannot mint grants
+- Rollback: delete the launcher, its tests, and the grant flags; mounts revert to registered-not-launchable
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick
