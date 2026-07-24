@@ -68,6 +68,8 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `config/mcp_mounts.toml` + `scripts/verify_mcp_mounts.py` — approved MCP server mounts per the connector policy, with live stdio verification.
 - `scripts/aps_credential_check.mjs` — APS readiness check completing validation-gate steps 2–3 once credentials exist.
 - `docs/ORCHESTRATION_AND_CONNECTORS.md` — orchestration and connectors record: AutoGen, LangGraph, MCP servers, APS, Logseq.
+- `scripts/cadence_flows.py` — cadence routes as Prefect flows with cron deployment specs; steps audit-logged.
+- `scripts/observability.py` — OpenTelemetry spans over governed operations with a weekly-review aggregator; Phoenix export at activation.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.

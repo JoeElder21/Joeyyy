@@ -144,6 +144,13 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Boundaries: no credentials stored or read; the JEOS graph is unreadable by APEX agents; mounts not listed are not reachable
 - Rollback: per `docs/ORCHESTRATION_AND_CONNECTORS.md`
 
+### Cadence scheduling and observability (prefect, opentelemetry/phoenix)
+
+- Status: shadow (flows execute locally with audit logging; span capture and weekly-review aggregation proven offline; Prefect work-pool schedules and the Phoenix collector are activation steps)
+- Owner layer: Agent 007 governance — manifest cadence routes as Prefect flows with cron deployment specs (`scripts/cadence_flows.py`); OpenTelemetry spans over admissions and returns with a weekly-review aggregator (`scripts/observability.py`)
+- Boundaries: spans carry packet metadata only, never packet content or credentials
+- Rollback: delete `scripts/cadence_flows.py`, `scripts/observability.py`, and `tests/test_cadence_observability.py`
+
 ### Execution layer (codex-autorunner OR multica — one, not both)
 
 - Status: candidate, pending Joe's platform pick
