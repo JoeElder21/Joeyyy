@@ -61,6 +61,11 @@ Agents must not claim an SDK surface that does not exist; cite this section when
 
 ## Validation gate (registry requirement)
 
+The runnable harness for steps 2–5 lives in `connectors/aps/` (see its README): `npm run gate`
+executes the steps in order, fails closed with no network call when credentials are absent, and
+writes per-step evidence JSON locally (gitignored). Step 5 spot-checks extracted properties against
+the synthetic test model's own validated ground truth (`connectors/aps/testdata/make_test_model.py`).
+
 The registry entry stays `candidate` until every step below has recorded evidence:
 
 1. APS app created at aps.autodesk.com; credentials placed in the local env store (never chat).

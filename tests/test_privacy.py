@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
     def test_tracked_text_has_no_obvious_private_or_secret_material(self):
-        excluded_parts = {"__pycache__", ".git"}
+        excluded_parts = {"__pycache__", ".git", "node_modules"}
         text_paths = [
             path
             for path in ROOT.rglob("*")
@@ -119,7 +119,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "memory.sqlite3",
         }
         for path in ROOT.rglob("*"):
-            if path.is_file() and ".git" not in path.parts:
+            if path.is_file() and not {".git", "node_modules"} & set(path.parts):
                 with self.subTest(path=path.relative_to(ROOT)):
                     self.assertNotIn(path.name.lower(), prohibited_names)
 
