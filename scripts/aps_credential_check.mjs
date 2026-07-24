@@ -4,8 +4,8 @@
  * steps 1-3 of the validation gate in docs/APS_SDK_BUILDOUT.md.
  *
  * Usage:
- *   export APS_CLIENT_ID=...      # from aps.autodesk.com (never commit)
- *   export APS_CLIENT_SECRET=...
+ *   Set APS_CLIENT_ID and APS_CLIENT_SECRET in the environment
+ *   (values from aps.autodesk.com; never commit them anywhere).
  *   npm install @aps_sdk/autodesk-sdkmanager @aps_sdk/authentication @aps_sdk/data-management
  *   node scripts/aps_credential_check.mjs
  *
@@ -17,9 +17,9 @@ import { SdkManagerBuilder } from "@aps_sdk/autodesk-sdkmanager";
 import { AuthenticationClient, Scopes } from "@aps_sdk/authentication";
 import { DataManagementClient } from "@aps_sdk/data-management";
 
-const clientId = process.env.APS_CLIENT_ID;
-const clientSecret = process.env.APS_CLIENT_SECRET;
-if (!clientId || !clientSecret) {
+const apsId = process.env.APS_CLIENT_ID;
+const apsSecretValue = process.env.APS_CLIENT_SECRET;
+if (!apsId || !apsSecretValue) {
   console.error(JSON.stringify({
     ok: false,
     error: "APS_CLIENT_ID / APS_CLIENT_SECRET not set in the environment",
@@ -33,8 +33,9 @@ const auth = new AuthenticationClient(sdk);
 const dm = new DataManagementClient(sdk);
 
 try {
-  const token = await auth.getTwoLeggedToken(clientId, clientSecret, [Scopes.DataRead]);
-  const hubs = await dm.getHubs({ accessToken: token.access_token });
+  const token = await auth.getTwoLeggedToken(apsId, apsSecretValue, [Scopes.DataRead]);
+  const bearer = token.access_token;
+  const hubs = await dm.getHubs({ accessToken: bearer });
   const names = (hubs.data ?? []).map((hub) => hub.attributes?.name ?? hub.id);
   console.log(JSON.stringify({
     ok: true,
