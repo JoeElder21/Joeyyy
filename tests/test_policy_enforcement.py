@@ -2718,5 +2718,160 @@ class TwentyFifthPassRegressionTests(unittest.TestCase):
         self.assertTrue(any("prohibits" in error for error in errors), errors)
 
 
+class TwentySixthPassRegressionTests(unittest.TestCase):
+    """The previous round's fix worked on the rule and not on the path.
+
+    `evaluate()` normalizes the action before any rule runs, and normalization
+    folded case without splitting camelCase -- so `deleteAll` reached the
+    boundary as the single token `deleteall`. The rule denied when called
+    directly and the enforcement point allowed. The round-25 regression test
+    called the rule directly, which is exactly why it passed.
+    """
+
+    RESOURCE = "APEX/Strategy-Campaigns"
+
+    SPELLINGS = (
+        "deleteAll",
+        "DeleteAll",
+        "delete_all",
+        "DELETE_ALL",
+        "delete-all",
+        "bulkDelete",
+        "publishReport",
+        "sendEmail",
+        "rotateCredentials",
+        "listPurge",
+        "readRow",
+        "listTransfers",
+        "designReview",
+        "appendRecord",
+        "validatePacket",
+        "GetInfo",
+        # Separator variants of the CATEGORY names. Added after mutation
+        # testing: removing the rule's own canonicalization was MISSED because
+        # every spelling above happens to resolve the same way with or without
+        # it. These do not -- `"Public Publication"` folds to
+        # `public publication`, which is in no set, so the boundary went quiet.
+        "Public Publication",
+        "public-publication",
+        "FINANCIAL TRANSACTION",
+        "credential or access change",
+    )
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _request(self, action=None, **overrides):
+        fields = {
+            "agent": CHIEF,
+            "action": "read",
+            "resource": self.RESOURCE,
+            "owner_brain": "APEX",
+            "mutating": True,
+        }
+        if action is not None:
+            fields["action"] = action
+        # Overrides last, so a test may replace the action with a malformed
+        # value without colliding with the positional form.
+        fields.update(overrides)
+        return ToolRequest(**fields)
+
+    @staticmethod
+    def _boundary_denied(decision):
+        return any("high-impact boundary" in reason for reason in decision.reasons)
+
+    def test_camel_case_is_denied_through_the_public_entry_point(self):
+        # The assertion the previous round should have made. Through
+        # `evaluate()`, not through the private rule: a control is only as good
+        # as the entry point the system actually uses, and these four returned
+        # allowed=True from the enforcement point while the rule denied them.
+        for action in ("deleteAll", "publishReport", "sendEmail", "rotateCredentials"):
+            with self.subTest(action=action):
+                self.assertTrue(
+                    self._boundary_denied(self.pep.evaluate(self._request(action))),
+                    f"evaluate() allowed {action} with no signed instruction",
+                )
+
+    def test_the_rule_and_the_entry_point_cannot_disagree(self):
+        # The class, not the instance. Any future normalization that changes
+        # what a rule receives fails here rather than silently disarming the
+        # boundary for one spelling convention -- which is what happened, for
+        # the whole camelCase convention, for a full round.
+        for action in self.SPELLINGS:
+            with self.subTest(action=action):
+                request = self._request(action)
+                self.assertEqual(
+                    bool(self.pep._high_impact_boundary(request)),
+                    self._boundary_denied(self.pep.evaluate(request)),
+                    f"{action}: the rule and the enforcement point disagree",
+                )
+
+    def test_every_category_name_is_denied_however_it_is_separated(self):
+        # `HIGH_IMPACT_ACTIONS` members are snake_case category names. A caller
+        # spelling one with spaces or hyphens produced a string in no set, and
+        # the boundary said nothing -- the same "controls that depend on the
+        # caller's spelling" shape as the camelCase bypass, one level up.
+        for category in HIGH_IMPACT_ACTIONS:
+            for spelling in (
+                category,
+                category.replace("_", " "),
+                category.replace("_", "-"),
+                category.replace("_", " ").title(),
+                category.upper(),
+            ):
+                with self.subTest(spelling=spelling):
+                    request = self._request(spelling)
+                    self.assertTrue(
+                        self._boundary_denied(self.pep.evaluate(request)),
+                        f"evaluate() allowed the boundary spelled {spelling!r}",
+                    )
+                    self.assertTrue(
+                        self.pep._high_impact_boundary(request),
+                        f"the rule allowed the boundary spelled {spelling!r}",
+                    )
+
+    def test_every_spelling_of_one_action_canonicalizes_together(self):
+        # `deleteAll`, `DELETE_ALL`, and `delete-all` are the same action, and
+        # no rule should be able to tell which the caller used.
+        canonical = {
+            self.pep.normalize(self._request(action))[0].action
+            for action in ("deleteAll", "DeleteAll", "delete_all", "DELETE_ALL", "delete-all")
+        }
+        self.assertEqual(canonical, {"delete_all"})
+
+    def test_a_malformed_field_is_refused_rather_than_raising(self):
+        # `resource=["docs/x"]` from malformed deserialized data reached
+        # `.strip()` and raised AttributeError before any rule could deny or
+        # any audit event could be written. A gate that unwinds on
+        # caller-controlled input is a denial of service on every other caller
+        # in the process. `packet_schema` was type-checked two rounds ago and
+        # every other string field was left alone -- the whole class is covered
+        # here rather than the one field that was reported.
+        for field, value in (
+            ("agent", 42),
+            ("action", {"a": 1}),
+            ("resource", ["docs/x"]),
+            ("owner_brain", 7),
+            ("resource_id", object()),
+            ("operation", [1]),
+            ("mount", ["m"]),
+            ("packet_schema", [1]),
+        ):
+            with self.subTest(field=field):
+                decision = self.pep.evaluate(self._request(**{field: value}))
+                self.assertFalse(decision.allowed)
+                self.assertTrue(decision.reasons)
+
+    def test_a_malformed_field_does_not_stop_the_remaining_rules(self):
+        # Blanked rather than aborted, for the same reason the naive-clock fix
+        # drops the clock instead of returning early: the other rules still
+        # have objections worth recording, and an audit event that lists one
+        # reason where seven applied understates what was wrong.
+        decision = self.pep.evaluate(self._request("delete_all", resource=["x"]))
+        self.assertFalse(decision.allowed)
+        self.assertEqual(len(decision.checks_run), 8)
+
+
 if __name__ == "__main__":
     unittest.main()

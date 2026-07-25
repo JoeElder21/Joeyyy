@@ -131,6 +131,18 @@ def _action_tokens(action: str) -> list[str]:
     return [token for token in re.split(r"[^a-z0-9]+", spaced.lower()) if token]
 
 
+def _canonical_action(action: str) -> str:
+    """The one spelling every rule reads: lower `snake_case`, boundaries kept.
+
+    `deleteAll`, `DELETE_ALL`, and `delete-all` are the same action, and the
+    classifier must not be able to tell which spelling the caller happened to
+    use. Folding case without splitting first is what let `deleteAll` through
+    the high-impact boundary; splitting here means no downstream rule has to
+    know that camelCase exists.
+    """
+    return "_".join(_action_tokens(action))
+
+
 # The only connector posture the deployed roster declares. Anything else is a
 # configuration the runtime has never been shown to be safe under.
 PACKET_ONLY = "packet_only_no_direct_connectors"
@@ -582,12 +594,51 @@ class PolicyEnforcementPoint:
           `datetime.datetime.now()` is not fail-closed, it is a crash. Naive
           clocks are rejected as a reason, and dropped so the remaining rules
           still evaluate against real UTC instead of exploding.
+
+        The action is canonicalized to lower `snake_case` rather than merely
+        lowercased. Folding case ALONE destroyed the word boundaries the
+        high-impact classifier reads: `deleteAll` arrived at the boundary rule
+        as the single token `deleteall`, matching no verb and requiring no
+        instruction. The previous round fixed the classifier to split camelCase
+        and left this, so the rule denied when called directly and `evaluate()`
+        allowed -- and the regression test called the rule directly, which is
+        why it passed. **A control is only as good as the entry point the
+        system actually uses.** Canonicalizing here keeps one lowercase form
+        for every rule, which is what this function exists for, while carrying
+        the word boundaries through the fold instead of erasing them.
         """
         errors: list[str] = []
         normalized = request
 
-        action = (request.action or "").strip().lower()
-        if action != request.action:
+        # Types before string operations. `resource=["docs/x"]` from malformed
+        # deserialized data reached `.strip()` and raised AttributeError before
+        # any rule could deny or any audit event could be written -- the
+        # enforcement boundary unwound instead of refusing. `packet_schema` was
+        # type-checked for this exact reason two rounds ago and every other
+        # string field was left alone, so this covers the whole class: each is
+        # reported AND blanked, because rules downstream call `.startswith`,
+        # `.strip`, and `.lower` on them and would raise in turn.
+        blanked: dict[str, Any] = {}
+        for name, value, empty in (
+            ("agent", request.agent, ""),
+            ("action", request.action, ""),
+            ("resource", request.resource, ""),
+            ("owner_brain", request.owner_brain, None),
+            ("resource_id", request.resource_id, None),
+            ("operation", request.operation, None),
+            ("mount", request.mount, None),
+        ):
+            if value is not None and not isinstance(value, str):
+                errors.append(
+                    f"request {name} must be a string, got {type(value).__name__}; "
+                    "a malformed request is refused, not evaluated"
+                )
+                blanked[name] = empty
+        if blanked:
+            normalized = replace(normalized, **blanked)
+
+        action = _canonical_action(normalized.action)
+        if action != normalized.action:
             normalized = replace(normalized, action=action)
 
         # The three fields every rule is a statement ABOUT. A request missing
@@ -605,10 +656,17 @@ class PolicyEnforcementPoint:
         # The empty ACTION case was caught only by accident: a blank action is
         # classified as mutating, so the lease rules happened to fire. Accident
         # is not enforcement, so all three are stated.
+        #
+        # Read from `normalized`, NOT from `request`. Reading the original is
+        # how the type check above got bypassed three lines after being
+        # written: a non-string agent was blanked on the copy and then
+        # `.strip()`ed on the original, raising the very AttributeError the
+        # check exists to prevent. Caught by running the reproduction again
+        # after the fix rather than assuming it.
         for name, value in (
-            ("agent", request.agent),
+            ("agent", normalized.agent),
             ("action", action),
-            ("resource", request.resource),
+            ("resource", normalized.resource),
         ):
             if not (value or "").strip():
                 errors.append(
@@ -1762,16 +1820,13 @@ class PolicyEnforcementPoint:
         Signature only; nonce consumption stays with the launcher, because a
         policy evaluation must not have side effects.
         """
-        # Compare the normalized action. `evaluate()` normalizes before any rule
-        # runs; lowercasing again here keeps a directly-invoked rule honest
-        # rather than making the boundary depend on the caller's entry point.
-        # NOT lowercased before classification. `evaluate()` normalizes the
-        # action to lowercase for every other rule, and doing the same here
-        # destroyed the camelCase boundaries the classifier needs -- `deleteAll`
-        # collapsed to one unrecognisable token. `_boundary_category` folds case
-        # itself, after splitting.
-        raw_action = (request.action or "").strip()
-        action = raw_action.lower()
+        # Canonicalized here as well as in `normalize()`, so a directly-invoked
+        # rule and a full `evaluate()` reach the same verdict. They did not:
+        # `normalize()` folded case without splitting camelCase, so this rule
+        # denied `deleteAll` when called directly and `evaluate()` allowed it,
+        # and the regression test called it directly. Two entry points that
+        # disagree mean the tested one is not the one that runs.
+        raw_action = _canonical_action(request.action)
         # Concrete verbs map to their category, not just the category label.
         #
         # The comparison was exact against `HIGH_IMPACT_ACTIONS`, whose members

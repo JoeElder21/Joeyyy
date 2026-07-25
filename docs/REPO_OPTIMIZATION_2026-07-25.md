@@ -975,6 +975,76 @@ moved and its default did not. Under-testing is what let all four persist: the
 sweep for a class is only as good as the test that keeps it swept, and none of
 these had one.
 
+### Automated review, twenty-sixth pass — two findings, both fixed
+
+Both were in the previous round's own work.
+
+**The camelCase fix worked on the rule and not on the path.** `evaluate()` calls
+`normalize()` before any rule runs, and normalization folded case *without*
+splitting camelCase — so `deleteAll` reached the boundary as the single token
+`deleteall`. The rule denied when called directly; the enforcement point allowed.
+Reproduced before touching anything:
+
+```
+deleteAll            direct=DENY   evaluate()=ALLOW
+publishReport        direct=DENY   evaluate()=ALLOW
+sendEmail            direct=DENY   evaluate()=ALLOW
+rotateCredentials    direct=DENY   evaluate()=ALLOW
+delete_all           direct=DENY   evaluate()=DENY
+```
+
+**The round-25 regression test called the private rule, which is exactly why it
+passed.** Nine tests were written last round specifically to stop this class of
+defect, and the one covering it tested an entry point the system does not use. A
+control is only as good as the path that actually runs, and a test that picks the
+convenient entry point measures the author's intent rather than the system's
+behaviour. The 610-test suite went green against a live P1 fail-open.
+
+The comment I wrote at the fix site named the cause — "`evaluate()` normalizes the
+action to lowercase for every other rule" — and I fixed only the local
+re-lowercasing while leaving the normalization that runs first. **Identifying the
+cause in prose is not fixing it.**
+
+Fixed by canonicalizing the action to lower `snake_case` in `normalize()` rather
+than merely lowercasing it. That keeps the single form every rule reads — which is
+what `normalize()` exists for — while carrying the word boundaries through the
+fold instead of erasing them. No new `ToolRequest` field, so no rule needs to know
+that camelCase exists, and no caller can influence the classification by choosing
+a spelling.
+
+**A malformed request unwound the enforcement boundary.** `resource=["docs/x"]`
+from malformed deserialized data reached `.strip()` and raised `AttributeError`
+before any rule could deny or any audit event could be written. `packet_schema`
+was type-checked for this exact reason two rounds ago and every other string field
+was left alone. All seven are now checked in `normalize()` — reported *and*
+blanked, because the rules downstream call `.startswith`, `.strip`, and `.lower`
+on them and would raise in turn.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| `evaluate()` lowercased the action before the boundary rule saw it | **Correct — P1 fail-open** | Canonicalized to `snake_case` in `normalize()`; parity between the rule and the entry point is now asserted |
+| Non-string request identities raised instead of denying | **Correct — P2** | All seven string fields type-checked before any string operation |
+
+**Three corrections came out of mutation testing, one of them to the fix itself.**
+
+- The type check blanked the malformed field on the normalized *copy*, and the
+  presence check three lines below still read the *original* — so `.strip()`
+  raised the very `AttributeError` the check had just been written to prevent.
+  **A fix bypassed three lines after being written**, and only re-running the
+  reproduction after the fix caught it. Assuming a fix works because the code
+  reads correctly is how this round's P1 shipped in the first place.
+- Removing the boundary rule's own canonicalization came back MISSED, because
+  every action spelling in the parity list happened to resolve identically with
+  or without it. It is not an equivalent mutant: `"Public Publication"` folds to
+  `public publication`, which is in no set, so the boundary goes quiet. Separator
+  variants of every category name are now asserted in both spellings.
+- The parity test — the rule and `evaluate()` must reach the same verdict for
+  every spelling — is the guard against this whole class. It is the one test
+  here that would have failed *last* round.
+
+The recurring-shape list gains: **(n) a test that exercises a private helper
+instead of the public entry point proves the helper, not the control.**
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
