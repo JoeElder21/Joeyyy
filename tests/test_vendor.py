@@ -286,6 +286,43 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             names = {path.name for path in repository_files(root)}
             self.assertIn("token.json", names)
 
+    def test_symlink_target_string_is_scanned_not_the_file_it_resolves_to(self) -> None:
+        """Git publishes a symlink's target string, not the bytes it points at.
+
+        A link named innocuously, resolving to a perfectly benign existing
+        file, still publishes its target path — which can carry a client name,
+        an address, or a private directory layout. Reading through the link
+        scans the wrong content entirely and reports nothing.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            # Assembled from fragments: this repository's own privacy guard
+            # scans this file, and an address-shaped literal would be a finding.
+            private_dir = base / ("clients-" + "jane.doe" + "@" + "acmecorp.com")
+            private_dir.mkdir(parents=True)
+            benign = private_dir / "notes.md"
+            benign.write_text("nothing sensitive in this file\n", encoding="utf-8")
+
+            root = base / "repo"
+            root.mkdir()
+
+            def run(*args: str) -> None:
+                subprocess.run(args, cwd=root, check=True, capture_output=True)
+
+            run("git", "init", "-q", ".")
+            run("git", "config", "user.email", "privacy-guard-fixture")
+            run("git", "config", "user.name", "privacy-guard-fixture")
+            (root / "reference.md").symlink_to(benign)
+            run("git", "add", "-A")
+            run("git", "commit", "-qm", "fixture")
+
+            self.assertTrue((root / "reference.md").exists(), "fixture link should resolve")
+            findings = scan_repository(root)
+            self.assertTrue(
+                any("email address" in finding for finding in findings),
+                f"symlink target string was not scanned: {findings}",
+            )
+
     def test_prohibited_filename_behind_a_dangling_symlink_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = self._repo_with_dangling_symlink(directory)

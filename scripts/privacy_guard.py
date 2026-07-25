@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -219,7 +220,18 @@ def scan_repository(root: Path = ROOT) -> list[str]:
                 f"{relative}: non-source artifact type is not allowed in this public repository"
             )
         try:
-            raw = path.read_bytes()
+            if path.is_symlink():
+                # What git publishes for a symlink is the *target string* it
+                # stores as the blob, not the bytes of whatever that string
+                # resolves to. Reading through would scan the wrong content
+                # entirely: a link named innocuously and pointing at a benign
+                # existing file still publishes its target path, which may
+                # carry a client name, an address, or a private directory
+                # layout. Dangling links are covered too — os.readlink needs
+                # no target.
+                raw = os.readlink(path).encode("utf-8", errors="surrogateescape")
+            else:
+                raw = path.read_bytes()
         except OSError as exc:
             findings.append(f"{relative}: unreadable ({exc})")
             continue
