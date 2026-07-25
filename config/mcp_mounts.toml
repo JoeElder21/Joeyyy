@@ -49,6 +49,7 @@ activation = "Postgres connection string appended to the command at mount time."
 name = "gdrive"
 require_grant = true
 command = ["npx", "-y", "@modelcontextprotocol/server-gdrive"]
+env = ["GDRIVE_CREDENTIALS_PATH"]
 agents = ["apex_intelligence_forge", "apex_chief_of_staff"]
 purpose = "Google Drive documents through MCP; pairs with the Drive command-center records."
 verify_offline = false
@@ -58,10 +59,11 @@ activation = "One-time OAuth flow on Joe's machine (GDRIVE_CREDENTIALS_PATH); th
 name = "civil3d"
 require_grant = true
 command = ["node", "build/index.js"]
+env = ["CIVIL3D_HOST", "CIVIL3D_PORT", "CIVIL3D_COMMAND_TIMEOUT", "LOG_LEVEL"]
 agents = ["apex_delivery_commander", "apex_systems_blacksmith", "apex_chief_of_staff"]
 purpose = "Live Civil 3D session access; see docs/CIVIL3D_MCP_BUILDOUT.md."
 verify_offline = false
-activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session scheduled)."
+activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session scheduled), reading CIVIL3D_HOST / CIVIL3D_PORT / CIVIL3D_COMMAND_TIMEOUT / LOG_LEVEL from the launcher env; each has a server-side default, so an undeclared one silently changes behaviour rather than failing."
 
 [[mounts]]
 name = "terraform"

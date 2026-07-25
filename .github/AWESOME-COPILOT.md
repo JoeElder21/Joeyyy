@@ -45,8 +45,8 @@ agents: no brain ownership, no memory namespace, no write target, no writer leas
 | File | What it does | Status |
 | --- | --- | --- |
 | `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. **Local override:** `tools: []`, `user-invocable: false`. | candidate |
-| `task-planner.agent.md` | Produces implementation plans into `.copilot-tracking/`. **Local override:** execution tools removed, `agent` added. | candidate |
-| `task-researcher.agent.md` | Research pass the planner mandates before planning. **Local override:** execution tools removed. | candidate |
+| `task-planner.agent.md` | Produces implementation plans destined for `.copilot-tracking/`. **Local override:** execution and file-editing tools removed, `agent` added, workflow rewritten to return artifacts. | candidate |
+| `task-researcher.agent.md` | Research pass the planner mandates before planning. **Local override:** execution and file-editing tools removed, workflow rewritten to return artifacts. | candidate |
 
 **`prompt-engineer` local override.** Upstream omits `tools`, which per
 `.github/instructions/agents.instructions.md` grants *every* built-in and MCP tool. This
@@ -66,10 +66,10 @@ session the planner runs *without* those capabilities. Registering the Terraform
 mounts gave Agent 007 that tooling; it did not give this agent it. Wiring Copilot-side MCP
 is an open decision recorded in `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`.
 
-A second limitation compounds it: the planner writes generated prompts to
+A second limitation compounds it: the planner's generated prompts are destined for
 `.copilot-tracking/prompts/`, but VS Code discovers prompt files in `.github/prompts/` or
 wherever `chat.promptFilesLocations` points, and this repository sets neither. The generated
-`*.prompt.md` files are therefore written but not runnable as prompts. Fixing it means either
+`*.prompt.md` files are therefore not runnable as prompts wherever they are persisted. Fixing it means either
 a tracked `.vscode/settings.json` location entry or moving the output directory — and it is
 entangled with the still-open question of whether `.copilot-tracking/` should be tracked or
 gitignored at all, so both are left as one decision rather than half-answered here. This is
@@ -77,10 +77,25 @@ part of why both planner agents are `candidate` rather than active.
 
 **Planner local overrides.** Both planner agents shipped with `runCommands`, terminal
 access, `runTests`, `runNotebooks`, `extensions`, `vscodeAPI`, `new` and
-`openSimpleBrowser`. Neither implements anything — they write plans under
+`openSimpleBrowser`. Neither implements anything — they compose plans destined for
 `.copilot-tracking/` — and prompt text is not a path restriction, so an
 injection-influenced call could have mutated source or run shell commands. Those tools are
-removed from both. `task-planner` additionally *gains* `agent`, which upstream omitted, and
+removed from both. `edit/editFiles` is removed too, for the same reason at a larger blast
+radius: it is *general* workspace file editing, and the only thing confining it to
+`.copilot-tracking/` was a sentence in the prompt.
+
+Removing it alone would have left both agents unable to deliver anything — the planner's
+sole output is three files it could no longer write, and its `OUTPUT` rule simultaneously
+forbade showing them. So the workflows are rewritten to match the tool surface: both agents
+now **return** their complete artifacts, each preceded by the destination path, and the
+invoking agent (Agent 007) persists them. Every "you WILL create/edit" instruction is
+restated as "you WILL return", including the completion summaries, which must not report a
+file as written. The write boundary is now enforced by tool absence rather than asserted in
+prose — the distinction this repository's contract turns on. The cost is that a partial
+revision has to be returned as full replacement content, since neither agent can patch in
+place.
+
+`task-planner` additionally *gains* `agent`, which upstream omitted, and
 its body text is rewritten from `#file:` references to explicit `agent`-tool invocations.
 Both halves were needed: per `.github/instructions/agents.instructions.md` sub-agent
 invocation requires that tool, and a `#file` reference only loads a spec into context. With
