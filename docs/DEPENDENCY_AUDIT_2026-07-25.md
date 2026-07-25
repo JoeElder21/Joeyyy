@@ -90,6 +90,34 @@ gate rather than a one-time observation. Weekly matters here specifically —
 vulnerability disclosures land against unchanged pins, so a dependency set that
 was clean at merge does not stay clean, and only a scheduled scan notices.
 
+### Two CI corrections the first run forced
+
+The job failed on its first run, and neither cause was a vulnerability:
+
+1. **Exit 127, `could not determine extractor`.** The scanner cannot infer a
+   parser from the filename `lock-2026-07-24.txt`. The local run had used the
+   explicit `requirements.txt:` prefix and the CI args had dropped it, so CI
+   exited before scanning anything. Worth noting that this failure mode is
+   silent-looking: a scanner that never scans reports no vulnerabilities.
+2. **Exit 127 again, resolver RPC failure.** By default the requirements
+   extractor re-resolves the transitive graph over the network, which fails both
+   on this lockfile's internal posthog conflict and on any resolver outage.
+   `--no-resolve` is the correct setting regardless: a lockfile already *is* the
+   resolved set, and re-deriving it makes the job's result depend on a third-party
+   service being up.
+
+### Triage, not suppression
+
+`osv-scanner.toml` carries the three findings with a stated reason and an
+`ignoreUntil` of 2026-08-25 each. Verified in both directions before merge: with
+the config the job exits 0, and with the config removed it exits 1 on the same
+three findings. **The gate is still hard** — anything not explicitly triaged
+fails CI.
+
+The expiry is the load-bearing part. These entries come back on their own, so a
+triage decision cannot become permanent by being forgotten, which is the usual
+fate of a suppression list.
+
 ## Rollback
 
 Additive. Rolling back is deleting this file and the `dependency-audit` job in

@@ -53,6 +53,20 @@ jobs:
       - name: Scan pinned dependencies
         uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:
+          # `requirements.txt:` names the extractor explicitly. Without it the
+          # scanner cannot infer one from the filename `lock-2026-07-24.txt` and
+          # exits 127 before scanning anything — the first run failed exactly
+          # that way.
+          #
+          # --no-resolve scans the pinned set rather than re-resolving the
+          # transitive graph over the network. Correct semantics for a lockfile,
+          # which already *is* the resolved set, and it avoids failing the job on
+          # a resolver RPC outage that has nothing to do with vulnerabilities.
+          #
+          # Triaged findings live in osv-scanner.toml with reasons and expiry
+          # dates. The gate stays hard: anything not listed there fails.
           scan-args: |-
-            --lockfile=requirements/lock-2026-07-24.txt
+            --no-resolve
+            --config=osv-scanner.toml
+            --lockfile=requirements.txt:requirements/lock-2026-07-24.txt
             --lockfile=connectors/aps/package-lock.json

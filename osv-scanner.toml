@@ -1,0 +1,40 @@
+# Triaged dependency findings.
+#
+# Full assessment: docs/DEPENDENCY_AUDIT_2026-07-25.md.
+#
+# Every entry here is an acknowledged finding with a stated reason and an expiry,
+# never a silenced one. The gate stays hard: any vulnerability not listed below
+# fails CI. These three are listed only because none of them can be resolved by a
+# version bump inside a dated lockfile snapshot, and blocking every unrelated
+# change on a pre-existing condition would convert a real gate into a nuisance
+# people learn to route around.
+#
+# `ignoreUntil` is the point. These expire and come back, so a triage decision
+# cannot quietly become permanent by being forgotten.
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-311"
+ignoreUntil = 2026-08-25
+reason = """chromadb 1.1.1, CVSS 9.3, no fix available upstream. Reaches this
+repository only as a transitive dependency of the optional memory tier, which is
+not deployed; CI installs requirements.txt alone. Because no upgrade resolves it,
+this is a deployment decision for Joe rather than a version bump — see the
+recommended actions in docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry or
+sooner if the memory tier is deployed to the workstation."""
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-2132"
+ignoreUntil = 2026-08-25
+reason = """click 8.2.0, CVSS 7.2, fixed in 8.3.3. This one is genuinely fixable
+and should be fixed — but lock-2026-07-24.txt is a dated evidence record, and
+editing pins inside a snapshot named for that date would falsify the record it
+exists to be. Carry the fix into the next lockfile regeneration, which is needed
+regardless: the file does not currently resolve (posthog is pinned at 7.29.0
+while chromadb requires <6.0.0)."""
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-2447"
+ignoreUntil = 2026-08-25
+reason = """diskcache 5.6.3, CVSS 5.2, no fix available. Transitive, medium, and
+in the same undeployed tier as chromadb. Lowest priority of the three; resolves
+with the same decision."""
