@@ -162,6 +162,38 @@ class LocalGateTests(unittest.TestCase):
                 self.assertIn(hook, text)
 
 
+class AutomationClaimTests(unittest.TestCase):
+    """A document may not claim a gate runs automatically when it does not."""
+
+    def test_the_readme_does_not_overstate_what_pre_commit_runs(self):
+        # The README listed eight commands and then said pre-commit "runs these
+        # gates automatically". Two of them -- verify_runtime_stack.py and the
+        # strict mount probe -- are in no hook, and the unit suite lets its JSON
+        # Schema check skip when jsonschema is absent. A contributor trusting
+        # the automatic path could pass locally and fail CI on a malformed
+        # schema or a broken mount.
+        #
+        # Derived from the hook config rather than restated, so a hook removed
+        # later cannot leave the claim standing.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        hooks = PRE_COMMIT.read_text(encoding="utf-8")
+        for checker in ("scripts/verify_runtime_stack.py", "scripts/verify_mcp_mounts.py"):
+            if checker in hooks:
+                continue  # if it is ever added as a hook, this stops applying
+            with self.subTest(checker=checker):
+                self.assertIn(
+                    "does **not** run",
+                    readme,
+                    f"{checker} is in no pre-commit hook, so the README must say "
+                    "which gates remain manual",
+                )
+        self.assertNotIn(
+            "`pre-commit install` runs these gates automatically",
+            readme,
+            "the unqualified claim is false while two listed gates have no hook",
+        )
+
+
 class ContributorSurfaceTests(unittest.TestCase):
     """A public repository needs a stated boundary, not an implied one."""
 
@@ -298,9 +330,29 @@ class ContributorSurfaceTests(unittest.TestCase):
         self.assertIsNotNone(applies, "no explicit scan-applicability question")
         self.assertTrue(applies.startswith("dropdown"), "applicability must be a dropdown")
         self.assertIn("required: true", applies)
-        # Exactly two branches: applies, or does not. An ambiguous third option
-        # would reintroduce the "either ... or" problem.
-        self.assertEqual(applies.count('\n        - "'), 2)
+        # Every option must BE an attestation, not a pointer to one elsewhere.
+        #
+        # This asserted exactly two options, on the reasoning that a third
+        # would reintroduce an ambiguous "either ... or". That was the wrong
+        # property: with two options the "Yes" branch said "complete the
+        # attestations below" while those attestations stayed optional, so a
+        # submitter could select Yes and leave every safety result blank. The
+        # risk was never the COUNT of options -- it was an option that decides
+        # nothing. Each option now states an outcome, so no branch can be
+        # selected without asserting something.
+        options = [line for line in applies.splitlines() if line.startswith('        - "')]
+        self.assertGreaterEqual(len(options), 2)
+        self.assertTrue(
+            any("not applicable" in option.lower() for option in options),
+            "no branch for a candidate the scan does not apply to",
+        )
+        self.assertTrue(
+            all(
+                "scanned" in option.lower() or "not applicable" in option.lower()
+                for option in options
+            ),
+            "every option must state an outcome rather than defer to the boxes below",
+        )
 
         attestations = blocks.get("agent-scan")
         self.assertIsNotNone(attestations)

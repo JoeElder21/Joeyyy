@@ -70,6 +70,37 @@ HIGH_IMPACT_ACTIONS = frozenset(
     }
 )
 
+# Concrete tool verbs that ARE one of the boundary categories above.
+#
+# Kept as an explicit map rather than inferred: a wrong entry here would demand
+# Joe's signature for ordinary work, and a missing one lets a boundary action
+# past, so both directions are worth stating by hand and testing. This is a
+# floor, not a claim of completeness -- a dispatcher that knows its tool's
+# category should pass the category, and this map catches the common verbs a
+# caller would naturally use instead.
+HIGH_IMPACT_VERBS = {
+    "publish": "public_publication",
+    "post": "public_publication",
+    "send": "public_publication",
+    "broadcast": "public_publication",
+    "transfer": "financial_transaction",
+    "pay": "financial_transaction",
+    "purchase": "financial_transaction",
+    "invoice": "financial_transaction",
+    "sign": "sign_or_certify_professional_work",
+    "certify": "sign_or_certify_professional_work",
+    "seal": "sign_or_certify_professional_work",
+    "stamp": "sign_or_certify_professional_work",
+    "purge": "irreversible_bulk_deletion",
+    "truncate": "irreversible_bulk_deletion",
+    "drop": "irreversible_bulk_deletion",
+    "wipe": "irreversible_bulk_deletion",
+    "revoke": "credential_or_access_change",
+    "grant": "credential_or_access_change",
+    "rotate": "credential_or_access_change",
+    "authorize": "credential_or_access_change",
+}
+
 # The only connector posture the deployed roster declares. Anything else is a
 # configuration the runtime has never been shown to be safe under.
 PACKET_ONLY = "packet_only_no_direct_connectors"
@@ -117,6 +148,17 @@ NON_EXECUTING_STAGES = frozenset({"candidate", "shadow", "restricted", "deprecat
 
 CHIEF = "apex_chief_of_staff"
 
+# The sentinel for text carried in the invocation itself, per
+# docs/SPECIALIST_CORPS_PROTOCOL.md: a specialist invoked directly by Joe
+# without a packet enters `direct_read_only` and may use current-message text
+# only. It is not a resource -- there is nothing durable to own, and no brain
+# owns it -- but the brain lock classified it as an unresolvable resource and
+# denied it. Packet admission already treats it as non-canonical, so the
+# documented direct-invocation path was refused by exactly one rule and had no
+# lawful route at all: the third deadlock of this shape in this change set,
+# after the execution-authority and brain-neutral-read ones.
+CURRENT_MESSAGE = "current-message"
+
 # Lease statuses under which a mutation may proceed. Anything else -- released,
 # verified, expired -- is a closed lease and authorizes nothing further.
 ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
@@ -151,6 +193,28 @@ DECLARED_LEASE_SCHEMA_VERSION = "2.0"
 # the error is guaranteed and says nothing about the packet. Retaining it made
 # every write-bearing packet fail: no governed mutation could pass at all.
 LEDGER_ABSENT_ARTIFACT = "write-bearing packet requires the active writer-lease ledger"
+
+
+def _is_ledger_artifact(error: str) -> bool:
+    """True for the ledger-absent artifact, bare or wrapped by a nesting prefix.
+
+    `PacketGuard` validates a handoff's originating delegation recursively and
+    re-emits each inner error as `originating delegation invalid: <error>`. The
+    filter compared for exact equality, so on a handoff whose delegation permits
+    a write the artifact arrived wrapped, survived the filter, and denied a
+    lawful write-bearing handoff even when the bound pass had its genuine
+    registry lease. The fix to a fail-shut was itself fail-shut, one nesting
+    level down.
+
+    Matching the tail rather than the whole string stays within the rule this
+    module keeps re-learning -- a suppression must not remove a finding it was
+    not written for. On the ledger-free pass this sentence is emitted only
+    because that pass withholds the ledger, at whatever nesting depth, so every
+    occurrence is the artifact and none of them is informative. The bound pass
+    runs WITH the ledger and still reports genuine lease-match failures.
+    """
+    return error == LEDGER_ABSENT_ARTIFACT or error.endswith(f": {LEDGER_ABSENT_ARTIFACT}")
+
 
 # Action fragments that read without changing anything. THIS IS AN ALLOWLIST,
 # and the direction is the whole point.
@@ -555,6 +619,30 @@ class PolicyEnforcementPoint:
         spec = self._spec(request.agent)
         if not spec:
             return []  # _agent_registered already denies this
+        # Message text belongs to no brain, so there is no lock to apply. This
+        # is not an exemption from ownership; it is the absence of a resource to
+        # own. Compared exactly -- `current-message-secrets` is a resource like
+        # any other, and the sibling-matching defect one round earlier is
+        # exactly why this is equality rather than a prefix.
+        if request.resource == CURRENT_MESSAGE:
+            return []
+        # Escape is checked BEFORE the chief exemption, because the exemption is
+        # about which BRAIN may be touched, not about whether the target is
+        # inside the governed tree at all. Returning early for the chief skipped
+        # `_escapes_the_tree` entirely: `evaluate(agent=CHIEF, action="read",
+        # resource="/etc/shadow")` was allowed with an EMPTY reason tuple, as
+        # were `../outside-secret` and `docs/../../.ssh/id_rsa`. A filesystem
+        # executor following a policy-approved request would have read straight
+        # out of the repository. Reproduced before fixing.
+        #
+        # Being the sole cross-brain agent permits acting for either brain. It
+        # does not put the whole filesystem in scope, and no brain owns a path
+        # outside the tree, so there is nothing here for the exemption to waive.
+        if self._escapes_the_tree(request.resource):
+            return [
+                f"brain lock: resource {request.resource!r} escapes the repository once "
+                "normalized, so its owning brain cannot be established"
+            ]
         if request.agent == CHIEF:
             return []  # the sole cross-brain agent, by contract
         # An omitted owner_brain used to mean "no objection", which let a caller
@@ -733,7 +821,7 @@ class PolicyEnforcementPoint:
         # caused a fail-open: a filter is safe only when the thing it removes is
         # provably uninformative in the pass it applies to, and when some other
         # pass still covers the underlying property.
-        semantic = [error for error in semantic if error != LEDGER_ABSENT_ARTIFACT]
+        semantic = [error for error in semantic if not _is_ledger_artifact(error)]
         seen = set(semantic)
         # No version filter here any more. The ledger is reconciled at source in
         # `_lease_ledger`, so the bound pass no longer stops at a lease-schema
@@ -1479,6 +1567,18 @@ class PolicyEnforcementPoint:
         # runs; lowercasing again here keeps a directly-invoked rule honest
         # rather than making the boundary depend on the caller's entry point.
         action = (request.action or "").strip().lower()
+        # Concrete verbs map to their category, not just the category label.
+        #
+        # The comparison was exact against `HIGH_IMPACT_ACTIONS`, whose members
+        # are abstract category names (`public_publication`). A real tool is
+        # invoked as `publish`, `send`, `delete_all`, `transfer` -- and this
+        # module already classifies several of those as mutations elsewhere, so
+        # it plainly expects concrete verbs. The boundary therefore fired only
+        # when a caller volunteered the category as its action name, which is
+        # the same "controls that ask the caller to incriminate itself" shape as
+        # the three caller-set booleans removed earlier: nobody publishing
+        # something they should not would spell the action `public_publication`.
+        action = HIGH_IMPACT_VERBS.get(action, action)
         if action not in HIGH_IMPACT_ACTIONS:
             return []
         grant = request.instruction_grant

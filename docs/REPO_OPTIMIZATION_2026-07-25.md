@@ -759,6 +759,32 @@ That field is caller-supplied, which this module has learned to distrust three t
 
 **The recurring shape, stated once more because it recurred through a fix rather than around one.** The seventeenth pass closed a hole by adding a field; the eighteenth found that the field opened a different one, because only the rule that motivated it was taught to read it. A new field in a shared request object is not additive — every rule that reasons about the same thing has to be revisited, or the object now describes a request the rules disagree about.
 
+### Automated review, nineteenth pass — nine findings, nine fixed
+
+**The worst finding was an exemption ordered ahead of a check that has nothing to do with it.** `_brain_lock` returned early for the Chief before `_escapes_the_tree()` ran, so `evaluate(agent=CHIEF, action="read", resource="/etc/shadow")` was allowed **with an empty reason tuple** — as were `../outside-secret` and `docs/../../.ssh/id_rsa`. Being the sole cross-brain agent permits acting for either brain; it does not put the filesystem in scope, and no brain owns a path outside the tree, so there was nothing there for the exemption to waive. The escape check now precedes it.
+
+That is the second time an exemption placed before a check has produced a fail-open here — the first was the chief exemption preceding mount registration, five rounds earlier. **An exemption is scoped to one question, and putting it ahead of a different question silently widens it to that one too.**
+
+**Three of the nine were defects in the previous round's fixes**, two of them fail-shuts that made a gate unsatisfiable:
+
+- **The identity gate rejected every lawful packet.** `load_modes()` takes `Mode.brain` from the manifest *directory* (`brains/apex/`), so it is lowercase, while both authorization schemas require `APEX`. Comparing exactly meant no evaluation could ever record a pass — a gate introduced one round earlier that shut the very thing it was meant to bind. Two conventions for one value, and the check assumed one of them.
+- **The ledger-artifact filter missed its wrapped form.** `PacketGuard` re-emits a delegation's inner errors as `originating delegation invalid: <error>`, so on a write-bearing handoff the artifact arrived nested, survived an exact-equality filter, and denied a lawful handoff even with its genuine registry lease. **The fix to a fail-shut was itself fail-shut, one nesting level down.**
+- **The persisted-login check crashed on a directory.** `~/.deepeval` is normally the directory holding the store, so `read_text()` raised an uncaught `IsADirectoryError` — a safety check that aborts before reaching a verdict is not a safety check.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Chief exemption preceded the escape check | **Correct — P1 fail-open** | Escape refused before any exemption. |
+| Identity gate rejected the schemas' own brain spelling | **Correct — P1 fail-shut, mine, one round old** | Brain compared case-insensitively; the other brain still refused in either case. |
+| Ledger artifact unrecognised when wrapped | **Correct — P1 fail-shut, mine** | Tail-matched at any nesting depth; nothing else removed, and tested. |
+| Concrete boundary verbs never reached the boundary | **Correct — P1 fail-open** | `HIGH_IMPACT_ACTIONS` holds abstract category names, so the check fired only when a caller volunteered `public_publication` as its action — the same "ask the caller to incriminate itself" shape as the three caller-set booleans removed earlier. Nobody publishing something they should not would spell it that way. A verb map now covers `publish`, `send`, `transfer`, `sign`, `purge`, `revoke` and their siblings. |
+| Case artifacts unbound to the packet | **Correct — P1** | `score_packet` proves the handoff matches its *own* delegation, so an internally consistent pair could deliver an artifact the case never requested while the prose claimed otherwise. |
+| `current-message` sentinel denied | **Correct — P2 deadlock** | The documented direct-invocation path was refused by exactly one rule. **Third deadlock of this shape**, after execution authority and brain-neutral reads. Matched by equality, not prefix — the sibling-matching defect two rounds earlier is why. |
+| Persisted DeepEval login check crashed | **Correct — P2, mine** | `is_file()` rather than `exists()`. |
+| Absorption scan attestations unenforceable | **Correct — P2** | Every dropdown option is now itself an attestation, because issue forms cannot enforce a condition stated in prose. **This contradicted a test I had written** asserting the attestations must *not* be required; that test was pinning the wrong property — the risk was never the option count, it was an option that decides nothing. |
+| README overstated pre-commit | **Correct — P2** | Two of the eight listed commands are in no hook, and the unit suite lets its JSON Schema check skip when `jsonschema` is absent, so the automatic path could pass while CI failed. The claim now names what runs and what stays manual, and a test derives that from the hook config. |
+
+**On the absorption-form finding specifically.** Two rounds ago I wrote a test asserting those attestations must not carry `required: true`, reasoning that requiring them would force a non-applicable submitter to attest to a scan that never happened. That reasoning was correct and the conclusion was still wrong: leaving them optional meant the *applicable* branch asserted nothing either. The resolution was not to pick a side but to move the attestation into the required field itself. A test can encode a real constraint and still pin the wrong property.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

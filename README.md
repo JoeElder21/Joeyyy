@@ -130,7 +130,9 @@ ruff format --check .
 python -m unittest discover -s tests -v
 ```
 
-`pre-commit install` runs these gates automatically before each commit — see `CONTRIBUTING.md`.
+`pre-commit install` runs **most** of these automatically before each commit — the privacy guard, corps validation, the unit suite, gitleaks, `ruff check`, and `ruff format --check`. It deliberately does **not** run `verify_runtime_stack.py` or the strict mount probe: the probe launches servers and fetches an npm package, which is not something to do on every commit. Those two, and the `pip install` they depend on, remain manual.
+
+That distinction matters rather than being pedantry: the unit suite lets its JSON Schema check skip when `jsonschema` is absent, so a contributor relying on the hooks alone can pass locally and still fail CI on a malformed schema or a broken mount. Run the full sequence above before pushing. See `CONTRIBUTING.md`.
 
 For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. The dependency uses Microsoft's official `autogen-agentchat` distribution and remains pinned to the legacy 0.2 API. This repository does not contain model configuration or connector credentials.
 

@@ -302,6 +302,15 @@ def identity_errors(mode, packet, delegations):
     strings the manifest already declares, so a model has no business being
     asked whether they match. Returns a list so a caller sees every mismatch
     at once instead of the first.
+
+    The brain is compared case-insensitively, and that is not laxity -- it is
+    two conventions for one value. `load_modes()` takes `Mode.brain` from the
+    manifest DIRECTORY (`brains/apex/`), so it is lowercase, while both
+    authorization schemas require `APEX`/`JEOS`. Comparing them exactly made
+    every schema-valid packet fail identity, so no lawful evaluation could
+    record a pass at all -- this gate was introduced one round earlier and shut
+    the very thing it was meant to bind. `apex` and `APEX` are the same brain;
+    `apex` and `jeos` are not, and that distinction is what the check is for.
     """
     errors = []
     if not isinstance(packet, dict):
@@ -312,21 +321,76 @@ def identity_errors(mode, packet, delegations):
         if not isinstance(candidate, dict):
             errors.append(f"{label} is {type(candidate).__name__}, not an object")
             continue
-        for name, expected in (
-            ("agent", mode.agent),
-            ("owner_brain", mode.brain),
-            ("mode", mode.mode),
+        for name, expected, fold in (
+            ("agent", mode.agent, False),
+            ("owner_brain", mode.brain, True),
+            ("mode", mode.mode, False),
         ):
             actual = candidate.get(name)
             # A packet kind that does not carry the field is not a mismatch;
             # one that carries a DIFFERENT value is. Treating absence as a
             # failure would reject lawful packet kinds, and treating a
             # difference as acceptable is the hole this closes.
-            if actual is not None and actual != expected:
+            if actual is None:
+                continue
+            left = actual.casefold() if fold and isinstance(actual, str) else actual
+            right = expected.casefold() if fold and isinstance(expected, str) else expected
+            if left != right:
                 errors.append(
                     f"{label} {name}={actual!r} does not belong to the mode "
                     f"under evaluation ({expected!r})"
                 )
+    return errors
+
+
+def artifact_errors(case, packet, delegations):
+    """The case's required artifact types must appear in the packet chain.
+
+    `score_packet` proves the handoff matches whatever its own delegation
+    requested -- an internally consistent pair that can request and deliver an
+    artifact type the CASE never asked for. The prose judges read separately
+    supplied text, so a specialist could emit a registered-but-different
+    artifact while its prose claimed the case's `campaign_map`, and the run
+    would record the mode as proven on evidence the packet does not contain.
+
+    Absent when the case declares none: a case that names no artifact types is
+    not asserting anything about them.
+    """
+    required = [str(item) for item in (case.get("expected_artifacts") or [])]
+    if not required:
+        return []
+
+    def declared(candidate):
+        if not isinstance(candidate, dict):
+            return set()
+        found = {
+            str(artifact.get("artifact_type"))
+            for artifact in (candidate.get("artifacts") or [])
+            if isinstance(artifact, dict) and artifact.get("artifact_type")
+        }
+        found.update(str(item) for item in (candidate.get("required_artifact_types") or []))
+        return found
+
+    errors = []
+    emitted = declared(packet)
+    missing = sorted(set(required) - emitted)
+    if missing:
+        errors.append(
+            f"emitted packet carries no {', '.join(missing)}; the case requires "
+            f"{', '.join(required)} and prose is not the evidence"
+        )
+    for index, item in enumerate(delegations or []):
+        # Only delegations that state a requirement are checked: a delegation
+        # naming none is not contradicting the case.
+        stated = declared(item)
+        if not stated:
+            continue
+        absent = sorted(set(required) - stated)
+        if absent:
+            errors.append(
+                f"delegation[{index}] does not commission {', '.join(absent)}, "
+                f"which the case requires"
+            )
     return errors
 
 

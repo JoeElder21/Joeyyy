@@ -20,6 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from harness import (  # noqa: E402
+    artifact_errors,
     build_coverage,
     deepeval_available,
     identity_errors,
@@ -211,6 +212,13 @@ def test_mode_meets_acceptance_criteria(mode_key):
     # specialist's packet could record the requested mode as proven.
     for mismatch in identity_errors(mode, emitted_packet, delegations):
         pytest.fail(f"{mode_key}: {mismatch}")
+
+    # The case's own required artifact types, checked against the packet chain
+    # rather than left to the prose judges. `score_packet` only proves the
+    # handoff agrees with its own delegation, so an internally consistent pair
+    # could deliver an artifact the case never asked for.
+    for gap in artifact_errors(case, emitted_packet, delegations):
+        pytest.fail(f"{mode_key}: {gap}")
 
     test_case = LLMTestCase(
         input=case["mission"],

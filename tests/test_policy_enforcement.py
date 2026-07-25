@@ -26,6 +26,7 @@ from scripts.policy_enforcement import (
     BRAIN_NEUTRAL_PREFIXES,
     CHIEF,
     HIGH_IMPACT_ACTIONS,
+    HIGH_IMPACT_VERBS,
     MUTATING_ACTION_VERBS,
     NON_EXECUTING_STAGES,
     PACKET_ONLY,
@@ -2103,6 +2104,123 @@ class EighteenthPassRegressionTests(unittest.TestCase):
             ),
             ["APEX::Strategy-Campaigns::apex_war_architect"],
         )
+
+
+class NineteenthPassRegressionTests(unittest.TestCase):
+    """Two fail-opens the chief exemption hid, one deadlock, one wrapped artifact."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def test_the_chief_cannot_read_outside_the_repository(self):
+        # The exemption returned before `_escapes_the_tree` ran, so the chief
+        # was allowed `/etc/shadow` with an EMPTY reason tuple. Being the sole
+        # cross-brain agent permits acting for either brain; it does not put the
+        # filesystem in scope, and no brain owns a path outside the tree.
+        for resource in ("../outside-secret", "/etc/shadow", "docs/../../.ssh/id_rsa", ".."):
+            with self.subTest(resource=resource):
+                decision = self.pep.evaluate(
+                    ToolRequest(agent=CHIEF, action="read", resource=resource, owner_brain="APEX")
+                )
+                self.assertFalse(decision.allowed, f"{resource}: {decision.reasons}")
+                self.assertTrue(any("escapes the repository" in r for r in decision.reasons))
+
+    def test_the_chief_still_reads_inside_the_repository(self):
+        decision = self.pep.evaluate(
+            ToolRequest(agent=CHIEF, action="read", resource="docs/README.md", owner_brain="APEX")
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_the_current_message_sentinel_has_a_lawful_path(self):
+        # docs/SPECIALIST_CORPS_PROTOCOL.md confines direct invocation to
+        # current-message text, and packet admission already treats it as
+        # non-canonical -- but the brain lock classified it as an unresolvable
+        # resource, so the documented direct path was denied by exactly one
+        # rule. Third deadlock of this shape in this change set.
+        decision = self.pep.evaluate(
+            ToolRequest(agent=SPECIALIST, action="read", resource="current-message")
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_the_sentinel_is_matched_exactly(self):
+        # Equality, not prefix. The sibling-matching defect one round earlier is
+        # exactly why: `current-message-secrets` is a resource like any other.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="current-message-secrets",
+                owner_brain="APEX",
+            )
+        )
+        self.assertFalse(decision.allowed)
+
+    def test_concrete_boundary_verbs_require_an_instruction(self):
+        # The comparison was exact against abstract category names, so the
+        # boundary fired only when a caller volunteered `public_publication` as
+        # its action -- the same "ask the caller to incriminate itself" shape as
+        # the three caller-set booleans removed earlier.
+        for action in ("publish", "send", "post", "transfer", "sign", "purge", "revoke"):
+            with self.subTest(action=action):
+                reasons = self.pep._high_impact_boundary(
+                    ToolRequest(
+                        agent=CHIEF,
+                        action=action,
+                        resource="APEX/Strategy-Campaigns",
+                        owner_brain="APEX",
+                        mutating=True,
+                    )
+                )
+                self.assertTrue(any("high-impact boundary" in r for r in reasons), reasons)
+
+    def test_ordinary_verbs_do_not_require_an_instruction(self):
+        # The opposite error would demand Joe's signature for routine work.
+        for action in ("read", "analyze", "propose", "append", "upsert", "list"):
+            with self.subTest(action=action):
+                self.assertEqual(
+                    self.pep._high_impact_boundary(
+                        ToolRequest(
+                            agent=CHIEF,
+                            action=action,
+                            resource="APEX/Strategy-Campaigns",
+                            owner_brain="APEX",
+                            mutating=True,
+                        )
+                    ),
+                    [],
+                )
+
+    def test_every_mapped_verb_names_a_real_boundary_category(self):
+        # A typo here would silently map a verb to nothing.
+        self.assertTrue(set(HIGH_IMPACT_VERBS.values()) <= set(HIGH_IMPACT_ACTIONS))
+
+    def test_the_ledger_artifact_is_recognised_when_wrapped(self):
+        # PacketGuard re-emits a delegation's inner errors as
+        # `originating delegation invalid: <error>`, so on a write-bearing
+        # handoff the artifact arrived wrapped and survived an exact-equality
+        # filter -- denying a lawful handoff even with its genuine registry
+        # lease. The fix to a fail-shut was itself fail-shut, one nesting level
+        # down.
+        from scripts.policy_enforcement import LEDGER_ABSENT_ARTIFACT, _is_ledger_artifact
+
+        self.assertTrue(_is_ledger_artifact(LEDGER_ABSENT_ARTIFACT))
+        self.assertTrue(
+            _is_ledger_artifact(f"originating delegation invalid: {LEDGER_ABSENT_ARTIFACT}")
+        )
+
+    def test_the_artifact_filter_removes_nothing_else(self):
+        # The standing rule: a suppression must not remove a finding it was not
+        # written for. Only the exact tail qualifies.
+        from scripts.policy_enforcement import LEDGER_ABSENT_ARTIFACT, _is_ledger_artifact
+
+        for finding in (
+            "writer lease 'x' is not uniquely active",
+            "agent must use memory namespace APEX::Strategy-Campaigns::apex_war_architect",
+            f"{LEDGER_ABSENT_ARTIFACT} and a second problem",
+        ):
+            with self.subTest(finding=finding):
+                self.assertFalse(_is_ledger_artifact(finding))
 
 
 if __name__ == "__main__":

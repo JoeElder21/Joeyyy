@@ -48,9 +48,17 @@ body:
         (2026-07-25). Scan the candidate before install; never point it at Joe's
         configured agent estate — it transmits skill content, tool names, and
         descriptions to Snyk's servers, and the estate is his roster.
+        Every option is itself an attestation, because GitHub issue forms have
+        no conditional validation and cannot enforce a condition stated in
+        prose. The earlier two-option version said "complete the attestations
+        below" and left them optional, so selecting "Yes" and leaving every
+        safety result blank recorded an MCP server as a candidate with no
+        evidence the mandatory scan had happened at all. Putting the outcome
+        INTO the required field is the only form of this the platform enforces.
       options:
-        - "Yes — MCP server, agent skill, or agent application (complete the attestations below)"
-        - "No — not an MCP server, skill, or agent application"
+        - "Not applicable — not an MCP server, agent skill, or agent application"
+        - "Scanned pre-install — no prompt-injection, tool-poisoning, toxic-flow, secret, or malware finding"
+        - "Scanned pre-install — findings reported; details and disposition in the notes below"
     validations:
       required: true
 
@@ -59,14 +67,10 @@ body:
     attributes:
       label: Pre-install scan attestations
       description: >
-        Required when the dropdown above says the scan applies. Leave blank only
-        when it says the scan does not.
-
-        The previous version put the applicability choice and the attestations
-        in one checkbox group with a single required "either ... or" box, which
-        established neither branch: a candidate could tick that one box and
-        leave the scan and every safety result blank. Applicability is now its
-        own required question, so the two decisions cannot be conflated.
+        Supporting detail for the required answer above, which is where the
+        attestation itself lives. These stay optional deliberately: making them
+        required would force a "not applicable" submitter to tick scan results
+        that do not exist, and the form cannot tell the two paths apart.
       options:
         - label: "`uvx snyk-agent-scan==0.3.0` run against the candidate, pre-install (pinned: `@latest` gives an unreviewed release code execution inside the supply-chain check itself)"
         - label: No prompt injection, tool poisoning, tool shadowing, or toxic flow reported

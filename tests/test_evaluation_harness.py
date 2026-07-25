@@ -431,5 +431,78 @@ class PacketIdentityTests(unittest.TestCase):
         self.assertTrue(harness.identity_errors(self.mode, "not a packet", []))
 
 
+class BrainCasingTests(unittest.TestCase):
+    """The identity gate must not reject the schemas' own spelling."""
+
+    def setUp(self):
+        self.mode = next(
+            m
+            for m in harness.load_modes()
+            if m.key.endswith("apex_war_architect/operating_campaign")
+        )
+
+    def test_the_schema_spelling_of_the_brain_is_accepted(self):
+        # `load_modes()` takes Mode.brain from the manifest DIRECTORY, so it is
+        # lowercase, while both authorization schemas require APEX/JEOS.
+        # Comparing exactly made every schema-valid packet fail identity, so no
+        # lawful evaluation could record a pass -- a gate introduced one round
+        # earlier that shut the very thing it was meant to bind.
+        self.assertEqual(self.mode.brain, self.mode.brain.lower())
+        packet = {
+            "agent": self.mode.agent,
+            "owner_brain": self.mode.brain.upper(),
+            "mode": self.mode.mode,
+        }
+        self.assertEqual(harness.identity_errors(self.mode, packet, [packet]), [])
+
+    def test_the_other_brain_is_still_refused_in_either_case(self):
+        # Case folding must not become brain blindness.
+        for spelling in ("JEOS", "jeos"):
+            with self.subTest(spelling=spelling):
+                packet = {"agent": self.mode.agent, "owner_brain": spelling}
+                self.assertTrue(harness.identity_errors(self.mode, packet, []))
+
+
+class CaseArtifactTests(unittest.TestCase):
+    """The case's required artifact types must be in the packet, not the prose."""
+
+    def setUp(self):
+        self.case = {"expected_artifacts": ["campaign_map"]}
+
+    def test_a_packet_carrying_the_required_type_is_accepted(self):
+        packet = {"artifacts": [{"artifact_type": "campaign_map"}]}
+        self.assertEqual(harness.artifact_errors(self.case, packet, []), [])
+
+    def test_a_different_registered_type_is_refused(self):
+        # score_packet only proves the handoff matches its OWN delegation, so an
+        # internally consistent pair can deliver an artifact the case never
+        # asked for while the prose claims otherwise.
+        packet = {"artifacts": [{"artifact_type": "decision_brief"}]}
+        self.assertTrue(harness.artifact_errors(self.case, packet, []))
+
+    def test_a_delegation_commissioning_something_else_is_refused(self):
+        packet = {"artifacts": [{"artifact_type": "campaign_map"}]}
+        self.assertTrue(
+            harness.artifact_errors(self.case, packet, [{"required_artifact_types": ["other"]}])
+        )
+
+    def test_a_case_declaring_no_artifacts_asserts_nothing(self):
+        self.assertEqual(harness.artifact_errors({}, {"artifacts": []}, []), [])
+
+    def test_every_shipped_case_declares_artifacts_its_mode_registers(self):
+        # A case requiring a type the manifest does not register can never pass
+        # once dispatch is wired, because PacketGuard would refuse the packet.
+        modes = {m.key: m for m in harness.load_modes()}
+        for key, case in harness.load_cases().items():
+            with self.subTest(mode=key):
+                registered = set(modes[key].artifact_types)
+                required = set(case.get("expected_artifacts") or [])
+                self.assertTrue(
+                    required <= registered,
+                    f"{key} requires {sorted(required - registered)}, which its manifest "
+                    f"does not register ({sorted(registered)})",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

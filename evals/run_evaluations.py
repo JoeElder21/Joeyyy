@@ -117,7 +117,13 @@ def assert_telemetry_disabled() -> None:
     # unsetting something we guessed at is exactly the kind of "probably
     # disabled" this record keeps finding.
     for store in _persisted_login_paths():
-        if store.exists() and store.read_text(encoding="utf-8", errors="ignore").strip():
+        # `is_file()`, not `exists()`. `~/.deepeval` is normally the DIRECTORY
+        # holding the store, so `read_text()` raised an uncaught
+        # IsADirectoryError and the runner crashed instead of deciding whether
+        # it was safe to run -- a safety check that aborts before reaching a
+        # verdict is not a safety check. The directory's contents are covered by
+        # the explicit path inside it.
+        if store.is_file() and store.read_text(encoding="utf-8", errors="ignore").strip():
             raise UnsafeRun(
                 f"a persisted Confident AI session is present at {store}. "
                 "DeepEval will upload results through it regardless of the environment. "
