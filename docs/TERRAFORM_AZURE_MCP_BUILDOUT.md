@@ -101,9 +101,24 @@ rounds shaped this:
 
 Now `--agent` is supplied when *minting* the grant, which only Joe's machine can do, and it
 becomes part of the HMAC payload. `issue_grant` refuses an identity that is not on the
-mount's allowlist, so a grant for a shadow specialist cannot be created in the first place;
-editing the field afterwards breaks the signature. Passing `--agent` at launch is an
-optional cross-check and a mismatch is refused.
+mount's allowlist; editing the field afterwards breaks the signature. Passing `--agent` at
+launch is an optional cross-check and a mismatch is refused.
+
+**The allowlist alone was not enough, and an earlier version of this paragraph wrongly
+claimed it was.** It held only for `terraform` and `azure`, whose allowlists name Agent 007
+alone. The pre-existing mounts list specialists — `apex_systems_blacksmith` on `github`,
+`apex_delivery_commander` on `civil3d`, `jeos_lifestyle_systems_builder` on the
+repository-wide `filesystem` mount — and grants for all three were being minted
+successfully. Making a documentation-only allowlist executable without also checking
+lifecycle would have handed mutation-capable connectors to agents
+`docs/AGENT_COMMUNITY_PROTOCOL.md` confines to analysis and proposed writes.
+
+`issue_grant` now also refuses any rostered specialist below lifecycle stage `active`.
+Every specialist is `shadow` (`config/specialist_corps.toml`, `[lifecycle] deployed_stage`),
+so in practice Agent 007 is the only identity that can currently hold a grant — the
+documented arrangement, now enforced rather than described. The allowlists are deliberately
+left intact: they record which specialist takes over each mount on promotion, and an
+unrecognised stage fails closed rather than being read as promotion.
 
 This applies to **every** agent-scoped mount, including the pre-existing `civil3d`, whose
 grant command now needs `--agent`. Mounts declaring `agents = ["*"]` are unaffected, and a
