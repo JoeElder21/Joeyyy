@@ -4,6 +4,8 @@ Record: docs/EVALUATION_HARNESS.md. These tests run without deepeval installed â
 that degradation is itself part of the contract, so it is asserted here.
 """
 
+import ast
+import dataclasses
 import json
 import re
 import sys
@@ -557,6 +559,182 @@ class CaseArtifactTests(unittest.TestCase):
                     f"{key} requires {sorted(required - registered)}, which its manifest "
                     f"does not register ({sorted(registered)})",
                 )
+
+
+class StageDependentCriterionTests(unittest.TestCase):
+    """The proposed-write rule must follow the stage, not be asserted."""
+
+    def _mode(self, status):
+        modes = harness.load_modes()
+        return dataclasses.replace(modes[0], status=status)
+
+    def test_a_pre_active_stage_requires_writes_to_be_proposed(self):
+        for status in sorted(harness.NON_EXECUTING_STAGES):
+            with self.subTest(status=status):
+                text = harness.proposed_write_criterion(self._mode(status)).lower()
+                self.assertIn("proposed", text)
+                self.assertIn("must not", text)
+
+    def test_an_executing_stage_does_not_forbid_an_executed_write(self):
+        # The latent false-fail. Written unconditionally, the criterion told the
+        # judge every specialist was in shadow and an executed write was always
+        # a violation. Every mode is `shadow` today, so it is true today -- and
+        # the entire purpose of this harness is to move modes out of shadow, at
+        # which point it would score every lawful mutation as a regression. A
+        # criterion that stops being true when the thing it measures succeeds is
+        # a trap.
+        for status in ("active", "value-proven"):
+            with self.subTest(status=status):
+                text = harness.proposed_write_criterion(self._mode(status)).lower()
+                self.assertIn("permitted", text)
+                self.assertNotIn("must not report any write as executed", text)
+
+    def test_the_stage_list_is_the_enforcement_point_s(self):
+        # One decision, one definition. A second copy would drift the first time
+        # a stage was added, and the evaluation would then certify behaviour the
+        # gate refuses -- or fail behaviour it permits.
+        from scripts.policy_enforcement import NON_EXECUTING_STAGES
+
+        self.assertIs(harness.NON_EXECUTING_STAGES, NON_EXECUTING_STAGES)
+
+    def test_every_shipped_mode_gets_a_criterion(self):
+        for mode in harness.load_modes():
+            with self.subTest(mode=mode.key):
+                self.assertTrue(harness.proposed_write_criterion(mode).strip())
+
+
+class ArtifactSubstanceTests(unittest.TestCase):
+    """A declared artifact type is not the artifact."""
+
+    CASE = {"expected_artifacts": ["campaign_map"]}
+
+    def test_a_hollow_artifact_is_refused(self):
+        # `artifact_errors` proves an artifact of the right TYPE was declared,
+        # and nothing read the record. A dispatcher returning compliant prose
+        # beside an empty but schema-valid `campaign_map` satisfied every
+        # deterministic and judged gate in the harness, and the run was then
+        # filed as evidence that the mode was proven.
+        for record in (
+            {"artifact_type": "campaign_map"},
+            {"artifact_type": "campaign_map", "id": "a-1", "title": ""},
+            {"artifact_type": "campaign_map", "name": "x", "summary": None, "rows": []},
+        ):
+            with self.subTest(record=record):
+                errors = harness.artifact_substance_errors(self.CASE, {"artifacts": [record]})
+                self.assertTrue(errors, f"{record} passed as a substantive artifact")
+
+    def test_an_artifact_with_content_is_accepted(self):
+        packet = {
+            "artifacts": [{"artifact_type": "campaign_map", "id": "a-1", "phases": ["discovery"]}]
+        }
+        self.assertEqual(harness.artifact_substance_errors(self.CASE, packet), [])
+
+    def test_an_unrequired_artifact_is_not_judged_for_substance(self):
+        # The case says nothing about it, so an empty record of another type is
+        # not this check's business -- denying it would be inventing a
+        # requirement the case never stated.
+        packet = {"artifacts": [{"artifact_type": "something_else"}]}
+        self.assertEqual(harness.artifact_substance_errors(self.CASE, packet), [])
+
+    def test_a_case_requiring_nothing_refuses_nothing(self):
+        self.assertEqual(harness.artifact_substance_errors({}, {"artifacts": [{}]}), [])
+
+    def test_records_are_extracted_only_from_a_well_formed_packet(self):
+        for packet in (None, [], "packet", {"artifacts": "not a list"}, {"artifacts": [1, 2]}):
+            with self.subTest(packet=packet):
+                self.assertEqual(harness.artifact_records(packet), [])
+
+
+class EvaluationSuiteWiringTests(unittest.TestCase):
+    """A checker the evaluation suite never calls protects nothing.
+
+    `evals/test_specialist_modes.py` deliberately does not run under
+    `unittest discover` â€” it needs deepeval and a model credential. That means
+    no test observed whether the harness helpers were WIRED INTO it, and
+    mutation testing proved it: deleting the substance check from the suite
+    body, and blanking the artifact records handed to the judge, both left 630
+    tests green. Checked against the parsed source, since executing it is not
+    available here.
+    """
+
+    SUITE = EVALS / "test_specialist_modes.py"
+
+    def setUp(self):
+        self.tree = ast.parse(self.SUITE.read_text(encoding="utf-8"))
+
+    def _imported_from_harness(self):
+        names = set()
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "harness":
+                names.update(alias.asname or alias.name for alias in node.names)
+        return names
+
+    def _referenced(self):
+        return {node.id for node in ast.walk(self.tree) if isinstance(node, ast.Name)}
+
+    def test_every_harness_helper_the_suite_imports_is_used(self):
+        # The general property rather than the two functions this round added.
+        # An import is a statement of intent; a checker imported and never
+        # called is the "built, not wired" failure this repository already
+        # tracks for `enforce()` and for dispatch, one scope down.
+        imported = self._imported_from_harness()
+        self.assertTrue(imported, "no harness imports found; this test would pass vacuously")
+        unused = sorted(imported - self._referenced())
+        self.assertEqual(unused, [], f"imported from harness but never used: {unused}")
+
+    def test_the_deterministic_gates_run_before_the_judges(self):
+        # Each of these is a gate whose whole value is that it runs without a
+        # model. If one is dropped from the suite body, the run still costs a
+        # full set of judge calls and still gets filed as evidence.
+        called = {
+            node.func.id
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        for checker in (
+            "score_packet",
+            "identity_errors",
+            "artifact_errors",
+            "artifact_substance_errors",
+        ):
+            with self.subTest(checker=checker):
+                self.assertIn(checker, called, f"the evaluation suite never calls {checker}")
+
+    def test_the_case_judge_is_handed_the_emitted_packet(self):
+        # Blanking the records the judge receives is invisible to every other
+        # test here: the judge is what reads them, and the judge does not run.
+        # Asserted as the call actually made, so passing a literal `None` or
+        # dropping the argument fails.
+        for node in ast.walk(self.tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_case_criteria_metric"
+            ):
+                self.assertEqual(
+                    [a.id for a in node.args if isinstance(a, ast.Name)],
+                    ["case", "emitted_packet"],
+                    "the case judge must receive the emitted packet, not just the case",
+                )
+                return
+        self.fail("the evaluation suite never builds the case-criteria metric")
+
+    def test_the_judge_reads_the_records_rather_than_a_placeholder(self):
+        # The other half: the metric may be handed the packet and then ignore
+        # it. `artifact_records` must be called on that argument.
+        for node in ast.walk(self.tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "artifact_records"
+            ):
+                self.assertEqual(
+                    [a.id for a in node.args if isinstance(a, ast.Name)],
+                    ["emitted_packet"],
+                    "the judge must read the records off the emitted packet",
+                )
+                return
+        self.fail("the case judge never extracts the emitted artifact records")
 
 
 class DocumentedProcedureTests(unittest.TestCase):

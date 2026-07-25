@@ -1045,6 +1045,93 @@ on them and would raise in turn.
 The recurring-shape list gains: **(n) a test that exercises a private helper
 instead of the public entry point proves the helper, not the control.**
 
+### Automated review, twenty-seventh pass — six findings, four fixed, two deferred
+
+**A return packet escaped every prohibition its commission stated.** The handoff
+schema defines no `prohibited_scope`, so applying the delegation-level prohibition
+to the *submitted* packet meant a handoff was bound by no prohibition at all.
+`_packet_namespace_errors`, immediately beside it, already derives its **allowlist**
+from the originating delegation. Permission was taken from the commission and
+prohibition from the return packet — the same assignment read from two documents,
+with the looser one winning.
+
+Reproduced with a control first, which mattered: the first attempt guessed the
+packet's agent field, got `None`, and every request denied for the wrong reason.
+That reproduction would have "confirmed" the finding while proving nothing. The
+sound version shows the same read **admitted** without the prohibition and
+**allowed** with it.
+
+**The collection fields were the untouched sibling of last round's fix.**
+`delegations=7` reached `list(...)` inside `_packet_admission` and raised
+`TypeError` before any denial or audit event. Round 26 type-checked the *string*
+fields for exactly this property and stopped there. The class is "every
+caller-supplied field a rule performs a typed operation on", not "every string
+field" — the scope-to-the-property rule, missed again by the fix that recorded it.
+`str` and `dict` are refused too: `list("abc")` and `list({"a": 1})` do not raise,
+they silently yield something the caller never meant, which is worse.
+
+**A judge criterion that would have broken on success.** The role-adherence judge
+was told unconditionally that the specialist is in shadow and that an executed
+write is always a violation. Every mode is `shadow` today, so it is true today —
+and the entire purpose of this harness is to move modes out of shadow, at which
+point it would have false-failed every lawful active-stage mutation and reported a
+promoted specialist as regressed. **A criterion that stops being true when the
+thing it measures succeeds is a trap, not a gate.** Now derived from `mode.status`,
+with the stage list *imported* from the enforcement point rather than restated, so
+the evaluation and the gate cannot disagree about which stages are pre-active.
+
+**A declared artifact type is not the artifact.** `artifact_errors` proved an
+artifact of the right *type* was declared and nothing read the record; all three
+judges see the mission, the prose, and the case context, and none saw the
+structured packet content. Compliant prose beside an empty-but-schema-valid
+`campaign_map` satisfied every gate. The case judge now receives the emitted
+artifact records, and a deliberately shallow deterministic check refuses a record
+carrying nothing beyond its own label — whether the artifact is any *good* is a
+judgement, and it belongs to the judge that now has the evidence.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Handoff reads escaped the originating delegation's `prohibited_scope` | **Correct — P1 fail-open** | Prohibitions inherited from the commission |
+| Scalar `delegations` / constraint ledgers raised instead of denying | **Correct — P2** | All three collection fields checked in `normalize()` |
+| Proposed-write criterion asserted shadow unconditionally | **Correct — P2** | Derived from `mode.status`; stage list imported, not restated |
+| Artifact contents reached no judge and no check | **Correct — P2** | Records handed to the case judge; label-only records refused |
+| Constraint packets are self-asserted | **Correct — deferred** | Needs an issuance mechanism; see below |
+| Evaluation packets not bound to the current mission | **Correct — deferred** | Blocked behind eval dispatch |
+
+**Two deferrals, both accurate findings.** Neither is declined on the merits.
+
+- **Constraint packets are caller-supplied and self-assert `created_by` and
+  `source_proof_hash`.** `PacketGuard` validates schema conformance and ledger
+  consistency; nothing authenticates issuance, so a fabricated but schema-valid
+  packet can claim Agent 007 authorship and carry cross-brain evidence. Closing
+  it needs either an HMAC signature (the machinery exists — `_sign_grant` already
+  does this for instruction grants) or an Agent 007-owned issuance registry.
+  Either adds a required field to a governance schema and invalidates every
+  existing lawful constraint packet, which is a contract change made as a set
+  with docs, templates, registry, and tests. **This is the same decision as
+  "delegation issuance verification" already on Joe's list.** A `created_by ==
+  Chief` check would be theatre — a forger writes that field too — so nothing
+  partial was shipped.
+- **Evaluation packets are not bound to the current mission.** A stale but
+  schema-valid handoff/delegation pair from an earlier mission of the same
+  specialist and mode passes every identity and artifact check, so one case could
+  be recorded as proven using another assignment's evidence. The fix requires a
+  trusted invocation identity returned by dispatch, and dispatch is unwired and
+  on the deferred list. Recording it here so it is not rediscovered as new.
+
+**Mutation testing: nine mutants, two initially MISSED — and the reason is
+structural.** `evals/test_specialist_modes.py` deliberately does not run under
+`unittest discover`, because it needs deepeval and a model credential. Deleting
+the substance check from the suite body and blanking the records handed to the
+judge both left 630 tests green. **A checker the evaluation suite never calls
+protects nothing, and nothing was watching whether it was called.** Four
+AST-based wiring tests now assert the suite's structure against its parsed
+source — including the general property that every helper imported from `harness`
+is actually used, which covers the class rather than this round's two functions.
+
+The recurring-shape list gains: **(p) a component excluded from the mandatory
+suite has no test observing whether it is wired in — assert its structure.**
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

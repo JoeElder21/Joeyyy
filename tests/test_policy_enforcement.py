@@ -2873,5 +2873,105 @@ class TwentySixthPassRegressionTests(unittest.TestCase):
         self.assertEqual(len(decision.checks_run), 8)
 
 
+class TwentySeventhPassRegressionTests(unittest.TestCase):
+    """A prohibition a return packet escaped, and the collection-field sibling."""
+
+    RESOURCE = "APEX/Strategy-Campaigns/apex_war_architect"
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _pair(self):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        delegation, handoff = PacketContractTests().v21_readonly_pair()
+        return json.loads(json.dumps(delegation)), json.loads(json.dumps(handoff))
+
+    def _handoff_read(self, delegation, handoff):
+        return ToolRequest(
+            agent=SPECIALIST,
+            action="read",
+            resource=self.RESOURCE,
+            owner_brain="APEX",
+            packet=handoff,
+            packet_schema="handoff_packet.schema.json",
+            delegations=[delegation],
+            resource_id=handoff.get("resource_id"),
+        )
+
+    def test_the_control_admits_the_same_read_without_a_prohibition(self):
+        # The control the reproduction needs. Without it, "the prohibited read
+        # was denied" proves nothing -- it could have been denied for any of
+        # eight other reasons, and an earlier attempt at this reproduction did
+        # exactly that by building a request whose agent was None.
+        delegation, handoff = self._pair()
+        self.assertEqual(self.pep._packet_scope_errors(self._handoff_read(delegation, handoff)), [])
+
+    def test_a_handoff_cannot_escape_its_commission_prohibition(self):
+        # The handoff schema defines no `prohibited_scope`, so checking only the
+        # submitted packet meant a return packet was bound by no prohibition at
+        # all. `_packet_namespace_errors` beside it already derived its ALLOWLIST
+        # from the originating delegation: permission taken from the commission,
+        # prohibition taken from the return packet, and the looser of the two won.
+        delegation, handoff = self._pair()
+        for entry in (self.RESOURCE, "APEX/Strategy-Campaigns"):
+            with self.subTest(entry=entry):
+                origin = json.loads(json.dumps(delegation))
+                origin["prohibited_scope"] = [entry]
+                errors = self.pep._packet_scope_errors(self._handoff_read(origin, handoff))
+                self.assertTrue(
+                    any("prohibits" in error for error in errors),
+                    f"handoff read past a commission prohibiting {entry!r}",
+                )
+
+    def test_an_unrelated_commission_prohibition_still_admits_the_read(self):
+        # The other direction: inheriting the commission's prohibitions must not
+        # deny work the commission never forbade.
+        delegation, handoff = self._pair()
+        delegation["prohibited_scope"] = ["JEOS", "binding commitments"]
+        self.assertEqual(self.pep._packet_scope_errors(self._handoff_read(delegation, handoff)), [])
+
+    def test_a_malformed_collection_field_is_refused_rather_than_raising(self):
+        # `list(7)` raises TypeError inside `_packet_admission`, before any
+        # denial or audit event -- the same unwinding the string fields were
+        # type-checked for one round earlier. That fix covered the string
+        # fields and stopped, so these were the untouched sibling of a fix
+        # written for this exact property.
+        #
+        # `str` and `dict` are in the matrix deliberately: neither raises.
+        # `list("abc")` and `list({"a": 1})` both succeed and silently yield
+        # something the caller did not mean, which is worse than a crash
+        # because nothing reports it.
+        delegation, handoff = self._pair()
+        for field in ("delegations", "constraint_packets", "private_constraint_packets"):
+            for bad in (7, None, "x", {"a": 1}):
+                with self.subTest(field=field, bad=type(bad).__name__):
+                    fields = {
+                        "agent": SPECIALIST,
+                        "action": "read",
+                        "resource": self.RESOURCE,
+                        "owner_brain": "APEX",
+                        "packet": handoff,
+                        "packet_schema": "handoff_packet.schema.json",
+                        "resource_id": handoff.get("resource_id"),
+                        "delegations": [delegation],
+                    }
+                    fields[field] = bad
+                    decision = self.pep.evaluate(ToolRequest(**fields))
+                    self.assertFalse(decision.allowed)
+                    self.assertTrue(
+                        any("must be a list or tuple" in reason for reason in decision.reasons),
+                        decision.reasons,
+                    )
+
+    def test_a_well_formed_request_is_still_admitted(self):
+        # The control for the type check: the lawful pair must still evaluate
+        # cleanly, or the check above would be passing by denying everything.
+        delegation, handoff = self._pair()
+        self.assertTrue(self.pep.evaluate(self._handoff_read(delegation, handoff)).allowed)
+
+
 if __name__ == "__main__":
     unittest.main()

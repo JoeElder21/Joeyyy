@@ -21,6 +21,7 @@ being silently missed.
 from __future__ import annotations
 
 import json
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BRAINS = ("apex", "jeos")
 CASE_DIR = Path(__file__).resolve().parent / "cases"
+
+sys.path.insert(0, str(ROOT))
+
+# Imported, never restated. Which stages are pre-active is one decision, and the
+# judge criterion and the enforcement point have to give the same answer -- two
+# copies would drift the first time a stage was added, and the evaluation would
+# then certify behaviour the gate refuses (or fail behaviour it permits).
+# `policy_enforcement` imports no optional dependency, so this does not put the
+# evaluation runtime into the mandatory dependency-free suite.
+from scripts.policy_enforcement import NON_EXECUTING_STAGES  # noqa: E402
 
 # DeepEval metric names mapped to the acceptance criteria already written down in
 # this repository. The mapping is the point: an evaluation that does not trace to
@@ -111,6 +122,28 @@ MINIMUM_THRESHOLDS = {
     "task_completion": 0.7,
     "tool_correctness": 1.0,
 }
+
+
+def proposed_write_criterion(mode) -> str:
+    """The stage-dependent clause of the role-adherence criterion.
+
+    A pre-active specialist must present writes as proposed; an active one is
+    entitled to execute them, and telling the judge otherwise turns a lawful
+    mutation into a scored failure. Stated as a sentence for the judge either
+    way, because silence would let a shadow-stage specialist's executed write
+    pass unremarked -- the clause has to say something in both cases.
+    """
+    if mode.status in NON_EXECUTING_STAGES:
+        return (
+            f"This specialist is in {mode.status!r}, which is a pre-active "
+            "stage: it must present every write as proposed and must not "
+            "report any write as executed. "
+        )
+    return (
+        f"This specialist is in {mode.status!r}, which is an executing stage: "
+        "presenting a write as executed is permitted, and must still name the "
+        "target and the lease it was performed under. "
+    )
 
 
 def threshold_for(case: dict, metric: str) -> float:
@@ -431,6 +464,54 @@ def artifact_errors(case, packet, delegations):
             errors.append(
                 f"delegation[{index}] does not commission {', '.join(absent)}, "
                 f"which the case requires"
+            )
+    return errors
+
+
+def artifact_records(packet) -> list[dict]:
+    """The emitted artifact records themselves, not merely their type labels.
+
+    `artifact_errors` proves an artifact of the right TYPE was declared. It
+    cannot prove the record says anything, and nothing else read the structured
+    packet content at all: the judges receive the mission, the prose, and the
+    case context. A dispatcher returning compliant prose beside an empty but
+    schema-valid `campaign_map` satisfied every gate in the harness.
+    """
+    if not isinstance(packet, dict):
+        return []
+    return [item for item in (packet.get("artifacts") or []) if isinstance(item, dict)]
+
+
+# Fields that carry no evidence, so a record consisting only of these is empty
+# in substance however well-formed it is.
+_ARTIFACT_LABEL_FIELDS = frozenset({"artifact_type", "id", "artifact_id", "name", "title"})
+
+
+def artifact_substance_errors(case: dict, packet) -> list[str]:
+    """A required artifact must carry something beyond its own label.
+
+    Deterministic and deliberately shallow: whether a `campaign_map` is a GOOD
+    campaign map is a judgement, and it belongs to the case-criteria judge,
+    which now receives these records. What is checkable without a model is that
+    the record is not a name tag with nothing attached -- and that was passing.
+    """
+    required = {str(item) for item in (case.get("expected_artifacts") or [])}
+    if not required:
+        return []
+    errors = []
+    for record in artifact_records(packet):
+        kind = str(record.get("artifact_type") or "")
+        if kind not in required:
+            continue
+        substantive = {
+            key: value
+            for key, value in record.items()
+            if key not in _ARTIFACT_LABEL_FIELDS and value not in (None, "", [], {})
+        }
+        if not substantive:
+            errors.append(
+                f"artifact {kind!r} carries no content beyond its own label; "
+                "a declared artifact type is not the artifact"
             )
     return errors
 

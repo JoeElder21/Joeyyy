@@ -634,6 +634,30 @@ class PolicyEnforcementPoint:
                     "a malformed request is refused, not evaluated"
                 )
                 blanked[name] = empty
+
+        # The collection fields, for the same reason and in the same place.
+        # The check above covered the STRING fields and stopped there, so
+        # `delegations=7` still reached `list(...)` inside `_packet_admission`
+        # and raised TypeError before any denial or audit event -- the untouched
+        # sibling, in a fix written one round earlier for this exact property.
+        # The class is "every caller-supplied field a rule performs a typed
+        # operation on", not "every string field".
+        #
+        # A str or dict is rejected rather than accepted: `list("abc")` and
+        # `list({"a": 1})` both succeed and yield something the caller plainly
+        # did not mean, which is worse than raising because nothing reports it.
+        for name, value in (
+            ("delegations", request.delegations),
+            ("constraint_packets", request.constraint_packets),
+            ("private_constraint_packets", request.private_constraint_packets),
+        ):
+            if not isinstance(value, (list, tuple)):
+                errors.append(
+                    f"request {name} must be a list or tuple, got {type(value).__name__}; "
+                    "a malformed request is refused, not evaluated"
+                )
+                blanked[name] = ()
+
         if blanked:
             normalized = replace(normalized, **blanked)
 
@@ -1526,24 +1550,39 @@ class PolicyEnforcementPoint:
         allowlist comparison uses, so the two cannot disagree about what a
         given string denotes.
         """
-        prohibited = packet.get("prohibited_scope") or []
-        if not isinstance(prohibited, list):
-            return ["packet prohibited_scope must be a list"]
+        # The submitted packet AND the delegation it answers. A handoff carries
+        # no `prohibited_scope` at all -- the schema does not define one -- so
+        # reading only the submitted packet meant a return packet escaped every
+        # prohibition its commission stated. `_packet_namespace_errors` beside
+        # this one already derives its ALLOWLIST from the originating
+        # delegation; taking the permission from the commission and the
+        # prohibition from the return packet is the same assignment read from
+        # two different documents, and the looser one won.
+        sources: list[tuple[str, Any]] = [("packet", packet)]
+        origin = self._originating_delegation(request)
+        if origin is not None:
+            sources.append(("originating delegation", origin))
+
         resource = self._canonical_resource(request.resource).replace("::", "/")
         errors = []
-        for entry in prohibited:
-            if not isinstance(entry, str) or not entry.strip():
+        for label, source in sources:
+            prohibited = source.get("prohibited_scope") or []
+            if not isinstance(prohibited, list):
+                errors.append(f"{label} prohibited_scope must be a list")
                 continue
-            normalized = self._canonical_resource(entry.strip()).replace("::", "/")
-            # Prose entries name no resource. `/` or `::` in the original is
-            # what distinguishes "APEX::Roundtable" from "binding commitments".
-            if "/" not in normalized and "::" not in entry:
-                continue
-            if resource == normalized or resource.startswith(f"{normalized}/"):
-                errors.append(
-                    f"packet prohibits {entry!r}, which covers the requested "
-                    f"{request.resource!r}; a delegation cannot authorize what it forbids"
-                )
+            for entry in prohibited:
+                if not isinstance(entry, str) or not entry.strip():
+                    continue
+                normalized = self._canonical_resource(entry.strip()).replace("::", "/")
+                # Prose entries name no resource. `/` or `::` in the original is
+                # what distinguishes "APEX::Roundtable" from "binding commitments".
+                if "/" not in normalized and "::" not in entry:
+                    continue
+                if resource == normalized or resource.startswith(f"{normalized}/"):
+                    errors.append(
+                        f"{label} prohibits {entry!r}, which covers the requested "
+                        f"{request.resource!r}; a delegation cannot authorize what it forbids"
+                    )
         return errors
 
     @staticmethod
