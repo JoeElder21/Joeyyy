@@ -1,0 +1,84 @@
+name: Agent intake
+description: Register and validate a new agent before active use
+title: "[intake] "
+labels: ["agent-intake"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Structured form for `templates/agent-intake.md`. Follow
+        `docs/AGENT_COMMUNITY_PROTOCOL.md`. A new agent is not usable until it is
+        registered in `docs/AGENT_REGISTRY.md` and validated.
+
+  - type: input
+    id: agent-name
+    attributes:
+      label: Agent name
+      description: Native definition name, e.g. `apex_war_architect`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Owning brain
+      description: >
+        APEX and JEOS specialists may not communicate across brains. Only Agent 007
+        is cross-brain.
+      options:
+        - APEX
+        - JEOS
+        - Cross-brain (Agent 007 only)
+    validations:
+      required: true
+
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose and bounded scope
+      description: What this agent does, and explicitly what it does not do.
+    validations:
+      required: true
+
+  - type: input
+    id: write-targets
+    attributes:
+      label: Proposed write targets
+      description: >
+        Canonical brain/target/resource paths. One designated writer per shared
+        resource — name the current writer if one already exists.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Requested lifecycle stage
+      options:
+        - shadow (read-only analysis and proposed writes)
+        - active (requires completed acceptance gates)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Acceptance gates
+      description: Per `docs/SPECIALIST_ACCEPTANCE_TESTS.md`. Shadow entry needs the static gate.
+      options:
+        - label: Static gate — definition parses; `validate_specialist_corps.py` passes
+        - label: Registry entry drafted for `docs/AGENT_REGISTRY.md`
+        - label: Brain isolation verified — no cross-brain route or shared namespace
+        - label: Shadow gate — controlled real mission completed with evidence
+        - label: Connector isolation verified at runtime (`packet_only_no_direct_connectors`)
+        - label: Writer-lease compliance verified; readback recorded where a mutation occurred
+
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback point
+      description: >
+        Required by the change standards in `AGENTS.md`. How this agent is removed
+        and what state that restores.
+    validations:
+      required: true

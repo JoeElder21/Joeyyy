@@ -1,6 +1,5 @@
 from pathlib import Path
 import json
-import re
 import tomllib
 import unittest
 

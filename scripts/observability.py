@@ -28,7 +28,7 @@ from scripts.packet_guard import PacketGuard
 ROOT = Path(__file__).resolve().parents[1]
 
 try:  # degrade cleanly when the runtime stack is not installed
-    from opentelemetry import trace
+    from opentelemetry import trace  # noqa: F401 - availability probe
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (

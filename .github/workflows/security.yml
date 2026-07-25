@@ -1,0 +1,37 @@
+name: Supply-chain and workflow security
+
+# Static analysis of this repository's own CI configuration. CI is the one place
+# in this repository that executes third-party code with repository tokens, so it
+# is the highest-value target of the FakeGit-class threat recorded in
+# docs/FRONTIER_REPO_SCAN_2026-07-24.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so newly published audit rules reach a quiet repository too.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-audit:
+    name: GitHub Actions static analysis (zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Audit workflows
+        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+        with:
+          # This repository has no code-scanning ingestion configured; fail the
+          # job directly rather than uploading SARIF that nothing would read.
+          advanced-security: false
+          persona: regular

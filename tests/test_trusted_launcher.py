@@ -25,8 +25,8 @@ class TrustedLauncherTests(unittest.TestCase):
             key, ledger = self._env(tmp)
             with self.assertRaisesRegex(LaunchDenied, "requires a signed"):
                 authorize("civil3d", None, key, ledger)
-            events = [json.loads(l)["event"]
-                      for l in ledger.path.read_text().splitlines()]
+            events = [json.loads(line)["event"]
+                      for line in ledger.path.read_text().splitlines()]
             self.assertEqual(events, ["launch_denied"])
 
     def test_unregistered_mount_is_denied(self):

@@ -1,0 +1,57 @@
+# Local gates that run before a commit exists, rather than after it is pushed.
+#
+# Install once:  python -m pip install pre-commit && pre-commit install
+# Run manually:  pre-commit run --all-files
+#
+# Every hook here is offline. Nothing in this file transmits repository content
+# to a third party, per docs/PRIVACY_AND_DATA_BOUNDARIES.md.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      # Maintained corpus of provider credential formats. Complements — does not
+      # replace — scripts/privacy_guard.py, which encodes the house-specific
+      # rules (Drive links, personal identifiers, binary artifacts).
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      # ruff-format is deliberately omitted: enabling it would reformat 45 of 54
+      # files. Adopt it as a single mechanical commit if wanted, not as a hook
+      # that rewrites unrelated files during review.
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-json
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: local
+    hooks:
+      # The house gates, run locally. AGENTS.md requires these before every
+      # commit; a hook is the difference between a rule and an enforced rule.
+      - id: privacy-guard
+        name: privacy guard (public-repository boundary)
+        entry: python scripts/privacy_guard.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: validate-specialist-corps
+        name: validate specialist corps contracts
+        entry: python scripts/validate_specialist_corps.py
+        language: system
+        pass_filenames: false
+        always_run: true

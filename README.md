@@ -39,6 +39,11 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `brains/apex/` — APEX-owned roster, namespace, target, route, and memory policy.
 - `brains/jeos/` — JEOS-owned roster, namespace, target, route, and memory policy.
 - `AGENTS.md` — durable activation and repository guidance.
+- `CLAUDE.md` — Claude-runtime guidance; defers to `AGENTS.md` as the single contract.
+- `docs/README.md` — indexed entry point to every documentation record.
+- `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md` — contribution mechanics, threat model and reporting, dated change history.
+- `.pre-commit-config.yaml` — local offline gates (gitleaks, ruff, privacy guard, corps validation) before a commit exists.
+- `docs/REPO_OPTIMIZATION_2026-07-25.md` — repository-engineering review: substrate gaps, evaluation and supply-chain candidates, open decisions.
 - `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
 - `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status.
@@ -100,12 +105,17 @@ Repository validation and the optional AutoGen adapter require Python 3.11 or 3.
 ```bash
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
+python scripts/verify_runtime_stack.py
+python scripts/verify_mcp_mounts.py
+ruff check .
 python -m unittest discover -s tests -v
 ```
 
+`pre-commit install` runs these gates automatically before each commit — see `CONTRIBUTING.md`.
+
 For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. The dependency uses Microsoft's official `autogen-agentchat` distribution and remains pinned to the legacy 0.2 API. This repository does not contain model configuration or connector credentials.
 
-GitHub Actions validates Python 3.11 and 3.12, installs the pinned adapter dependency, and runs the same checks plus a no-model AutoGen lifecycle smoke test on pushes to `main` and pull requests.
+GitHub Actions validates Python 3.11 and 3.12, installs the pinned adapter dependency, and runs the same checks plus a no-model AutoGen lifecycle smoke test on pushes to `main` and pull requests. Separate jobs lint the Python tree and install the APS Node connector, and a scheduled zizmor job audits the workflows themselves. Every action is pinned to a full commit SHA, enforced by `tests/test_repo_hygiene.py` and kept current by Dependabot.
 
 The harness parses the configuration and validates synthetic v2.1 packets and fail-closed boundary probes. It does not invoke named agents, call connectors, complete real missions, or prove output quality.
 

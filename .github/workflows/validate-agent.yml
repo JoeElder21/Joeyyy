@@ -8,18 +8,24 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    name: Contracts and tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install the official AutoGen 0.2 runtime
@@ -29,3 +35,41 @@ jobs:
           python scripts/privacy_guard.py
           python scripts/validate_specialist_corps.py
           python -m unittest discover -s tests -v
+      - name: Verify runtime stack and MCP mounts
+        run: |
+          python scripts/verify_runtime_stack.py
+          python scripts/verify_mcp_mounts.py
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: python -m pip install ruff
+      - name: Lint agent-generated Python
+        run: ruff check --output-format=github .
+
+  connectors:
+    name: APS connector harness (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: connectors/aps/package-lock.json
+      - name: Install pinned connector dependencies
+        working-directory: connectors/aps
+        run: npm ci --ignore-scripts
+      - name: Syntax-check the validation-gate harness
+        working-directory: connectors/aps
+        run: node --check src/gate.mjs

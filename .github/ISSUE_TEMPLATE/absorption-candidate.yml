@@ -1,0 +1,97 @@
+name: Absorption candidate
+description: Propose an external repository, skill, or MCP server for absorption or adoption
+title: "[candidate] "
+labels: ["absorption-candidate"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Intake for the capability-absorption protocol. **Provenance verification is
+        mandatory and comes first.** The FakeGit campaign (July 2026) planted roughly
+        7,600 malicious repositories, 800+ posing as AI skills or MCP servers, and
+        specifically manipulated AI agents into recommending them — see
+        `docs/FRONTIER_REPO_SCAN_2026-07-24.md`.
+
+        Do not clone, install, or execute anything from this candidate until the
+        provenance section below is complete.
+
+  - type: input
+    id: url
+    attributes:
+      label: Canonical repository URL
+      description: >
+        The URL you verified directly — not one copied from an article, a model
+        response, or a package listing.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: provenance
+    attributes:
+      label: Provenance verification (required before any code is read or run)
+      options:
+        - label: Owning org/user confirmed as the canonical author (releases, website cross-link, or package-registry linkage)
+          required: true
+        - label: Repository age and contributor history reviewed; not a fresh or single-burst repository
+          required: true
+        - label: Name checked against typosquats and against any redirect from a predecessor project
+          required: true
+        - label: No code from this repository has been executed
+          required: true
+
+  - type: textarea
+    id: gap
+    attributes:
+      label: Which gap does this close?
+      description: >
+        Cite the specific finding or open decision — e.g. a record in
+        `docs/REPO_OPTIMIZATION_2026-07-25.md`, `docs/ECOSYSTEM_REPO_ANALYSIS.md`, or
+        `docs/FRONTIER_REPO_SCAN_2026-07-24.md`. A candidate with no named gap is a
+        skip by default.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: verification-level
+    attributes:
+      label: Verification level
+      description: House standard from the frontier scan.
+      options:
+        - Verified — repository page read directly this session
+        - Corroborated — consistent across multiple independent secondary sources
+        - Unverified — single-source claim; a lead, not a finding
+    validations:
+      required: true
+
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: Proposed verdict
+      options:
+        - Build / adopt
+        - Conditional — pending named verification
+        - Absorb patterns, do not deploy
+        - Watch list
+        - Skip
+    validations:
+      required: true
+
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Data-boundary impact
+      description: >
+        Does this transmit repository content, roster data, agent configuration, or
+        mission material off-box? Any outbound disclosure is a decision under
+        `docs/PRIVACY_AND_DATA_BOUNDARIES.md`, not a tooling choice. State "none —
+        fully local and offline" if that is the case.
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and cautions
+      description: Maturity, single-author risk, ops burden, credential requirements, attack surface.
+    validations:
+      required: true

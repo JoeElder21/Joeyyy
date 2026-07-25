@@ -1,4 +1,26 @@
 [tool.taskipy.tasks]
-validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python -m unittest discover -s tests -v"
+validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python scripts/verify_mcp_mounts.py && python -m unittest discover -s tests -v"
 test = "python -m unittest discover -s tests -v"
+lint = "ruff check ."
 autogen-preflight = "python scripts/autogen_challenge_pair.py --brain APEX --agents apex_war_architect apex_intelligence_forge --mission-id synthetic-autogen-preflight --evidence-ref synthetic://apex/challenge-input"
+
+# House Python standard for agent-generated code, per the conclusion recorded in
+# docs/ECOSYSTEM_REPO_ANALYSIS.md ("PEP 8 + a linter step in CI").
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["connectors/aps/node_modules"]
+
+[tool.ruff.lint]
+# Deliberately conservative. This set is enforced in CI and the whole tree is
+# clean under it today, so the gate is real rather than aspirational.
+#
+# The broader set ("I", "UP", "B", "C4", "SIM") reports 63 further findings —
+# mostly modernization and test-idiom nits, none of them defects. Adopting it
+# would mean rewriting governance code in the same change that installs the
+# linter. Tighten in a separate, reviewable pass instead.
+select = ["E", "F", "W"]
+ignore = [
+    # Line length is a formatter concern, and ruff-format is not enabled here.
+    "E501",
+]

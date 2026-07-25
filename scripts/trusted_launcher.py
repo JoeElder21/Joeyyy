@@ -158,11 +158,11 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("grant", help="Mint a signed one-time grant (Joe only).")
     g.add_argument("--mount", required=True)
     g.add_argument("--minutes", type=int, default=30)
-    l = sub.add_parser("launch", help="Launch a mount under grant control.")
-    l.add_argument("--mount", required=True)
-    l.add_argument("--grant", type=Path)
-    l.add_argument("--dry-run", action="store_true",
-                   help="Verify authorization without executing.")
+    launch = sub.add_parser("launch", help="Launch a mount under grant control.")
+    launch.add_argument("--mount", required=True)
+    launch.add_argument("--grant", type=Path)
+    launch.add_argument("--dry-run", action="store_true",
+                        help="Verify authorization without executing.")
     args = parser.parse_args(argv)
 
     if args.cmd == "grant":

@@ -1,0 +1,46 @@
+version: 2
+
+# Grouped weekly updates. Grouping keeps PR volume low enough that each one is
+# actually reviewed rather than rubber-stamped, which matters more here than
+# update latency: every dependency in this repository is an absorption surface.
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      python-runtime:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(python)"
+
+  - package-ecosystem: npm
+    directory: /connectors/aps
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      aps-sdk:
+        patterns: ["@aps_sdk/*"]
+      npm-other:
+        patterns: ["*"]
+        exclude-patterns: ["@aps_sdk/*"]
+    commit-message:
+      prefix: "deps(aps)"
+
+  # Workflow actions are SHA-pinned, so this is the mechanism that keeps those
+  # pins current. Without it, pinning trades supply-chain risk for staleness.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(actions)"
