@@ -1,7 +1,7 @@
 """Enforcement for the JOEYYY Global Agent Engineering Constitution adoption.
 
 Guards the section-18 single-canonical-copy rule, the thin runtime adapters,
-and the 2026-07-25 staffing-rule supersession recorded in
+and the 2026-07-25 supersessions recorded in
 docs/CONSTITUTION_ADOPTION_2026-07-25.md.
 """
 
@@ -9,6 +9,7 @@ from pathlib import Path
 import tomllib
 import unittest
 
+from scripts.privacy_guard import gitlink_paths, is_vendored
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENTS_PATH = ROOT / "AGENTS.md"
@@ -42,16 +43,34 @@ SECTION_HEADINGS = [
     "## 20. Completion Contract and Operating Loop",
 ]
 
-# External or generated trees that are not policy surfaces of this repository.
-EXCLUDED_DIRS = {".git", "vendor", "third_party", "node_modules", ".venv", "__pycache__"}
+EXCLUDED_PARTS = {".git", "__pycache__", ".venv", "node_modules"}
 
-SUPERSEDED_STAFFING_PHRASE = "full registered corps"
+SUPERSEDED_STAFFING_PHRASES = ("full registered corps", "smallest useful team")
 CURRENT_STAFFING_PHRASE = "smallest evidence-justified team"
 
+# Surfaces allowed to quote superseded phrases as recorded history.
+SUPERSESSION_TRAIL_FILES = {
+    Path("AGENTS.md"),
+    Path("docs/CONSTITUTION_ADOPTION_2026-07-25.md"),
+}
 
-def markdown_files():
-    for path in sorted(ROOT.rglob("*.md")):
-        if EXCLUDED_DIRS.intersection(part.name for part in path.parents):
+
+def policy_surface_files(suffixes):
+    """First-party tracked policy surfaces; vendored gitlink trees excluded.
+
+    Exclusion is computed on the path relative to ROOT so directory names in
+    the checkout location above the repository cannot silently empty the scan,
+    and vendor content is excluded only when the git index proves it is a
+    gitlink (scripts/privacy_guard.is_vendored), keeping this repository's own
+    files under vendor/ covered.
+    """
+    gitlinks = gitlink_paths(ROOT)
+    for path in sorted(ROOT.rglob("*")):
+        if not path.is_file() or path.suffix not in suffixes:
+            continue
+        if EXCLUDED_PARTS.intersection(path.relative_to(ROOT).parts):
+            continue
+        if is_vendored(path, ROOT, gitlinks):
             continue
         yield path
 
@@ -74,8 +93,10 @@ class ConstitutionCanonicalCopyTests(unittest.TestCase):
                 self.assertEqual(self.agents_text.count(heading), 1)
 
     def test_no_second_copy_anywhere_in_the_repository(self):
+        scanned = []
         carriers = []
-        for path in markdown_files():
+        for path in policy_surface_files({".md"}):
+            scanned.append(path)
             if path == AGENTS_PATH:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
@@ -85,6 +106,9 @@ class ConstitutionCanonicalCopyTests(unittest.TestCase):
             section_hits = sum(heading in text for heading in SECTION_HEADINGS)
             if title_as_heading or section_hits >= 3:
                 carriers.append(str(path.relative_to(ROOT)))
+        # The scan must prove it actually saw the tree, not pass vacuously.
+        self.assertIn(AGENTS_PATH, scanned)
+        self.assertIn(ROOT / "README.md", scanned)
         self.assertEqual(carriers, [])
 
     def test_annex_is_subordinate_to_the_constitution(self):
@@ -107,7 +131,7 @@ class RuntimeAdapterTests(unittest.TestCase):
     def test_adapters_stay_thin(self):
         for path, text in self.adapter_texts():
             with self.subTest(adapter=path.name):
-                self.assertLess(len(text), 4000)
+                self.assertLess(len(text), 2000)
                 for heading in SECTION_HEADINGS:
                     self.assertNotIn(heading, text)
 
@@ -125,13 +149,56 @@ class StaffingRuleSupersessionTests(unittest.TestCase):
 
     def test_codex_contract_matches_current_staffing_rule(self):
         self.assertIn(CURRENT_STAFFING_PHRASE, self.instructions)
-        self.assertNotIn(SUPERSEDED_STAFFING_PHRASE, self.instructions)
+        for phrase in SUPERSEDED_STAFFING_PHRASES:
+            with self.subTest(phrase=phrase):
+                self.assertNotIn(phrase, self.instructions)
+
+    def test_superseded_phrases_do_not_reappear_on_any_policy_surface(self):
+        scanned = []
+        offenders = []
+        for path in policy_surface_files({".md", ".toml"}):
+            scanned.append(path)
+            if path.relative_to(ROOT) in SUPERSESSION_TRAIL_FILES:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for phrase in SUPERSEDED_STAFFING_PHRASES:
+                if phrase in text:
+                    offenders.append(f"{path.relative_to(ROOT)}: {phrase}")
+        self.assertIn(AGENTS_PATH, scanned)
+        self.assertIn(CODEX_CONTRACT_PATH, scanned)
+        self.assertEqual(offenders, [])
 
     def test_adoption_record_preserves_the_supersession_trail(self):
         record = ADOPTION_RECORD_PATH.read_text(encoding="utf-8")
-        self.assertIn(SUPERSEDED_STAFFING_PHRASE, record)
+        for phrase in SUPERSEDED_STAFFING_PHRASES:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, record)
         self.assertIn(CURRENT_STAFFING_PHRASE, record)
         self.assertIn("2026-07-24", record)
+
+
+class ContractCascadeTests(unittest.TestCase):
+    """The constitution's section 5 and 9 rules must hold in the Codex contract."""
+
+    @classmethod
+    def setUpClass(cls):
+        with CODEX_CONTRACT_PATH.open("rb") as source:
+            cls.instructions = tomllib.load(source)["developer_instructions"]
+
+    def test_lare_amendment_cascaded(self):
+        self.assertIn("Apply the current valid LARE amendment", self.instructions)
+        self.assertNotIn(
+            "Preserve the current recorded LARE ownership conflict", self.instructions
+        )
+
+    def test_always_gated_list_cascaded(self):
+        for phrase in (
+            "final permit or agency submission",
+            "scheduled-task creation or deletion",
+            "modification of Separation governance",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.instructions)
 
 
 if __name__ == "__main__":

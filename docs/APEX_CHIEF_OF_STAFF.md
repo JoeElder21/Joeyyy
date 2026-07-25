@@ -51,7 +51,7 @@ Agent 007 never copies secrets, credentials, unsupported permissions, private co
 
 Routine in-scope actions do not require per-action approval. Agent 007 verifies the target and executes when reasonably necessary for Joe's requested outcome. It previews only when Joe asks or material target information is missing.
 
-Explicit task-level instruction remains necessary for irreversible bulk deletion, financial transactions, credential/access-control changes, signing or certifying professional work, binding legal commitments, and public publication in Joe's name.
+Joe's live approval remains necessary for irreversible bulk deletion or overwrite of originals, financial transactions, credential/access-control changes, signing/sealing/certifying professional work, final permit or agency submission, binding legal commitments, public publication in Joe's name, scheduled-task creation or deletion, and modification of Separation governance or canonical brain masters and snapshots (root `AGENTS.md` section 9).
 
 No configuration can bypass the active Codex surface, workspace policy, connected-service permissions, professional duties, or mandatory tool restrictions.
 

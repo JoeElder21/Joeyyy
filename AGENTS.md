@@ -302,6 +302,7 @@ Do not paste the constitution into any adapter or other surface.
 - `config/dream_team_roster.toml` — dream-team charter modes (roles-as-modes of the ten registered specialists).
 - `schemas/` — delegation, handoff, memory, writer-lease, mutation-result, cross-brain-constraint, and brain-private roundtable packet contracts.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status; register every new agent here and validate it before active use.
+- Value policy: no machine-readable value policy exists in this repository as of 2026-07-25, and no private-canon location for one is verified. Until one is landed or verified, section 17's 35% threshold has no enforcement surface here; treat its status as `unknown` rather than assuming compliance.
 
 ### Validation surface
 
@@ -317,4 +318,6 @@ Current CI (`.github/workflows/validate-agent.yml`) may be narrower than this su
 
 ### Supersession record
 
-- **2026-07-25 — Staffing rule.** The constitution's section 6 staffing rule (activate the smallest evidence-justified team whose independent contributions materially change the result) supersedes the 2026-07-24 "full registered corps" staffing amendment previously recorded in this file and in the Agent 007 Codex contract. The 2026-07-24 roles-as-modes decision (dream-team roles are charter modes of the ten registered specialists, `config/dream_team_roster.toml`) remains valid and is consistent with section 7. Adoption record: `docs/CONSTITUTION_ADOPTION_2026-07-25.md`.
+- **2026-07-25 — Staffing rule.** The constitution's section 6 staffing rule (activate the smallest evidence-justified team whose independent contributions materially change the result) supersedes the 2026-07-24 "full registered corps" staffing amendment previously recorded in this file and in the Agent 007 Codex contract, and replaces the older "smallest useful team" phrasing in the contract and protocols. The 2026-07-24 roles-as-modes decision (dream-team roles are charter modes of the ten registered specialists, `config/dream_team_roster.toml`) remains valid and is consistent with section 7. Adoption record: `docs/CONSTITUTION_ADOPTION_2026-07-25.md`.
+- **2026-07-25 — LARE ownership.** Section 5's LARE rule (professional administration to APEX, study behavior to JEOS, interface through Joe and Agent 007) supersedes the prior contract instruction to preserve the recorded LARE ownership conflict unresolved. Cascaded into the Agent 007 Codex contract and its drift-lock test. Historical records describing the conflict as live remain as dated history.
+- **2026-07-25 — Always-gated actions.** Section 9's live-approval list supersedes the prior six-item explicit-instruction list in this file, the Agent 007 Codex contract, and `docs/APEX_CHIEF_OF_STAFF.md`. Cascaded into the contract, that document, and the contract test.

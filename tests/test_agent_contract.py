@@ -51,9 +51,9 @@ class AgentContractTests(unittest.TestCase):
             "Unknown ownership means investigate and flag",
         ])
 
-    def test_lare_conflict_is_preserved(self):
-        self.assertIn("Preserve the current recorded LARE ownership conflict", self.instructions)
-        self.assertIn("do not silently choose or merge", self.instructions)
+    def test_lare_amendment_is_applied(self):
+        self.assertIn("Apply the current valid LARE amendment", self.instructions)
+        self.assertIn("record supersession", self.instructions)
 
     def test_delegated_authority_covers_requested_actions(self):
         # Agent 007 is the sole write-capable native agent; specialists stay
@@ -68,6 +68,9 @@ class AgentContractTests(unittest.TestCase):
             "edit authorized external systems",
             "commit, and push code",
             "Do not ask Joe for per-action approval",
+            "final permit or agency submission",
+            "scheduled-task creation or deletion",
+            "modification of Separation governance",
         ])
 
     def test_agent_community_contract(self):
