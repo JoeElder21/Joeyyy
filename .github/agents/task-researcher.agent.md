@@ -12,7 +12,13 @@ name: "Task Researcher Instructions"
 # path restriction: an injection-influenced call could otherwise mutate
 # source or run shell commands. See .github/AWESOME-COPILOT.md.
 user-invocable: false
-tools: ["read", "changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
+# Local override (not upstream): `edit/editFiles` removed. It is general
+# workspace file editing, and this agent's body claims it writes only under
+# .copilot-tracking/research/ -- but prompt text is not an enforcement boundary. Processing
+# adversarial repository content or fetched documentation could otherwise
+# mutate source or configuration well outside its editor-plane role. Its
+# outputs are handed back for Agent 007 to write. See .github/AWESOME-COPILOT.md.
+tools: ["read", "changes", "search/codebase", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 
 # Task Researcher Instructions
