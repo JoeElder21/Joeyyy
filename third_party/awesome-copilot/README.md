@@ -11,11 +11,18 @@ linked externally.
 
 ## What is covered
 
+Only the files **named in the manifest** are vendored from upstream. These
+directories are not exclusively upstream: `.github/agents/` also holds
+repository-authored agents (for example `dotnet-self-learning-architect` and
+`market-operator`), which were never in `github/awesome-copilot` and carry no
+upstream provenance or licence obligation. Treating the whole directory as
+vendored would send a drift check or a licence review at first-party work.
+
 | Location | Contents |
 |---|---|
-| `.github/instructions/` | Vendored instruction files |
-| `.github/agents/` | Vendored custom agents |
-| `.github/skills/` | Vendored discovery skills |
+| `.github/instructions/` | Instruction files listed in the manifest |
+| `.github/agents/` | Custom agents listed in the manifest — **not** every file here |
+| `.github/skills/` | Discovery skills listed in the manifest |
 
 `.github/AWESOME-COPILOT.md` is the manifest: per-file rationale, the pinned
 commit, local overrides, and how to refresh. `docs/AGENT_REGISTRY.md` records the

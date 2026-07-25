@@ -48,6 +48,15 @@ agents: no brain ownership, no memory namespace, no write target, no writer leas
 | `task-planner.agent.md` | Produces implementation plans destined for `.copilot-tracking/`. **Local override:** execution and file-editing tools removed, `agent` added, workflow rewritten to return artifacts. | candidate |
 | `task-researcher.agent.md` | Research pass the planner mandates before planning. **Local override:** execution and file-editing tools removed, workflow rewritten to return artifacts. | candidate |
 
+**`agent-safety` local override.** Upstream lists "send email" among the actions always
+requiring human-in-the-loop approval. This file applies to `**`, so that arrived as a
+standing rule contradicting `AGENTS.md`, which grants Agent 007 delegated authority to send
+communications and explicitly forbids requesting per-action approval for routine in-scope
+work. A vendored, always-applied instruction must not quietly narrow the contract it sits
+under — the contract is the authority, and the guidance is restated to point at its own
+enumerated boundaries (irreversible, externally visible, financially committing, or
+out-of-scope) rather than inventing a second checkpoint.
+
 **`prompt-engineer` local override.** Upstream omits `tools`, which per
 `.github/instructions/agents.instructions.md` grants *every* built-in and MCP tool. This
 agent processes arbitrary user-supplied text, so all-tools access would let prompt
