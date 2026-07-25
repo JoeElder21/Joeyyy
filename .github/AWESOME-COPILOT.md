@@ -5,7 +5,10 @@ a community collection of GitHub Copilot agents, instructions, and skills.
 
 - **Source:** `https://github.com/github/awesome-copilot`
 - **Pinned at commit:** `aa280f28b1b73f9b6e6917b607eb92127b67b419`
-- **Upstream license:** MIT (see the upstream `LICENSE`)
+- **Upstream license:** MIT — text vendored at `third_party/awesome-copilot/LICENSE`
+  with a provenance note beside it. MIT requires the copyright and permission
+  notice to accompany substantial portions, and this repository has no `LICENSE`
+  of its own to carry it, so an external link was not sufficient.
 
 Files are copied in verbatim (except where a **local override** is noted below) so Copilot picks
 them up from the standard locations. The vendored files themselves are editor-side authoring aids
@@ -41,9 +44,9 @@ agents: no brain ownership, no memory namespace, no write target, no writer leas
 
 | File | What it does | Status |
 | --- | --- | --- |
-| `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. Carries a **local override**: `tools: []`. | active |
-| `task-planner.agent.md` | Produces implementation plans into `.copilot-tracking/`. | candidate |
-| `task-researcher.agent.md` | Research pass the planner mandates before planning. | candidate |
+| `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. **Local override:** `tools: []`. | active |
+| `task-planner.agent.md` | Produces implementation plans into `.copilot-tracking/`. **Local override:** execution tools removed, `agent` added. | candidate |
+| `task-researcher.agent.md` | Research pass the planner mandates before planning. **Local override:** execution tools removed. | candidate |
 
 **`prompt-engineer` local override.** Upstream omits `tools`, which per
 `.github/instructions/agents.instructions.md` grants *every* built-in and MCP tool. This
@@ -62,6 +65,16 @@ standard, unrecognized tool names are silently ignored, so in a normal collabora
 session the planner runs *without* those capabilities. Registering the Terraform and Azure
 mounts gave Agent 007 that tooling; it did not give this agent it. Wiring Copilot-side MCP
 is an open decision recorded in `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`.
+
+**Planner local overrides.** Both planner agents shipped with `runCommands`, terminal
+access, `runTests`, `runNotebooks`, `extensions`, `vscodeAPI`, `new` and
+`openSimpleBrowser`. Neither implements anything — they write plans under
+`.copilot-tracking/` — and prompt text is not a path restriction, so an
+injection-influenced call could have mutated source or run shell commands. Those tools are
+removed from both. `task-planner` additionally *gains* `agent`, which upstream omitted:
+per `.github/instructions/agents.instructions.md`, sub-agent invocation requires that tool,
+and a `#file` reference invokes nothing — so without it the planner blocked before
+producing any plan.
 
 `task-researcher` is vendored because `task-planner` mandatorily invokes it before any
 planning; without it the planner blocks on a missing dependency on every new task.
@@ -83,6 +96,15 @@ instead of hand-copying files:
 
 Each compares what is already in this repo against upstream, flags drift, and suggests additions.
 They need a `#fetch`-capable tool to reach raw.githubusercontent.com.
+
+**Local override — intake preamble.** All three carry a preamble stating that this
+repository's intake gates apply and take precedence over the upstream text below them. The
+upstream instructions tell the reader to download, replace or install immediately and forbid
+local adjustment, which would make the discovery path an unchecked route for vendoring
+untrusted content — including bundled executable assets — into a public tree. The preamble
+requires full-file review, a privacy-guard run, preservation of recorded local overrides, a
+test update and full gate, and a rollback record, and requires an install to be reported
+incomplete if any step could not be run.
 
 ## Selection report
 

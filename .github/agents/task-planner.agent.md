@@ -6,8 +6,12 @@ name: "Task Planner Instructions"
 # so runCommands, terminal access, runTests, runNotebooks, extensions,
 # vscodeAPI, new and openSimpleBrowser are not needed. Prompt text is not a
 # path restriction: an injection-influenced call could otherwise mutate
-# source or run shell commands. See .github/AWESOME-COPILOT.md.
-tools: ["changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
+# source or run shell commands. `agent` IS included: this agent orchestrates
+# task-researcher, and per agents.instructions.md sub-agent invocation requires
+# the `agent` tool -- a #file reference does not invoke anything, so without it
+# the planner blocks before producing any plan.
+# See .github/AWESOME-COPILOT.md.
+tools: ["agent", "changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 
 # Task Planner Instructions
