@@ -79,13 +79,60 @@ PATTERNS = {
 HIGH_CONFIDENCE_PATTERNS = frozenset(
     {"secret token", "private key", "cloud access key", "bearer credential"}
 )
-# Contact and location heuristics. Vendored documentation is built on RFC 2606
-# reserved example domains and sample postal addresses, so these fire only as false
-# positives there. They are relaxed for those paths alone; first-party source is still
-# held to every pattern.
-CONTACT_HEURISTIC_PATTERNS = frozenset(
-    {"email address", "phone number", "street address"}
+# Contact heuristics re-checked by value in vendored paths. Phone numbers are NOT in
+# this set: nothing in the vendored tree matches that pattern, so it stays armed
+# everywhere at no cost. Address and email matches are re-examined individually by
+# vendored_contact_findings rather than waived wholesale - a path-wide skip would
+# suppress a real employee address or postal address committed to this public repo.
+CONTACT_HEURISTIC_PATTERNS = frozenset({"email address", "street address"})
+# RFC 2606 / RFC 6761 names reserved so they can never route to a real mailbox.
+RESERVED_EMAIL_DOMAINS = frozenset(
+    {
+        "example.com",
+        "example.net",
+        "example.org",
+        "example.edu",
+        "example",
+        "test",
+        "invalid",
+        "localhost",
+        "local",
+        "domain.com",
+        "email.com",
+        "mail.com",
+        "yourcompany.com",
+        "acme.com",
+    }
 )
+RESERVED_EMAIL_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
+# Street names used as documentation fixtures rather than real locations.
+FIXTURE_STREET_NAMES = frozenset(
+    {"main", "oak", "elm", "test", "example", "sample", "fake", "any", "first", "second"}
+)
+EMAIL_MATCH = PATTERNS["email address"]
+STREET_MATCH = PATTERNS["street address"]
+
+
+def _email_is_reserved(address: str) -> bool:
+    domain = address.rsplit("@", 1)[-1].lower()
+    return domain in RESERVED_EMAIL_DOMAINS or domain.endswith(RESERVED_EMAIL_SUFFIXES)
+
+
+def _street_is_fixture(address: str) -> bool:
+    words = [word.strip(".,").lower() for word in address.split()]
+    return any(word in FIXTURE_STREET_NAMES for word in words[1:])
+
+
+def vendored_contact_findings(text: str) -> list[str]:
+    """Contact matches in vendored docs that are not recognized reserved examples."""
+    labels = []
+    for match in EMAIL_MATCH.finditer(text):
+        if not _email_is_reserved(match.group(0)):
+            labels.append("email address")
+    for match in STREET_MATCH.finditer(text):
+        if not _street_is_fixture(match.group(0)):
+            labels.append("street address")
+    return labels
 DOCUMENTATION_ONLY_PREFIXES = (Path(".claude/agents/awesome-claude-agents"),)
 # Credential assignments in vendored docs are checked by value rather than waived by
 # path, so a real secret committed under a vendored prefix is still caught. Only a
@@ -105,11 +152,17 @@ VENDORED_CREDENTIAL_BARE = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*([^\s#\"']{8,})"
 )
-# An unquoted right-hand side is only credential-shaped when it is one opaque run of
-# word characters. Anything holding a dot, bracket, paren, comma, or slash is code -
-# an attribute lookup, a call, a subscript, a type annotation - and has no value to
-# leak, which is what every unquoted match in the vendored samples turns out to be.
-OPAQUE_LITERAL = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]{7,}\Z")
+# Deciding which unquoted values are code, rather than which are secrets. An allowlist
+# of "safe" secret characters fails open: base64 and URL-safe keys carry +, /, = and .,
+# so requiring word characters alone silently waived them. Detect the expression forms
+# instead - a call, a subscript, an attribute lookup, a trailing separator - and treat
+# everything else as a candidate credential.
+CODE_EXPRESSION = re.compile(
+    r"[()\[\]{}]"          # call, subscript, literal, or f-string braces
+    r"|\.[A-Za-z_]"        # attribute lookup: obj.attr
+    r"|::|->|=>"           # scope / lambda / arrow operators
+    r"|[,;]\s*\Z"          # trailing separator left by the surrounding code
+)
 # Complete placeholder forms. These must match the WHOLE literal, never a substring:
 # a substring test would waive a live credential that merely happens to contain a
 # common word, so a real secret would silently pass here.
@@ -187,7 +240,7 @@ def vendored_credential_findings(text: str) -> list[str]:
             labels.append("credential assignment")
     for match in VENDORED_CREDENTIAL_BARE.finditer(text):
         value = match.group(1)
-        if OPAQUE_LITERAL.match(value) and not is_placeholder_value(value):
+        if not CODE_EXPRESSION.search(value) and not is_placeholder_value(value):
             labels.append("credential assignment")
     return labels
 
@@ -245,6 +298,8 @@ def scan_repository(root: Path = ROOT) -> list[str]:
                 findings.append(f"{relative}: possible {label}")
         if is_vendored_documentation(relative):
             for label in vendored_credential_findings(text):
+                findings.append(f"{relative}: possible {label}")
+            for label in vendored_contact_findings(text):
                 findings.append(f"{relative}: possible {label}")
     return findings
 

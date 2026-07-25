@@ -16,11 +16,57 @@ DOCUMENTATION_ONLY_PREFIXES = (Path(".claude/agents/awesome-claude-agents"),)
 # Contact and location heuristics only. Credential assignment is NOT waived by path:
 # it is re-checked by value below, so a real secret under a vendored prefix still
 # fails. Keep that distinction when editing.
+# Phone is deliberately absent: it stays armed everywhere. Email and street matches
+# are re-checked by value below rather than waived by path.
 CONTACT_HEURISTIC_CHECKS = {
     "email address",
-    "phone number",
     "street address",
 }
+RESERVED_EMAIL_DOMAINS = {
+    "example.com",
+    "example.net",
+    "example.org",
+    "example.edu",
+    "example",
+    "test",
+    "invalid",
+    "localhost",
+    "local",
+    "domain.com",
+    "email.com",
+    "mail.com",
+    "yourcompany.com",
+    "acme.com",
+}
+RESERVED_EMAIL_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
+FIXTURE_STREET_NAMES = {
+    "main",
+    "oak",
+    "elm",
+    "test",
+    "example",
+    "sample",
+    "fake",
+    "any",
+    "first",
+    "second",
+}
+
+
+def unreserved_contacts(text: str, prohibited: dict) -> list[str]:
+    """Email and street matches that are not recognized reserved examples."""
+    found = []
+    for match in prohibited["email address"].finditer(text):
+        domain = match.group(0).rsplit("@", 1)[-1].lower()
+        if domain not in RESERVED_EMAIL_DOMAINS and not domain.endswith(
+            RESERVED_EMAIL_SUFFIXES
+        ):
+            found.append(match.group(0))
+    for match in prohibited["street address"].finditer(text):
+        words = [w.strip(".,").lower() for w in match.group(0).split()]
+        if not any(w in FIXTURE_STREET_NAMES for w in words[1:]):
+            found.append(match.group(0))
+    return found
 # Complete placeholder forms, matched against the WHOLE literal. A substring test
 # would waive any live credential containing a common word; keep these anchored.
 PLACEHOLDER_VALUE_PATTERNS = (
@@ -51,7 +97,9 @@ CREDENTIAL_BARE = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*([^\s#\"']{8,})"
 )
-OPAQUE_LITERAL = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]{7,}\Z")
+# Detect code expressions rather than allowlisting secret characters: base64 and
+# URL-safe keys contain +, /, = and ., so a word-character allowlist fails open.
+CODE_EXPRESSION = re.compile(r"[()\[\]{}]|\.[A-Za-z_]|::|->|=>|[,;]\s*\Z")
 
 
 def is_vendored_documentation(relative: Path) -> bool:
@@ -75,7 +123,7 @@ def non_placeholder_credentials(text: str) -> list[str]:
     found += [
         m.group(1)
         for m in CREDENTIAL_BARE.finditer(text)
-        if OPAQUE_LITERAL.match(m.group(1)) and not _is_filler(m.group(1))
+        if not CODE_EXPRESSION.search(m.group(1)) and not _is_filler(m.group(1))
     ]
     return found
 
@@ -111,6 +159,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for label, pattern in prohibited.items():
                 if vendored and label in CONTACT_HEURISTIC_CHECKS:
+                    # Not waived — only RFC-reserved examples and fixture addresses
+                    # are tolerated, so real contact data still fails.
+                    with self.subTest(path=relative, check="vendored contact value"):
+                        self.assertEqual(unreserved_contacts(text, prohibited), [])
                     continue
                 if vendored and label == "generic credential assignment":
                     # Not waived — re-checked by value, so live secrets still fail.
@@ -161,6 +213,9 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 # Begins with a dummy word but carries a live-looking tail.
                 "testing-servers-real-key-771",
                 "Example-Corp-LIVE-KEY-88213",
+                # Base64 / URL-safe shapes: punctuation must not buy an exemption.
+                "QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+                "ab+cd/ef1234567890=",
                 # Split so this file stays clean under the guard's own token pattern.
                 "sk" + "_test_but_actually_live-9931-REALKEY",
             ]
@@ -181,6 +236,34 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                         f"{form} {value!r} was not reported: {findings}",
                     )
                     leak.unlink()
+
+            # Real contact data under the vendored prefix must still be reported;
+            # the exemption covers reserved examples only, not the path.
+            for index, contact in enumerate(
+                [
+                    "Contact " + "employee@" + "realcompany.com",
+                    "Reach " + "j.doe@" + "clientfirm.co.uk",
+                    "Office at 3300 Lakeside" + " Drive",
+                ]
+            ):
+                doc = vendored / f"contact{index}.md"
+                doc.write_text(contact + "\n", encoding="utf-8")
+                findings = scan_repository(root)
+                self.assertTrue(findings, f"{contact!r} was not reported")
+                doc.unlink()
+
+            # Reserved examples and fixture addresses stay quiet.
+            for benign in [
+                "Contact " + "test@" + "example.com",
+                "Write to " + "admin@" + "example.org",
+                "123 Main" + " St",
+                "456 Oak" + " Ave",
+            ]:
+                doc = vendored / "benign.md"
+                doc.write_text(benign + "\n", encoding="utf-8")
+                findings = scan_repository(root)
+                self.assertEqual(findings, [], f"{benign!r} is a reserved example")
+                doc.unlink()
 
             # Unquoted expressions are code, not secrets, and must stay quiet.
             for expression in [
