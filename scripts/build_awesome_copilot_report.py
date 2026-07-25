@@ -12,6 +12,7 @@ Output: docs/reports/AWESOME_COPILOT_SELECTION_REPORT.pdf (gitignored).
 
 import re
 import subprocess
+from xml.sax.saxutils import escape
 import sys
 from pathlib import Path
 
@@ -35,6 +36,17 @@ ACCENT = colors.HexColor("#1F4E79")
 BAND = colors.HexColor("#EEF1F6")
 KEEP = colors.HexColor("#1B6B4A")
 DROP = colors.HexColor("#8A5A00")
+
+def count_tracked(pattern: str) -> int:
+    """Count tracked files matching a git pathspec, at build time."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-files", pattern], cwd=root,
+                             capture_output=True, text=True, check=False)
+    except OSError:
+        return -1
+    return len([line for line in out.stdout.splitlines() if line.strip()])
+
 
 def count_installed(pattern: str) -> int:
     """Count what is actually vendored, so the inventory cannot drift from the
@@ -60,21 +72,24 @@ def run_gate(script: str) -> str:
     except (OSError, subprocess.TimeoutExpired) as error:
         return f"not measured at build time ({type(error).__name__})"
 
+    # Paragraph() parses its input as XML-ish markup, so a finding naming a real
+    # file such as docs/R&D<draft>.pdf would raise a parse error and destroy the
+    # very PDF meant to record the failure. Escape anything derived from output.
     if completed.returncode != 0:
         first = next(
             (line.strip() for line in
              (completed.stdout + completed.stderr).splitlines() if line.strip()),
             "no output",
         )
-        return f"FAILED (exit {completed.returncode}) — {first[:110]}"
+        return escape(f"FAILED (exit {completed.returncode}) — {first[:110]}")
 
     output = completed.stdout.strip()
     if '"valid": true' in output:
         checked = re.search(r'"(\w+_checked)":\s*(\d+)', output)
         detail = (f" — {checked.group(2)} {checked.group(1).replace('_', ' ')}"
                   if checked else "")
-        return f'passed, "valid": true{detail}'
-    return f"passed — {output.splitlines()[-1][:90]}" if output else "passed"
+        return escape(f'passed, "valid": true{detail}')
+    return escape(f"passed — {output.splitlines()[-1][:90]}") if output else "passed"
 
 
 def measure_test_suite() -> str:
@@ -101,11 +116,46 @@ def measure_test_suite() -> str:
     count = ran.group(1)
     if completed.returncode != 0:
         failures = re.search(r"(FAILED \([^)]*\))", output)
-        return f"{count} tests, {failures.group(1) if failures else 'FAILED'}"
+        return escape(f"{count} tests, {failures.group(1) if failures else 'FAILED'}")
     skipped = re.search(r"skipped=(\d+)", output)
     tail = f" ({skipped.group(1)} skipped)" if skipped else ""
     return f"{count} tests, OK{tail}"
 
+
+def count_tracked_at(ref: str, pattern: str) -> int:
+    """Count matching tracked files at a git ref, for honest before/after deltas."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
+                             cwd=root, capture_output=True, text=True, check=False)
+    except OSError:
+        return -1
+    if out.returncode != 0:
+        return -1
+    suffix = pattern.lstrip("*")
+    return len([l for l in out.stdout.splitlines() if l.endswith(suffix)])
+
+
+def _branch_point() -> str:
+    """The commit this branch left main at, so 'added' is a real delta rather
+    than a hand-maintained glob list -- which is the drift this report keeps
+    being corrected for."""
+    root = Path(__file__).resolve().parents[1]
+    for base in ("origin/main", "main"):
+        try:
+            out = subprocess.run(["git", "merge-base", "HEAD", base], cwd=root,
+                                 capture_output=True, text=True, check=False)
+        except OSError:
+            return ""
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    return ""
+
+
+MARKDOWN_NOW = count_tracked("*.md")
+_BASE = _branch_point()
+_MD_BEFORE = count_tracked_at(_BASE, "*.md") if _BASE else -1
+MARKDOWN_ADDED = (MARKDOWN_NOW - _MD_BEFORE) if _MD_BEFORE >= 0 else -1
 
 ADOPTED_TOTAL = (
     count_installed("instructions/*.instructions.md")
@@ -248,7 +298,7 @@ prof = [hdr("Signal", "Measured", "Consequence for selection")]
 for sig, val, why in [
     ("Python source", "54 files",
      "Language-level standards are relevant; web-framework sets are not."),
-    ("Markdown", "46 files",
+    ("Markdown", f"{MARKDOWN_NOW} files",
      "Contracts, plans, registries, runbooks. Markdown discipline matters "
      "more here than in a typical code repo."),
     ("GitHub Actions", "1 workflow",
@@ -270,10 +320,20 @@ for sig, val, why in [
 
 story.append(tbl(prof, [1.35 * inch, 1.0 * inch, 4.35 * inch]))
 story.append(Spacer(1, 5))
+_md_delta = (
+    f"This branch adds {MARKDOWN_ADDED} markdown files, so the tree now carries "
+    f"{MARKDOWN_NOW}."
+    if MARKDOWN_ADDED >= 0 else
+    f"The tree now carries {MARKDOWN_NOW} markdown files; the delta against the "
+    "branch point could not be computed here."
+)
 story.append(Paragraph(
-    "The markdown figure is the <b>pre-install</b> count and is the number the "
-    "decision was made against. The install itself added 14 markdown files, so "
-    "the tree now carries 60.", NOTE))
+    "The markdown row above is measured at generation time, as is the delta: "
+    + _md_delta
+    + " Both come from the tracked tree and the branch point, not from figures "
+      "recorded by hand — an earlier version stated 46 and 60 and was wrong "
+      "about both.",
+    NOTE))
 
 story.append(PageBreak())
 

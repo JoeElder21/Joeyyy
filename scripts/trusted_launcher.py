@@ -74,7 +74,7 @@ def _sign(key: bytes, payload: dict) -> str:
 def issue_grant(
     mount: str, minutes: int, key_path: Path = DEFAULT_KEY_PATH,
     out_dir: Path | None = None, now: float | None = None,
-    agent: str | None = None,
+    agent: str | None = None, ledger: AuditLedger | None = None,
 ) -> Path:
     """Create a signed, single-use grant file for one mount and one identity.
 
@@ -84,19 +84,31 @@ def issue_grant(
     version read the identity from a CLI flag at launch time, which any caller
     holding a valid grant could set to anything.
     """
+    ledger = ledger or AuditLedger(DEFAULT_LEDGER)
     mounts = _load_mounts()
+
+    def refuse(reason: str) -> LaunchDenied:
+        # The module promises that every denial is recorded. Grant-time refusals
+        # are the ones worth keeping most: an attempt to mint authority for a
+        # shadow specialist is exactly the event an audit should surface.
+        detail = {"mount": mount, "reason": reason}
+        if agent is not None:
+            detail["agent"] = agent
+        ledger.append("grant_denied", detail)
+        return LaunchDenied(reason)
+
     if mount not in mounts:
-        raise LaunchDenied(f"unknown mount {mount!r}")
+        raise refuse(f"unknown mount {mount!r}")
 
     allowed = mounts[mount].get("agents", [])
     if "*" not in allowed:
         if agent is None:
-            raise LaunchDenied(
+            raise refuse(
                 f"mount {mount!r} is agent-scoped; --agent is required when "
                 f"minting the grant (allowed: {', '.join(allowed) or 'none'})"
             )
         if agent not in allowed:
-            raise LaunchDenied(
+            raise refuse(
                 f"agent {agent!r} is not on {mount!r}'s allowlist "
                 f"({', '.join(allowed) or 'none'})"
             )

@@ -42,6 +42,28 @@ class TrustedLauncherTests(unittest.TestCase):
                                     agent=identity)
                     self.assertIn("is not on", str(caught.exception))
 
+    def test_grant_time_denials_reach_the_ledger(self):
+        """The module promises every denial is recorded. Grant-time refusals were
+        raised directly, so an attempt to mint authority for a shadow specialist
+        left no hash-chained evidence -- the very event an audit should surface."""
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            with self.assertRaises(LaunchDenied):
+                issue_grant("terraform", 30, key_path=key,
+                            out_dir=Path(tmp) / "grants",
+                            agent="apex_systems_blacksmith", ledger=ledger)
+            entries = [
+                json.loads(line)
+                for line in ledger.path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            denials = [e for e in entries if e["event"] == "grant_denied"]
+            self.assertTrue(denials, entries)
+            self.assertEqual(denials[-1]["detail"]["agent"],
+                             "apex_systems_blacksmith")
+            self.assertEqual(denials[-1]["detail"]["mount"], "terraform")
+            self.assertEqual(ledger.verify(), [])
+
     def test_caller_cannot_claim_an_identity_it_was_not_granted(self):
         """The whole point of signing the identity. An earlier version read it
         from a CLI flag, so any holder of a valid grant could assert Agent 007."""

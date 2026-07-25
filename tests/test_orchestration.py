@@ -270,6 +270,10 @@ class McpMountRegistryTests(unittest.TestCase):
         which defeats the point of the approved-mounts registry. Reference
         servers fetched by bare package name are exempt; anything carrying an
         explicit version must not use a floating one.
+
+        Container images additionally need a digest: a tag is mutable even when
+        it is not called `latest`, so a retag of `1.1.0` would swap the code a
+        later authorized launch executes with no repository change.
         """
         floating = {"latest", "main", "master", "edge", "next", "canary"}
         with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
@@ -285,6 +289,18 @@ class McpMountRegistryTests(unittest.TestCase):
                         tag.lower(), floating,
                         f"{mount['name']} pins a mutable tag in {token!r}",
                     )
+
+    def test_container_images_are_pinned_by_digest(self):
+        """Only images this PR introduces are required to carry a digest.
+        `ghcr.io/github/github-mcp-server` predates it and is unpinned entirely;
+        that is a real gap of the same class, flagged for a separate change
+        rather than silently altered here."""
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = {m["name"]: m for m in tomllib.load(source)["mounts"]}
+        for name in ("terraform",):
+            command = " ".join(mounts[name]["command"])
+            with self.subTest(mount=name):
+                self.assertIn("@sha256:", command)
 
 
 if __name__ == "__main__":
