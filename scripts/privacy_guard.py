@@ -79,31 +79,73 @@ PATTERNS = {
 HIGH_CONFIDENCE_PATTERNS = frozenset(
     {"secret token", "private key", "cloud access key", "bearer credential"}
 )
-# Vendored third-party documentation. These trees are prose and code samples built on
-# RFC 2606 reserved example domains, dummy password literals, and sample postal
-# addresses, so the remaining heuristic patterns produce only false positives here.
-# They are exempted for these paths alone; first-party source is still held to every
-# pattern, including the heuristic ones.
+# Contact and location heuristics. Vendored documentation is built on RFC 2606
+# reserved example domains and sample postal addresses, so these fire only as false
+# positives there. They are relaxed for those paths alone; first-party source is still
+# held to every pattern.
+CONTACT_HEURISTIC_PATTERNS = frozenset(
+    {"email address", "phone number", "street address"}
+)
 DOCUMENTATION_ONLY_PREFIXES = (Path(".claude/agents/awesome-claude-agents"),)
+# Credential assignments in vendored docs are checked by value rather than waived by
+# path, so a real secret committed under a vendored prefix is still caught. Only a
+# quoted literal counts: in these samples an unquoted right-hand side is always an
+# expression rather than a secret — a request-header lookup, a Terraform variable
+# reference, or a type annotation — and carries no literal value to leak.
+VENDORED_CREDENTIAL_LITERAL = re.compile(
+    r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
+    r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
+    r"\s*[:=]\s*[\"']([^\"']{8,})[\"']"
+)
+# Substrings that mark a literal as documentation filler rather than a live secret.
+PLACEHOLDER_MARKERS = (
+    "example",
+    "test",
+    "placeholder",
+    "changeme",
+    "change-me",
+    "your",
+    "dummy",
+    "fake",
+    "sample",
+    "redacted",
+    "xxx",
+    "password",
+    "secret",
+)
 
 
-def applicable_patterns(relative: Path) -> dict[str, re.Pattern[str]]:
-    """Return the patterns enforced for ``relative``.
-
-    Vendored documentation is checked against the high-confidence credential
-    patterns only; everything else is checked against the full set.
-    """
-    vendored = any(
+def is_vendored_documentation(relative: Path) -> bool:
+    return any(
         prefix == relative or prefix in relative.parents
         for prefix in DOCUMENTATION_ONLY_PREFIXES
     )
-    if not vendored:
+
+
+def applicable_patterns(relative: Path) -> dict[str, re.Pattern[str]]:
+    """Return the patterns enforced wholesale for ``relative``.
+
+    Vendored documentation drops the contact heuristics and the blanket
+    credential-assignment pattern; the latter is replaced by the stricter,
+    value-aware :func:`vendored_credential_findings` rather than dropped outright.
+    """
+    if not is_vendored_documentation(relative):
         return PATTERNS
     return {
         label: pattern
         for label, pattern in PATTERNS.items()
-        if label in HIGH_CONFIDENCE_PATTERNS
+        if label not in CONTACT_HEURISTIC_PATTERNS and label != "credential assignment"
     }
+
+
+def vendored_credential_findings(text: str) -> list[str]:
+    """Credential literals in vendored docs that are not recognized placeholders."""
+    labels = []
+    for match in VENDORED_CREDENTIAL_LITERAL.finditer(text):
+        value = match.group(1).lower()
+        if not any(marker in value for marker in PLACEHOLDER_MARKERS):
+            labels.append("credential assignment")
+    return labels
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:
@@ -156,6 +198,9 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(text):
+                findings.append(f"{relative}: possible {label}")
+        if is_vendored_documentation(relative):
+            for label in vendored_credential_findings(text):
                 findings.append(f"{relative}: possible {label}")
     return findings
 

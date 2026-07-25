@@ -13,12 +13,34 @@ ROOT = Path(__file__).resolve().parents[1]
 # skipped for these paths; credential-shaped patterns stay armed everywhere and are
 # asserted by test_vendored_documentation_exemption_is_narrow.
 DOCUMENTATION_ONLY_PREFIXES = (Path(".claude/agents/awesome-claude-agents"),)
-HEURISTIC_CHECKS = {
-    "generic credential assignment",
+# Contact and location heuristics only. Credential assignment is NOT waived by path:
+# it is re-checked by value below, so a real secret under a vendored prefix still
+# fails. Keep that distinction when editing.
+CONTACT_HEURISTIC_CHECKS = {
     "email address",
     "phone number",
     "street address",
 }
+PLACEHOLDER_MARKERS = (
+    "example",
+    "test",
+    "placeholder",
+    "changeme",
+    "change-me",
+    "your",
+    "dummy",
+    "fake",
+    "sample",
+    "redacted",
+    "xxx",
+    "password",
+    "secret",
+)
+CREDENTIAL_LITERAL = re.compile(
+    r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
+    r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
+    r"\s*[:=]\s*[\"']([^\"']{8,})[\"']"
+)
 
 
 def is_vendored_documentation(relative: Path) -> bool:
@@ -26,6 +48,14 @@ def is_vendored_documentation(relative: Path) -> bool:
         prefix == relative or prefix in relative.parents
         for prefix in DOCUMENTATION_ONLY_PREFIXES
     )
+
+
+def non_placeholder_credentials(text: str) -> list[str]:
+    return [
+        match.group(1)
+        for match in CREDENTIAL_LITERAL.finditer(text)
+        if not any(marker in match.group(1).lower() for marker in PLACEHOLDER_MARKERS)
+    ]
 
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
@@ -58,7 +88,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             vendored = is_vendored_documentation(relative)
             text = path.read_text(encoding="utf-8")
             for label, pattern in prohibited.items():
-                if vendored and label in HEURISTIC_CHECKS:
+                if vendored and label in CONTACT_HEURISTIC_CHECKS:
+                    continue
+                if vendored and label == "generic credential assignment":
+                    # Not waived — re-checked by value, so live secrets still fail.
+                    with self.subTest(path=relative, check="vendored credential value"):
+                        self.assertEqual(non_placeholder_credentials(text), [])
                     continue
                 with self.subTest(path=relative, check=label):
                     self.assertIsNone(pattern.search(text))
@@ -82,12 +117,23 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             findings = scan_repository(root)
             self.assertEqual(findings, [], findings)
 
-            # A real credential in the same tree must still be caught.
+            # A provider-specific token in the same tree must still be caught.
             token = "gh" + "o_" + ("A" * 24)
             (vendored / "leak.md").write_text(token + "\n", encoding="utf-8")
             findings = scan_repository(root)
+            self.assertTrue(
+                any("leak.md" in f and "secret token" in f for f in findings), findings
+            )
+
+            # A provider-agnostic credential must also be caught, even though the
+            # generic detector is relaxed for placeholder literals in this tree.
+            key_name = "api" + "_key"
+            (vendored / "generic.md").write_text(
+                key_name + '="live-production-key-4938291"\n', encoding="utf-8"
+            )
+            findings = scan_repository(root)
         self.assertTrue(
-            any("leak.md" in finding and "secret token" in finding for finding in findings),
+            any("generic.md" in f and "credential assignment" in f for f in findings),
             findings,
         )
 

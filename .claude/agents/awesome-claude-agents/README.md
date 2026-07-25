@@ -70,5 +70,8 @@ delimiters in fix 3. Agent bodies, descriptions, and tool lists are unmodified.
 git clone https://github.com/vijaythecoder/awesome-claude-agents.git /tmp/aca
 rsync -a --delete --exclude README.md /tmp/aca/agents/ .claude/agents/awesome-claude-agents/
 cp /tmp/aca/LICENSE .claude/agents/awesome-claude-agents/LICENSE
-# then re-apply the two fixes above and update the commit SHA in this file
+# Then re-apply ALL THREE fixes documented above (duplicate vue name, five python
+# agent names, frontend-developer frontmatter block) and update the commit SHA here.
+# Verify before committing: every file must parse as `---` frontmatter with a
+# kebab-case `name`, and no two agents may share a name.
 ```
