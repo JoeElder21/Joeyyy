@@ -21,9 +21,9 @@ from pathlib import Path
 
 from scripts.privacy_guard import (
     gitlink_paths,
+    index_is_authoritative,
     is_vendored,
     repository_files,
-    run_git,
     scan_repository,
     submodule_paths,
     tracked_paths,
@@ -57,6 +57,23 @@ UPSTREAM_DEPENDENCY_SOURCES = {
     ),
 }
 
+# sha256 of the derived declarations themselves. The record above binds a
+# declaration to the upstream file it came from; this binds the other
+# direction. Without it, editing a committed declaration — dropping a package
+# the pinned code needs — leaves every upstream digest valid and the suite
+# green, because nothing in the repository ever hashed the derived file.
+#
+# Unlike the upstream sources, these are committed here, so this check runs
+# everywhere including CI rather than only where submodules are initialized.
+DERIVED_DEPENDENCY_DECLARATIONS = {
+    "requirements/vendor-civil-domain.txt": (
+        "42733ffc98f57c7dfa97ad2ddaf330693bc6765ca803a0162452f6469831b483"
+    ),
+    "requirements/vendor-multi-agent-kg.txt": (
+        "e64c672325efdf716d0b1356933abc31c5fc034cfb04d31f1db65d17f27cd60b"
+    ),
+}
+
 EXPECTED_SUBMODULES = {
     "vendor/multi-agent-ai-in-civil-engineering": (
         "https://github.com/Kimi-chuheng/Multi-Agent-AI-in-Civil-Engineering.git"
@@ -81,19 +98,18 @@ def _git_available() -> bool:
 
 
 def _inside_git_worktree(root: Path = ROOT) -> bool:
-    """Whether ``root`` has a git worktree backing it.
+    """Whether an index describing ``root`` itself is readable.
 
     A source archive (``git archive``) carries the tracked files but no index,
     so every index-derived assertion here is unverifiable rather than failing.
-    Mirrors the probe in ``tests/test_rollback.py``, but routed through
-    ``run_git`` so a missing binary reports False instead of raising.
+
+    Delegates to the scanner's own ``index_is_authoritative`` rather than
+    re-probing with ``--is-inside-work-tree``. That weaker question — "is
+    there a repository *above* me" — is true for an archive extracted beneath
+    an unrelated checkout, and the assertions below would then run against
+    that repository's index instead of skipping.
     """
-    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
-    return (
-        probe is not None
-        and probe.returncode == 0
-        and probe.stdout.decode().strip() == "true"
-    )
+    return index_is_authoritative(root)
 
 
 class VendorSubmoduleTests(unittest.TestCase):
@@ -207,9 +223,33 @@ class VendorSubmoduleTests(unittest.TestCase):
             "moving off the tag requires updating RELAY_TAG_COMMIT and every "
             "provenance record together",
         )
-        self.assertIn(
+        # The contents row's own tag, not the tag appearing anywhere in the
+        # document. `v11.2.0` occurs three times in vendor/README.md, so a
+        # whole-document search passes even when this row is rewritten to
+        # claim the pin came from `main` — publishing a false source-to-release
+        # provenance claim while every gate stays green.
+        contents_row = next(
+            (
+                line
+                for line in (ROOT / "vendor" / "README.md")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if "`relay`" in line and RELAY_TAG_COMMIT[:7] in line
+            ),
+            None,
+        )
+        self.assertIsNotNone(
+            contents_row,
+            f"vendor/README.md has no relay contents row recording {RELAY_TAG_COMMIT[:7]}",
+        )
+        recorded_tag = re.search(r"tag `([^`]+)`", contents_row or "")
+        self.assertIsNotNone(
+            recorded_tag, f"relay contents row records no tag: {contents_row}"
+        )
+        self.assertEqual(
+            recorded_tag.group(1),
             RELAY_TAG,
-            (ROOT / "vendor" / "README.md").read_text(encoding="utf-8"),
+            f"relay contents row claims tag {recorded_tag.group(1)!r}, pinned to {RELAY_TAG}",
         )
 
     def test_upstream_dependency_sources_are_unchanged(self) -> None:
@@ -235,6 +275,27 @@ class VendorSubmoduleTests(unittest.TestCase):
                     expected,
                     f"{submodule}/{relative} changed upstream — re-derive the declaration "
                     "in requirements/ and update the recorded hash together",
+                )
+
+    def test_derived_dependency_declarations_are_unchanged(self) -> None:
+        """The committed declarations are bound too, not only their sources.
+
+        Hashing upstream catches drift in one direction: the source moving out
+        from under a stale declaration. Editing the declaration itself —
+        dropping a package the pinned code needs — leaves every upstream
+        digest valid, so nothing failed. These files are committed here, so
+        unlike the upstream sources this runs in CI as well.
+        """
+        for relative, expected in DERIVED_DEPENDENCY_DECLARATIONS.items():
+            declaration = ROOT / relative
+            with self.subTest(declaration=relative):
+                self.assertTrue(declaration.exists(), f"missing {relative}")
+                digest = hashlib.sha256(declaration.read_bytes()).hexdigest()
+                self.assertEqual(
+                    digest,
+                    expected,
+                    f"{relative} was edited — confirm it still matches the upstream "
+                    "source it is derived from, then update the recorded hash",
                 )
 
     def test_every_relay_provenance_record_agrees(self) -> None:
@@ -281,18 +342,20 @@ class VendorSubmoduleTests(unittest.TestCase):
             vendor_row,
             "vendor/README.md has no relay row declaring an agent-relay dependency",
         )
-        declared_in_vendor_row = re.search(
-            r"agent-relay@\S*?([0-9][^\s`|]*)", vendor_row or ""
-        )
+        # The complete spec, operator included. Capturing from the first digit
+        # normalizes `agent-relay@11.2.0` and `agent-relay@>=11.2.0` to the
+        # same bare `11.2.0` as `^11.2.0`, so a row declaring materially
+        # different install semantics passes as agreement.
+        declared_in_vendor_row = re.search(r"agent-relay@([^\s`|]+)", vendor_row or "")
         self.assertIsNotNone(
             declared_in_vendor_row,
-            f"no agent-relay version in the vendor row: {vendor_row}",
+            f"no agent-relay spec in the vendor row: {vendor_row}",
         )
         self.assertEqual(
             declared_in_vendor_row.group(1),
-            version,
-            f"vendor/README.md declares agent-relay {declared_in_vendor_row.group(1)}, "
-            f"manifest declares {version}",
+            spec,
+            f"vendor/README.md declares agent-relay@{declared_in_vendor_row.group(1)}, "
+            f"manifest declares {spec}",
         )
 
         # The connector's own provenance table must carry both the version and
