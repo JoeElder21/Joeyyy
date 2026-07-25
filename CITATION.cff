@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+title: "Joeyyy: a brain-locked, fail-closed governance system for multi-agent runtimes"
+message: "If you use or build on these governance patterns, please cite this repository."
+type: software
+authors:
+  - family-names: Elder
+    given-names: Joe
+    alias: JoeElder21
+repository-code: "https://github.com/JoeElder21/Joeyyy"
+license: Apache-2.0
+year: 2026
+abstract: >-
+  An agent governance system implementing cross-brain separation with a single
+  authorized cross-brain governor. Two mirrored specialist units (APEX for
+  professional context, JEOS for personal context) share a functional class
+  taxonomy but are isolated in prompts, evidence, memory namespaces, write
+  targets, and roundtables, and may not communicate directly.
+
+  The reusable contribution is the enforcement layer rather than the roster:
+  typed delegation, handoff, memory, and writer-lease packet contracts validated
+  as JSON Schema; fail-closed packet admission that rejects malformed or
+  out-of-mode requests; one designated writer per canonical brain/target/resource
+  with lease-serialized mutation, schema-valid readback, and recorded rollback;
+  staged shadow-to-active acceptance gating with a hard human checkpoint before
+  activation; user-signed one-time launch grants for write-capable mounts; and a
+  provenance-verified capability absorption protocol hardened against
+  repository-impersonation supply-chain attacks.
+
+  Governance rules are executable rather than advisory: the documentation,
+  templates, registry, and schemas are asserted to agree by the test suite, and a
+  privacy guard enforces the public-repository data boundary on every commit.
+keywords:
+  - multi-agent systems
+  - agent governance
+  - ai safety
+  - least privilege
+  - policy enforcement
+  - model context protocol
+  - supply chain security
+  - land development engineering

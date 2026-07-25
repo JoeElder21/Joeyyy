@@ -176,13 +176,16 @@ class ContributorSurfaceTests(unittest.TestCase):
             "provenance checks must be required fields, not optional prompts",
         )
 
-    def test_optimization_record_states_its_open_decisions(self):
+    def test_optimization_record_states_findings_and_decision_outcomes(self):
         text = OPTIMIZATION_RECORD.read_text(encoding="utf-8")
         for phrase in [
             "## Verification honesty",
             "Part 1 — What the repository is missing",
             "Part 2 — External repositories that fit these gaps",
-            "## Open decisions for Joe",
+            # Decisions must be tracked to an outcome, not left as a standing list.
+            "## Decisions",
+            "resolved",
+            "What remains open after this round",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)

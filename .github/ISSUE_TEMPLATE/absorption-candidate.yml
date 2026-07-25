@@ -39,6 +39,25 @@ body:
         - label: No code from this repository has been executed
           required: true
 
+  - type: checkboxes
+    id: agent-scan
+    attributes:
+      label: Pre-install scan (MCP servers, agent skills, and agent applications only)
+      description: >
+        `snyk/agent-scan` is approved for **pre-install candidate scanning only**
+        (2026-07-25). Scan the candidate before install; never point it at Joe's
+        configured agent estate — it transmits skill content, tool names, and
+        descriptions to Snyk's servers, and the estate is his roster.
+
+        Skip this section, marking it not applicable, for a candidate that is not
+        an MCP server, skill, or agent application.
+      options:
+        - label: "`uvx snyk-agent-scan@latest` run against the candidate, pre-install"
+        - label: No prompt injection, tool poisoning, tool shadowing, or toxic flow reported
+        - label: No hardcoded secrets or malware payload reported
+        - label: Scope confirmed — candidate only; Joe's configured estate was not scanned
+        - label: Not applicable — candidate is not an MCP server, skill, or agent application
+
   - type: textarea
     id: gap
     attributes:

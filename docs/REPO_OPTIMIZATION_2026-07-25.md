@@ -287,19 +287,59 @@ adopted in the same change.
   regress. Notably, one test fails if any GitHub Action is referenced by floating tag
   instead of a SHA pin — the SHA-pinning rule is now enforced, not just applied once.
 
-## Open decisions for Joe
+## Decisions — all five resolved 2026-07-25 on Joe's instruction
 
-1. **License.** The repository is public and unlicensed, so it is all-rights-reserved by
-   default. Deliberately not chosen here — it is a rights decision, not a build decision.
-   MIT or Apache-2.0 if the governance patterns should be citable and reusable (Apache-2.0
-   also grants patent rights); leave unlicensed if the system should stay
-   look-but-don't-touch. *Recommendation: Apache-2.0, matching DeepEval and agent-scan.*
-2. **DeepEval adoption (Finding 1).** The largest remaining gap and the one blocking
-   shadow-to-active promotion. Needs a decision on where evaluations run (workstation only,
-   given the model key and the cloud-logging default that must be disabled).
-3. **`snyk/agent-scan` (Tier 2 #4).** Approve for pre-install candidate scanning only, or
-   decline on the outbound-disclosure ground. Not a default-yes.
-4. **Ruff formatter.** Enable as one mechanical commit (45 files), or leave lint-only.
-5. **TruffleHog history sweep.** One-off verification pass over the full git history,
-   confirming nothing sensitive predates `privacy_guard.py`. Cheap, and worth doing once on
-   a repository that was public before the guard existed.
+Every open decision from the original review was answered the same day. Nothing in
+Part 1 or Part 2 above was revised; this section records the outcomes.
+
+1. **License — Apache-2.0, and the governance patterns are to be citable.**
+   `LICENSE` carries the verbatim Apache-2.0 text (fetched from apache.org,
+   sha256 `cfc7749b…`), `NOTICE` states the copyright and scopes what the grant
+   does and does not cover, and `CITATION.cff` gives GitHub a "Cite this
+   repository" entry. The citation abstract names the reusable contribution
+   explicitly — the enforcement layer, not the roster — so a citation points at
+   the patterns rather than at Joe's personal agent lineup.
+   Apache-2.0 over MIT for the patent grant, which matters for a system whose
+   reusable surface is architectural.
+
+2. **DeepEval — adopted; results go to the Evaluations folder on Drive.**
+   Built in `evals/`; full record in `docs/EVALUATION_HARNESS.md`. The Drive
+   folder was created and the first artifacts published there. The harness makes
+   the acceptance-gate backlog a number for the first time: **39 material modes,
+   3 covered.** Results never enter this tree, and publication is a connector
+   action rather than a library call — no script in `evals/` holds a Drive
+   credential.
+
+3. **`snyk/agent-scan` — approved for pre-install candidate scanning only.**
+   Wired as a required section in
+   `.github/ISSUE_TEMPLATE/absorption-candidate.yml` and as a provenance block in
+   `templates/agent-intake.md`. Both state the scope limit in the same breath as
+   the requirement: scan the candidate, never Joe's configured estate, because
+   the tool transmits skill content and tool descriptions to Snyk's servers and
+   the estate is his roster.
+
+4. **`ruff-format` — enabled.** Applied as one mechanical commit, and enforced
+   from then on in CI and pre-commit. Joe's instruction was explicit that the
+   repository should keep evolving rather than settle at lint-only, so the
+   expanded rule set (`I`, `UP`, `B`, `C4`, `SIM`) was adopted alongside it in a
+   separate reviewable commit rather than deferred again.
+
+5. **TruffleHog history sweep — run, clean.** Record:
+   `docs/SECRET_HISTORY_SWEEP_2026-07-25.md`. Zero verified and zero unverified
+   secrets across all 95 commits, confirmed by two independent passes with
+   coverage verified against `git rev-list` rather than taken from the tool's own
+   summary. The privacy guard's working-tree coverage can now be treated as
+   complete coverage.
+
+### What remains open after this round
+
+Not a decision backlog — the actual work the harness exposed:
+
+- **36 of 39 material modes have no evaluation case**, and none can leave
+  `shadow` until they do. This is now the top of the queue and it is measurable.
+- **Specialist dispatch is unwired** (`_invoke_specialist` raises). Connecting it
+  needs a verified model credential and a connector-isolation decision that is a
+  separate, deliberate step.
+- **Confident AI cloud logging must be disabled** before any real mission is
+  evaluated. This is the one setting that turns an approved tool into an
+  unapproved disclosure.

@@ -30,3 +30,8 @@ brains/jeos/memory/*
 
 # Node vendored dependencies (connectors)
 node_modules/
+
+# Evaluation run results. These publish to the Evaluations folder on Drive, never
+# into this public tree — evaluation inputs and transcripts are exactly what
+# docs/PRIVACY_AND_DATA_BOUNDARIES.md keeps out. See evals/README.md.
+evals/output/

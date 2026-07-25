@@ -18,9 +18,12 @@
 | [`AGENT_COMMUNITY_PROTOCOL.md`](AGENT_COMMUNITY_PROTOCOL.md) | Delegation, handoffs, conflict resolution, intake, absorption, error learning, audits |
 | [`SPECIALIST_CORPS_PROTOCOL.md`](SPECIALIST_CORPS_PROTOCOL.md) | Specialist isolation and operating system |
 | [`SPECIALIST_ACCEPTANCE_TESTS.md`](SPECIALIST_ACCEPTANCE_TESTS.md) | Static, shadow, activation, and value gates |
+| [`EVALUATION_HARNESS.md`](EVALUATION_HARNESS.md) | Behavioral evaluation harness: metric contract, 39-mode coverage, Drive result boundary |
 | [`PRIVACY_AND_DATA_BOUNDARIES.md`](PRIVACY_AND_DATA_BOUNDARIES.md) | Public-repository and runtime-data rules |
 | [`BRAIN_CADENCE_RUNBOOK.md`](BRAIN_CADENCE_RUNBOOK.md) | Daily, weekly, and monthly brain-specific orchestration |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, reporting, supply-chain posture |
+| [`SECRET_HISTORY_SWEEP_2026-07-25.md`](SECRET_HISTORY_SWEEP_2026-07-25.md) | Full-history secret sweep: method, coverage proof, clean result |
+| [`../LICENSE`](../LICENSE) / [`../NOTICE`](../NOTICE) / [`../CITATION.cff`](../CITATION.cff) | Apache-2.0 grant, copyright and scope, citation metadata |
 
 ## Runtime and architecture
 
@@ -68,6 +71,7 @@ Read in date order — each supersedes nothing, but later records assume earlier
 
 ## Elsewhere in the repository
 
+- [`../evals/`](../evals/) — behavioral evaluation harness; results publish to Drive, not here
 - [`../templates/`](../templates/) — intake, handoff, brief, and audit templates
 - [`../schemas/`](../schemas/) — delegation, handoff, memory, lease, and roundtable packet contracts
 - [`../trial/`](../trial/) — execution-layer trial tickets and output

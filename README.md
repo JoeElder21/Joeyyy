@@ -43,7 +43,10 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/README.md` — indexed entry point to every documentation record.
 - `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md` — contribution mechanics, threat model and reporting, dated change history.
 - `.pre-commit-config.yaml` — local offline gates (gitleaks, ruff, privacy guard, corps validation) before a commit exists.
-- `docs/REPO_OPTIMIZATION_2026-07-25.md` — repository-engineering review: substrate gaps, evaluation and supply-chain candidates, open decisions.
+- `docs/REPO_OPTIMIZATION_2026-07-25.md` — repository-engineering review: substrate gaps, evaluation and supply-chain candidates, and the five resolved decisions.
+- `evals/` + `docs/EVALUATION_HARNESS.md` — behavioral evaluation harness closing the output-quality half of the acceptance gate: 39 material modes derived from the brain manifests, metric contract traced to recorded gates, results published to the Evaluations folder on Drive rather than committed here.
+- `docs/SECRET_HISTORY_SWEEP_2026-07-25.md` — full-history secret sweep: clean across all 95 commits, with coverage verified independently of the tool's own summary.
+- `LICENSE`, `NOTICE`, `CITATION.cff` — Apache-2.0, with the reusable contribution scoped to the governance patterns rather than the roster.
 - `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
 - `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status.

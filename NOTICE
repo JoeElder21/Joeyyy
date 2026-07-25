@@ -1,0 +1,38 @@
+Joeyyy — Agent 007 / APEX / JEOS agent governance system
+Copyright 2026 Joe Elder
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+---
+
+What is and is not covered
+
+The License covers the contents of this repository: the governance patterns,
+protocol documents, packet schemas, runtime modules, validation harnesses, and
+templates.
+
+It does not grant rights to, and this repository does not contain, Joe Elder's
+private records, professional or client work product, credentials, connector
+identifiers, or any brain memory contents. Those live outside this repository by
+design — see docs/PRIVACY_AND_DATA_BOUNDARIES.md.
+
+Reusing the governance patterns
+
+The reusable contribution here is the pattern set, not the roster: brain-locked
+specialist isolation, fail-closed packet admission, one designated writer per
+shared resource with lease-serialized mutation, shadow-to-active acceptance
+gating, and provenance-verified capability absorption. These are documented in
+docs/SPECIALIST_CORPS_PROTOCOL.md, docs/AGENT_COMMUNITY_PROTOCOL.md, and
+docs/SPECIALIST_ACCEPTANCE_TESTS.md, and enforced by the tests in tests/.
+
+See CITATION.cff for how to cite this work.

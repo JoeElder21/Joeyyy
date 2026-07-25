@@ -1,0 +1,15 @@
+# Behavioral evaluation stack. Opt-in; never required for repository validation.
+#
+# Approved 2026-07-25 on Joe's instruction, closing Finding 1 of
+# docs/REPO_OPTIMIZATION_2026-07-25.md.
+#
+# Operating conditions, not preferences:
+#   - Runs on the workstation, never in public CI. Judge metrics need a model
+#     credential, and this repository holds none.
+#   - Confident AI cloud logging must be disabled before any real mission is
+#     evaluated. DeepEval auto-logs results to its hosted platform by default;
+#     evaluation inputs are precisely the material
+#     docs/PRIVACY_AND_DATA_BOUNDARIES.md protects.
+#   - Results publish to the Evaluations folder on Drive, never into this tree.
+deepeval>=3.0
+pytest>=8.0

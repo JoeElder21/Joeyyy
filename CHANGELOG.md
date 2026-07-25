@@ -3,6 +3,43 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-07-25 — All five open decisions resolved
+
+Joe answered every open decision from `docs/REPO_OPTIMIZATION_2026-07-25.md` the
+same day. No governance rule, packet contract, schema, roster entry, or lifecycle
+stage changed; all ten specialists remain in `shadow`.
+
+### Added
+
+- **Apache-2.0 licensing, patterns citable.** `LICENSE` (verbatim upstream text),
+  `NOTICE` (copyright plus what the grant does and does not cover), `CITATION.cff`
+  (GitHub "Cite this repository"; the abstract names the enforcement layer as the
+  reusable contribution, not the roster).
+- **Behavioral evaluation harness** — `evals/` with `docs/EVALUATION_HARNESS.md`.
+  Derives 39 material modes from `brains/*/agents.toml` so a new mode cannot be
+  silently missed; metric contract traced to already-recorded acceptance criteria;
+  three seed cases. Results publish to the Evaluations folder on Drive and are
+  gitignored here. Two deliberate refusals: specialist dispatch raises rather than
+  returning canned text, and the runner exits 2 rather than fabricating a pass.
+- `requirements/runtime-evaluation.txt` — opt-in evaluation stack, recording the
+  workstation-only and cloud-logging-disabled conditions.
+- `tests/test_evaluation_harness.py` — 14 tests, including that the evaluation
+  suite stays outside `unittest discover` and that the dispatch refusal is intact.
+- `docs/SECRET_HISTORY_SWEEP_2026-07-25.md` — TruffleHog full-history sweep.
+  Clean: 0 verified and 0 unverified secrets across 95 commits, two independent
+  passes, coverage verified against `git rev-list` rather than the tool's summary.
+
+### Changed
+
+- **`snyk/agent-scan` approved for pre-install candidate scanning only.** Required
+  section in `.github/ISSUE_TEMPLATE/absorption-candidate.yml` and a provenance
+  block in `templates/agent-intake.md`, both stating the scope limit alongside the
+  requirement — candidate only, never Joe's configured estate.
+- **`ruff-format` enabled** and enforced in CI and pre-commit, applied as one
+  mechanical commit; the expanded lint set (`I`, `UP`, `B`, `C4`, `SIM`) adopted in
+  a separate commit rather than deferred again.
+- `.gitignore` — `evals/output/`.
+
 ## 2026-07-25 — Repository engineering substrate
 
 Record: `docs/REPO_OPTIMIZATION_2026-07-25.md`. No governance rule, packet contract,
