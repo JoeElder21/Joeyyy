@@ -151,8 +151,18 @@ jobs:
               status=1
             fi
           }
+          # Every manifest/lock pair the security workflow scans. The first
+          # version listed two of the three and omitted
+          # runtime-evaluation.txt, so the documented evaluation install could
+          # drift from the lock osv-scanner audits and nothing would say so --
+          # the same partial fix this record keeps re-learning to avoid.
+          #
+          # Driven from a list, and cross-checked below against what the
+          # security workflow actually scans, so adding a fourth lock there
+          # without adding it here fails rather than passing quietly.
           check requirements.txt requirements/lock-runtime-root.txt
           check requirements/runtime-contracts.txt requirements/lock-runtime-contracts.txt
+          check requirements/runtime-evaluation.txt requirements/lock-runtime-evaluation.txt
           exit "$status"
 
   lint:

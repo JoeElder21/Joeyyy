@@ -713,6 +713,28 @@ The ledger is now filtered rather than swept: a policy evaluation must not mutat
 
 **One of my own tests was too weak, and mutation-testing is what found it.** The secret-scan assertion checked for `github.event.before` anywhere in the file and still passed after the env binding was deleted, because the comment above it mentions the same string — a test satisfied by prose *describing* the property rather than by the property. Reading it would not have caught that. It now asserts the binding and the branch that consumes it, and all four mutations are caught.
 
+### Automated review, seventeenth pass — five findings, four fixed, one deferred
+
+**Three of the four were scope-widening in code written in the previous two rounds.** The pattern is worth naming: each was a *matching rule* that accepted more than it was written to accept, and in each case the over-acceptance was invisible because the intended case also passed.
+
+**Named neutral files matched their siblings.** `BRAIN_NEUTRAL_PREFIXES` holds directories (`docs/`) and named files (`AGENTS.md`) in one list, and prefix matching was applied to both — so `AGENTS.md` also matched `AGENTS.md.private`, `README.md.jeos`, and `CLAUDE.md-secrets`, files whose ownership is unresolvable. This was tolerable while neutrality was only a *classification*; the sixteenth pass made it an **exemption from packet admission**, at which point a specialist could read any of those packetlessly. A change that is safe under one meaning of a helper became a fail-open when the helper's meaning changed, and nothing connected the two.
+
+**A child scope authorized its parent.** `_packet_namespace_errors` accepted a declared scope that is a *descendant* of the request, so a delegation naming only `APEX::Strategy-Campaigns::apex_war_architect` authorized `APEX/Strategy-Campaigns` — the collection holding every specialist's namespace. **Two existing tests were asserting exactly this**, under the names "authorizes the resource it does name" and "is bound to its own memory namespace", both using the parent as the resource. That is the third time in this change set a test has been found encoding the defect it was written to prevent.
+
+**The launch grant could not fire where it mattered.** It keyed off `resource.startswith("mount:")`, but a mutation dispatched through a mount must name its canonical write target in `resource` — that is what the packet and lease scope checks compare against. The two requirements were mutually exclusive: name the mount and lose scope binding, or name the target and skip the grant. A fully authorized canonical mutation was allowed with no grant at all. `ToolRequest.mount` now carries the executing mount independently.
+
+That field is caller-supplied, which this module has learned to distrust three times (`mutating`, `launch_grant_verified`, `explicit_instruction`). It is deliberately a different shape: **it can oblige, never permit** — setting it can only add the grant requirement, and a test pins that. But a dispatcher that omits it reproduces the hole, so populating it is part of the dispatcher contract that wiring `enforce()` must establish. That is recorded with the wiring work rather than assumed here.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Neutral prefixes matched sibling filenames | **Correct — fail-open, mine, one round old** | Directories match descendants; named files match only themselves. |
+| Child scope authorized its parent | **Correct — fail-open** | Equality or descendant-of-scope only. Two tests that asserted the widening corrected. |
+| Launch grant unreachable for mount-dispatched mutations | **Correct — fail-open** | `ToolRequest.mount` carries the mount independently of the write target. |
+| Lock-drift matrix omitted the evaluation pair | **Correct — mine, one round old** | The third pair added, and the hygiene test now **derives** the required set from the locks the security workflow actually scans, so a fourth lock cannot be scanned-but-unchecked. |
+| Active leases not carried into evaluation packet scoring | **Correct, deferred** | Blocked behind eval dispatch, with `expected_artifacts` and the delegation ledger. |
+
+**The lock-drift omission is the same partial-fix shape as the formatter finding one round earlier**, where the reported instance was one of four. Fixing the reported instance and stopping is now a documented recurring failure here, so this repair derives its coverage from the other workflow instead of restating a list that can fall out of step.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

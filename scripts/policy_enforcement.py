@@ -286,6 +286,23 @@ class ToolRequest:
     # `delete`), matched against what the packet proposed. Without it, every
     # check bound *where* a write lands and none bound *what it does*.
     operation: str | None = None
+    # The MCP mount actually executing this invocation, carried independently of
+    # `resource`.
+    #
+    # The launch-grant rule keyed off `resource.startswith("mount:")`, but a
+    # mutation dispatched through a mount has to name its canonical write target
+    # in `resource` -- that is what the packet and lease scope checks compare
+    # against. So the two requirements were mutually exclusive: name the mount
+    # and lose scope binding, or name the target and skip the grant entirely. A
+    # fully authorized canonical mutation was allowed with no grant at all.
+    #
+    # This field is caller-supplied, which this module has learned to distrust
+    # three separate times. It is not the same shape as those: it cannot grant
+    # anything, only oblige. Setting it can add the grant requirement and never
+    # remove one. But a dispatcher that OMITS it reproduces the hole, so
+    # populating it is part of the dispatcher contract that wiring `enforce()`
+    # has to establish -- recorded with that work, not assumed here.
+    mount: str | None = None
     # Signed grant material, not an assertion. `launch_grant_verified` used to be
     # a plain bool the caller set, which is the same "trust the caller" defect as
     # the mutating flag: any caller could claim a grant it never held.
@@ -622,12 +639,24 @@ class PolicyEnforcementPoint:
 
         Compared after normalization, and tolerant of the directory itself:
         `normpath("docs/")` is `"docs"`, which does not start with `"docs/"`.
+
+        Directory entries match descendants; NAMED FILES match only themselves.
+        Applying prefix matching to both meant `AGENTS.md` also matched
+        `AGENTS.md.private`, `README.md.jeos`, and `CLAUDE.md-secrets` -- files
+        whose ownership is unresolvable and which an APEX specialist could
+        therefore read packetlessly. The trailing slash in the declaration is
+        what distinguishes the two cases, so it is what the comparison reads.
+        This matters more since the previous round, which made a neutral read
+        an exemption from packet admission rather than merely a classification.
         """
         canonical = PolicyEnforcementPoint._canonical_resource(resource)
-        return any(
-            canonical == prefix.rstrip("/") or canonical.startswith(prefix)
-            for prefix in BRAIN_NEUTRAL_PREFIXES
-        )
+        for prefix in BRAIN_NEUTRAL_PREFIXES:
+            if prefix.endswith("/"):
+                if canonical == prefix.rstrip("/") or canonical.startswith(prefix):
+                    return True
+            elif canonical == prefix:
+                return True
+        return False
 
     def _resource_owner(self, resource: str) -> str | None:
         """Which brain owns this resource, by manifest-declared prefix or path."""
@@ -1301,9 +1330,16 @@ class PolicyEnforcementPoint:
             # targets `APEX/Strategy-Campaigns`; compare on the shared segments
             # rather than demanding one spelling.
             normalized = str(entry).replace("::", "/")
+            # Equality, or the request is a DESCENDANT of the declared scope.
+            # The reverse direction used to be accepted too -- a declared scope
+            # that is a descendant of the REQUEST -- which let a delegation
+            # naming only `APEX::Strategy-Campaigns::apex_war_architect`
+            # authorize a request for `APEX/Strategy-Campaigns`, the parent
+            # collection holding every specialist's namespace. A bounded
+            # assignment must not widen to its own parent: on a
+            # collection-backed store that is the difference between one
+            # specialist's records and all of them.
             if resource == normalized or resource.startswith(f"{normalized}/"):
-                return []
-            if normalized.startswith(f"{resource}/"):
                 return []
         return [
             f"packet does not authorize {request.resource!r}; it is scoped to "
@@ -1420,17 +1456,25 @@ class PolicyEnforcementPoint:
         evaluation must not have side effects, or merely *asking* whether an
         action is permitted would burn the grant.
         """
-        if not (request.mutating and request.resource.startswith("mount:")):
+        # Either spelling obliges a grant: the resource IS a mount handle, or
+        # the request declares the mount it is dispatched through while naming a
+        # canonical target. Keying only off the resource meant those two were
+        # mutually exclusive -- a mutation could satisfy the packet and lease
+        # scope checks by naming its write target, and skip this rule for the
+        # same reason.
+        mount = request.mount or (
+            request.resource.split(":", 1)[1] if request.resource.startswith("mount:") else None
+        )
+        if not (request.mutating and mount):
             return []
         grant = request.launch_grant
         if grant is not None and not isinstance(grant, dict):
             return [f"launch grant must be an object, got {type(grant).__name__}"]
         if not grant:
             return [
-                f"write-capable mount {request.resource!r} requires a signed one-time "
+                f"write-capable mount {mount!r} requires a signed one-time "
                 "launch grant; none was presented"
             ]
-        mount = request.resource.split(":", 1)[1]
         payload = {key: grant.get(key) for key in ("mount", "issued_at", "expires_at", "nonce")}
         if payload["mount"] != mount:
             return [f"grant is for mount {payload['mount']!r}, not {mount!r}"]

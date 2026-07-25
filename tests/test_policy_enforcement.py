@@ -1013,6 +1013,13 @@ class ScopeTests(unittest.TestCase):
 
     def test_a_delegation_authorizes_the_resource_it_does_name(self):
         # The accept path: scope binding must not deny the assignment itself.
+        #
+        # The resource here used to be `APEX/Strategy-Campaigns` -- the PARENT
+        # of the namespace the scope names, not the namespace itself. It passed
+        # only through a reverse-prefix branch that let a declared scope
+        # authorize any ancestor of itself, so this test was asserting the
+        # widening rather than the accept path. The resource it does name is
+        # the one the scope names.
         scoped = {
             "agent": SPECIALIST,
             "owner_brain": "APEX",
@@ -1023,7 +1030,7 @@ class ScopeTests(unittest.TestCase):
                 ToolRequest(
                     agent=SPECIALIST,
                     action="read",
-                    resource="APEX/Strategy-Campaigns",
+                    resource="APEX/Strategy-Campaigns/apex_war_architect",
                     owner_brain="APEX",
                     packet=scoped,
                 )
@@ -1135,6 +1142,8 @@ class ScopeTests(unittest.TestCase):
         self.assertTrue(any("absent scope is not unrestricted" in r for r in reasons), reasons)
 
     def test_a_handoff_is_bound_to_its_own_memory_namespace(self):
+        # Same correction as the delegation accept path above: bound to its own
+        # namespace means that namespace, not the collection containing it.
         scoped = {
             "agent": SPECIALIST,
             "owner_brain": "APEX",
@@ -1145,7 +1154,7 @@ class ScopeTests(unittest.TestCase):
                 ToolRequest(
                     agent=SPECIALIST,
                     action="read",
-                    resource="APEX/Strategy-Campaigns",
+                    resource="APEX/Strategy-Campaigns/apex_war_architect",
                     owner_brain="APEX",
                     packet=scoped,
                 )
@@ -1821,6 +1830,139 @@ class SixteenthPassRegressionTests(unittest.TestCase):
                     )
                 )
                 self.assertTrue(errors, f"{resource} was authorized by a scope not naming it")
+
+
+class SeventeenthPassRegressionTests(unittest.TestCase):
+    """Three scope-widening defects and a control that could not fire."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def test_a_named_neutral_file_does_not_match_its_siblings(self):
+        # BRAIN_NEUTRAL_PREFIXES holds both directories and named files, and
+        # prefix matching was applied to both -- so `AGENTS.md` also matched
+        # `AGENTS.md.private`, `README.md.jeos`, and `CLAUDE.md-secrets`.
+        # Since the previous round made a neutral read an EXEMPTION from packet
+        # admission rather than only a classification, that let a specialist
+        # read those files packetlessly.
+        for sibling in ("AGENTS.md.private", "README.md.jeos", "CLAUDE.md-secrets", "AGENTS.mdx"):
+            with self.subTest(resource=sibling):
+                self.assertFalse(self.pep._is_brain_neutral(sibling))
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=sibling, owner_brain="APEX"
+                    )
+                )
+                self.assertFalse(decision.allowed, f"{sibling}: {decision.reasons}")
+
+    def test_the_named_neutral_files_themselves_still_resolve(self):
+        # The other direction: tightening file matching must not deny the files
+        # the neutral set exists to permit.
+        for neutral in ("AGENTS.md", "README.md", "CLAUDE.md"):
+            with self.subTest(resource=neutral):
+                self.assertTrue(self.pep._is_brain_neutral(neutral))
+
+    def test_neutral_directories_still_match_their_contents(self):
+        for neutral in ("docs/", "docs/README.md", "schemas/writer_lease.schema.json", "config/"):
+            with self.subTest(resource=neutral):
+                self.assertTrue(self.pep._is_brain_neutral(neutral))
+        # ...and a directory-shaped near-miss still does not.
+        self.assertFalse(self.pep._is_brain_neutral("docsomething/x"))
+
+    def _scoped_packet(self):
+        return {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "allowed_read_namespaces": ["APEX::Strategy-Campaigns::apex_war_architect"],
+        }
+
+    def test_a_child_scope_does_not_authorize_its_parent(self):
+        # The reverse-prefix branch accepted a declared scope that is a
+        # DESCENDANT of the request, so a delegation naming one specialist's
+        # namespace authorized the parent collection holding every
+        # specialist's. On a collection-backed store that is the difference
+        # between one agent's records and all of them.
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                packet=self._scoped_packet(),
+            )
+        )
+        self.assertTrue(any("does not authorize" in reason for reason in reasons), reasons)
+
+    def test_the_named_scope_and_its_descendants_are_still_authorized(self):
+        for resource in (
+            "APEX/Strategy-Campaigns/apex_war_architect",
+            "APEX::Strategy-Campaigns::apex_war_architect",
+            "APEX/Strategy-Campaigns/apex_war_architect/record-1",
+        ):
+            with self.subTest(resource=resource):
+                self.assertEqual(
+                    self.pep._packet_scope_errors(
+                        ToolRequest(
+                            agent=SPECIALIST,
+                            action="read",
+                            resource=resource,
+                            owner_brain="APEX",
+                            packet=self._scoped_packet(),
+                        )
+                    ),
+                    [],
+                )
+
+    def _mutation(self, **overrides):
+        fields = {
+            "agent": CHIEF,
+            "action": "write",
+            "resource": "APEX/Strategy-Campaigns",
+            "owner_brain": "APEX",
+            "mutating": True,
+            "lease": self.lease,
+            "resource_id": "campaign-alpha",
+        }
+        fields.update(overrides)
+        return ToolRequest(**fields)
+
+    def test_a_mount_dispatched_mutation_requires_its_grant(self):
+        # The rule keyed off `resource.startswith("mount:")`, but a mutation
+        # dispatched through a mount must name its canonical write target in
+        # `resource` -- that is what the packet and lease scope checks compare
+        # against. The two requirements were mutually exclusive, so a fully
+        # authorized canonical mutation was allowed with no grant at all.
+        reasons = self.pep._launch_grant(self._mutation(mount="filesystem"))
+        self.assertTrue(any("launch grant" in reason for reason in reasons), reasons)
+
+    def test_the_mount_handle_spelling_still_requires_its_grant(self):
+        reasons = self.pep._launch_grant(self._mutation(resource="mount:filesystem"))
+        self.assertTrue(any("launch grant" in reason for reason in reasons), reasons)
+
+    def test_a_read_through_a_mount_needs_no_launch_grant(self):
+        # The grant governs write-capable launches. Requiring it for reads
+        # would deny the governance mount, which is deliberately grant-free.
+        self.assertEqual(
+            self.pep._launch_grant(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="read",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                    mount="governance",
+                )
+            ),
+            [],
+        )
+
+    def test_declaring_a_mount_can_only_add_the_requirement(self):
+        # This field is caller-supplied, which this module has three times
+        # learned to distrust. It is a different shape: it can oblige, never
+        # permit. Setting it must never turn a denial into an approval.
+        without = self.pep._launch_grant(self._mutation())
+        with_mount = self.pep._launch_grant(self._mutation(mount="filesystem"))
+        self.assertGreaterEqual(len(with_mount), len(without))
 
 
 if __name__ == "__main__":

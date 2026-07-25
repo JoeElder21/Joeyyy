@@ -460,8 +460,18 @@ class DependencyProvenanceTests(unittest.TestCase):
         for version in ("3.11", "3.12"):
             with self.subTest(python=version):
                 self.assertIn(version, job)
-        self.assertIn("requirements/lock-runtime-root.txt", job)
-        self.assertIn("requirements/lock-runtime-contracts.txt", job)
+        # Every generated lock the security workflow scans must appear here.
+        # The first version of this job checked two of the three and omitted
+        # lock-runtime-evaluation.txt, so the documented evaluation install
+        # could drift from the audited lock indefinitely. Derived from the
+        # security workflow rather than restated, so adding a lock there
+        # without adding it to the drift matrix fails instead of passing.
+        security = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        scanned = sorted(set(re.findall(r"requirements/lock-runtime-[\w.-]+\.txt", security)))
+        self.assertTrue(scanned, "no generated locks are scanned at all")
+        for lock in scanned:
+            with self.subTest(lock=lock):
+                self.assertIn(lock, job, f"{lock} is scanned but its drift is never checked")
 
 
 class SecretScanScopeTests(unittest.TestCase):
