@@ -67,14 +67,25 @@ first vendoring commit, when none of this existed.
 Withdrawing a vendored source after a provenance or compatibility failure is
 not a single delete. A partial rollback leaves an installable connector or a
 stale declaration behind after its audited source is gone, which is worse than
-either state alone. The complete reversible set:
+either state alone.
+
+**The general rule, because this table has been incomplete three times:**
+every test-visible record that *names* a file being withdrawn must be
+withdrawn with it. A test asserting the presence or digest of a file the
+rollback deletes fails against the very suite this section requires at the
+end — and a rollback that leaves the tree failing its own gate is worse than
+none, because it looks finished. The table below enumerates the current
+records; when a check is added, add its record here in the same commit rather
+than trusting this list to still be complete.
+
+The complete reversible set:
 
 | Withdrawing | Files to revert |
 | --- | --- |
 | Any repo | its `vendor/<name>` gitlink; its `[submodule]` block in `.gitmodules`; its row in the contents and provenance tables here; its entry in `EXPECTED_SUBMODULES` and `UPSTREAM_DEPENDENCY_SOURCES` in `tests/test_vendor.py` |
 | `relay` additionally | `connectors/relay/` entirely (manifest, lockfile, README); **both** relay constants (`RELAY_TAG`, `RELAY_TAG_COMMIT`) and **both** relay-only tests (`test_every_relay_provenance_record_agrees`, `test_relay_gitlink_is_the_documented_release_tag`) in `tests/test_vendor.py`; the `connectors/relay/` line in the root `README.md` |
-| `awesome-civil-engineering` additionally | `requirements/vendor-civil-domain.txt` |
-| `multi-agent-ai-in-civil-engineering` additionally | `requirements/vendor-multi-agent-kg.txt` |
+| `awesome-civil-engineering` additionally | `requirements/vendor-civil-domain.txt` **and its `DERIVED_DEPENDENCY_DECLARATIONS` entry** |
+| `multi-agent-ai-in-civil-engineering` additionally | `requirements/vendor-multi-agent-kg.txt` **and its `DERIVED_DEPENDENCY_DECLARATIONS` entry** |
 | `civil-innovation-agent` additionally | nothing — it declares no dependencies |
 
 Withdrawing **all four** additionally reverts the scanner scoping in

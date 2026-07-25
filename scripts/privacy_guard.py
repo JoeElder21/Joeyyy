@@ -278,10 +278,17 @@ def scan_repository(root: Path = ROOT) -> list[str]:
     findings: list[str] = []
     # A submodule's *path* is tracked by this repository even though its
     # contents are not, so the name itself is published and stays subject to
-    # the filename and artifact-type rules. Excluding gitlinks from the
+    # every rule that governs published text. Excluding gitlinks from the
     # content scan must not exclude them from these: a submodule added as
     # `token.json` would otherwise pass a scan that exists to forbid exactly
     # that name.
+    #
+    # The pattern set applies to the path string too, not only the filename
+    # and suffix rules. A path is free-form text this repository publishes: a
+    # submodule named after a client contact carries that person's name and
+    # address in the path itself without matching any prohibited filename, and
+    # with no `.gitmodules` entry to catch it incidentally there is nothing
+    # else in the scan that would ever read it.
     for name in sorted(gitlink_paths(root)):
         relative = Path(name)
         if relative.name.lower() in PROHIBITED_FILENAMES:
@@ -290,6 +297,9 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             findings.append(
                 f"{relative}: non-source artifact type is not allowed in this public repository"
             )
+        for label, pattern in PATTERNS.items():
+            if pattern.search(name):
+                findings.append(f"{relative}: possible {label} (submodule path)")
     for path in repository_files(root):
         relative = path.relative_to(root)
         if path.name.lower() in PROHIBITED_FILENAMES:

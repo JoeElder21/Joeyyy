@@ -500,6 +500,64 @@ class VendorScannerExclusionTests(unittest.TestCase):
             self.assertEqual(gitlink_paths(root), frozenset())
             self.assertFalse(is_vendored(root / "config" / "settings.toml", root))
 
+    def test_gitlink_paths_are_scanned_for_private_data_patterns(self) -> None:
+        """A submodule's path is published text and gets the full pattern set.
+
+        The filename and suffix rules only catch exact matches, so a gitlink
+        named after a client — carrying an email address, a phone number, an
+        address — passes them all. Its contents are excluded from the content
+        scan by design, and with no `.gitmodules` entry to catch the name
+        incidentally, nothing else in the scan ever reads it.
+        """
+        if not _git_available():
+            self.skipTest("no git binary; this fixture builds a real repository")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def run(*args: str, cwd: Path = root) -> None:
+                subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+            inner = root / "inner"
+            inner.mkdir()
+            run("git", "init", "-q", ".", cwd=inner)
+            run("git", "config", "user.email", "gitlink-fixture", cwd=inner)
+            run("git", "config", "user.name", "gitlink-fixture", cwd=inner)
+            (inner / "a.txt").write_text("hi\n", encoding="utf-8")
+            run("git", "add", "a.txt", cwd=inner)
+            run("git", "commit", "-qm", "inner", cwd=inner)
+            sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=inner,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            run("git", "init", "-q", ".")
+            run("git", "config", "user.email", "gitlink-fixture")
+            run("git", "config", "user.name", "gitlink-fixture")
+            # A gitlink recorded directly in the index, with no .gitmodules
+            # entry — the case where the path is the only published record.
+            # Assembled at runtime: as a literal this fixture would trip the
+            # scanner it exercises when the guard walks this file, failing the
+            # repository's own privacy gate.
+            private = "clients-jane.doe" + "@" + "acmecorp" + ".invalid"
+            run(
+                "git",
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                f"160000,{sha},{private}",
+            )
+            run("git", "commit", "-qm", "fixture")
+
+            self.assertEqual(gitlink_paths(root), frozenset({private}))
+            findings = scan_repository(root)
+            self.assertTrue(
+                any("possible email address" in finding for finding in findings),
+                f"a gitlink path publishing an email scanned clean: {findings}",
+            )
+
     def test_upstream_files_are_excluded_from_the_privacy_contract(self) -> None:
         if not self.has_git_index:
             self.skipTest(
