@@ -78,9 +78,7 @@ class AutoGenMissionOrchestrator:
             raise ValueError(f"{brain} has no {cadence!r} cadence route")
         order = tuple(route["order"])
         if not order or len(set(order)) != len(order):
-            raise ValueError(
-                f"{brain} {cadence!r} cadence order must contain distinct specialists"
-            )
+            raise ValueError(f"{brain} {cadence!r} cadence order must contain distinct specialists")
         self._assert_same_brain(brain, order)
         integrator = route.get("integrator")
         governed_integrator = self.corps["governance"]["sole_cross_brain_agent"]
@@ -95,22 +93,16 @@ class AutoGenMissionOrchestrator:
         for item in manifest.get("challenge_pairs", []):
             agents = tuple(item.get("agents", ()))
             if not all(isinstance(agent, str) and agent for agent in agents):
-                raise ValueError(
-                    "challenge groups must contain distinct registered specialists"
-                )
+                raise ValueError("challenge groups must contain distinct registered specialists")
             if not set(agents).issubset(participants):
                 continue
             if len(agents) < 2 or len(set(agents)) != len(agents):
-                raise ValueError(
-                    "challenge groups must contain distinct registered specialists"
-                )
+                raise ValueError("challenge groups must contain distinct registered specialists")
             self._assert_same_brain(brain, agents)
             purpose = item.get("purpose")
             if not isinstance(purpose, str) or not purpose.strip():
                 raise ValueError("challenge groups must define a non-empty purpose")
-            challenges.append(
-                ChallengeRequirement(agents=agents, purpose=purpose.strip())
-            )
+            challenges.append(ChallengeRequirement(agents=agents, purpose=purpose.strip()))
 
         # Agent 007 integrates after the specialist-only GroupChat terminates.
         return GroupChatPlan(
@@ -168,9 +160,7 @@ class AutoGenMissionOrchestrator:
                 raise ValueError("llm_config must be a non-empty mapping or False")
             forbidden = {"functions", "tools"}.intersection(llm_config)
             if forbidden:
-                raise ValueError(
-                    "specialist llm_config cannot grant direct functions or tools"
-                )
+                raise ValueError("specialist llm_config cannot grant direct functions or tools")
         packets = self.validate_delegations(plan, delegations)
         try:
             from autogen import ConversableAgent, GroupChat, GroupChatManager
@@ -200,14 +190,11 @@ class AutoGenMissionOrchestrator:
             spoken = tuple(
                 message.get("name")
                 for message in groupchat.messages
-                if isinstance(message, dict)
-                and message.get("name") in specialists
+                if isinstance(message, dict) and message.get("name") in specialists
             )
             expected_prefix = plan.speaker_order[: len(spoken)]
             if spoken != expected_prefix:
-                raise ValueError(
-                    "GroupChat specialist history violates the manifest speaker order"
-                )
+                raise ValueError("GroupChat specialist history violates the manifest speaker order")
             if len(spoken) == len(plan.speaker_order):
                 return None
             return specialists[plan.speaker_order[len(spoken)]]
@@ -256,9 +243,7 @@ class AutoGenMissionOrchestrator:
         if groupchat is None:
             raise RuntimeError("the AutoGen manager does not expose its GroupChat")
         transcript = tuple(
-            dict(message)
-            for message in groupchat.messages
-            if isinstance(message, dict)
+            dict(message) for message in groupchat.messages if isinstance(message, dict)
         )
         spoken = tuple(
             message.get("name")
@@ -312,17 +297,13 @@ class AutoGenMissionOrchestrator:
     @staticmethod
     def _challenge_policy(plan: GroupChatPlan, agent: str) -> str:
         """Build the manifest-required challenge instructions for one specialist."""
-        relevant = [
-            challenge for challenge in plan.challenges if agent in challenge.agents
-        ]
+        relevant = [challenge for challenge in plan.challenges if agent in challenge.agents]
         if not relevant:
             return ""
 
         lines = ["Manifest-required same-brain challenge policy (mandatory):"]
         for challenge in relevant:
-            cadence_order = tuple(
-                name for name in plan.speaker_order if name in challenge.agents
-            )
+            cadence_order = tuple(name for name in plan.speaker_order if name in challenge.agents)
             position = cadence_order.index(agent)
             duties: list[str] = []
             if position:

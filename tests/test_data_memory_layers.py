@@ -51,19 +51,15 @@ class GovernedMemoryTests(unittest.TestCase):
             memory = self._memory(tmp)
             memory.add(
                 "Campaign one targets permit throughput this quarter.",
-                writer=CHIEF, agent_id=namespace, lease=lease,
+                writer=CHIEF,
+                agent_id=namespace,
+                lease=lease,
             )
-            hits = memory.search(
-                "permit campaign", reader="apex_war_architect", agent_id=namespace
-            )
+            hits = memory.search("permit campaign", reader="apex_war_architect", agent_id=namespace)
             self.assertEqual(len(hits), 1)
             with self.assertRaises(MemoryAccessDenied):
-                memory.search(
-                    "permit campaign", reader="jeos_life_architect", agent_id=namespace
-                )
-            chief_hits = memory.search(
-                "permit campaign", reader=CHIEF, agent_id=namespace
-            )
+                memory.search("permit campaign", reader="jeos_life_architect", agent_id=namespace)
+            chief_hits = memory.search("permit campaign", reader=CHIEF, agent_id=namespace)
             self.assertEqual(len(chief_hits), 1)
 
     def test_writes_require_owner_and_lease(self):
@@ -72,8 +68,7 @@ class GovernedMemoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)
             with self.assertRaises(MemoryAccessDenied):
-                memory.add("x", writer="apex_war_architect",
-                           agent_id=namespace, lease=lease)
+                memory.add("x", writer="apex_war_architect", agent_id=namespace, lease=lease)
             with self.assertRaises(MemoryAccessDenied):
                 memory.add("x", writer=CHIEF, agent_id=namespace, lease=None)
             wrong_lease = deepcopy(lease)

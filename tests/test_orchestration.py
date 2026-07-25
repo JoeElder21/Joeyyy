@@ -31,23 +31,32 @@ class LifecycleGraphTests(unittest.TestCase):
         from scripts.orchestration_graphs import build_lifecycle_graph
 
         graph = build_lifecycle_graph()
-        satisfied = graph.invoke({
-            "agent": "apex_war_architect", "stage": "shadow",
-            "gates": {gate: True for gate in ACTIVE_GATES},
-        })
+        satisfied = graph.invoke(
+            {
+                "agent": "apex_war_architect",
+                "stage": "shadow",
+                "gates": {gate: True for gate in ACTIVE_GATES},
+            }
+        )
         self.assertEqual(satisfied["stage"], "active")
 
-        missing = graph.invoke({
-            "agent": "apex_war_architect", "stage": "shadow",
-            "gates": {gate: True for gate in ACTIVE_GATES[:-1]},
-        })
+        missing = graph.invoke(
+            {
+                "agent": "apex_war_architect",
+                "stage": "shadow",
+                "gates": {gate: True for gate in ACTIVE_GATES[:-1]},
+            }
+        )
         self.assertEqual(missing["stage"], "shadow")
         self.assertTrue(any("unsatisfied" in line for line in missing["decision_log"]))
 
-        violated = graph.invoke({
-            "agent": "apex_war_architect", "stage": "active",
-            "violation": "wrote outside its lease",
-        })
+        violated = graph.invoke(
+            {
+                "agent": "apex_war_architect",
+                "stage": "active",
+                "violation": "wrote outside its lease",
+            }
+        )
         self.assertEqual(violated["stage"], "restricted")
 
 
@@ -58,9 +67,7 @@ class CadenceAndMissionGraphTests(unittest.TestCase):
 
         manifest = load_manifest("apex", ROOT)
         route = next(r for r in manifest["cadence_routes"] if r["cadence"] == "daily")
-        graph = build_cadence_graph(
-            "apex", "daily", lambda agent, state: {"note": f"{agent} ran"}
-        )
+        graph = build_cadence_graph("apex", "daily", lambda agent, state: {"note": f"{agent} ran"})
         outcome = graph.invoke({"cadence": "daily"})
         ran = [step["agent"] for step in outcome["steps"]]
         self.assertEqual(ran, list(route["order"]) + [route["integrator"]])
@@ -101,16 +108,16 @@ class GroupDebateTests(unittest.TestCase):
         team = build_challenge_debate(
             "APEX",
             ("apex_war_architect", "apex_intelligence_forge"),
-            self._client([
-                "Campaign two is the highest-leverage move this quarter.",
-                "The source record does not support that: two of three cited "
-                "opportunities are stale. TERMINATE",
-            ]),
+            self._client(
+                [
+                    "Campaign two is the highest-leverage move this quarter.",
+                    "The source record does not support that: two of three cited "
+                    "opportunities are stale. TERMINATE",
+                ]
+            ),
             max_turns=2,
         )
-        result = asyncio.run(
-            team.run(task="Debate: is campaign two the right focus?")
-        )
+        result = asyncio.run(team.run(task="Debate: is campaign two the right focus?"))
         speakers = {message.source for message in result.messages}
         self.assertIn("apex_war_architect", speakers)
         self.assertIn("apex_intelligence_forge", speakers)
@@ -120,14 +127,16 @@ class GroupDebateTests(unittest.TestCase):
 
         with self.assertRaises(DebateRefused):
             build_challenge_debate(
-                "APEX", ("apex_war_architect", "apex_delivery_commander")
+                "APEX",
+                ("apex_war_architect", "apex_delivery_commander")
                 if not self._pair_registered("apex_war_architect", "apex_delivery_commander")
                 else ("apex_deal_engine", "apex_systems_blacksmith"),
                 self._client(["x"]),
             )
         with self.assertRaises(DebateRefused):
             build_challenge_debate(
-                "APEX", ("apex_war_architect", "jeos_life_architect"),
+                "APEX",
+                ("apex_war_architect", "jeos_life_architect"),
                 self._client(["x"]),
             )
 
@@ -144,9 +153,7 @@ class GroupDebateTests(unittest.TestCase):
 
         manifest = load_manifest("apex", ROOT)
         route = next(r for r in manifest["cadence_routes"] if r["cadence"] == "daily")
-        team = build_cadence_chat(
-            "APEX", "daily", self._client(["a", "b", "c", "d"])
-        )
+        team = build_cadence_chat("APEX", "daily", self._client(["a", "b", "c", "d"]))
         names = [participant.name for participant in team._participants]
         self.assertEqual(names, list(route["order"]) + [route["integrator"]])
 
@@ -157,12 +164,8 @@ class GroupChatPlanTests(unittest.TestCase):
     def test_plan_uses_canonical_roster_order_and_subsets(self):
         from scripts.group_debate import plan_brain_chat
 
-        plan = plan_brain_chat(
-            "APEX", ["apex_intelligence_forge", "apex_deal_engine"]
-        )
-        self.assertEqual(
-            plan.speaker_order, ("apex_deal_engine", "apex_intelligence_forge")
-        )
+        plan = plan_brain_chat("APEX", ["apex_intelligence_forge", "apex_deal_engine"])
+        self.assertEqual(plan.speaker_order, ("apex_deal_engine", "apex_intelligence_forge"))
         self.assertEqual(plan.manager, CHIEF)
 
     def test_plan_rejects_mixed_brain_unknown_and_empty(self):
@@ -179,7 +182,8 @@ class GroupChatPlanTests(unittest.TestCase):
 class JeosKnowledgeGraphTests(unittest.TestCase):
     def _graph(self, tmp: str) -> JeosKnowledgeGraph:
         return JeosKnowledgeGraph(
-            Path(tmp) / "graph", load_roster(ROOT),
+            Path(tmp) / "graph",
+            load_roster(ROOT),
             AuditLedger(Path(tmp) / "audit.jsonl"),
         )
 
@@ -187,21 +191,23 @@ class JeosKnowledgeGraphTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             graph = self._graph(tmp)
             graph.write_page(
-                "jeos_reflection_forge", "JEOS/Pattern-Hypotheses",
+                "jeos_reflection_forge",
+                "JEOS/Pattern-Hypotheses",
                 "Energy dips after late scope calls",
                 "Three of four low-energy mornings followed evening scope calls.",
-                tags=["pattern-hypothesis"], links=["Energy Ledger"],
+                tags=["pattern-hypothesis"],
+                links=["Energy Ledger"],
             )
             graph.write_page(
-                "jeos_reflection_forge", "JEOS/Pattern-Hypotheses",
-                "Old hypothesis", "Stale entry.",
+                "jeos_reflection_forge",
+                "JEOS/Pattern-Hypotheses",
+                "Old hypothesis",
+                "Stale entry.",
                 tags=["pattern-hypothesis"],
                 date=dt.date.today() - dt.timedelta(days=90),
             )
             with self.assertRaises(GraphAccessDenied):
-                graph.write_page(
-                    "jeos_momentum_engine", "JEOS/Pattern-Hypotheses", "x", "y"
-                )
+                graph.write_page("jeos_momentum_engine", "JEOS/Pattern-Hypotheses", "x", "y")
             with self.assertRaises(GraphAccessDenied):
                 graph.query_by_tag("apex_intelligence_forge", "pattern-hypothesis")
 
@@ -211,9 +217,7 @@ class JeosKnowledgeGraphTests(unittest.TestCase):
             self.assertEqual(len(recent), 1)
             everything = graph.query_by_tag(CHIEF, "pattern-hypothesis")
             self.assertEqual(len(everything), 2)
-            self.assertEqual(
-                len(graph.backlinks(CHIEF, "Energy Ledger")), 1
-            )
+            self.assertEqual(len(graph.backlinks(CHIEF, "Energy Ledger")), 1)
 
     def test_journal_appends_dated_entries(self):
         with tempfile.TemporaryDirectory() as tmp:

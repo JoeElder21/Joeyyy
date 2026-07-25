@@ -53,16 +53,18 @@ def make_app(broker: str | None = None, eager: bool = False):
         readback: Callable[[dict], bool],
     ) -> dict:
         """Queue a mutation on its per-key queue, then close via readback."""
-        result = execute_mutation.apply_async(
-            args=[lease, description], queue=queue_name(lease)
+        result = execute_mutation.apply_async(args=[lease, description], queue=queue_name(lease))
+        outcome: dict[str, Any] = (
+            result.get()
+            if app.conf.task_always_eager
+            else {
+                "key": canonical_key(
+                    lease["owner_brain"], lease["write_target"], lease["resource_id"]
+                ),
+                "task_id": result.id,
+                "status": "queued",
+            }
         )
-        outcome: dict[str, Any] = result.get() if app.conf.task_always_eager else {
-            "key": canonical_key(
-                lease["owner_brain"], lease["write_target"], lease["resource_id"]
-            ),
-            "task_id": result.id,
-            "status": "queued",
-        }
         if app.conf.task_always_eager:
             confirmed = bool(readback(outcome))
             closed = admission.complete(outcome["key"], readback_confirmed=confirmed)

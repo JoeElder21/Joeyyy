@@ -156,9 +156,7 @@ def build_coverage(root: Path = ROOT, case_dir: Path = CASE_DIR) -> Coverage:
     known = {mode.key for mode in modes}
     for key in cases:
         if key not in known:
-            raise ValueError(
-                f"case targets unknown mode {key!r}; the roster is authoritative"
-            )
+            raise ValueError(f"case targets unknown mode {key!r}; the roster is authoritative")
     covered = {key: Path(cases[key]["_source"]) for key in cases}
     return Coverage(modes=modes, covered=covered)
 

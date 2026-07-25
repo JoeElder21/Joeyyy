@@ -93,9 +93,7 @@ def _delegation(agent: str, meta: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _handoff(
-    delegation: dict[str, Any], meta: dict[str, Any]
-) -> dict[str, Any]:
+def _handoff(delegation: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
     agent = delegation["agent"]
     source_ref = delegation["allowed_evidence"][0]["source_ref"]
     record_id = f"validation:{agent}:record-1"
@@ -139,9 +137,7 @@ def _handoff(
         "blockers": [],
         "challenges": [],
         "proposed_writes": [],
-        "validation": [
-            "The artifact record is source-linked and no mutation was proposed."
-        ],
+        "validation": ["The artifact record is source-linked and no mutation was proposed."],
         "criterion_validation": [
             {
                 "criterion_id": "typed-artifact",
@@ -156,9 +152,7 @@ def _handoff(
     }
 
 
-def _boundary_handoff(
-    delegation: dict[str, Any]
-) -> dict[str, Any]:
+def _boundary_handoff(delegation: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "2.1",
         "delegation_id": delegation["delegation_id"],
@@ -235,9 +229,7 @@ def run_validation() -> tuple[dict[str, Any], list[str]]:
         for agent in manifest["apex_roster"] + manifest["jeos_roster"]:
             meta = manifest["agents"][agent]
             delegation = _delegation(agent, meta)
-            delegation_errors = guard.validate(
-                "delegation_packet.schema.json", delegation
-            )
+            delegation_errors = guard.validate("delegation_packet.schema.json", delegation)
             handoff = _handoff(delegation, meta)
             handoff_errors = guard.validate(
                 "handoff_packet.schema.json",
@@ -245,9 +237,7 @@ def run_validation() -> tuple[dict[str, Any], list[str]]:
                 delegations=[delegation],
             )
             if delegation_errors or handoff_errors:
-                errors.extend(
-                    f"{agent}: delegation: {item}" for item in delegation_errors
-                )
+                errors.extend(f"{agent}: delegation: {item}" for item in delegation_errors)
                 errors.extend(f"{agent}: handoff: {item}" for item in handoff_errors)
             else:
                 result["contract_packets_validated"] += 1
@@ -257,9 +247,7 @@ def run_validation() -> tuple[dict[str, Any], list[str]]:
             contaminated["allowed_evidence"] = [
                 _evidence(f"{opposite}/synthetic-opposite", opposite)
             ]
-            rejection_errors = guard.validate(
-                "delegation_packet.schema.json", contaminated
-            )
+            rejection_errors = guard.validate("delegation_packet.schema.json", contaminated)
             boundary_errors = guard.validate(
                 "handoff_packet.schema.json",
                 _boundary_handoff(delegation),
@@ -268,9 +256,7 @@ def run_validation() -> tuple[dict[str, Any], list[str]]:
             if not rejection_errors:
                 errors.append(f"{agent}: opposite-brain delegation was not rejected")
             elif boundary_errors:
-                errors.extend(
-                    f"{agent}: boundary response: {item}" for item in boundary_errors
-                )
+                errors.extend(f"{agent}: boundary response: {item}" for item in boundary_errors)
             else:
                 result["boundary_rejections_validated"] += 1
 

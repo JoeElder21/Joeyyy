@@ -80,9 +80,7 @@ if OTEL_AVAILABLE:
             }
             with self._span("delegation.admission", attributes) as span:
                 try:
-                    admit_delegation(
-                        packet, target, roster, guard, self.ledger, **kwargs
-                    )
+                    admit_delegation(packet, target, roster, guard, self.ledger, **kwargs)
                     span.set_attribute("outcome", "admitted")
                 except HandoffRejected as rejection:
                     span.set_attribute("outcome", "rejected")
@@ -101,9 +99,7 @@ if OTEL_AVAILABLE:
                 "handoff.agent": handoff_packet.get("agent"),
             }
             with self._span("specialist.return", attributes) as span:
-                errors = validate_specialist_return(
-                    handoff_packet, guard, self.ledger, **kwargs
-                )
+                errors = validate_specialist_return(handoff_packet, guard, self.ledger, **kwargs)
                 span.set_attribute("outcome", "valid" if not errors else "invalid")
                 return errors
 
@@ -117,9 +113,11 @@ if OTEL_AVAILABLE:
                 key = f"{span.name}:{span.attributes.get('outcome', '?')}"
                 summary["by_outcome"][key] = summary["by_outcome"].get(key, 0) + 1
                 if span.attributes.get("outcome") == "rejected":
-                    rejections.append({
-                        "target": span.attributes.get("handoff.target"),
-                        "errors": span.attributes.get("errors"),
-                    })
+                    rejections.append(
+                        {
+                            "target": span.attributes.get("handoff.target"),
+                            "errors": span.attributes.get("errors"),
+                        }
+                    )
             summary["rejections"] = rejections
             return summary

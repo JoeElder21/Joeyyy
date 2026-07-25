@@ -66,9 +66,7 @@ def plan_brain_chat(
         raise DebateRefused("a group chat needs at least one specialist")
     unknown = [name for name in requested if name not in roster_order]
     if unknown:
-        raise DebateRefused(
-            f"brain-private chat rejects non-{brain} participants: {unknown}"
-        )
+        raise DebateRefused(f"brain-private chat rejects non-{brain} participants: {unknown}")
     return GroupChatPlan(
         brain=brain,
         participants=requested,
@@ -123,9 +121,10 @@ if AUTOGEN_AVAILABLE:
         agents = [
             _assistant(
                 name,
-                {**roster[name],
-                 "description": f"{roster[name]['description']} "
-                                f"Debate purpose: {purpose}"},
+                {
+                    **roster[name],
+                    "description": f"{roster[name]['description']} Debate purpose: {purpose}",
+                },
                 model_client,
             )
             for name in pair
@@ -140,9 +139,7 @@ if AUTOGEN_AVAILABLE:
     ) -> "RoundRobinGroupChat":
         """A cadence route as a group chat; manifest order is speaking order."""
         manifest = load_manifest(brain, root)
-        route = next(
-            item for item in manifest["cadence_routes"] if item["cadence"] == cadence
-        )
+        route = next(item for item in manifest["cadence_routes"] if item["cadence"] == cadence)
         roster = load_roster(root)
         order = list(route["order"]) + [route["integrator"]]
         agents = [_assistant(name, roster[name], model_client) for name in order]
@@ -155,10 +152,7 @@ if AUTOGEN_AVAILABLE:
     ) -> "RoundRobinGroupChat":
         """Construct the chat a validated plan describes, in plan order."""
         roster = load_roster(root)
-        agents = [
-            _assistant(name, roster[name], model_client)
-            for name in plan.speaker_order
-        ]
+        agents = [_assistant(name, roster[name], model_client) for name in plan.speaker_order]
         return RoundRobinGroupChat(agents, max_turns=max(2, len(agents) * 2))
 
     def build_selector_chat(
@@ -174,6 +168,4 @@ if AUTOGEN_AVAILABLE:
             for name, meta in sorted(roster.items())
             if meta["brain"] == brain or name == CHIEF
         ]
-        return SelectorGroupChat(
-            members, model_client=model_client, max_turns=max_turns
-        )
+        return SelectorGroupChat(members, model_client=model_client, max_turns=max_turns)

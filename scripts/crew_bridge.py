@@ -92,21 +92,17 @@ if CREWAI_AVAILABLE:
         """Build one single-brain sequential crew from admitted packets."""
         guard = guard or PacketGuard(root)
         roster = load_roster(root)
-        wrong = [p.get("agent") for p in packets
-                 if roster.get(p.get("agent", ""), {}).get("brain") != brain]
-        if wrong:
-            raise HandoffRejected(
-                brain, [f"crew is {brain}-only; packets address {wrong}"]
-            )
-        agents = {
-            name: crew_agent(name, meta)
-            for name, meta in roster.items()
-            if meta["brain"] == brain
-        }
-        tasks = [
-            task_from_packet(packet, agents, roster, guard, ledger)
-            for packet in packets
+        wrong = [
+            p.get("agent")
+            for p in packets
+            if roster.get(p.get("agent", ""), {}).get("brain") != brain
         ]
+        if wrong:
+            raise HandoffRejected(brain, [f"crew is {brain}-only; packets address {wrong}"])
+        agents = {
+            name: crew_agent(name, meta) for name, meta in roster.items() if meta["brain"] == brain
+        }
+        tasks = [task_from_packet(packet, agents, roster, guard, ledger) for packet in packets]
         return Crew(
             agents=list(agents.values()),
             tasks=tasks,

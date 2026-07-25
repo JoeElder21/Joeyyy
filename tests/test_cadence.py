@@ -98,9 +98,7 @@ class CadenceEngineTests(unittest.TestCase):
         self.assertIn("unittest=pass", line)
 
 
-@unittest.skipUnless(
-    importlib.util.find_spec("prefect") is not None, "prefect not installed"
-)
+@unittest.skipUnless(importlib.util.find_spec("prefect") is not None, "prefect not installed")
 class CadenceFlowTests(unittest.TestCase):
     def test_cadence_flow_builds_plan_and_reports_partial(self):
         from prefect.testing.utilities import prefect_test_harness

@@ -125,9 +125,7 @@ class GateEngineTests(unittest.TestCase):
             apply(result, state)
 
 
-@unittest.skipUnless(
-    importlib.util.find_spec("langgraph") is not None, "langgraph not installed"
-)
+@unittest.skipUnless(importlib.util.find_spec("langgraph") is not None, "langgraph not installed")
 class LifecycleGraphTests(unittest.TestCase):
     def test_graph_interrupts_for_joe_then_promotes_after_approval(self):
         from runtime.lifecycle_graph import build_lifecycle_graph

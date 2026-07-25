@@ -55,9 +55,7 @@ def load_roster(root: Path = ROOT) -> dict[str, dict[str, Any]]:
         with path.open("rb") as source:
             data = tomllib.load(source)
         name = data["name"]
-        brain = "cross-brain" if name == CHIEF else (
-            "APEX" if name.startswith("apex_") else "JEOS"
-        )
+        brain = "cross-brain" if name == CHIEF else ("APEX" if name.startswith("apex_") else "JEOS")
         roster[name] = {
             "brain": brain,
             "description": data.get("description", ""),
@@ -163,15 +161,17 @@ def admit_delegation(
         if ledger is not None:
             ledger.append(
                 "handoff_rejected",
-                {"target": target, "errors": errors,
-                 "delegation_id": packet.get("delegation_id")},
+                {"target": target, "errors": errors, "delegation_id": packet.get("delegation_id")},
             )
         raise HandoffRejected(target, errors)
     if ledger is not None:
         ledger.append(
             "handoff_admitted",
-            {"target": target, "delegation_id": packet.get("delegation_id"),
-             "mode": packet.get("mode")},
+            {
+                "target": target,
+                "delegation_id": packet.get("delegation_id"),
+                "mode": packet.get("mode"),
+            },
         )
 
 
@@ -185,15 +185,20 @@ def validate_specialist_return(
 ) -> list[str]:
     """Validate a specialist's returned handoff packet; log the outcome."""
     errors = guard.validate(
-        "handoff_packet.schema.json", handoff_packet, leases,
+        "handoff_packet.schema.json",
+        handoff_packet,
+        leases,
         delegations=delegations,
     )
     if ledger is not None:
         ledger.append(
             "return_validated" if not errors else "return_rejected",
-            {"agent": handoff_packet.get("agent"),
-             "delegation_id": handoff_packet.get("delegation_id"),
-             "status": handoff_packet.get("status"), "errors": errors},
+            {
+                "agent": handoff_packet.get("agent"),
+                "delegation_id": handoff_packet.get("delegation_id"),
+                "status": handoff_packet.get("status"),
+                "errors": errors,
+            },
         )
     return errors
 

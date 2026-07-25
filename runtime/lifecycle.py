@@ -173,9 +173,7 @@ def evaluate_promotion(state: AgentLifecycleState) -> TransitionResult:
     return TransitionResult(state.agent_id, state.stage, target, not failures, failures)
 
 
-def evaluate_administrative(
-    state: AgentLifecycleState, target: Stage
-) -> TransitionResult:
+def evaluate_administrative(state: AgentLifecycleState, target: Stage) -> TransitionResult:
     """Restrict, deprecate, or retire an agent. Requires a recorded reason.
 
     Retired is terminal: nothing transitions out of it, ever.

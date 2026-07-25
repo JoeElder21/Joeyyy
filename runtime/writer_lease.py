@@ -134,9 +134,7 @@ class MutationAdmission:
     _in_flight: dict[str, str] = field(default_factory=dict)
 
     def admit(self, lease: dict) -> str:
-        key = canonical_key(
-            lease["owner_brain"], lease["write_target"], lease["resource_id"]
-        )
+        key = canonical_key(lease["owner_brain"], lease["write_target"], lease["resource_id"])
         active = self.registry.active_lease(key)
         if active is None or active["lease_id"] != lease["lease_id"]:
             raise LeaseError(f"mutation on {key} has no matching active lease")

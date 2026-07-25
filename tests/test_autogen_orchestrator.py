@@ -67,15 +67,12 @@ class FakeIntegrator:
 
     def initiate_chat(self, manager, **kwargs):
         self.calls.append("initiate_chat")
-        manager.groupchat.messages.append(
-            {"name": self.name, "content": kwargs["message"]}
-        )
+        manager.groupchat.messages.append({"name": self.name, "content": kwargs["message"]})
         participants = self.plan.speaker_order
         if not self.complete:
             participants = participants[:-1]
         manager.groupchat.messages.extend(
-            {"name": name, "content": f"{name} handoff"}
-            for name in participants
+            {"name": name, "content": f"{name} handoff"} for name in participants
         )
         return "group result"
 
@@ -173,15 +170,11 @@ class AutoGenMissionOrchestratorTests(unittest.TestCase):
         manifest_path = ROOT / self.orchestrator.corps["apex_brain_manifest"]
         with manifest_path.open("rb") as source:
             manifest = tomllib.load(source)
-        route = next(
-            item for item in manifest["cadence_routes"] if item["cadence"] == "daily"
-        )
+        route = next(item for item in manifest["cadence_routes"] if item["cadence"] == "daily")
         for invalid in ("rogue_integrator", None):
             changed = deepcopy(manifest)
             changed_route = next(
-                item
-                for item in changed["cadence_routes"]
-                if item["cadence"] == "daily"
+                item for item in changed["cadence_routes"] if item["cadence"] == "daily"
             )
             if invalid is None:
                 changed_route.pop("integrator")
@@ -222,9 +215,7 @@ class AutoGenMissionOrchestratorTests(unittest.TestCase):
                 yielded.append(packet["agent"])
                 yield packet
 
-        plan, specialists, manager = self.build_chat(
-            delegations=delegation_stream()
-        )
+        plan, specialists, manager = self.build_chat(delegations=delegation_stream())
         self.assertEqual(tuple(specialists), plan.participants)
         self.assertEqual(tuple(yielded), plan.participants)
         self.assertEqual(

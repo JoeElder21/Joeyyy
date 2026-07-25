@@ -29,9 +29,7 @@ async def _probe(command: list[str]) -> list[str]:
     from mcp.client.stdio import stdio_client
 
     executable = sys.executable if command[0] == "python" else command[0]
-    params = StdioServerParameters(
-        command=executable, args=command[1:], cwd=str(ROOT)
-    )
+    params = StdioServerParameters(command=executable, args=command[1:], cwd=str(ROOT))
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -43,6 +41,7 @@ def main() -> int:
     report: dict = {"mounts": []}
     try:
         import mcp  # noqa: F401
+
         mcp_available = True
     except ImportError:
         mcp_available = False
@@ -67,8 +66,7 @@ def main() -> int:
         report["mounts"].append(entry)
 
     report["valid"] = all(
-        entry["status"] in ("verified", "registered")
-        or entry["status"].startswith("unverified")
+        entry["status"] in ("verified", "registered") or entry["status"].startswith("unverified")
         for entry in report["mounts"]
     )
     print(json.dumps(report, indent=2, sort_keys=True))

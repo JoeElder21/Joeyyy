@@ -61,11 +61,16 @@ class ClaudeRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = AuditLedger(Path(tmp) / "audit.jsonl")
             admitted = handle_tool_use(
-                _block(DELEGATE_TOOL, {
-                    "target": "apex_war_architect",
-                    "packet_json": json.dumps(self.delegation),
-                }),
-                self.roster, self.guard, ledger,
+                _block(
+                    DELEGATE_TOOL,
+                    {
+                        "target": "apex_war_architect",
+                        "packet_json": json.dumps(self.delegation),
+                    },
+                ),
+                self.roster,
+                self.guard,
+                ledger,
             )
             self.assertFalse(admitted["is_error"])
             self.assertIn('"admitted": true', admitted["content"])
@@ -73,11 +78,16 @@ class ClaudeRuntimeTests(unittest.TestCase):
             legacy = deepcopy(self.delegation)
             legacy["schema_version"] = "2.0"
             rejected = handle_tool_use(
-                _block(DELEGATE_TOOL, {
-                    "target": "apex_war_architect",
-                    "packet_json": json.dumps(legacy),
-                }),
-                self.roster, self.guard, ledger,
+                _block(
+                    DELEGATE_TOOL,
+                    {
+                        "target": "apex_war_architect",
+                        "packet_json": json.dumps(legacy),
+                    },
+                ),
+                self.roster,
+                self.guard,
+                ledger,
             )
             self.assertTrue(rejected["is_error"])
             self.assertIn("legacy", rejected["content"])
@@ -87,11 +97,15 @@ class ClaudeRuntimeTests(unittest.TestCase):
         broken = deepcopy(self.handoff_return)
         broken["artifacts"][0]["records"][0]["source_refs"] = []
         outcome = handle_tool_use(
-            _block(RETURN_TOOL, {
-                "handoff_json": json.dumps(broken),
-                "delegation_json": json.dumps(self.delegation),
-            }),
-            self.roster, self.guard,
+            _block(
+                RETURN_TOOL,
+                {
+                    "handoff_json": json.dumps(broken),
+                    "delegation_json": json.dumps(self.delegation),
+                },
+            ),
+            self.roster,
+            self.guard,
         )
         self.assertTrue(outcome["is_error"])
         self.assertIn("source evidence", outcome["content"])
@@ -100,13 +114,9 @@ class ClaudeRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = AuditLedger(Path(tmp) / "audit.jsonl")
             ledger.append("probe", {"n": 1})
-            intact = handle_tool_use(
-                _block(AUDIT_TOOL, {}), self.roster, self.guard, ledger
-            )
+            intact = handle_tool_use(_block(AUDIT_TOOL, {}), self.roster, self.guard, ledger)
             self.assertFalse(intact["is_error"])
-        unknown = handle_tool_use(
-            _block("no_such_tool", {}), self.roster, self.guard
-        )
+        unknown = handle_tool_use(_block("no_such_tool", {}), self.roster, self.guard)
         self.assertTrue(unknown["is_error"])
 
 
@@ -175,22 +185,19 @@ class GovernanceMcpServerTests(unittest.TestCase):
         delegation, _ = _v21_pair()
         with tempfile.TemporaryDirectory() as tmp:
             tools = _tool_functions(
-                PacketGuard(ROOT), load_roster(ROOT),
+                PacketGuard(ROOT),
+                load_roster(ROOT),
                 AuditLedger(Path(tmp) / "audit.jsonl"),
             )
             admitted = json.loads(
-                tools["admit_delegation_packet"](
-                    "apex_war_architect", json.dumps(delegation)
-                )
+                tools["admit_delegation_packet"]("apex_war_architect", json.dumps(delegation))
             )
             self.assertTrue(admitted["admitted"])
 
             legacy = deepcopy(delegation)
             legacy["schema_version"] = "2.0"
             rejected = json.loads(
-                tools["admit_delegation_packet"](
-                    "apex_war_architect", json.dumps(legacy)
-                )
+                tools["admit_delegation_packet"]("apex_war_architect", json.dumps(legacy))
             )
             self.assertFalse(rejected["admitted"])
             self.assertTrue(any("legacy" in item for item in rejected["errors"]))

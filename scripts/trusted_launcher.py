@@ -66,8 +66,11 @@ def _sign(key: bytes, payload: dict) -> str:
 
 
 def issue_grant(
-    mount: str, minutes: int, key_path: Path = DEFAULT_KEY_PATH,
-    out_dir: Path | None = None, now: float | None = None,
+    mount: str,
+    minutes: int,
+    key_path: Path = DEFAULT_KEY_PATH,
+    out_dir: Path | None = None,
+    now: float | None = None,
 ) -> Path:
     """Create a signed, single-use grant file for one mount."""
     mounts = _load_mounts()
@@ -106,7 +109,8 @@ def _consumed_nonces(ledger: AuditLedger) -> set[str]:
 
 
 def authorize(
-    mount: str, grant_path: Path | None,
+    mount: str,
+    grant_path: Path | None,
     key_path: Path = DEFAULT_KEY_PATH,
     ledger: AuditLedger | None = None,
     now: float | None = None,
@@ -146,8 +150,7 @@ def authorize(
         raise deny("grant already consumed (single-use)")
     ledger.append(
         "launch_authorized",
-        {"mount": mount, "nonce": payload["nonce"],
-         "expires_at": payload["expires_at"]},
+        {"mount": mount, "nonce": payload["nonce"], "expires_at": payload["expires_at"]},
     )
     return spec
 
@@ -161,14 +164,14 @@ def main(argv: list[str] | None = None) -> int:
     launch = sub.add_parser("launch", help="Launch a mount under grant control.")
     launch.add_argument("--mount", required=True)
     launch.add_argument("--grant", type=Path)
-    launch.add_argument("--dry-run", action="store_true",
-                        help="Verify authorization without executing.")
+    launch.add_argument(
+        "--dry-run", action="store_true", help="Verify authorization without executing."
+    )
     args = parser.parse_args(argv)
 
     if args.cmd == "grant":
         path = issue_grant(args.mount, args.minutes)
-        print(json.dumps({"grant": str(path), "mount": args.mount,
-                          "minutes": args.minutes}))
+        print(json.dumps({"grant": str(path), "mount": args.mount, "minutes": args.minutes}))
         return 0
 
     try:
@@ -177,8 +180,16 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"authorized": False, "error": str(denial)}))
         return 1
     if args.dry_run:
-        print(json.dumps({"authorized": True, "mount": args.mount,
-                          "command": spec["command"], "dry_run": True}))
+        print(
+            json.dumps(
+                {
+                    "authorized": True,
+                    "mount": args.mount,
+                    "command": spec["command"],
+                    "dry_run": True,
+                }
+            )
+        )
         return 0
     env = dict(**os.environ)
     return subprocess.call(spec["command"], cwd=str(ROOT), env=env)

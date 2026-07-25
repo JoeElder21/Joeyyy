@@ -13,7 +13,9 @@ from scripts.packet_guard import PacketGuard
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def evidence(ref="synthetic-goals-v1", brain="APEX", sensitivity="internal", source_type="synthetic"):
+def evidence(
+    ref="synthetic-goals-v1", brain="APEX", sensitivity="internal", source_type="synthetic"
+):
     return {
         "source_ref": ref,
         "owner_brain": brain,
@@ -224,9 +226,7 @@ class PacketContractTests(unittest.TestCase):
         )
 
         undelegated_source = deepcopy(handoff)
-        undelegated_source["artifacts"][0]["records"][0]["source_refs"] = [
-            "undelegated-source"
-        ]
+        undelegated_source["artifacts"][0]["records"][0]["source_refs"] = ["undelegated-source"]
         self.assertInvalid(
             "handoff_packet.schema.json",
             undelegated_source,
@@ -236,9 +236,7 @@ class PacketContractTests(unittest.TestCase):
     def test_candidate_lease_collides_with_ledgered_active_lease(self):
         candidate = deepcopy(self.lease)
         candidate["lease_id"] = "lease-2"
-        errors = self.guard.validate(
-            "writer_lease.schema.json", candidate, [self.lease]
-        )
+        errors = self.guard.validate("writer_lease.schema.json", candidate, [self.lease])
         self.assertTrue(any("collides" in error for error in errors), errors)
 
     def test_v21_passed_criterion_requires_artifact_evidence(self):
@@ -285,9 +283,7 @@ class PacketContractTests(unittest.TestCase):
             "replay_policy": "single_mission_resource",
             "expires_at": expires,
         }
-        errors = self.guard.validate(
-            "brain_private_constraint_packet.schema.json", private
-        )
+        errors = self.guard.validate("brain_private_constraint_packet.schema.json", private)
         self.assertTrue(any("legacy" in error for error in errors), errors)
         self.assertEqual(
             self.guard.validate(
@@ -302,18 +298,14 @@ class PacketContractTests(unittest.TestCase):
         delegation_errors = self.guard.validate(
             "delegation_packet.schema.json", self.delegation, [self.lease]
         )
-        self.assertTrue(
-            any("legacy" in error for error in delegation_errors), delegation_errors
-        )
+        self.assertTrue(any("legacy" in error for error in delegation_errors), delegation_errors)
         handoff_errors = self.guard.validate(
             "handoff_packet.schema.json",
             self.handoff,
             [self.lease],
             delegations=[self.delegation],
         )
-        self.assertTrue(
-            any("legacy" in error for error in handoff_errors), handoff_errors
-        )
+        self.assertTrue(any("legacy" in error for error in handoff_errors), handoff_errors)
 
     def test_v21_delegation_rejects_downgraded_handoff_even_as_historical(self):
         delegation, handoff = self.v21_readonly_pair()
@@ -325,9 +317,7 @@ class PacketContractTests(unittest.TestCase):
             delegations=[delegation],
             historical=True,
         )
-        self.assertTrue(
-            any("must use schema_version 2.1" in error for error in errors), errors
-        )
+        self.assertTrue(any("must use schema_version 2.1" in error for error in errors), errors)
 
     def test_v21_completed_artifact_records_require_source_evidence(self):
         delegation, handoff = self.v21_readonly_pair()
@@ -445,9 +435,7 @@ class PacketContractTests(unittest.TestCase):
         mislabeled["allowed_evidence"] = [
             evidence(sensitive_ref, "APEX", "internal", "runtime_record")
         ]
-        errors = self.guard.validate(
-            "delegation_packet.schema.json", mislabeled, [self.lease]
-        )
+        errors = self.guard.validate("delegation_packet.schema.json", mislabeled, [self.lease])
         self.assertTrue(errors)
         self.assertNotIn(sensitive_ref, " ".join(errors))
 
@@ -712,8 +700,8 @@ class PacketContractTests(unittest.TestCase):
         self.assertInvalid("writer_lease.schema.json", no_expiry)
         too_long = deepcopy(self.lease)
         too_long["expires_at"] = (
-            datetime.now(timezone.utc) + timedelta(days=30)
-        ).isoformat().replace("+00:00", "Z")
+            (datetime.now(timezone.utc) + timedelta(days=30)).isoformat().replace("+00:00", "Z")
+        )
         self.assertInvalid("writer_lease.schema.json", too_long)
 
     def test_roundtable_is_delegation_bound_and_same_brain(self):
@@ -748,20 +736,14 @@ class PacketContractTests(unittest.TestCase):
             "resolution": None,
             "tags": ["strategy"],
         }
-        self.assertValid(
-            "roundtable_memo.schema.json", memo, delegations=[readonly]
-        )
+        self.assertValid("roundtable_memo.schema.json", memo, delegations=[readonly])
         mixed = deepcopy(memo)
         mixed["to_agents"] = ["jeos_life_architect"]
-        self.assertInvalid(
-            "roundtable_memo.schema.json", mixed, delegations=[readonly]
-        )
+        self.assertInvalid("roundtable_memo.schema.json", mixed, delegations=[readonly])
         downgraded = deepcopy(memo)
         restricted = deepcopy(readonly)
         restricted["sensitivity"] = "restricted"
-        restricted["allowed_evidence"] = [
-            evidence("restricted-source", "APEX", "restricted")
-        ]
+        restricted["allowed_evidence"] = [evidence("restricted-source", "APEX", "restricted")]
         downgraded["sensitivity"] = "public"
         downgraded["evidence"] = []
         self.assertInvalid(
@@ -998,12 +980,8 @@ class PacketContractTests(unittest.TestCase):
         wrong_brain["destination_agent"] = "apex_war_architect"
         self.assertInvalid("brain_private_constraint_packet.schema.json", wrong_brain)
         future_cross = deepcopy(cross)
-        future_cross["issued_at"] = (
-            now + timedelta(days=30)
-        ).isoformat().replace("+00:00", "Z")
-        future_cross["expires_at"] = (
-            now + timedelta(days=31)
-        ).isoformat().replace("+00:00", "Z")
+        future_cross["issued_at"] = (now + timedelta(days=30)).isoformat().replace("+00:00", "Z")
+        future_cross["expires_at"] = (now + timedelta(days=31)).isoformat().replace("+00:00", "Z")
         self.assertInvalid("cross_brain_constraint_packet.schema.json", future_cross)
         future_private = deepcopy(private)
         future_private["issued_at"] = future_cross["issued_at"]
@@ -1076,14 +1054,10 @@ class PacketContractTests(unittest.TestCase):
             self.assertNotEqual(legacy.returncode, 0, legacy.stdout + legacy.stderr)
             self.assertIn("legacy", legacy.stdout)
             historical_command = command + ["--historical"]
-            valid = subprocess.run(
-                historical_command, cwd=ROOT, capture_output=True, text=True
-            )
+            valid = subprocess.run(historical_command, cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
             packet_path.write_text("{}", encoding="utf-8")
-            invalid = subprocess.run(
-                historical_command, cwd=ROOT, capture_output=True, text=True
-            )
+            invalid = subprocess.run(historical_command, cwd=ROOT, capture_output=True, text=True)
             self.assertNotEqual(invalid.returncode, 0)
 
 

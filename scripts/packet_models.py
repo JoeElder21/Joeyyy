@@ -52,7 +52,6 @@ except ImportError:  # pragma: no cover - exercised in stdlib CI
 
 
 if PYDANTIC_AVAILABLE:
-
     _TYPE_MAP = {
         "string": str,
         "integer": int,
@@ -84,9 +83,7 @@ if PYDANTIC_AVAILABLE:
 
         __schema_name__: str = ""
 
-        def validate_with_guard(
-            self, guard: PacketGuard | None = None, **kwargs: Any
-        ) -> list[str]:
+        def validate_with_guard(self, guard: PacketGuard | None = None, **kwargs: Any) -> list[str]:
             """Run PacketGuard's relational validation on this packet."""
             guard = guard or PacketGuard(ROOT)
             return guard.validate(self.__schema_name__, self.model_dump(), **kwargs)

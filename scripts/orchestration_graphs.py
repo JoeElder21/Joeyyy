@@ -36,8 +36,13 @@ except ImportError:  # pragma: no cover - exercised in stdlib CI
 ROOT = Path(__file__).resolve().parents[1]
 
 LIFECYCLE_STAGES = [
-    "candidate", "shadow", "active", "value-proven",
-    "restricted", "deprecated", "retired",
+    "candidate",
+    "shadow",
+    "active",
+    "value-proven",
+    "restricted",
+    "deprecated",
+    "retired",
 ]
 
 # Gate conditions for shadow -> active, per README and
@@ -78,7 +83,8 @@ def _evaluate(state: LifecycleState) -> LifecycleState:
     elif state["stage"] == "shadow":
         missing = [gate for gate in ACTIVE_GATES if not state.get("gates", {}).get(gate)]
         log.append(
-            "all active gates satisfied" if not missing
+            "all active gates satisfied"
+            if not missing
             else f"gates unsatisfied: {', '.join(missing)}"
         )
     else:
@@ -126,7 +132,8 @@ def build_lifecycle_graph():
     graph.add_node("restrict", _restrict)
     graph.set_entry_point("evaluate")
     graph.add_conditional_edges(
-        "evaluate", _route,
+        "evaluate",
+        _route,
         {"promote": "promote", "hold": "hold", "restrict": "restrict"},
     )
     graph.add_edge("promote", END)
@@ -152,9 +159,7 @@ def build_cadence_graph(
     record — injected, so live execution is an activation-time decision.
     """
     manifest = load_manifest(brain, root)
-    route = next(
-        item for item in manifest["cadence_routes"] if item["cadence"] == cadence
-    )
+    route = next(item for item in manifest["cadence_routes"] if item["cadence"] == cadence)
     order = list(route["order"]) + [route["integrator"]]
 
     graph = StateGraph(CadenceState)
@@ -163,6 +168,7 @@ def build_cadence_graph(
         def node(state: CadenceState) -> CadenceState:
             record = step_fn(agent, state)
             return {"steps": state.get("steps", []) + [{"agent": agent, **record}]}
+
         return node
 
     for agent in order:
@@ -197,9 +203,7 @@ def build_mission_graph():
 
     def execute_irreversible(state: MissionState) -> MissionState:
         if not state.get("approved_by_joe"):
-            raise PermissionError(
-                "irreversible action requires Joe's explicit approval"
-            )
+            raise PermissionError("irreversible action requires Joe's explicit approval")
         return {
             "actions": state.get("actions", [])
             + [f"irreversible executed: {state.get('irreversible_action', '?')}"]
@@ -213,6 +217,4 @@ def build_mission_graph():
     graph.add_edge("plan", "execute_reversible")
     graph.add_edge("execute_reversible", "execute_irreversible")
     graph.add_edge("execute_irreversible", END)
-    return graph.compile(
-        checkpointer=MemorySaver(), interrupt_before=["execute_irreversible"]
-    )
+    return graph.compile(checkpointer=MemorySaver(), interrupt_before=["execute_irreversible"])

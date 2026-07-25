@@ -12,15 +12,15 @@ line-length = 100
 extend-exclude = ["connectors/aps/node_modules"]
 
 [tool.ruff.lint]
-# Deliberately conservative. This set is enforced in CI and the whole tree is
-# clean under it today, so the gate is real rather than aspirational.
-#
-# The broader set ("I", "UP", "B", "C4", "SIM") reports 63 further findings —
-# mostly modernization and test-idiom nits, none of them defects. Adopting it
-# would mean rewriting governance code in the same change that installs the
-# linter. Tighten in a separate, reviewable pass instead.
+# Enforced in CI and clean across the tree, so the gate is real rather than
+# aspirational.
 select = ["E", "F", "W"]
 ignore = [
-    # Line length is a formatter concern, and ruff-format is not enabled here.
+    # ruff-format owns line length; the linter flagging it too is just noise.
     "E501",
 ]
+
+[tool.ruff.format]
+# Enabled 2026-07-25. Applied as one mechanical commit so the reformat is
+# reviewable on its own rather than buried in a behavior change.
+docstring-code-format = true

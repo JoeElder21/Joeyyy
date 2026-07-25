@@ -110,9 +110,7 @@ def build_cadence_run(brain: str, cadence: str) -> CadenceRun:
 
     integrator = route["integrator"]
     if integrator != INTEGRATOR:
-        raise ValueError(
-            f"{brain}/{cadence}: integrator must be {INTEGRATOR}, found {integrator}"
-        )
+        raise ValueError(f"{brain}/{cadence}: integrator must be {INTEGRATOR}, found {integrator}")
     return CadenceRun(brain=brain, cadence=cadence, steps=steps, integrator=integrator)
 
 
@@ -128,9 +126,7 @@ def run_hygiene_sweep(
     """
     results: dict[str, bool] = {}
     for name, command in checks:
-        completed = subprocess.run(
-            command, cwd=ROOT, capture_output=True, text=True
-        )
+        completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         results[name] = completed.returncode == 0
 
     log_path = log_path or (ROOT / "trial" / "output" / "cadence-log.md")

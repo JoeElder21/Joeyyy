@@ -33,9 +33,7 @@ class CadenceFlowTests(unittest.TestCase):
         route = next(r for r in manifest["cadence_routes"] if r["cadence"] == "daily")
         with tempfile.TemporaryDirectory() as tmp:
             ledger = AuditLedger(Path(tmp) / "audit.jsonl")
-            flow = build_cadence_flow(
-                "apex", "daily", lambda agent, state: {"note": "ran"}, ledger
-            )
+            flow = build_cadence_flow("apex", "daily", lambda agent, state: {"note": "ran"}, ledger)
             outcome = flow()
             ran = [step["agent"] for step in outcome["steps"]]
             self.assertEqual(ran, list(route["order"]) + [route["integrator"]])
@@ -71,9 +69,7 @@ class ObservabilityTests(unittest.TestCase):
 
             with self.assertRaises(HandoffRejected):
                 tracer.traced_admission(legacy, "apex_war_architect", roster, guard)
-            errors = tracer.traced_return(
-                deepcopy(handoff_return), guard, delegations=[delegation]
-            )
+            errors = tracer.traced_return(deepcopy(handoff_return), guard, delegations=[delegation])
             self.assertEqual(errors, [])
 
             review = tracer.weekly_review()

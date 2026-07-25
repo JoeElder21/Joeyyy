@@ -52,11 +52,7 @@ class RollbackTests(unittest.TestCase):
         )
         prior_paths = set(result.stdout.splitlines())
         self.assertTrue(RETIRED_NATIVE_FILES.issubset(prior_paths))
-        current_paths = {
-            str(path.relative_to(ROOT))
-            for path in ROOT.rglob("*")
-            if path.is_file()
-        }
+        current_paths = {str(path.relative_to(ROOT)) for path in ROOT.rglob("*") if path.is_file()}
         self.assertTrue(RETIRED_NATIVE_FILES.isdisjoint(current_paths))
 
 

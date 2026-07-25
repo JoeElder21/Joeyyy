@@ -114,12 +114,13 @@ def handle_tool_use(
     try:
         if block.name == DELEGATE_TOOL:
             packet = json.loads(block.input["packet_json"])
-            admit_delegation(
-                packet, block.input["target"], roster, guard, ledger, leases=leases
-            )
+            admit_delegation(packet, block.input["target"], roster, guard, ledger, leases=leases)
             return result(
-                {"admitted": True, "target": block.input["target"],
-                 "delegation_id": packet.get("delegation_id")}
+                {
+                    "admitted": True,
+                    "target": block.input["target"],
+                    "delegation_id": packet.get("delegation_id"),
+                }
             )
         if block.name == RETURN_TOOL:
             handoff_packet = json.loads(block.input["handoff_json"])
@@ -132,8 +133,9 @@ def handle_tool_use(
             return result({"valid": not errors, "errors": errors}, is_error=bool(errors))
         if block.name == AUDIT_TOOL:
             violations = ledger.verify() if ledger is not None else []
-            return result({"intact": not violations, "violations": violations},
-                          is_error=bool(violations))
+            return result(
+                {"intact": not violations, "violations": violations}, is_error=bool(violations)
+            )
     except HandoffRejected as rejection:
         return result({"admitted": False, "errors": rejection.errors}, is_error=True)
     except (KeyError, json.JSONDecodeError) as error:

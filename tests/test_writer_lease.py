@@ -40,11 +40,11 @@ def _issue(registry: LeaseRegistry, **overrides):
 class CanonicalKeyTests(unittest.TestCase):
     def test_rejects_whitespace_unicode_aliases_and_unknown_brains(self):
         for brain, target, resource in [
-            ("APEX", "APEX/Strategy Campaigns", "r"),   # whitespace
-            ("APEX", "APEX/Ｓtrategy", "r"),             # fullwidth alias (NFKC changes it)
-            ("APEX", "APEX/Stratégy", "r"),              # non-ASCII
-            ("BOTH", "X/Y", "r"),                        # unknown brain
-            ("APEX", "", "r"),                           # empty part
+            ("APEX", "APEX/Strategy Campaigns", "r"),  # whitespace
+            ("APEX", "APEX/Ｓtrategy", "r"),  # fullwidth alias (NFKC changes it)
+            ("APEX", "APEX/Stratégy", "r"),  # non-ASCII
+            ("BOTH", "X/Y", "r"),  # unknown brain
+            ("APEX", "", "r"),  # empty part
         ]:
             with self.assertRaises(LeaseError, msg=(brain, target, resource)):
                 canonical_key(brain, target, resource)
@@ -107,9 +107,7 @@ class MutationAdmissionTests(unittest.TestCase):
         self.assertEqual(closed["status"], "verified")
 
 
-@unittest.skipUnless(
-    importlib.util.find_spec("celery") is not None, "celery not installed"
-)
+@unittest.skipUnless(importlib.util.find_spec("celery") is not None, "celery not installed")
 class LeaseQueueTests(unittest.TestCase):
     def test_eager_queue_runs_admission_and_readback_end_to_end(self):
         from runtime.lease_queue import make_app, queue_name

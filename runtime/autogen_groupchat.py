@@ -78,7 +78,9 @@ def build_group_chat(
         )
     )
     specialists = {
-        agent: ConversableAgent(name=agent, system_message=make_message(agent), llm_config=llm_config)
+        agent: ConversableAgent(
+            name=agent, system_message=make_message(agent), llm_config=llm_config
+        )
         for agent in plan.speaker_order
     }
     group = GroupChat(
