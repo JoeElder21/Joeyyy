@@ -378,7 +378,7 @@ for sig, val, why in [
     ("Domain", "Multi-agent governance",
      "The single strongest signal — it is what made "
      "<font face='Courier' size='7.5'>agent-safety</font> the highest-value "
-     "file in 190."),
+     "file in the collection."),
 ]:
     prof.append([Paragraph(f"<b>{sig}</b>", CELL), Paragraph(val, CELL),
                  Paragraph(why, CELL)])
@@ -405,7 +405,8 @@ story.append(PageBreak())
 # ------------------------------------------------------------------ adopted
 story.append(Paragraph(
     f"3. Instructions adopted "
-    f"({count_installed('instructions/*.instructions.md')} of 190)", H1))
+    f"({count_installed('instructions/*.instructions.md')} of "
+    f"{_cell(UPSTREAM_INVENTORY.get('instructions'))})", H1))
 story.append(Paragraph(
     "Each file carries its own <font face='Courier' size='8'>applyTo</font> "
     "glob and is applied automatically to matching files. No wrapper or "
@@ -440,7 +441,9 @@ for f, glob, why in [
 
 story.append(tbl(ins, [2.2 * inch, 1.78 * inch, 2.72 * inch]))
 
-story.append(Paragraph("4. Agents adopted (3 of 221)", H1))
+story.append(Paragraph(
+    f"4. Agents adopted ({count_installed('agents/*.agent.md')} of "
+    f"{_cell(UPSTREAM_INVENTORY.get('agents'))})", H1))
 story.append(Paragraph(
     "All three are registered in "
     "<font face='Courier' size='8'>docs/AGENT_REGISTRY.md</font>. They are "
@@ -477,7 +480,9 @@ story.append(Paragraph(
     "function and route through intake.", NOTE))
 
 story.append(PageBreak())
-story.append(Paragraph("5. Skills adopted (3 of 391)", H1))
+story.append(Paragraph(
+    f"5. Skills adopted ({count_installed('skills/*/SKILL.md')} of "
+    f"{_cell(UPSTREAM_INVENTORY.get('skills'))})", H1))
 story.append(Paragraph(
     "All three are discovery skills. This is the deliberate core of the "
     "selection: rather than vendoring a large static subset, the repository "
@@ -617,7 +622,11 @@ story.append(Paragraph(
     "Scope of change: the adopted instruction, agent, and skill files are "
     "editor-side authoring aids and alter no runtime or brain behaviour. Three "
     "changes to existing behaviour did occur and are not covered by that "
-    "statement \u2014 the privacy-guard scoping in section 7; the Agent 007 "
+    "statement \u2014 the privacy-guard scoping in section 7; the trusted "
+    "launcher, whose grant format now signs the authorized identity, which "
+    "enforces each mount's agent allowlist for every non-wildcard mount, "
+    "requires --agent when minting a grant, and therefore changes the "
+    "pre-existing Civil 3D activation workflow; the Agent 007 "
     "contract, which now activates on either name, emits a changed activation "
     "line, requires the discovery skills to be run rather than listed, and "
     "imposes the five-line ops brief, front-loaded validation, and "
@@ -631,7 +640,7 @@ story.append(Paragraph(
     "Re-run the three discovery skills periodically rather than growing the "
     "vendored set by hand. They report drift against upstream and propose "
     "additions scoped to the repository as it exists at that time, which keeps "
-    f"the {ADOPTED_TOTAL / 802 * 100:.1f}% adoption rate a deliberate position "
+    f"the {_rate(ADOPTED_TOTAL, PRIMARY_AVAILABLE)} adoption rate a deliberate position "
     "rather than a snapshot that "
     "quietly rots. Bump the pinned commit in "
     "<font face='Courier' size='8'>.github/AWESOME-COPILOT.md</font> whenever "

@@ -51,6 +51,19 @@ PATTERNS = {
     ),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "cloud access key": re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
+    # Connector identifiers. AGENTS.md forbids these in this public repository
+    # alongside credentials: a tenant or client id names Joe's actual cloud
+    # tenancy and app registration. They are not secrets, so they are reported
+    # separately, but they must not be published either. GUID-shaped or opaque
+    # values only -- a placeholder like "<your-tenant-id>" is not flagged.
+    "connector identifier": re.compile(
+        r"(?i)\b(?:azure[_-]?tenant[_-]?id|azure[_-]?client[_-]?id"
+        r"|azure[_-]?subscription[_-]?id|aps[_-]?client[_-]?id"
+        r"|tfe?[_-]?organization|gdrive[_-]?client[_-]?id)"
+        r"\s*[:=]\s*[\"']?"
+        r"(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        r"|[A-Za-z0-9_-]{16,})[\"']?"
+    ),
     # Credential-bearing names. A Terraform or GitHub token carries no
     # distinguishing prefix, so for those the name is the only signal there is
     # and "secret token" above cannot help. Every credential env var named in a
@@ -248,10 +261,22 @@ def scan_paths(
             targets.append(candidate)
         else:
             targets.append(candidate)  # reported as unreadable below
-    resolved = {
-        (given if given.is_absolute() else (root / given)): dest
-        for given, dest in (destinations or {}).items()
-    }
+    # A directory destination must reach the children the recursion produced.
+    # Mapping only the parent key meant a downloaded bundle scanned
+    # `--as .github/instructions` matched no child against the allowlists, so an
+    # approved file inside it reported its own documented placeholders and
+    # pre-install intake of a bundle was impossible.
+    resolved: dict[Path, Path] = {}
+    for given, dest in (destinations or {}).items():
+        anchor = given if given.is_absolute() else (root / given)
+        resolved[anchor] = dest
+        if anchor.is_dir():
+            for child in targets:
+                try:
+                    suffix = child.relative_to(anchor)
+                except ValueError:
+                    continue
+                resolved[child] = dest / suffix
     return _scan_files(targets, root, resolved)
 
 

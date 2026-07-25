@@ -140,9 +140,18 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
             r"\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"']{8,})"
         )
-        # Env-var-shaped names that denote a credential, not an endpoint or id.
-        credential_suffixes = ("TOKEN", "SECRET", "KEY", "PASSWORD", "CREDENTIAL")
-        benign = {"GDRIVE_CREDENTIALS_PATH"}  # a path to a file, not a secret
+        # Env-var-shaped names the guard must recognise. `_ID` is included:
+        # AGENTS.md forbids connector identifiers in this public repository
+        # alongside credentials, and an earlier version of this test skipped
+        # them -- so AZURE_TENANT_ID and AZURE_CLIENT_ID, which this repository's
+        # own headless activation workflow names, went undetected. A tenant or
+        # client id is not a secret but it still identifies Joe's real tenancy.
+        credential_suffixes = (
+            "TOKEN", "SECRET", "KEY", "PASSWORD", "CREDENTIAL", "ID",
+        )
+        benign = {
+            "GDRIVE_CREDENTIALS_PATH",  # a path to a file, not a secret
+        }
         seen = 0
         for mount in mounts:
             text = mount.get("activation", "") + " " + " ".join(mount["command"])
@@ -151,9 +160,14 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     continue
                 seen += 1
                 with self.subTest(mount=mount["name"], env=name):
-                    probe = f'{name} = "aRealLookingSecretValue"'
-                    self.assertIsNotNone(
-                        pattern.search(probe),
+                    probe = f'{name} = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"'
+                    combined = [
+                        PATTERNS["credential assignment"],
+                        PATTERNS["connector identifier"],
+                    ]
+                    self.assertTrue(
+                        any(p.search(probe) for p in combined)
+                        or pattern.search(f'{name} = "aRealLookingSecretValue"'),
                         f"{mount['name']} activation names {name}, but the "
                         f"credential-assignment pattern cannot detect it",
                     )
