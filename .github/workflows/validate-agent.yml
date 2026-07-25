@@ -72,6 +72,32 @@ jobs:
       - name: Install pinned connector dependencies
         working-directory: connectors/aps
         run: npm ci --ignore-scripts
-      - name: Syntax-check the validation-gate harness
+      - name: Syntax-check and import-resolve the validation-gate harness
         working-directory: connectors/aps
-        run: node --check src/gate.mjs
+        # `node --check` parses without executing, so it never resolves an
+        # import. The APS SDKs are dynamically imported only after the
+        # credential check, which means an incompatible SDK update left CI green
+        # and failed first on the credentialed workstation gate.
+        #
+        # Importing each declared dependency here resolves its exports on a
+        # credential-free path, so a breaking upstream change fails in CI where
+        # it is cheap to see.
+        run: |
+          set -euo pipefail
+          node --check src/gate.mjs
+          node --input-type=module -e "
+            const mods = [
+              '@aps_sdk/authentication',
+              '@aps_sdk/autodesk-sdkmanager',
+              '@aps_sdk/data-management',
+              '@aps_sdk/model-derivative',
+              '@aps_sdk/oss',
+            ];
+            for (const name of mods) {
+              const mod = await import(name);
+              if (!mod || Object.keys(mod).length === 0) {
+                throw new Error(\`\${name} resolved with no exports\`);
+              }
+              console.log(\`ok \${name}\`);
+            }
+          "

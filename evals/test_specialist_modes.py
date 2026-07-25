@@ -147,13 +147,19 @@ def test_mode_meets_acceptance_criteria(mode_key):
     # metric validates. Returning only prose left packet_validity reading None
     # and scoring zero forever, so every evaluation would have failed for a
     # reason that had nothing to do with the specialist.
-    actual_output, emitted_packet = _invoke_specialist(mode, case)
+    actual_output, emitted_packet, tools_called = _invoke_specialist(mode, case)
 
     test_case = LLMTestCase(
         input=case["mission"],
         actual_output=actual_output,
         context=case.get("context", []),
         expected_tools=case.get("expected_tools", []),
+        # The observed trace, not just the expectation. Supplying only
+        # `expected_tools` left ToolCorrectnessMetric comparing against an empty
+        # observed list, so a specialist could call a forbidden direct connector
+        # and still score perfectly -- the metric would have certified exactly
+        # the connector isolation it could not see.
+        tools_called=tools_called,
         # The packet travels here because it is structured data, not prose: a
         # judge should not be asked to eyeball schema conformance.
         additional_metadata={"packet": emitted_packet, "mode_key": mode_key},
@@ -170,9 +176,11 @@ def test_mode_meets_acceptance_criteria(mode_key):
 def _invoke_specialist(mode, case):
     """Dispatch the mission through the governed runtime.
 
-    Returns ``(actual_output, emitted_packet)`` when wired -- the prose the
-    judged metrics read, and the handoff packet the deterministic metric
-    validates.
+    Returns ``(actual_output, emitted_packet, tools_called)`` when wired -- the
+    prose the judged metrics read, the handoff packet the deterministic metric
+    validates, and the governed invocation trace tool-correctness scores
+    against. All three are required: a metric handed only expectations, with no
+    observation, cannot fail.
 
     Deliberately unimplemented. Wiring this to `scripts/agent_runtime.py` or
     `scripts/claude_runtime.py` requires a verified model credential and a

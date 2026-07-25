@@ -35,6 +35,7 @@ carries its reasons, and callers with a ledger get both outcomes recorded.
 from __future__ import annotations
 
 import datetime
+import hmac
 import sys
 import tomllib
 from dataclasses import dataclass, field, replace
@@ -47,6 +48,11 @@ sys.path.insert(0, str(ROOT))
 from runtime.writer_lease import canonical_key  # noqa: E402
 from scripts.agent_runtime import AuditLedger, load_roster  # noqa: E402
 from scripts.packet_guard import PacketGuard  # noqa: E402
+
+# Grant verification reuses the launcher's own signing primitive, so the two can
+# never disagree about what a valid grant looks like.
+from scripts.trusted_launcher import DEFAULT_KEY_PATH as DEFAULT_LAUNCH_KEY  # noqa: E402
+from scripts.trusted_launcher import _sign as _sign_grant  # noqa: E402
 
 # AGENTS.md: explicit task-level instruction is required for each of these.
 # Kept as data so the boundary list is enumerable and testable rather than
@@ -116,6 +122,26 @@ def _load_brain_manifests(root: Path = ROOT) -> dict[str, dict[str, Any]]:
     return merged
 
 
+def _load_brain_prefixes(root: Path = ROOT) -> dict[str, str]:
+    """Namespace and write-target prefixes that identify which brain owns a resource.
+
+    Read from the brain-owned manifests rather than hardcoded, so a renamed
+    prefix cannot silently detach the ownership check from reality.
+    """
+    prefixes: dict[str, str] = {}
+    for brain in ("apex", "jeos"):
+        path = root / "brains" / brain / "agents.toml"
+        if not path.exists():
+            continue
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        owner = str(data.get("brain") or brain).upper()
+        for key in ("write_target_prefix", "namespace_prefix"):
+            value = data.get(key)
+            if value:
+                prefixes[str(value)] = owner
+    return prefixes
+
+
 @dataclass(frozen=True)
 class ToolRequest:
     """A tool invocation awaiting authorization.
@@ -136,7 +162,11 @@ class ToolRequest:
     resource_id: str | None = None
     now: datetime.datetime | None = None
     explicit_instruction: bool = False
-    launch_grant_verified: bool = False
+    # Signed grant material, not an assertion. `launch_grant_verified` used to be
+    # a plain bool the caller set, which is the same "trust the caller" defect as
+    # the mutating flag: any caller could claim a grant it never held.
+    launch_grant: dict[str, Any] | None = None
+    launch_key_path: Path | None = None
 
 
 @dataclass
@@ -189,6 +219,7 @@ class PolicyEnforcementPoint:
         # objection" for every agent, which is the exact fail-open-by-omission
         # this enforcement point exists to eliminate. Found by running it.
         self.manifest = _load_brain_manifests(root)
+        self.brain_prefixes = _load_brain_prefixes(root)
 
     def _spec(self, agent: str) -> dict[str, Any]:
         """Merged view: brain manifest wins, roster fills the rest."""
@@ -266,12 +297,32 @@ class PolicyEnforcementPoint:
                 f"brain lock: {request.agent!r} declared no owner_brain; a specialist "
                 "must state its brain, and omitting it does not waive the lock"
             ]
-        if spec.get("brain") != request.owner_brain:
-            return [
-                f"brain lock: {request.agent!r} belongs to {spec.get('brain')!r}, "
+        agent_brain = spec.get("brain")
+        errors = []
+        if agent_brain != request.owner_brain:
+            errors.append(
+                f"brain lock: {request.agent!r} belongs to {agent_brain!r}, "
                 f"request declares {request.owner_brain!r}"
-            ]
-        return []
+            )
+        # Declaring your own brain correctly is not the same as being entitled to
+        # the resource. Previously only the declaration was checked, so an APEX
+        # specialist could read `JEOS/Weekly` simply by declaring "APEX" -- the
+        # lock compared the caller against itself. Resolve who owns the resource
+        # and compare that too.
+        resource_brain = self._resource_owner(request.resource)
+        if resource_brain and agent_brain and resource_brain != agent_brain:
+            errors.append(
+                f"brain lock: resource {request.resource!r} belongs to "
+                f"{resource_brain!r}, and {request.agent!r} is {agent_brain!r}-only"
+            )
+        return errors
+
+    def _resource_owner(self, resource: str) -> str | None:
+        """Which brain owns this resource, by manifest-declared prefix."""
+        for prefix, owner in self.brain_prefixes.items():
+            if resource.startswith(prefix):
+                return owner
+        return None
 
     def _connector_policy(self, request: ToolRequest) -> list[str]:
         spec = self._spec(request.agent)
@@ -322,9 +373,16 @@ class PolicyEnforcementPoint:
         # Fail-closed when no registry is supplied: an unverifiable lease is not
         # a lease. Because enforce() has no live call sites yet, this can be
         # strict from the outset rather than loosened later.
-        registry_errors = self._registry_membership_errors(lease)
+        registry_errors, issued = self._registry_membership(lease)
         if registry_errors:
             return registry_errors
+        # From here on, read the REGISTRY's lease, never the caller's copy.
+        # Comparing only lease_id against the registry and then reading the rest
+        # from the submitted dict let a caller copy a genuine active lease,
+        # change writer_agent (or status, or expiry), and pass -- the id matched
+        # a real lease while every authorization-relevant field came from the
+        # attacker. The id is the lookup key; it is not the authorization.
+        lease = issued
 
         raw = self.guard.validate("writer_lease.schema.json", lease)
         # KNOWN REPOSITORY DEFECT, scoped deliberately narrowly.
@@ -375,13 +433,16 @@ class PolicyEnforcementPoint:
         errors.extend(self._lease_expiry_errors(lease, request))
         return errors
 
-    def _registry_membership_errors(self, lease: dict[str, Any]) -> list[str]:
-        """Confirm the lease was actually issued, not merely well-formed."""
+    def _registry_membership(self, lease: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+        """Look the lease up and return the authoritative copy alongside errors."""
         if self.registry is None:
-            return [
-                "no authoritative lease registry available; a caller-supplied lease "
-                "cannot be verified as issued, and an unverifiable lease is not a lease"
-            ]
+            return (
+                [
+                    "no authoritative lease registry available; a caller-supplied lease "
+                    "cannot be verified as issued, and an unverifiable lease is not a lease"
+                ],
+                {},
+            )
         try:
             key = canonical_key(
                 str(lease.get("owner_brain", "")),
@@ -392,16 +453,19 @@ class PolicyEnforcementPoint:
             # A lease too malformed to even key must deny, not raise. An
             # enforcement point that throws on hostile input is a denial-of-
             # service on every legitimate caller sharing the process.
-            return [f"lease cannot be keyed, so it cannot be verified as issued: {error}"]
+            return ([f"lease cannot be keyed, so it cannot be verified as issued: {error}"], {})
         issued = self.registry.active_lease(key)
         if issued is None:
-            return [f"no active lease is registered for {key!r}"]
+            return ([f"no active lease is registered for {key!r}"], {})
         if issued.get("lease_id") != lease.get("lease_id"):
-            return [
-                f"lease id {lease.get('lease_id')!r} does not match the registered "
-                f"active lease for {key!r}"
-            ]
-        return []
+            return (
+                [
+                    f"lease id {lease.get('lease_id')!r} does not match the registered "
+                    f"active lease for {key!r}"
+                ],
+                {},
+            )
+        return ([], dict(issued))
 
     def _packet_scope_errors(self, request: ToolRequest) -> list[str]:
         """Bind the packet to *this* invocation.
@@ -468,14 +532,43 @@ class PolicyEnforcementPoint:
         return []
 
     def _launch_grant(self, request: ToolRequest) -> list[str]:
-        if (
-            request.mutating
-            and request.resource.startswith("mount:")
-            and not request.launch_grant_verified
-        ):
+        """Verify the grant's signature; never accept a claim that one exists.
+
+        This was a caller-set boolean — the identical "trust the caller" defect
+        as the `mutating` flag fixed one round earlier, sitting two rules away.
+        Any caller could assert `launch_grant_verified=True` and walk past the
+        control without ever holding a grant.
+
+        Signature verification only. Single-use nonce consumption stays with
+        `scripts/trusted_launcher.py`, which owns the ledger: a policy
+        evaluation must not have side effects, or merely *asking* whether an
+        action is permitted would burn the grant.
+        """
+        if not (request.mutating and request.resource.startswith("mount:")):
+            return []
+        grant = request.launch_grant
+        if not grant:
             return [
-                f"write-capable mount {request.resource!r} requires a signed one-time launch grant"
+                f"write-capable mount {request.resource!r} requires a signed one-time "
+                "launch grant; none was presented"
             ]
+        mount = request.resource.split(":", 1)[1]
+        payload = {key: grant.get(key) for key in ("mount", "issued_at", "expires_at", "nonce")}
+        if payload["mount"] != mount:
+            return [f"grant is for mount {payload['mount']!r}, not {mount!r}"]
+        key_path = Path(request.launch_key_path or DEFAULT_LAUNCH_KEY)
+        if not key_path.exists():
+            return ["no launch signing key is present, so the grant cannot be verified"]
+        expected = _sign_grant(key_path.read_bytes(), payload)
+        if not hmac.compare_digest(expected, str(grant.get("sig", ""))):
+            return ["launch grant signature is invalid"]
+        now = request.now or datetime.datetime.now(datetime.UTC)
+        try:
+            expires = float(payload["expires_at"])
+        except (TypeError, ValueError):
+            return ["launch grant has no usable expiry"]
+        if now.timestamp() > expires:
+            return ["launch grant has expired"]
         return []
 
 

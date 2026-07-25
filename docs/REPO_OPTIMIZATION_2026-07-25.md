@@ -441,6 +441,30 @@ seed cases drift: the harness derives modes from the manifests precisely so they
 cannot drift, and artifacts were the one field still hand-written — which drifted
 immediately.
 
+### Automated review, third pass — seven findings, six fixed
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Brain lock compared the caller against itself | **Correct** | An APEX specialist could read `JEOS/Weekly` by declaring "APEX". Resource ownership is now resolved from manifest-declared prefixes and compared too. |
+| Only `lease_id` checked against the registry | **Correct** | A genuine lease could be copied and its `writer_agent`, status, or expiry rewritten. Every field now reads the registry's object; the id is the lookup key, not the authorization. |
+| `launch_grant_verified` was a caller boolean | **Correct** | HMAC-verified grant material required instead. Signature only — nonce consumption stays with the launcher, since a policy evaluation must not have side effects. |
+| gitleaks binary downloaded unverified | **Correct** | Replaced with `go install` at a pinned version, verified through the Go checksum database. Pinning actions to SHAs and then executing an unverified binary in the same job was a contradiction. |
+| Unit suite missing from pre-commit | **Correct** | Added. The block claimed to be the house gate while omitting the one check `AGENTS.md` names explicitly. |
+| `node --check` never resolves imports | **Correct** | Now imports all five APS SDKs on a credential-free path, so a breaking upstream change fails in CI rather than first on the workstation. |
+| `tools_called` never supplied | **Correct** | Dispatch returns the trace. `ToolCorrectnessMetric` was comparing against an empty observed list, so it would have certified exactly the connector isolation it could not see. |
+
+**The pattern across three rounds is the finding.** Round two fixed a
+caller-asserted `mutating` boolean; round three found `launch_grant_verified`,
+the identical defect two rules away, untouched. Round two bound the packet;
+round three found the tool trace unbound in the same file. Fixing an instance is
+not fixing a class, and reviewing my own work did not surface the siblings.
+
+**Two fixes also improved the tests that covered them.** The expiry and
+closed-lease tests had been mutating the caller's copy — which the registry fix
+now correctly ignores, meaning those tests had been asserting against a value
+the code no longer consults. They now change registry state, which is what they
+always claimed to test.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

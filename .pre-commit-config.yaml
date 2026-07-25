@@ -64,3 +64,15 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      # AGENTS.md requires the test suite before every commit, and this block
+      # claimed to be the house gate while omitting it -- so a contributor
+      # following the documented `pre-commit install` path could commit failing
+      # contract tests and only learn of it from CI. ~2.5s for 300+ tests is
+      # well worth paying locally.
+      - id: unit-suite
+        name: contract and runtime test suite
+        entry: python -m unittest discover -s tests
+        language: system
+        pass_filenames: false
+        always_run: true

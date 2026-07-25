@@ -300,15 +300,44 @@ class DenialTests(unittest.TestCase):
         self.assertTrue(any("does not cover" in reason for reason in reasons))
 
     def test_expired_lease_is_denied(self):
-        lease = dict(self.lease)
-        lease["expires_at"] = "2020-01-01T00:00:00+00:00"
-        reasons = self.pep._writer_lease(self._mutating(lease=lease))
-        self.assertTrue(any("expired" in reason for reason in reasons))
+        # Expiry must be judged from the registry's lease, so this advances the
+        # clock rather than editing the caller's copy. Editing the copy is now
+        # correctly ignored -- which is the point of the registry fix, and the
+        # reason the earlier version of this test was testing nothing real.
+        later = NOW + datetime.timedelta(days=2)
+        reasons = self.pep._writer_lease(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                lease=self.lease,
+                now=later,
+            )
+        )
+        self.assertTrue(
+            any("expired" in reason or "no active lease" in reason for reason in reasons)
+        )
+
+    def test_tampering_with_the_caller_copy_changes_nothing(self):
+        # The attack the registry fix closes: copy a genuine active lease and
+        # rewrite the authorization-relevant fields. Every check now reads the
+        # registry's object, so the tampering is simply not consulted.
+        tampered = dict(self.lease)
+        tampered["expires_at"] = "2099-01-01T00:00:00+00:00"
+        tampered["status"] = "active"
+        reasons = self.pep._writer_lease(
+            self._mutating(lease=tampered, resource_id="campaign-alpha")
+        )
+        self.assertEqual(reasons, [])
 
     def test_closed_lease_authorizes_nothing_further(self):
-        lease = dict(self.lease)
-        lease["status"] = "verified"
-        reasons = self.pep._writer_lease(self._mutating(lease=lease))
+        # Close it in the registry -- the authoritative place -- not in the copy.
+        self.registry.release(self.lease["lease_id"], readback_confirmed=True)
+        reasons = self.pep._writer_lease(
+            self._mutating(lease=self.lease, resource_id="campaign-alpha")
+        )
         self.assertTrue(reasons)
 
     def test_lease_for_another_resource_id_is_denied(self):

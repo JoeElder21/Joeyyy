@@ -53,6 +53,24 @@ jobs:
           # branch, not only in the tip tree.
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+      - name: Build gitleaks from a checksum-verified module
+        # The first version downloaded a release tarball and executed it without
+        # verifying anything. Pinning the workflow's *actions* to SHAs and then
+        # running an unverified binary in the same job is a contradiction: a
+        # replaced asset at the same URL would run in CI and report a clean scan,
+        # silently defeating the gate.
+        #
+        # `go install` at a pinned version verifies the module against the Go
+        # checksum database (sum.golang.org), a public transparency log. That is
+        # stronger than a digest hardcoded here, because it needs no digest kept
+        # in sync by hand and it detects retroactive tampering with the module.
+        #
+        # Note the module path: gitleaks declares itself as zricethezav/gitleaks,
+        # not gitleaks/gitleaks, and `go install` rejects the repository path.
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.0
       - name: Scan working tree and this ref's history
         env:
           # Empty on push/schedule; set on pull_request. Quoted through env
@@ -61,13 +79,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          VERSION=8.30.0
-          curl -sSfL -o /tmp/gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          GITLEAKS="$(go env GOPATH)/bin/gitleaks"
 
           # Working tree: always, in full.
-          /tmp/gitleaks dir . --no-banner --redact --exit-code 1
+          "$GITLEAKS" dir . --no-banner --redact --exit-code 1
 
           # History: only the commits this ref actually introduces.
           #
@@ -81,10 +96,10 @@ jobs:
           # Whole-repo history coverage is not lost — it moves to the weekly
           # scheduled run, where a finding anywhere is genuinely actionable.
           if [ -n "${BASE_SHA}" ]; then
-            /tmp/gitleaks git . --no-banner --redact --exit-code 1 \
+            "$GITLEAKS" git . --no-banner --redact --exit-code 1 \
               --log-opts="${BASE_SHA}..HEAD"
           else
-            /tmp/gitleaks git . --no-banner --redact --exit-code 1
+            "$GITLEAKS" git . --no-banner --redact --exit-code 1
           fi
 
   dependency-audit:

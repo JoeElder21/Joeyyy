@@ -231,6 +231,14 @@ class HonestyContractTests(unittest.TestCase):
         self.assertIn("NotImplementedError", source)
         self.assertIn("_invoke_specialist", source)
 
+    def test_dispatch_contract_supplies_observations_not_just_expectations(self):
+        # packet_validity needs the emitted packet and tool_correctness needs the
+        # observed trace. Supplying only expectations means neither metric can
+        # ever fail, which is worse than not running them.
+        source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
+        self.assertIn("tools_called=tools_called", source)
+        self.assertIn('"packet": emitted_packet', source)
+
     def test_runner_documents_that_results_leave_the_repository(self):
         source = (EVALS / "run_evaluations.py").read_text(encoding="utf-8")
         self.assertIn("Evaluations", source)
