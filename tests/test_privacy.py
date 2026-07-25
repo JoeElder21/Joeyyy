@@ -3,10 +3,22 @@ import re
 import tempfile
 import unittest
 
-from scripts.privacy_guard import repository_files, scan_repository
+from scripts.privacy_guard import (
+    PLACEHOLDER_LITERALS,
+    VENDORED_DOC_DIR,
+    repository_files,
+    scan_repository,
+    strip_known_placeholders,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Labels in this module's `prohibited` map that are relaxed inside
+# VENDORED_DOC_DIR, mirroring privacy_guard.VENDORED_DOC_RELAXED_PATTERNS.
+RELAXED_IN_VENDORED_DOCS = frozenset(
+    {"generic credential assignment", "email address"}
+)
 
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
@@ -35,10 +47,25 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             ),
         }
         for path in text_paths:
-            text = path.read_text(encoding="utf-8")
+            relative_path = path.relative_to(ROOT)
+            text = strip_known_placeholders(
+                relative_path, path.read_text(encoding="utf-8")
+            )
+            vendored = VENDORED_DOC_DIR in relative_path.parents
             for label, pattern in prohibited.items():
-                with self.subTest(path=path.relative_to(ROOT), check=label):
+                if vendored and label in RELAXED_IN_VENDORED_DOCS:
+                    continue
+                with self.subTest(path=relative_path, check=label):
                     self.assertIsNone(pattern.search(text))
+
+    def test_placeholder_allowlist_has_no_stale_entries(self):
+        for relative_path, literals in PLACEHOLDER_LITERALS.items():
+            path = ROOT / relative_path
+            with self.subTest(path=relative_path):
+                self.assertTrue(path.is_file())
+                text = path.read_text(encoding="utf-8")
+                for literal in literals:
+                    self.assertIn(literal, text)
 
     def test_dedicated_privacy_guard_scans_every_tracked_text_file(self):
         self.assertEqual(scan_repository(ROOT), [])
