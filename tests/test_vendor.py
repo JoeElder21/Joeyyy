@@ -93,7 +93,14 @@ class VendorSubmoduleTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.has_git_index = _git_available() and _inside_git_worktree()
 
-    def setUp(self) -> None:
+    def _require_index(self) -> None:
+        """Skip only the assertions that genuinely read this checkout's index.
+
+        A class-wide skip is too blunt: it also suppressed the manifest,
+        lockfile, README and Node-engine consistency checks, none of which
+        need an index. In an archive that let a manifest engine of `>=1` pass
+        while the suite still reported OK.
+        """
         if not self.has_git_index:
             self.skipTest(
                 "no Git index here (archive or no git binary); CI checkout validates this"
@@ -108,6 +115,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         self.assertEqual(declared, EXPECTED_SUBMODULES)
 
     def test_every_submodule_is_a_pinned_gitlink_not_committed_content(self) -> None:
+        self._require_index()
         listing = subprocess.run(
             ["git", "ls-files", "-s", "--", "vendor"],
             cwd=ROOT,
@@ -150,6 +158,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         lockfile alongside it — would otherwise leave the repository auditing
         one commit while documenting, and installing, another.
         """
+        self._require_index()
         readme = (ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
         for path, sha in self._index_gitlinks().items():
             name = path.split("/")[-1]
@@ -175,6 +184,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         advancing relay off the released tag fails even when the paperwork is
         internally consistent.
         """
+        self._require_index()
         self.assertEqual(
             self._index_gitlinks()["vendor/relay"],
             RELAY_TAG_COMMIT,
@@ -235,13 +245,31 @@ class VendorSubmoduleTests(unittest.TestCase):
             f"lockfile resolves a different agent-relay than the declared {version}",
         )
 
+        # The *declared dependencies* row, not merely the first row mentioning
+        # relay. The contents table comes first and carries the release tag,
+        # which already contains the version — so matching on `relay` alone
+        # asserted against the wrong row and let a stale `agent-relay@^11.2.0`
+        # declaration survive a coordinated upgrade.
         vendor_row = next(
-            line
-            for line in (ROOT / "vendor" / "README.md").read_text(encoding="utf-8").splitlines()
-            if "`relay`" in line and "|" in line
+            (
+                line
+                for line in (ROOT / "vendor" / "README.md").read_text(encoding="utf-8").splitlines()
+                if "`relay`" in line and "agent-relay@" in line
+            ),
+            None,
         )
-        self.assertIn(
-            version, vendor_row, f"agent-relay {version} absent from the vendor/README.md row"
+        self.assertIsNotNone(
+            vendor_row, "vendor/README.md has no relay row declaring an agent-relay dependency"
+        )
+        declared_in_vendor_row = re.search(r"agent-relay@\S*?([0-9][^\s`|]*)", vendor_row or "")
+        self.assertIsNotNone(
+            declared_in_vendor_row, f"no agent-relay version in the vendor row: {vendor_row}"
+        )
+        self.assertEqual(
+            declared_in_vendor_row.group(1),
+            version,
+            f"vendor/README.md declares agent-relay {declared_in_vendor_row.group(1)}, "
+            f"manifest declares {version}",
         )
 
         # The connector's own provenance table must carry both the version and
@@ -267,18 +295,22 @@ class VendorSubmoduleTests(unittest.TestCase):
         )
 
         self.assertIn("Vendored at", rows, "connector README has no Vendored at row")
-        relay_sha = self._index_gitlinks()["vendor/relay"]
-        recorded = re.findall(r"`([0-9a-f]{7,40})`", rows["Vendored at"])
-        self.assertTrue(
-            any(relay_sha.startswith(candidate) for candidate in recorded),
-            f"vendor/relay is pinned at {relay_sha[:7]}, "
-            f"but the Vendored at row records {recorded}",
-        )
         self.assertIn(
             RELAY_TAG,
             rows["Vendored at"],
             f"Vendored at row does not name {RELAY_TAG}",
         )
+        # Only this last comparison needs the index. Guarding the whole test on
+        # it would take the manifest, lockfile, README and Node-engine checks
+        # down with it in an archive — the very over-skip this addresses.
+        if self.has_git_index:
+            relay_sha = self._index_gitlinks()["vendor/relay"]
+            recorded = re.findall(r"`([0-9a-f]{7,40})`", rows["Vendored at"])
+            self.assertTrue(
+                any(relay_sha.startswith(candidate) for candidate in recorded),
+                f"vendor/relay is pinned at {relay_sha[:7]}, "
+                f"but the Vendored at row records {recorded}",
+            )
 
         # The Node floor must cover the whole locked tree, not just
         # agent-relay's own declaration — npm downgrades engine mismatches to
@@ -312,6 +344,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         )
 
     def test_no_upstream_file_content_is_tracked_in_this_repository(self) -> None:
+        self._require_index()
         tracked = subprocess.run(
             ["git", "ls-files", "--", "vendor"],
             cwd=ROOT,

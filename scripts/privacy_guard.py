@@ -107,6 +107,27 @@ def run_git(args: list[str], root: Path = ROOT) -> subprocess.CompletedProcess |
         return None
 
 
+def _parse_ls_files(stdout: bytes) -> list[tuple[str, str]]:
+    """Parse ``git ls-files -s -z`` output into (mode, path) pairs.
+
+    The mode metadata is ASCII, but a path is an arbitrary byte string on
+    POSIX — git happily tracks filenames that are not valid UTF-8. Decoding
+    the whole entry strictly raises ``UnicodeDecodeError`` and takes down the
+    entire scan over one unrelated filename, so the two halves are decoded
+    separately and the path round-trips through ``surrogateescape``.
+    """
+    entries: list[tuple[str, str]] = []
+    for entry in stdout.split(b"\0"):
+        if not entry:
+            continue
+        metadata, _, name = entry.partition(b"\t")
+        fields = metadata.decode("ascii", errors="replace").split()
+        if not fields:
+            continue
+        entries.append((fields[0], name.decode("utf-8", errors="surrogateescape")))
+    return entries
+
+
 def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     """Return the repository-relative paths the git index proves are submodules.
 
@@ -122,14 +143,23 @@ def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is None or listing.returncode != 0:
         return frozenset()
-    names = []
-    for entry in listing.stdout.split(b"\0"):
-        if not entry:
-            continue
-        metadata, _, name = entry.decode("utf-8").partition("\t")
-        if metadata.split()[0] == GITLINK_MODE:
-            names.append(name)
-    return frozenset(names)
+    return frozenset(name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE)
+
+
+def tracked_paths(root: Path = ROOT) -> frozenset[str]:
+    """Return every repository-relative path the index tracks, gitlinks included.
+
+    Lets a caller tell this repository's own files from installed dependency
+    content that merely shares a directory name. Empty where the index is not
+    readable, which callers must treat as "cannot prove tracked".
+    """
+    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
+    if probe is None or probe.returncode != 0 or probe.stdout.decode().strip() != "true":
+        return frozenset()
+    listing = run_git(["git", "ls-files", "-s", "-z"], root)
+    if listing is None or listing.returncode != 0:
+        return frozenset()
+    return frozenset(name for _mode, name in _parse_ls_files(listing.stdout))
 
 
 def is_vendored(path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None) -> bool:
@@ -175,22 +205,15 @@ def repository_files(root: Path = ROOT) -> list[Path]:
         # which is exactly the kind of entry this scanner exists to catch.
         listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is not None and listing.returncode == 0:
-        tracked = listing.stdout.split(b"\0")
         # The index mode is the only evidence used here. `.gitmodules` text is
         # deliberately not consulted: a stale or malformed `path =` entry
         # naming a tracked regular directory would otherwise exclude
         # first-party files this repository really does publish. Submodule
         # contents never reach this list anyway — `git ls-files` does not
         # recurse into a submodule's own index.
-        paths: list[Path] = []
-        for entry in tracked:
-            if not entry:
-                continue
-            metadata, _, name = entry.decode("utf-8").partition("\t")
-            if metadata.split()[0] == GITLINK_MODE:
-                continue
-            paths.append(root / name)
-        return paths
+        return [
+            root / name for mode, name in _parse_ls_files(listing.stdout) if mode != GITLINK_MODE
+        ]
     gitlinks = gitlink_paths(root)
     return [
         path

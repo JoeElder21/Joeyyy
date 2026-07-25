@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.privacy_guard import gitlink_paths, is_vendored  # noqa: E402
+from scripts.privacy_guard import gitlink_paths, is_vendored, tracked_paths  # noqa: E402
 
 RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
     "contracts": [
@@ -127,14 +127,24 @@ def enforce_toml() -> tuple[list[str], list[str]]:
 
     checked: list[str] = []
     errors: list[str] = []
-    # Resolved once: is_vendored() otherwise spawns two git processes per path.
+    # Both resolved once: is_vendored() otherwise spawns two git processes per
+    # path, and the tracked set is needed per path below.
     gitlinks = gitlink_paths(ROOT)
+    tracked = tracked_paths(ROOT)
     for toml_path in sorted(ROOT.rglob("*.toml")):
+        relative = toml_path.relative_to(ROOT)
         # Match against the repository-relative path: an absolute-path test
         # would skip every file when the checkout itself happens to sit under
         # a directory named .git or node_modules, silently reporting `valid`
         # with nothing checked.
-        if {".git", "node_modules"} & set(toml_path.relative_to(ROOT).parts):
+        #
+        # node_modules is excluded as *installed dependency content*, which is
+        # not the same as "any path containing node_modules". A file the index
+        # tracks is this repository's regardless of where it sits, so it stays
+        # validated; only untracked installed content is skipped.
+        if ".git" in relative.parts:
+            continue
+        if "node_modules" in relative.parts and str(relative) not in tracked:
             continue
         # Vendored submodules under vendor/ carry the upstream project's TOML
         # contract, not this repository's, and are never committed here beyond
