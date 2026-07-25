@@ -60,6 +60,17 @@ def count_tracked(pattern: str) -> int:
     return len([line for line in out.stdout.splitlines() if line.strip()])
 
 
+def count_adopted(kind: str, pattern: str) -> int:
+    """Assets adopted FROM the pinned upstream: manifest-listed AND tracked.
+
+    Globbing the directory counted every file in it, which attributed
+    repository-authored agents to the Awesome Copilot inventory the moment a
+    sibling change added one. The manifest is what "adopted" means, so the
+    count is the intersection and a first-party file simply is not in it.
+    """
+    return len(manifest_names().get(kind, set()) & tracked_names(pattern))
+
+
 def count_installed(pattern: str) -> int:
     """Count vendored assets that are actually TRACKED.
 
@@ -158,7 +169,8 @@ def reconcile_with_manifest() -> None:
         "skills": tracked_names("skills/*/SKILL.md"),
     }
     shown = rendered_names()
-    problems = []
+    problems: list[str] = []
+    first_party: list[str] = []
     for kind, expected in claimed.items():
         untracked = expected - actual[kind]
         unlisted = actual[kind] - expected
@@ -168,8 +180,15 @@ def reconcile_with_manifest() -> None:
             problems.append(f"{kind}: in manifest but not tracked: "
                             f"{', '.join(sorted(untracked))}")
         if unlisted:
-            problems.append(f"{kind}: tracked but not in the manifest: "
-                            f"{', '.join(sorted(unlisted))}")
+            # NOT fatal, and deliberately so. `.github/agents/` also holds
+            # repository-authored agents that were never upstream; failing here
+            # would block report generation on a perfectly valid first-party
+            # addition. They are excluded from the adopted counts instead --
+            # which is the actual defect this reconciliation exists to fix --
+            # and named in the build output so the exclusion is visible rather
+            # than silent.
+            first_party.append(f"{kind}: not from upstream, excluded from the "
+                               f"adopted counts: {', '.join(sorted(unlisted))}")
         if unrendered:
             problems.append(f"{kind}: adopted but this report renders no row "
                             f"for it: {', '.join(sorted(unrendered))}")
@@ -177,6 +196,8 @@ def reconcile_with_manifest() -> None:
             problems.append(f"{kind}: this report renders a row for an asset "
                             f"the manifest does not claim: "
                             f"{', '.join(sorted(extra_rows))}")
+    if first_party:
+        print("note: " + "; ".join(first_party))
     if problems:
         raise SystemExit(
             "adopted inventory does not match .github/AWESOME-COPILOT.md, so "
@@ -259,9 +280,9 @@ _MD_BEFORE = count_tracked_at(_BASE, "*.md") if _BASE else -1
 MARKDOWN_ADDED = (MARKDOWN_NOW - _MD_BEFORE) if _MD_BEFORE >= 0 else -1
 
 ADOPTED_TOTAL = (
-    count_installed("instructions/*.instructions.md")
-    + count_installed("agents/*.agent.md")
-    + count_installed("skills/*/SKILL.md")
+    count_adopted("instructions", "instructions/*.instructions.md")
+    + count_adopted("agents", "agents/*.agent.md")
+    + count_adopted("skills", "skills/*/SKILL.md")
 )
 
 ss = getSampleStyleSheet()
@@ -378,11 +399,11 @@ story.append(Paragraph(
 inv = [hdr("Asset class", "Available upstream", "Adopted", "Adoption rate")]
 for cls, avail, took in [
     ("Instructions", UPSTREAM_INVENTORY.get("instructions"),
-     count_installed("instructions/*.instructions.md")),
+     count_adopted("instructions", "instructions/*.instructions.md")),
     ("Agents", UPSTREAM_INVENTORY.get("agents"),
-     count_installed("agents/*.agent.md")),
+     count_adopted("agents", "agents/*.agent.md")),
     ("Skills", UPSTREAM_INVENTORY.get("skills"),
-     count_installed("skills/*/SKILL.md")),
+     count_adopted("skills", "skills/*/SKILL.md")),
 ]:
     inv.append([
         Paragraph(f"<b>{cls}</b>", CELL),
@@ -473,7 +494,7 @@ story.append(PageBreak())
 # ------------------------------------------------------------------ adopted
 story.append(Paragraph(
     f"3. Instructions adopted "
-    f"({count_installed('instructions/*.instructions.md')} of "
+    f"({count_adopted('instructions', 'instructions/*.instructions.md')} of "
     f"{_cell(UPSTREAM_INVENTORY.get('instructions'))})", H1))
 story.append(Paragraph(
     "Each file carries its own <font face='Courier' size='8'>applyTo</font> "
@@ -511,7 +532,7 @@ for f, glob, why in INSTRUCTION_ROWS:
 story.append(tbl(ins, [2.2 * inch, 1.78 * inch, 2.72 * inch]))
 
 story.append(Paragraph(
-    f"4. Agents adopted ({count_installed('agents/*.agent.md')} of "
+    f"4. Agents adopted ({count_adopted('agents', 'agents/*.agent.md')} of "
     f"{_cell(UPSTREAM_INVENTORY.get('agents'))})", H1))
 story.append(Paragraph(
     "All three are registered in "
@@ -551,7 +572,7 @@ story.append(Paragraph(
 
 story.append(PageBreak())
 story.append(Paragraph(
-    f"5. Skills adopted ({count_installed('skills/*/SKILL.md')} of "
+    f"5. Skills adopted ({count_adopted('skills', 'skills/*/SKILL.md')} of "
     f"{_cell(UPSTREAM_INVENTORY.get('skills'))})", H1))
 story.append(Paragraph(
     "All three are discovery skills. This is the deliberate core of the "

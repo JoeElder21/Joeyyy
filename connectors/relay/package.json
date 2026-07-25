@@ -1,0 +1,13 @@
+{
+  "name": "@joeyyy/relay-connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Declared dependency on the Agent Relay agent-to-agent transport (vendor/relay). Declaration only; no relay server is configured.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "dependencies": {
+    "agent-relay": "^11.2.0"
+  }
+}
