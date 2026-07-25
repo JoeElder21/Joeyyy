@@ -19,7 +19,9 @@ is based on. "Looks right" is not evidence.
 - [ ] `python scripts/privacy_guard.py`
 - [ ] `python scripts/validate_specialist_corps.py`
 - [ ] `python scripts/verify_runtime_stack.py`
+- [ ] `python scripts/verify_mcp_mounts.py --strict`
 - [ ] `ruff check .`
+- [ ] `ruff format --check .`
 - [ ] `python -m unittest discover -s tests -v`
 
 ## Boundaries
