@@ -477,6 +477,52 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 with self.subTest(clean=body):
                     self.assertEqual(scan_paths([clean], root=root), [])
 
+    def test_explicit_yaml_tags_do_not_hide_the_value(self):
+        """A YAML parser discards the tag and keeps the value, so the scan must.
+
+        `AZURE_CLIENT_SECRET: !!str <secret>` put a token between key and value,
+        and the bare-value branch matched the TAG and stopped at the following
+        space. `!!binary` is itself eight characters, so it even satisfied the
+        minimum length -- the scan looked like it had found something when it
+        had examined nothing."""
+        secret = "Xy7Q" + "secretValue0192"
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        ident = "AZURE" + "_TENANT_ID"
+        token = "TFE" + "_TOKEN"
+        # Every tag form YAML defines, not just the reported "!!str".
+        tags = ("!!str", "!!binary", "!secret", "!<tag:example.com,2026:s>")
+
+        cases = []
+        for tag in tags:
+            cases.append(("credential assignment", f"{cred}: {tag} {secret}\n"))
+            cases.append(("connector identifier", f"{ident}: {tag} {guid}\n"))
+        # Composed with the other shapes already normalised: a quoted key, a
+        # sequence entry, and a tag in front of a block scalar.
+        cases += [
+            ("credential assignment", f'"{cred}": !!str {secret}\n'),
+            ("credential assignment", f"- {token}: !!str atlasv1.abcdefghijkl\n"),
+            ("credential assignment", f"{cred}: !!str |-\n  {secret}\n"),
+        ]
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(cases):
+                probe = root / f"tagged{index}.yaml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(body=body):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any(label in finding for finding in findings),
+                        f"{body!r} produced {findings}",
+                    )
+
+            clean = root / "clean.yaml"
+            clean.write_text(
+                "description: !!str Ordinary prose about a mount.\n",
+                encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

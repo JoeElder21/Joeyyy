@@ -59,10 +59,18 @@ def _load_mounts() -> dict[str, dict]:
 
 
 CORPS = ROOT / "config" / "specialist_corps.toml"
-# The first stage at which a specialist may hold a connector of its own.
-# Below it, docs/AGENT_COMMUNITY_PROTOCOL.md restricts a specialist to analysis
-# and proposed writes, with Agent 007 as the sole executor.
-CONNECTOR_STAGE = "active"
+# The stages at which a specialist may hold a connector of its own. This is an
+# explicit allowlist, NOT "active or later in the stage list".
+#
+# The ordinal test it replaces was wrong in the one direction that matters: the
+# stage list runs candidate, shadow, active, value-proven, restricted,
+# deprecated, retired -- so every ADMINISTRATIVE EXIT sorts after `active` and
+# compared as a promotion. A specialist that the lifecycle graph moved to
+# `restricted` for writing outside its lease kept minting full connector
+# grants, as did a deprecated or retired one. Naming the eligible stages means
+# a new stage is denied by default instead of inheriting authority from its
+# position in a list.
+CONNECTOR_STAGES = frozenset({"active", "value-proven"})
 
 
 def _corps() -> dict:
@@ -70,31 +78,68 @@ def _corps() -> dict:
         return tomllib.load(source)
 
 
+def _brain_manifest(path: str) -> dict:
+    try:
+        with (ROOT / path).open("rb") as source:
+            return tomllib.load(source)
+    except OSError:
+        return {}
+
+
 def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     """The lifecycle stage of a roster specialist, or None if not one.
 
-    The corps declares one `deployed_stage` covering every rostered specialist
-    rather than a per-agent field, so that is what this reports. Agent 007 is
-    not a rostered specialist and is not stage-gated here: it is the designated
-    executor, which is the whole reason the specialists are not.
+    Resolved from the named agent's own entry in its brain manifest
+    (`[agents.<id>] status`), falling back to the corps-wide `deployed_stage`
+    only when the agent has no entry of its own. Reading the corps-wide value
+    first was wrong in both directions: an individually promoted specialist was
+    denied while the snapshot said `shadow`, and moving the snapshot to
+    `active` would have made every still-shadow allowlisted specialist eligible
+    at once.
+
+    When the two disagree, the MORE RESTRICTIVE wins. A per-agent promotion is
+    real authority and must be recorded per agent; a per-agent restriction must
+    never be widened by a permissive global snapshot.
+
+    Agent 007 is not a rostered specialist and is not stage-gated here: it is
+    the designated executor, which is the whole reason the specialists are.
     """
     corps = corps if corps is not None else _corps()
     roster = set(corps.get("apex_roster", [])) | set(corps.get("jeos_roster", []))
     if agent not in roster:
         return None
-    return corps.get("lifecycle", {}).get("deployed_stage")
+
+    deployed = corps.get("lifecycle", {}).get("deployed_stage")
+    per_agent = None
+    for key in ("apex_brain_manifest", "jeos_brain_manifest"):
+        manifest_path = corps.get(key)
+        if not manifest_path:
+            continue
+        entry = _brain_manifest(manifest_path).get("agents", {}).get(agent)
+        if isinstance(entry, dict) and entry.get("status"):
+            per_agent = entry["status"]
+            break
+
+    if per_agent is None:
+        return deployed
+    if deployed is None:
+        return per_agent
+    # Take whichever grants less. An unknown stage is not eligible anyway, so
+    # comparing eligibility is enough and needs no ordering.
+    if stage_permits_connector(per_agent) and not stage_permits_connector(deployed):
+        return deployed
+    return per_agent
 
 
 def stage_permits_connector(stage: str | None, corps: dict | None = None) -> bool:
-    """Whether a specialist at `stage` may hold a mount of its own."""
+    """Whether a specialist at `stage` may hold a mount of its own.
+
+    Membership, not ordering: see CONNECTOR_STAGES. An unrecognised stage is
+    not evidence of promotion, so it is denied.
+    """
     if stage is None:
         return True
-    corps = corps if corps is not None else _corps()
-    order = corps.get("lifecycle", {}).get("stages", [])
-    if stage not in order or CONNECTOR_STAGE not in order:
-        # An unrecognised stage is not evidence of promotion. Fail closed.
-        return False
-    return order.index(stage) >= order.index(CONNECTOR_STAGE)
+    return stage in CONNECTOR_STAGES
 
 
 def _load_or_create_key(key_path: Path) -> bytes:
@@ -163,9 +208,10 @@ def issue_grant(
     if not stage_permits_connector(stage):
         raise refuse(
             f"agent {agent!r} is lifecycle stage {stage!r}; a specialist may "
-            f"not hold a connector before {CONNECTOR_STAGE!r}. Promote it "
-            "through docs/AGENT_COMMUNITY_PROTOCOL.md first, or mint the grant "
-            "for the designated executor."
+            "hold a connector only at "
+            f"{', '.join(sorted(CONNECTOR_STAGES))}. Promote it through "
+            "docs/AGENT_COMMUNITY_PROTOCOL.md first, or mint the grant for the "
+            "designated executor."
         )
 
     now = now if now is not None else time.time()

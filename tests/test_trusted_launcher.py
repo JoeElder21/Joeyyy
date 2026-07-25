@@ -11,7 +11,7 @@ import unittest
 
 from scripts.agent_runtime import AuditLedger
 from scripts.trusted_launcher import (
-    BASELINE_ENV, CONNECTOR_STAGE, LaunchDenied, authorize, issue_grant,
+    BASELINE_ENV, CONNECTOR_STAGES, LaunchDenied, authorize, issue_grant,
     mount_env, specialist_stage, stage_permits_connector,
 )
 
@@ -71,15 +71,78 @@ class TrustedLauncherTests(unittest.TestCase):
             self.assertTrue(path.exists())
             self.assertIsNone(specialist_stage("apex_chief_of_staff"))
 
-    def test_an_unrecognised_stage_fails_closed(self):
-        """An unknown stage is not evidence of promotion."""
+    def test_only_service_stages_permit_a_connector(self):
+        """Eligibility is membership, not position in the stage list.
+
+        The ordinal test this replaces was wrong in the one direction that
+        matters: candidate, shadow, active, value-proven, restricted,
+        deprecated, retired means every ADMINISTRATIVE EXIT sorts after
+        `active` and compared as a promotion. A specialist the lifecycle graph
+        moved to `restricted` for writing outside its lease kept full connector
+        eligibility, as did a deprecated or retired one.
+
+        Asserted over every stage the corps declares, so a stage added later is
+        covered without editing this test."""
+        import tomllib
+
+        with (ROOT / "config" / "specialist_corps.toml").open("rb") as source:
+            declared = tomllib.load(source)["lifecycle"]["stages"]
+
+        for stage in declared:
+            with self.subTest(stage=stage):
+                self.assertEqual(
+                    stage_permits_connector(stage), stage in CONNECTOR_STAGES)
+
+        for exit_stage in ("restricted", "deprecated", "retired"):
+            with self.subTest(stage=exit_stage):
+                self.assertIn(exit_stage, declared)
+                self.assertFalse(
+                    stage_permits_connector(exit_stage),
+                    "an administrative exit must revoke connector eligibility",
+                )
         self.assertFalse(stage_permits_connector("not-a-stage"))
-        self.assertFalse(stage_permits_connector("shadow"))
-        self.assertFalse(stage_permits_connector("candidate"))
-        self.assertTrue(stage_permits_connector(CONNECTOR_STAGE))
-        self.assertTrue(stage_permits_connector("value-proven"))
         # Not a rostered specialist -> not stage-gated at all.
         self.assertTrue(stage_permits_connector(None))
+
+    def test_lifecycle_resolves_from_the_named_agent_not_the_snapshot(self):
+        """A promotion is per agent; a restriction must not be widened.
+
+        Reading the corps-wide deployed_stage was wrong both ways: an
+        individually promoted specialist was denied, and moving the snapshot to
+        `active` would have made every still-shadow allowlisted specialist
+        eligible at once."""
+        import tomllib
+
+        with (ROOT / "config" / "specialist_corps.toml").open("rb") as source:
+            corps = tomllib.load(source)
+
+        for key in ("apex_brain_manifest", "jeos_brain_manifest"):
+            with (ROOT / corps[key]).open("rb") as source:
+                entries = tomllib.load(source).get("agents", {})
+            for agent, entry in entries.items():
+                if not isinstance(entry, dict) or "status" not in entry:
+                    continue
+                with self.subTest(agent=agent):
+                    resolved = specialist_stage(agent)
+                    self.assertIn(
+                        resolved, {entry["status"],
+                                   corps["lifecycle"]["deployed_stage"]})
+                    # Whichever it took, it must not grant more than the
+                    # agent's own recorded status allows.
+                    if not stage_permits_connector(entry["status"]):
+                        self.assertFalse(stage_permits_connector(resolved))
+
+        # An agent with no per-agent entry falls back to the snapshot; an
+        # agent outside the roster is not stage-gated at all.
+        snapshot_only = {
+            "apex_roster": ["apex_probe"],
+            "jeos_roster": [],
+            "lifecycle": {"deployed_stage": "shadow"},
+        }
+        self.assertEqual(
+            specialist_stage("apex_probe", corps=snapshot_only), "shadow")
+        self.assertIsNone(
+            specialist_stage("apex_chief_of_staff", corps=snapshot_only))
 
     def test_grant_for_an_agent_scoped_mount_needs_an_identity(self):
         """The identity lives in the signed grant, so it must be supplied when

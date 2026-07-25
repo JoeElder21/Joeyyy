@@ -224,6 +224,27 @@ _TOML_MULTILINE = re.compile(
 )
 
 
+_YAML_TAG = re.compile(
+    r"(?m)^(?P<lead>[ \t]*(?:-[ \t]+)?" + _KEY + r"[ \t]*:[ \t]*)"
+    r"(?:!(?:!\w+|<[^>]*>|[\w.-]*)[ \t]+)+"
+)
+
+
+def strip_yaml_tags(text: str) -> str:
+    """Drop explicit YAML tags so the value behind them is scanned.
+
+    `AZURE_CLIENT_SECRET: !!str the-actual-secret` put an eight-character token
+    between the key and the value. The credential pattern's bare-value branch
+    matched the TAG and stopped at the following space, so the secret was never
+    examined -- and `!!binary` even satisfied the eight-character minimum, which
+    made the scan look like it had found something when it had not.
+
+    A YAML parser discards the tag and keeps the value, so this does too, for
+    the `!!type`, `!local` and verbatim `!<...>` forms.
+    """
+    return _YAML_TAG.sub(lambda m: m.group("lead"), text)
+
+
 def fold_toml_multiline(text: str) -> str:
     """Rewrite TOML multiline strings onto one single-quoted-style line.
 
@@ -404,7 +425,8 @@ def _scan_files(
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
         scannable = strip_known_placeholders(
-            relative, fold_toml_multiline(fold_block_scalars(text)))
+            relative,
+            fold_toml_multiline(fold_block_scalars(strip_yaml_tags(text))))
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")
