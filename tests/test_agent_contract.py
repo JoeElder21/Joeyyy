@@ -261,6 +261,64 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
             with self.subTest(path=path.name):
                 self.assertTrue(path.is_file())
 
+    def test_planner_can_actually_invoke_its_researcher(self):
+        """task-planner refuses to plan until task-researcher has run, and per
+        agents.instructions.md sub-agent invocation needs the `agent` tool. A
+        #file reference does not invoke anything, so without it the planner
+        blocks before producing any plan."""
+        fm = (ROOT / ".github" / "agents" / "task-planner.agent.md").read_text(
+            encoding="utf-8"
+        ).split("---")[1]
+        self.assertIn('"agent"', fm)
+
+    def test_planner_agents_hold_no_execution_tools(self):
+        """Neither planner implements anything, so shell, test-running and
+        IDE-control tools are not needed. Prompt text is not a path
+        restriction."""
+        forbidden = ("runCommands", "terminalLastCommand", "terminalSelection",
+                     "runTests", "runNotebooks", "extensions", "vscodeAPI",
+                     "openSimpleBrowser")
+        for name in ("task-planner", "task-researcher"):
+            fm = (ROOT / ".github" / "agents" / f"{name}.agent.md").read_text(
+                encoding="utf-8"
+            ).split("---")[1]
+            tools_line = next(
+                line for line in fm.splitlines() if line.startswith("tools:")
+            )
+            for tool in forbidden:
+                with self.subTest(agent=name, tool=tool):
+                    self.assertNotIn(tool, tools_line)
+
+    def test_discovery_skills_require_repository_intake_gates(self):
+        """The upstream skill text tells the reader to download and install
+        immediately and forbids local adjustment. That conflicts with this
+        repository's intake requirement, so each skill carries an override
+        preamble asserting the gates and the precedence."""
+        for name in ("instructions", "agents", "skills"):
+            path = (SKILLS_DIR / f"suggest-awesome-github-copilot-{name}"
+                    / "SKILL.md")
+            body = path.read_text(encoding="utf-8").split("---", 2)[2]
+            with self.subTest(skill=name):
+                self.assertIn("Local override", body)
+                self.assertIn("privacy_guard.py", body)
+                self.assertIn("overrides any instruction below", body)
+                self.assertIn("bundled asset", body)
+                self.assertIn("rollback point", body)
+
+    def test_upstream_licence_is_vendored_with_the_files(self):
+        """MIT requires the copyright and permission notice to accompany
+        substantial portions. An external link does not satisfy that, and this
+        repository has no LICENSE of its own to carry it."""
+        licence = ROOT / "third_party" / "awesome-copilot" / "LICENSE"
+        self.assertTrue(licence.is_file())
+        text = licence.read_text(encoding="utf-8")
+        self.assertIn("MIT License", text)
+        self.assertIn("Copyright", text)
+        self.assertIn("WITHOUT WARRANTY OF ANY KIND", text)
+        notice = ROOT / "third_party" / "awesome-copilot" / "README.md"
+        self.assertTrue(notice.is_file())
+        self.assertIn("aa280f28", notice.read_text(encoding="utf-8"))
+
     def test_session_start_template_holds_its_stable_shape(self):
         text = SESSION_START_PATH.read_text(encoding="utf-8")
         for phrase in [
