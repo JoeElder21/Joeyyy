@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from scripts.privacy_guard import (
+    MAX_EMITTED_VALUES,
     PATTERNS,
     PLACEHOLDER_LITERALS,
     applicable_patterns,
@@ -17,6 +18,7 @@ from scripts.privacy_guard import (
     strip_known_placeholders,
     strip_yaml_node_properties,
     strip_yaml_tags,
+    toml_reconstructed_values,
     yaml_reconstructed_values,
 )
 
@@ -709,6 +711,126 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
         self.assertIn(secret, yaml_reconstructed_values(f"{cred}: !custom {secret}\n"))
+
+    def test_toml_escapes_are_decoded_by_a_parser_not_by_the_fold(self):
+        """The parser argument, one format over.
+
+        `fold_toml_multiline` approximates the TOML grammar the same way the
+        old YAML normalisers approximated theirs, and loses in the same two
+        places: a quoted key may spell its own name in Unicode escapes, so no
+        pattern matching the literal credential name ever sees it; and a
+        multiline basic string may contain an ESCAPED triple quote, which the
+        non-greedy fold reads as the closing delimiter -- emitting only the
+        harmless prefix and leaving the credential after it unscanned and
+        keyless. Both decode correctly in tomllib and in nothing short of one.
+        """
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        quotes = '"' * 3
+        # Written as escapes so this file does not carry the credential name.
+        escaped_key = '"AZURE\\u005fCLIENT\\u005fSECRET"'
+        cases = {
+            "escaped key": '%s = "%s"\n' % (escaped_key, secret),
+            # The prefix before the escaped delimiter is deliberately too short
+            # to match anything on its own. The fold emits exactly that prefix,
+            # so a longer one lets this case report a finding for the remnant
+            # while the credential after it is still never scanned -- passing
+            # for the wrong reason, which is the failure mode this round keeps
+            # producing.
+            "escaped delimiter":
+                "%s = %s\nok \\%s %s\n%s\n"
+                % (cred, quotes, quotes, secret, quotes),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(cases.items()):
+                probe = root / f"escaped{index}.toml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(case=label):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any("credential assignment" in finding
+                            for finding in findings),
+                        f"{label}: {body!r} produced {findings}",
+                    )
+                    # And it must be flagged BECAUSE the credential reached the
+                    # scanned text, not because some truncated remnant of the
+                    # line happened to look credential-shaped.
+                    line = toml_reconstructed_values(body)
+                    self.assertIn(secret, line, f"{label}: emitted {line!r}")
+                    # A reconstructed value containing a quote must not
+                    # terminate the scanned line early -- emitting values bare
+                    # was how the escaped delimiter kept hiding even once the
+                    # parser was reading it.
+                    self.assertEqual(line.count('"'), 2,
+                                     f"{label}: unbalanced emission {line!r}")
+
+            clean = root / "clean.toml"
+            clean.write_text(
+                'name = "governance"\npurpose = "read only registry"\n',
+                encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
+
+    def test_organization_exclusions_must_consume_the_whole_value(self):
+        """A placeholder PREFIX is not a placeholder.
+
+        Written as bare lookaheads, `your-`/`my-`/`example-` exempted every
+        real slug that merely began with one, so an organization named for a
+        client was excused by two characters in front of it. This is the same
+        defect already repaired on the hostname exemptions, and it is asserted
+        here as a grid rather than as the one reported value, because the
+        exclusion list is where this pattern's entire weight sits."""
+        pattern = PATTERNS["connector organization"]
+        key = "TFE" + "_ORGANIZATION"
+        # Real slugs that happen to start with an approved placeholder word.
+        for value in ("my-client-prod", "your-real-client",
+                      "example-client-prod", "our-northside-utilities"):
+            with self.subTest(value=value, expect="flagged"):
+                self.assertIsNotNone(
+                    pattern.search('%s = "%s"' % (key, value)),
+                    "a placeholder prefix must not exempt the value it prefixes",
+                )
+        # Every exclusion must still hold for the whole-value form, including
+        # the determiners the prefix repair introduced.
+        for value in ("your-org", "my-org", "our-org", "the-org", "some-org",
+                      "example-org", "your_organization", "my-workspace",
+                      "example", "placeholder", "organization", "workspace",
+                      "name", "<your-org>", "..."):
+            with self.subTest(value=value, expect="clean"):
+                self.assertIsNone(
+                    pattern.search('%s = "%s"' % (key, value)),
+                    "an approved whole-value placeholder must stay clean",
+                )
+
+    def test_alias_expansion_is_bounded_so_the_guard_cannot_be_the_outage(self):
+        """A YAML alias is a shared reference, not a copy.
+
+        Adding the parser added this: four levels of ten-way aliasing expand to
+        hundreds of thousands of emitted characters from five lines, without
+        ever increasing recursion depth -- so neither MAX_PARSE_BYTES nor the
+        RecursionError handler bounds it. A denial-of-service in the privacy
+        gate is a way to stop the gate running, which is a way to land
+        unscanned material. Bound the OUTPUT, not just the input."""
+        bomb = "a: &a [x, x, x, x, x, x, x, x, x, x]\n"
+        for name in "bcdefg":
+            previous = chr(ord(name) - 1)
+            refs = ", ".join([f"*{previous}"] * 10)
+            bomb += f"{name}: &{name} [{refs}]\n"
+
+        emitted = yaml_reconstructed_values(bomb)
+        self.assertLess(
+            len(emitted.splitlines()), MAX_EMITTED_VALUES + 1,
+            "the emission budget must cap a shared-reference expansion",
+        )
+        self.assertLess(len(emitted), 100_000)
+        # Bounding it must not make it useless: an ordinary aliased document
+        # still has to give up its value.
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        self.assertIn(
+            secret,
+            yaml_reconstructed_values(
+                f"defaults: &d {secret}\n{cred}: *d\n"))
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.

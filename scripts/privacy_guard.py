@@ -48,6 +48,9 @@ PROHIBITED_ARTIFACT_SUFFIXES = {
 # this class ends one: a port, a path, a query, a fragment, a closing quote,
 # whitespace, or the end of the input.
 HOST_END = r"(?=[:/?#\s\"']|$)"
+# The same idea for a quoted or bare VALUE: an exclusion is only safe when it
+# covers the entire value, not a prefix of one.
+VALUE_END = r"(?=[\s\"',}\]#]|$)"
 LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1"
 PATTERNS = {
     "secret token": re.compile(
@@ -137,8 +140,20 @@ PATTERNS = {
         r"(?i)\b(?:tfe?[_-]?organization|tfe?[_-]?workspace"
         r"|terraform[_-]?organization)"
         r"[\"']?\s*[:=]\s*[\"']?"
-        r"(?!your[-_.])(?!my[-_.])(?!<)(?!example[-_.\s\"']?)(?!placeholder\b)"
-        r"(?!org\b)(?!organization\b)(?!workspace\b)(?!name\b)(?!\.\.\.)"
+        # Each exclusion must consume the WHOLE value. Written as bare
+        # prefixes, the your-/my-/example- lookaheads exempted every real slug
+        # that merely begins with one, so an organization named for a client
+        # and prefixed "my-" was excused by the prefix alone. VALUE_END anchors
+        # each exemption to the end of the value, the same repair already made
+        # to the hostname exemptions above. (Described rather than written out:
+        # this file is scanned by its own patterns.)
+        r"(?!(?:your|my|our|the|some|a)[-_.]?(?:org|organization|workspace|"
+        r"name|company|team|tenant|client)?" + VALUE_END + r")"
+        r"(?!example[-_.]?(?:org|organization|workspace|name)?" + VALUE_END + r")"
+        r"(?!<)(?!placeholder" + VALUE_END + r")"
+        r"(?!org" + VALUE_END + r")(?!organization" + VALUE_END + r")"
+        r"(?!workspace" + VALUE_END + r")(?!name" + VALUE_END + r")"
+        r"(?!\.\.\.)"
         r"[A-Za-z0-9][A-Za-z0-9_-]{2,}"
     ),
     "bearer credential": re.compile(
@@ -259,6 +274,9 @@ _YAML_ALIAS = re.compile(r"(?m)(?P<lead>:[ \t]*)\*(?P<name>[\w.-]+)[ \t]*$")
 # is not in every environment, and losing all coverage when it is absent would
 # trade a partial gap for a total one.
 MAX_PARSE_BYTES = 2_000_000
+# Hard ceiling on reconstructed values, so a hostile alias graph cannot turn
+# the privacy gate into the outage.
+MAX_EMITTED_VALUES = 20_000
 
 
 def _yaml_loader():
@@ -307,8 +325,23 @@ def yaml_reconstructed_values(text: str) -> str:
         return ""
 
     lines: list[str] = []
+    # An alias is a SHARED REFERENCE, so a five-line file with four levels of
+    # ten-way aliasing expands to hundreds of thousands of emitted characters
+    # without ever increasing recursion depth. MAX_PARSE_BYTES bounds the input
+    # and the RecursionError handler bounds the depth; neither bounds this.
+    # Both a visited set (each shared subtree walked once) and a hard output
+    # budget are needed: the set alone still permits a wide flat structure.
+    seen: set[int] = set()
+    budget = [MAX_EMITTED_VALUES]
 
     def walk(node, key=None):
+        if budget[0] <= 0:
+            return
+        if isinstance(node, (dict, list, tuple)):
+            marker = id(node)
+            if marker in seen:
+                return
+            seen.add(marker)
         if isinstance(node, dict):
             for child_key, value in node.items():
                 walk(value, child_key)
@@ -316,7 +349,8 @@ def yaml_reconstructed_values(text: str) -> str:
             for value in node:
                 walk(value, key)
         elif node is not None and key is not None:
-            lines.append(f"{key}: {node}")
+            budget[0] -= 1
+            lines.append(_reconstructed(key, ":", node))
 
     try:
         # An alias bomb expands geometrically; the size cap plus these guards
@@ -326,7 +360,60 @@ def yaml_reconstructed_values(text: str) -> str:
             walk(document)
     except (Exception, RecursionError):  # noqa: BLE001 - any parse failure falls back
         return ""
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line)
+
+
+def _reconstructed(key, delimiter: str, value) -> str:
+    """One `key <delim> "value"` line, quoted and quote-free.
+
+    Emitting the value bare meant a reconstructed value that itself contains a
+    quote -- which is exactly what an escaped delimiter produces -- terminated
+    the bare-value branch early and was never matched. Quoting it and stripping
+    inner quotes lets the quoted branch bracket the whole thing.
+    """
+    flat = " ".join(str(value).replace('"', " ").replace("'", " ").split())
+    return f'{key} {delimiter} "{flat}"' if flat else ""
+
+
+def toml_reconstructed_values(text: str) -> str:
+    """`key = value` lines for every scalar tomllib actually produces.
+
+    The same argument as the YAML side, one format over. A quoted TOML key may
+    carry Unicode escapes (`"AZURE\\u005fCLIENT\\u005fSECRET"`), and a multiline
+    basic string may contain an ESCAPED triple quote that a non-greedy regex
+    reads as the closing delimiter -- so the fold emitted only the prefix and
+    the credential after it was never scanned. Both are decoded correctly by
+    the parser and by nothing short of one.
+
+    Returns "" when the text is not TOML, which leaves the regex fold in charge.
+    """
+    if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
+        return ""
+    try:
+        import tomllib
+
+        document = tomllib.loads(text)
+    except Exception:  # noqa: BLE001 - any parse failure falls back
+        return ""
+
+    lines: list[str] = []
+    budget = [MAX_EMITTED_VALUES]
+
+    def walk(node, key=None):
+        if budget[0] <= 0:
+            return
+        if isinstance(node, dict):
+            for child_key, value in node.items():
+                walk(value, child_key)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                walk(value, key)
+        elif node is not None and key is not None:
+            budget[0] -= 1
+            lines.append(_reconstructed(key, "=", node))
+
+    walk(document)
+    return "\n".join(line for line in lines if line)
 
 
 def strip_yaml_node_properties(text: str) -> str:
@@ -764,7 +851,8 @@ def _scan_files(
         scannable = strip_known_placeholders(
             relative,
             fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text)))
-            + "\n" + yaml_reconstructed_values(text))
+            + "\n" + yaml_reconstructed_values(text)
+            + "\n" + toml_reconstructed_values(text))
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")

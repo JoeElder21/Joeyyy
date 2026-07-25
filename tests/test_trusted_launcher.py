@@ -251,6 +251,94 @@ class TrustedLauncherTests(unittest.TestCase):
                                     agent=identity, ledger=ledger)
                     self.assertIn("is not on", str(caught.exception))
 
+    def test_stage_resolution_reads_only_the_owning_brains_manifest(self):
+        """One brain's files must not decide the other brain's authority.
+
+        Walking apex-then-jeos meant an unreadable APEX manifest raised before
+        a JEOS specialist's own healthy record was ever consulted, so every
+        JEOS specialist was denied by a fault in a brain it does not belong to.
+        AGENTS.md separates the brains precisely to prevent that coupling, and
+        Agent 007 is the only identity that crosses it. A read failure is still
+        an authorization failure -- but only for the brain that owns the agent.
+        """
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        corps = {
+            "apex_roster": ["apex_probe"],
+            "jeos_roster": ["jeos_probe"],
+            "apex_brain_manifest": "brains/apex/agents.toml",
+            "jeos_brain_manifest": "brains/jeos/agents.toml",
+            "lifecycle": {"deployed_stage": "shadow"},
+        }
+
+        def one_brain_broken(broken: str):
+            def load(path: str) -> dict:
+                if broken in path:
+                    raise ManifestUnavailable(f"{path}: gone")
+                agent = "jeos_probe" if "jeos" in path else "apex_probe"
+                return {"agents": {agent: {"status": "shadow"}}}
+            return load
+
+        # Either brain may be the broken one; the healthy brain must resolve
+        # and the broken brain's own agent must still be denied.
+        for broken, healthy_agent, denied_agent in (
+            ("apex", "jeos_probe", "apex_probe"),
+            ("jeos", "apex_probe", "jeos_probe"),
+        ):
+            with self.subTest(broken=broken):
+                with mock.patch.object(launcher, "_brain_manifest",
+                                       side_effect=one_brain_broken(broken)):
+                    self.assertEqual(
+                        specialist_stage(healthy_agent, corps=corps), "shadow",
+                        "a healthy brain's records must be readable while the "
+                        "other brain's manifest is broken",
+                    )
+                    with self.assertRaises(ManifestUnavailable):
+                        specialist_stage(denied_agent, corps=corps)
+
+    def test_an_unreadable_corps_registry_is_denied_and_audited(self):
+        """A failure the module promises to record must not escape as a
+        traceback.
+
+        `_corps()` opened the registry bare, so a missing or half-written
+        `specialist_corps.toml` terminated the CLI with OSError/TOMLDecodeError
+        instead of its denial JSON -- and skipped the ledger append every
+        refusal is supposed to leave. That failed loudly but not auditably,
+        which is the one combination an audit trail cannot survive."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            missing = Path(tmp) / "absent_corps.toml"
+            with mock.patch.object(launcher, "CORPS", missing):
+                with self.assertRaises(LaunchDenied) as caught:
+                    issue_grant("filesystem", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_systems_blacksmith", ledger=ledger)
+            self.assertIn("cannot resolve the lifecycle stage",
+                          str(caught.exception))
+            entries = [
+                json.loads(line)
+                for line in ledger.path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([e["event"] for e in entries], ["grant_denied"])
+            self.assertEqual(ledger.verify(), [])
+
+            # Half-written TOML is the likelier failure and must behave the same.
+            broken = Path(tmp) / "broken_corps.toml"
+            broken.write_text("[lifecycle\ndeployed_stage = ", encoding="utf-8")
+            with mock.patch.object(launcher, "CORPS", broken):
+                with self.assertRaises(LaunchDenied):
+                    issue_grant("filesystem", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_systems_blacksmith", ledger=ledger)
+            self.assertEqual(ledger.verify(), [])
+
     def test_grant_time_denials_reach_the_ledger(self):
         """The module promises every denial is recorded. Grant-time refusals were
         raised directly, so an attempt to mint authority for a shadow specialist

@@ -38,12 +38,21 @@ def unverified_note(output: str) -> str:
 
     if not isinstance(payload, dict):
         return ""
+    # "registered" is ALSO an unprobed state, and the larger one: every
+    # verify_offline = false mount reports it. Naming only the "unverified"
+    # ones published a row reading "not probed: filesystem, governance" while
+    # github, postgres, gdrive, civil3d, terraform and azure had equally never
+    # been contacted -- an incomplete clean scope, which is the same defect as
+    # a bare "passed" one level down.
+    def unprobed(entry: dict) -> bool:
+        status = str(entry.get("status", ""))
+        return status.startswith("unverified") or status == "registered"
+
     names = sorted(
         str(entry.get("name", "unnamed"))
         for section in payload.values() if isinstance(section, list)
         for entry in section
-        if isinstance(entry, dict)
-        and str(entry.get("status", "")).startswith("unverified")
+        if isinstance(entry, dict) and unprobed(entry)
     )
     return f" (not probed: {', '.join(names)})" if names else ""
 
@@ -92,6 +101,22 @@ def failure_detail(completed) -> str:
                 return "; ".join(str(item) for item in value[:3])
             if isinstance(value, str) and value.strip():
                 return value.strip()
+        # The actionable reason for a failed mount probe lives only in
+        # mounts[*].status as "probe failed: ...". With no top-level error key
+        # the substantive-line fallback then filtered out every quoted status
+        # line and returned "{", so the row read `FAILED (exit 1) — {` -- the
+        # exact uninformative output that fallback was added to prevent.
+        failures = [
+            f"{entry.get('name', 'unnamed')}: {entry['status']}"
+            for section in payload.values() if isinstance(section, list)
+            for entry in section
+            if isinstance(entry, dict)
+            and isinstance(entry.get("status"), str)
+            and ("fail" in entry["status"].lower()
+                 or "error" in entry["status"].lower())
+        ]
+        if failures:
+            return "; ".join(failures[:3])
 
     def substantive(stream: str) -> str | None:
         lines = [line.strip() for line in stream.splitlines() if line.strip()]

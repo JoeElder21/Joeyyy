@@ -482,16 +482,25 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 {"name": "github", "status": "registered"},
                 {"name": "filesystem",
                  "status": "unverified (mcp package not installed)"},
+                {"name": "reached-mount", "status": "verified (3 tools)"},
             ],
             "valid": True,
         })
         note = unverified_note(stalled)
         self.assertIn("governance", note)
         self.assertIn("filesystem", note)
-        self.assertNotIn("github", note)
+        # "registered" is ALSO unprobed, and the larger group. An earlier
+        # version of this test asserted github must be ABSENT here, which
+        # encoded the defect: the row then advertised a clean scope covering
+        # two mounts while six others had equally never been contacted.
+        self.assertIn("github", note)
+        # A mount that really was probed must not appear. (Named so it is not a
+        # substring of the note's own "not probed:" prefix -- the first version
+        # of this assertion matched that and passed for the wrong reason.)
+        self.assertNotIn("reached-mount", note)
 
         clean = json.dumps({
-            "mounts": [{"name": "github", "status": "registered"}],
+            "mounts": [{"name": "github", "status": "verified (12 tools)"}],
             "valid": True,
         })
         self.assertEqual(unverified_note(clean), "")
@@ -554,6 +563,42 @@ class SelectionReportBaselineTests(unittest.TestCase):
         self.assertEqual(failure_detail(crashed), "ValueError: no pin in manifest")
 
         self.assertEqual(failure_detail(Completed("", "")), "no output")
+
+        # The gate that actually fails in practice -- a mount probe -- carries
+        # no top-level error key at all: its reason lives only in
+        # mounts[*].status. The substantive-line fallback then discarded every
+        # quoted status line and returned "{", reproducing the exact
+        # uninformative row it exists to prevent. Assert the shape, not the one
+        # key name: any nested list of entries whose status reads as a failure
+        # has to reach the row.
+        for section in ("mounts", "connectors", "servers"):
+            nested = Completed(
+                json.dumps({"valid": False, section: [
+                    {"name": "governance", "status": "probe failed: no such file"},
+                    {"name": "github", "status": "registered"},
+                ]}, indent=2),
+                "")
+            with self.subTest(section=section):
+                detail = failure_detail(nested)
+                self.assertIn("governance", detail)
+                self.assertIn("no such file", detail)
+                self.assertNotEqual(detail.strip(), "{")
+                # A healthy entry must not be reported as a failure.
+                self.assertNotIn("github", detail)
+
+        errored = Completed(
+            json.dumps({"valid": False, "mounts": [
+                {"name": "postgres", "status": "error: connection refused"}]}),
+            "")
+        self.assertIn("connection refused", failure_detail(errored))
+
+        # A top-level error key still wins: it is the more specific signal.
+        both = Completed(
+            json.dumps({"valid": False, "errors": ["registry is malformed"],
+                        "mounts": [{"name": "governance",
+                                    "status": "probe failed: no such file"}]}),
+            "")
+        self.assertIn("registry is malformed", failure_detail(both))
 
     def test_report_refuses_to_publish_an_inventory_it_cannot_reconcile(self):
         """Counting every tracked path under .github/ as upstream adoption

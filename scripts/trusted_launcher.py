@@ -73,13 +73,24 @@ CORPS = ROOT / "config" / "specialist_corps.toml"
 CONNECTOR_STAGES = frozenset({"active", "value-proven"})
 
 
-def _corps() -> dict:
-    with CORPS.open("rb") as source:
-        return tomllib.load(source)
-
-
 class ManifestUnavailable(Exception):
     """A brain manifest could not be read, so no stage can be resolved."""
+
+
+def _corps() -> dict:
+    """Load the corps registry, or raise ManifestUnavailable.
+
+    Leaking OSError/TOMLDecodeError here terminated the CLI with a traceback
+    instead of its denial JSON, and skipped the ledger append this module
+    promises for every refusal -- so a missing or half-written registry failed
+    LOUDLY but not auditably. Both callers already handle this exception, so
+    the same failure now goes out through the normal denial path.
+    """
+    try:
+        with CORPS.open("rb") as source:
+            return tomllib.load(source)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ManifestUnavailable(f"{CORPS.name}: {error}") from error
 
 
 def _brain_manifest(path: str) -> dict:
@@ -123,17 +134,22 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
         return None
 
     deployed = corps.get("lifecycle", {}).get("deployed_stage")
+    # Read the OWNING brain's manifest only. Walking apex-then-jeos meant an
+    # unreadable APEX manifest denied every JEOS specialist too, before its own
+    # healthy records were ever consulted -- one brain's connector eligibility
+    # made to depend on the other brain's files, which is precisely the
+    # coupling AGENTS.md separates the brains to avoid. A read failure is still
+    # an authorization failure, but only for the brain that owns the agent.
+    if agent in set(corps.get("apex_roster", [])):
+        manifest_key = "apex_brain_manifest"
+    else:
+        manifest_key = "jeos_brain_manifest"
     per_agent = None
-    for key in ("apex_brain_manifest", "jeos_brain_manifest"):
-        manifest_path = corps.get(key)
-        if not manifest_path:
-            continue
-        # A read failure is an authorization failure, not an absent override:
-        # the agent's authoritative status is exactly what could not be read.
+    manifest_path = corps.get(manifest_key)
+    if manifest_path:
         entry = _brain_manifest(manifest_path).get("agents", {}).get(agent)
         if isinstance(entry, dict) and entry.get("status"):
             per_agent = entry["status"]
-            break
 
     if per_agent is None:
         return deployed

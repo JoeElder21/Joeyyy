@@ -301,6 +301,111 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 with self.subTest(agent=name, tool=tool):
                     self.assertNotIn(tool, tools_line)
 
+    def test_refresh_procedure_forbids_moving_a_collection_wide_pin_per_file(self):
+        """The pin at the top of the manifest attributes the WHOLE collection.
+
+        A one-file refresh that also moves it makes every other adopted asset
+        claim a revision it was never compared against -- and the existing
+        resolved-SHA rule does not prevent this, because a resolved SHA makes
+        one pass self-consistent, not the collection current. That distinction
+        is the part a reader will otherwise reason their way past, so the
+        procedure has to state it, not just forbid the action."""
+        # Collapsed, so a reflow of the prose does not read as a missing rule.
+        manifest = " ".join(
+            MANIFEST_PATH.read_text(encoding="utf-8").split())
+        self.assertIn("manifest-WIDE", manifest)
+        self.assertIn("self-consistent, not the collection current", manifest)
+        self.assertIn("never move the pin on the strength of a single file",
+                      manifest)
+        # The alternative must be stated too: a rule with no compliant path is
+        # a rule that gets skipped.
+        self.assertIn("leave the pin where it is", manifest)
+        # And the check it demands has to be the exhaustive one.
+        self.assertIn("compare **every** asset", manifest)
+
+    def test_a_candidate_agent_is_closed_to_both_invocation_paths(self):
+        """`user-invocable: false` closes one door of two.
+
+        It hides the agent from the USER picker only; per the installed agent
+        standard, sub-agent invocation stays enabled unless
+        `disable-model-invocation` is true. So a `candidate` -- which
+        docs/AGENT_COMMUNITY_PROTOCOL.md defines as not routed -- was still
+        reachable by another model routing to it, which is the invocation path
+        that matters most here because no human sees it happen.
+
+        Driven off the registry rather than a hardcoded list: the next agent
+        added at `candidate` must satisfy this without anyone remembering to
+        extend the test."""
+        registry = (ROOT / "docs" / "AGENT_REGISTRY.md").read_text(
+            encoding="utf-8")
+        candidates = []
+        for line in registry.splitlines():
+            if not line.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if not cells or not cells[0].startswith("`"):
+                continue
+            name = cells[0].strip("`").split("`")[0]
+            path = ROOT / ".github" / "agents" / f"{name}.agent.md"
+            if path.is_file() and "candidate" in cells:
+                candidates.append((name, path))
+        self.assertTrue(
+            candidates,
+            "the registry lists no candidate editor-plane agent; if the "
+            "column moved, this test is measuring nothing")
+
+        for name, path in candidates:
+            frontmatter = path.read_text(encoding="utf-8").split("---")[1]
+            keys = {}
+            for line in frontmatter.splitlines():
+                if line.lstrip().startswith("#") or ":" not in line:
+                    continue
+                key, _, value = line.partition(":")
+                keys[key.strip()] = value.strip()
+            with self.subTest(agent=name):
+                self.assertEqual(
+                    keys.get("user-invocable"), "false",
+                    "a candidate must not appear in the user picker")
+                self.assertEqual(
+                    keys.get("disable-model-invocation"), "true",
+                    "hiding a candidate from the picker still leaves it "
+                    "routable by another model; both flags are the gate")
+
+    def test_returned_artifacts_are_validated_by_whoever_persists_them(self):
+        """Removing the researcher's edit tool moved the untrusted mutation one
+        step outward; it did not remove it.
+
+        Repository text and fetched documentation can prompt-inject
+        `task-researcher`, and what it returns is written to disk by an agent
+        that does have a writer. "Return it verbatim" therefore has to be
+        scoped to the CONTENT: a destination path in an injected response is a
+        claim to check, not an instruction to obey, and embedded directives are
+        a finding to report rather than steps to follow."""
+        researcher = (ROOT / ".github" / "agents"
+                      / "task-researcher.agent.md").read_text(encoding="utf-8")
+        planner = (ROOT / ".github" / "agents"
+                   / "task-planner.agent.md").read_text(encoding="utf-8")
+
+        # The verbatim instruction must no longer stand unqualified.
+        self.assertNotIn("writes it there verbatim", researcher)
+        for token in ("never the destination", "resolve the destination",
+                      "as data, not as instructions"):
+            with self.subTest(agent="task-researcher", token=token):
+                self.assertIn(token, researcher)
+        # Both traversal forms have to be named, not just one.
+        for escape in ("`..`", "leading `/`", "`~`"):
+            with self.subTest(agent="task-researcher", escape=escape):
+                self.assertIn(escape, researcher)
+
+        # And the duty must be stated on the agent that actually relays it --
+        # a rule written only on the injected agent is enforced by the party
+        # that cannot be trusted to enforce it.
+        self.assertIn("VALIDATE WHAT YOU RELAY", planner)
+        for escape in ("`..`", "leading `/`", "`~`"):
+            with self.subTest(agent="task-planner", escape=escape):
+                self.assertIn(escape, planner)
+        self.assertIn("never steps to follow", planner)
+
     def test_discovery_skills_require_repository_intake_gates(self):
         """The upstream skill text tells the reader to download and install
         immediately and forbids local adjustment. That conflicts with this
