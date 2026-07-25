@@ -5,6 +5,7 @@ from pathlib import Path
 
 from scripts.privacy_guard import (
     MAX_EMITTED_VALUES,
+    MAX_PARSE_BYTES,
     PATTERNS,
     TRUNCATION_MARKER,
     PLACEHOLDER_LITERALS,
@@ -699,8 +700,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         or return a false clean."""
         # Genuinely malformed YAML (unbalanced flow) must fall through, not raise.
         self.assertEqual(yaml_reconstructed_values("{a: [1, 2}\n"), "")
-        # Oversized input is skipped rather than parsed.
-        self.assertEqual(yaml_reconstructed_values("x" * 3_000_000), "")
+        # Oversized input is not parsed -- but it is REPORTED, not skipped
+        # silently. The earlier version of this line asserted "" here, which
+        # encoded the defect: padding a file past the cap dropped the parser
+        # and the scan still read clean.
+        self.assertEqual(
+            yaml_reconstructed_values("x" * 3_000_000), TRUNCATION_MARKER)
         # The property that matters for every other input: never raise, always
         # return a string. Python source, markdown and JSON all reach this.
         for probe in ("def f(:\n  not yaml [", "# heading\n\ntext\n",
@@ -884,6 +889,45 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             bomb += f"{name}: &{name} [{', '.join(['*' + previous] * 10)}]\n"
         self.assertNotIn(TRUNCATION_MARKER, yaml_reconstructed_values(bomb))
 
+    def test_an_oversized_file_is_reported_not_silently_unparsed(self):
+        """The size cap is attacker-selectable, so it must fail closed too.
+
+        Round twenty-two made an exhausted BUDGET report an incomplete scan and
+        left the size cap returning "" -- indistinguishable, to the caller,
+        from "this file is not YAML". Padding a file past 2 MB therefore
+        dropped the parser entirely while the scan still read clean, which is
+        the same bypass one limit over. Both limits are unfinished checks."""
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        pad = "# " + "p" * 200 + "\n"
+        tail = 'tail: {"%s": !!str %s}\n' % (cred, secret)
+        oversized = pad * (MAX_PARSE_BYTES // len(pad) + 5) + tail
+        self.assertGreater(len(oversized.encode("utf-8")), MAX_PARSE_BYTES)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            probe = root / "oversized.yaml"
+            probe.write_text(oversized, encoding="utf-8")
+            findings = scan_paths([probe], root=root)
+            self.assertTrue(
+                any("incomplete scan" in finding for finding in findings),
+                f"an oversized file reported clean -- {findings}")
+
+            # The TOML side has the same cap and needs the same answer.
+            big_toml = "".join(
+                f'# {"p" * 200}\n'
+                for _ in range(MAX_PARSE_BYTES // 203 + 5))
+            toml_probe = root / "oversized.toml"
+            toml_probe.write_text(big_toml, encoding="utf-8")
+            self.assertTrue(
+                any("incomplete scan" in finding
+                    for finding in scan_paths([toml_probe], root=root)))
+
+            # An ordinary file must stay silent, or every scan is "incomplete".
+            small = root / "small.yaml"
+            small.write_text("name: governance\n", encoding="utf-8")
+            self.assertEqual(scan_paths([small], root=root), [])
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 
@@ -938,6 +982,23 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 self.assertIn("the file is **rejected**", text)
                 self.assertIn("Never pin a real value", text)
                 self.assertIn("Uncertain counts as real", text)
+
+                # The classification criterion itself has to hold. "It appears
+                # in upstream's public documentation" was offered as PROOF of a
+                # placeholder, which lets the one case this gate exists for --
+                # an accidentally published live credential -- classify itself
+                # as safe, two lines after the same preamble declares upstream
+                # untrusted. Proof must be a property of the value, not of
+                # where it was found.
+                self.assertNotIn(
+                    "upstream's public documentation, is obviously fabricated",
+                    text,
+                    "publication is being treated as proof of synthesis")
+                self.assertIn("Publication upstream is not proof", text)
+                for criterion in ("RFC 2606", "RFC 5737",
+                                  "structurally impossible", "revoked"):
+                    with self.subTest(criterion=criterion):
+                        self.assertIn(criterion, text)
 
     def test_placeholder_allowlist_has_no_stale_entries(self):
         for relative_path, literals in PLACEHOLDER_LITERALS.items():

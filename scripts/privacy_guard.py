@@ -325,7 +325,14 @@ def yaml_reconstructed_values(text: str) -> str:
     every one of which leaves the regex normalisers in charge.
     """
     if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
-        return ""
+        # Skipping the parser is a coverage loss, and this one is
+        # ATTACKER-SELECTABLE: pad a file past the cap and everything in it
+        # goes unreconstructed while the scan still reports clean. Report it
+        # the same way an exhausted budget is reported. (A missing PyYAML is
+        # also a coverage loss, but it is a uniform, visible, environment-wide
+        # condition rather than a per-file bypass anyone can choose, so it
+        # stays a documented degradation.)
+        return TRUNCATION_MARKER
     try:
         import yaml
     except ImportError:
@@ -397,7 +404,9 @@ def toml_reconstructed_values(text: str) -> str:
     Returns "" when the text is not TOML, which leaves the regex fold in charge.
     """
     if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
-        return ""
+        # Same reasoning as the YAML side: an oversized file is an unfinished
+        # check, not a clean one.
+        return TRUNCATION_MARKER
     try:
         import tomllib
 

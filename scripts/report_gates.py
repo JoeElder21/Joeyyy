@@ -101,19 +101,26 @@ def failure_detail(completed) -> str:
                 return "; ".join(str(item) for item in value[:3])
             if isinstance(value, str) and value.strip():
                 return value.strip()
-        # The actionable reason for a failed mount probe lives only in
-        # mounts[*].status as "probe failed: ...". With no top-level error key
-        # the substantive-line fallback then filtered out every quoted status
-        # line and returned "{", so the row read `FAILED (exit 1) — {` -- the
-        # exact uninformative output that fallback was added to prevent.
+        # The actionable reason for a failed mount lives only in
+        # mounts[*].status. With no top-level error key the substantive-line
+        # fallback filtered out every quoted status line and returned "{", so
+        # the row read `FAILED (exit 1) — {` -- the exact uninformative output
+        # that fallback was added to prevent.
+        #
+        # Match by EXCLUSION, not by keyword. Allowlisting "fail"/"error" meant
+        # each newly introduced failure status had to be remembered here, and
+        # the very next one ("undeclared grant scope") was not -- it contains
+        # neither word, so the row regressed to `FAILED (exit 1) — },`. The
+        # healthy vocabulary is small and stable; anything outside it, in a
+        # gate that already exited non-zero, is by definition the reason.
+        healthy = ("verified", "registered", "unverified")
         failures = [
             f"{entry.get('name', 'unnamed')}: {entry['status']}"
             for section in payload.values() if isinstance(section, list)
             for entry in section
             if isinstance(entry, dict)
             and isinstance(entry.get("status"), str)
-            and ("fail" in entry["status"].lower()
-                 or "error" in entry["status"].lower())
+            and not entry["status"].lower().startswith(healthy)
         ]
         if failures:
             return "; ".join(failures[:3])

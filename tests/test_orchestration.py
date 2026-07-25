@@ -638,6 +638,26 @@ class SelectionReportBaselineTests(unittest.TestCase):
             "")
         self.assertIn("connection refused", failure_detail(errored))
 
+        # Match by EXCLUSION, not by keyword. An allowlist of "fail"/"error"
+        # had to be remembered for each new failure status, and the very next
+        # one added -- "undeclared grant scope" -- contains neither word, so
+        # the row regressed to `FAILED (exit 1) — },`. Assert the property
+        # across statuses that share no vocabulary at all.
+        for status in ("undeclared grant scope", "refused by policy",
+                       "timed out", "missing digest pin"):
+            nameless = Completed(
+                json.dumps({"valid": False,
+                            "mounts": [{"name": "azure", "status": status},
+                                       {"name": "github",
+                                        "status": "registered"}]}, indent=2),
+                "")
+            with self.subTest(status=status):
+                detail = failure_detail(nameless)
+                self.assertIn(status, detail)
+                self.assertNotIn("github", detail)
+                self.assertNotIn("{", detail)
+                self.assertNotIn("}", detail)
+
         # A top-level error key still wins: it is the more specific signal.
         both = Completed(
             json.dumps({"valid": False, "errors": ["registry is malformed"],

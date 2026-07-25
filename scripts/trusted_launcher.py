@@ -162,6 +162,17 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
             per_agent = entry["status"]
 
     if per_agent is None:
+        # No authoritative record for this agent -- the manifest path is absent
+        # from the corps file, or the manifest has no entry for it. Falling
+        # back to the corps-wide snapshot is only safe while that snapshot
+        # denies. The moment `deployed_stage` reads `active`, the fallback
+        # hands a connector to every allowlisted specialist whose promotion
+        # nobody ever recorded, which is the exact widening this function's
+        # own rule forbids: a per-agent promotion is real authority and must be
+        # recorded per agent. A permissive snapshot plus a missing record is
+        # therefore a denial, not an inheritance.
+        if stage_permits_connector(deployed):
+            return "unrecorded"
         return deployed
     if deployed is None:
         return per_agent
@@ -409,9 +420,16 @@ def authorize(
         check_agent(spec, agent)
         authorized["agent"] = agent
         authorized["agent_source"] = "caller-supplied" if agent else "not-required"
+        # Record the claim AS a claim. Nothing authenticated `agent` on this
+        # path -- there is no grant to have signed it -- so writing it into the
+        # same `agent` field a grant-backed launch uses preserved a forged
+        # identity in the hash chain as though it had been verified. The chain
+        # is only as good as what it attributes, and an unauthenticated string
+        # filed under the authenticated name is worse than no attribution.
         ledger.append(
             "launch_authorized",
-            {"mount": mount, "agent": agent, "grant": "not-required"},
+            {"mount": mount, "claimed_agent": agent,
+             "agent_authenticated": False, "grant": "not-required"},
         )
         return spec
     if grant_path is None:

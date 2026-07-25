@@ -252,6 +252,93 @@ class TrustedLauncherTests(unittest.TestCase):
                                     agent=identity, ledger=ledger)
                     self.assertIn("is not on", str(caught.exception))
 
+    def test_a_permissive_snapshot_cannot_stand_in_for_a_missing_record(self):
+        """The snapshot fallback is only safe while the snapshot denies.
+
+        Two shapes leave `per_agent` unset without anything being malformed:
+        the corps file omits the owning brain-manifest path, or the manifest is
+        readable but has no entry for this agent. Both then inherited the
+        corps-wide `deployed_stage`. That is harmless at `shadow` and a
+        fail-open the moment the snapshot reads `active` -- it hands a
+        connector to every allowlisted specialist whose promotion nobody
+        recorded, which is exactly the widening `specialist_stage` says it
+        exists to prevent: a per-agent promotion must be recorded per agent."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        base = {
+            "apex_roster": ["apex_probe"],
+            "jeos_roster": [],
+            "governance": {"designated_executor": "apex_chief_of_staff"},
+        }
+        for permissive in sorted(CONNECTOR_STAGES):
+            corps = {**base, "lifecycle": {"deployed_stage": permissive}}
+            with self.subTest(snapshot=permissive, shape="no manifest path"):
+                self.assertFalse(stage_permits_connector(
+                    specialist_stage("apex_probe", corps=corps)))
+            with_path = {**corps, "apex_brain_manifest": "brains/apex/agents.toml"}
+            with mock.patch.object(launcher, "_brain_manifest",
+                                   lambda path: {"agents": {}}):
+                with self.subTest(snapshot=permissive, shape="no agent entry"):
+                    self.assertFalse(stage_permits_connector(
+                        specialist_stage("apex_probe", corps=with_path)))
+
+        # A DENYING snapshot must still be inherited -- that fallback is the
+        # normal case and removing it would deny nothing extra while making
+        # every unpromoted specialist look like a configuration error.
+        denying = {**base, "lifecycle": {"deployed_stage": "shadow"}}
+        self.assertEqual(specialist_stage("apex_probe", corps=denying), "shadow")
+
+    def test_an_unauthenticated_agent_is_logged_as_a_claim_not_an_identity(self):
+        """The hash chain is only as good as what it attributes.
+
+        A grant-free wildcard mount has no signature over `--agent`, so nothing
+        authenticates it. Writing it into the same `agent` field a grant-backed
+        launch uses preserved a caller-chosen string as verified audit
+        evidence -- worse than recording nothing, because the chain then
+        vouches for it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _, ledger = self._env(tmp)
+            authorize("governance", None, ledger=ledger, agent="forged-identity")
+            entries = [
+                json.loads(line)
+                for line in ledger.path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([e["event"] for e in entries], ["launch_authorized"])
+            detail = entries[-1]["detail"]
+            self.assertNotIn(
+                "agent", detail,
+                "an unauthenticated string must not occupy the field a signed "
+                "identity occupies")
+            self.assertEqual(detail["claimed_agent"], "forged-identity")
+            self.assertIs(detail["agent_authenticated"], False)
+            self.assertEqual(ledger.verify(), [])
+
+        # A grant-backed launch still records an authenticated identity, so the
+        # two are distinguishable in the ledger rather than uniformly hedged.
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            from unittest import mock
+
+            import scripts.trusted_launcher as launcher
+            with mock.patch.object(launcher, "specialist_stage",
+                                   lambda agent, corps=None: "active"):
+                grant = issue_grant("filesystem", 30, key_path=key,
+                                    out_dir=Path(tmp) / "grants",
+                                    agent="apex_systems_blacksmith",
+                                    ledger=ledger)
+                authorize("filesystem", grant_path=grant, key_path=key,
+                          ledger=ledger)
+            granted = [
+                json.loads(line) for line
+                in ledger.path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ][-1]
+            self.assertEqual(granted["detail"].get("agent"),
+                             "apex_systems_blacksmith")
+
     def test_only_the_named_executor_escapes_the_lifecycle_gate(self):
         """The exemption belongs to an identity, not to a gap in the registry.
 
