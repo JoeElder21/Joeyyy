@@ -6,7 +6,12 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, assigned]
+    # Deliberately not [opened, assigned]. The job condition can only recheck
+    # the persistent issue title and body, so every assignment on an issue whose
+    # original text mentions @claude would start another run with no new
+    # request. `assigned` is only useful alongside the action's
+    # assignee_trigger input, which this workflow does not set.
+    types: [opened]
   pull_request_review:
     types: [submitted]
 
