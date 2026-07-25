@@ -566,6 +566,24 @@ Adding two entries would have fixed the instance and left the class intact, whic
 
 **An exemption is not a hole until someone omits the field.** The chief's cross-brain exemption was correct in `_brain_lock` and wrong everywhere it silently propagated. Being permitted to act for either brain is not the same as being permitted to act for an unstated one — a distinction that reads as obvious once written down and was invisible while the field was merely optional.
 
+### Automated review, tenth pass — seven findings, seven fixed
+
+**The ninth round's convergence reading was wrong.** That entry called round 9 "the first round that looks like convergence." Round 10 returned five P1s, three of them in code the previous two rounds had just rewritten. Two data points do not make a trend, and saying so in a record that spends its length insisting on evidence over inference was the same error in miniature.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Grant expiry read `ToolRequest.now` | **Correct** | The clock was supplied by the caller requesting authorization, so a genuinely signed instruction that expired years ago could be replayed by backdating the request. `ToolRequest.now` is gone; the clock lives on the enforcement point, injectable only so tests can pin it. Same class as `launch_key_path` two rounds earlier: a trust input taken from the party being checked. |
+| PacketGuard's lease ledger came from the request | **Correct** | A caller knowing a genuine active lease id could submit a fabricated ledger entry carrying that id but a different `mission_id`, have the guard validate a write-bearing packet against the fabricated mission, then pair it with the real registry lease — two checks, each satisfied by a different object. The ledger is now built from the registry. |
+| Operation never bound to the packet | **Correct** | Target, resource id, brain, and lease could all match while the executed operation was strictly more destructive than the packet proposed: a packet restricted to `append` raised no objection against `replace`. Binding everything about *where* a write lands and nothing about *what it does* is not a bound authorization. |
+| Read scope conferred write authority | **Correct** | The two allow-lists were unioned, so a delegation granting only `allowed_read_namespaces` authorized a write when paired with a genuine lease. Scope is selected by operation kind now. |
+| A handoff with no scope authorized everything | **Correct** | Absent allow-lists reached an unconditional success path — "declares no scope" read as "unrestricted scope", the fail-open shape this module keeps rediscovering in new places. Handoffs bind to their own `memory_namespace` and `proposed_writes`, and an unscoped packet is refused. |
+| `--no-resolve` applied to floating manifests | **Correct** | One global flag applied to inputs of two kinds: right for a lockfile, wrong for a file with `>=`, where it scanned declared ranges instead of the versions an install selects. Split into two steps. |
+| Metric scores absent from the run artifact | **Correct** | pytest's default `junit_logging=no` omits captured output for *passing* tests, so every judge score and reason on a successful run was discarded — while `evals/README.md` calls the published directory the "scored result". |
+
+**Three of five P1s were in code rewritten during rounds 8 and 9.** The scope binding added in round 7 unioned read and write lists; the handoff path added alongside it treated missing scope as unrestricted; the clock hardened in round 4 was still caller-supplied for the grant check added in round 5. Each fix was locally correct and left an adjacent surface in the state the fix was meant to eliminate.
+
+That is the fifth distinct failure mode of the same lesson, and the most specific: **a fix that adds a new code path must be reviewed as new code, not as a patch.** The scope checks, the handoff branch, and the operation binding were all *introduced* by earlier fixes in this change set — they were never reviewed as fresh surface, only as remedies.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

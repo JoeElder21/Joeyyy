@@ -169,7 +169,7 @@ class RuleCoverageTests(unittest.TestCase):
 class DenialTests(unittest.TestCase):
     def setUp(self):
         self.registry, self.lease = registry_and_lease()
-        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
 
     def test_unregistered_agent_is_denied(self):
         decision = self.pep.evaluate(ToolRequest(agent="rogue", action="read", resource="x"))
@@ -213,7 +213,7 @@ class DenialTests(unittest.TestCase):
             key_path.write_bytes(b"test-signing-key")
             for action in sorted(HIGH_IMPACT_ACTIONS):
                 with self.subTest(action=action):
-                    pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path)
+                    pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
                     without = ToolRequest(agent=CHIEF, action=action, resource="target")
                     self.assertTrue(pep._high_impact_boundary(without))
                     signed = ToolRequest(
@@ -221,7 +221,6 @@ class DenialTests(unittest.TestCase):
                         action=action,
                         resource="target",
                         instruction_grant=instruction_grant(action, "target", key_path),
-                        now=NOW,
                     )
                     self.assertEqual(pep._high_impact_boundary(signed), [])
 
@@ -250,7 +249,7 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
-            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path)
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
             grant = instruction_grant("public_publication", "APEX/Post", key_path)
             wrong_action = pep._high_impact_boundary(
                 ToolRequest(
@@ -258,7 +257,6 @@ class DenialTests(unittest.TestCase):
                     action="financial_transaction",
                     resource="APEX/Post",
                     instruction_grant=grant,
-                    now=NOW,
                 )
             )
             self.assertTrue(any("authorizes" in reason for reason in wrong_action))
@@ -268,7 +266,6 @@ class DenialTests(unittest.TestCase):
                     action="public_publication",
                     resource="APEX/Other",
                     instruction_grant=grant,
-                    now=NOW,
                 )
             )
             self.assertTrue(any("scoped to" in reason for reason in wrong_target))
@@ -277,7 +274,7 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
-            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path)
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
             grant = instruction_grant("public_publication", "APEX/Post", key_path)
             grant["sig"] = "0" * 64
             reasons = pep._high_impact_boundary(
@@ -286,7 +283,6 @@ class DenialTests(unittest.TestCase):
                     action="public_publication",
                     resource="APEX/Post",
                     instruction_grant=grant,
-                    now=NOW,
                 )
             )
             self.assertTrue(any("signature is invalid" in reason for reason in reasons))
@@ -405,7 +401,8 @@ class DenialTests(unittest.TestCase):
         # correctly ignored -- which is the point of the registry fix, and the
         # reason the earlier version of this test was testing nothing real.
         later = NOW + datetime.timedelta(days=2)
-        reasons = self.pep._writer_lease(
+        aged = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: later)
+        reasons = aged._writer_lease(
             ToolRequest(
                 agent=CHIEF,
                 action="write",
@@ -413,7 +410,6 @@ class DenialTests(unittest.TestCase):
                 owner_brain="APEX",
                 mutating=True,
                 lease=self.lease,
-                now=later,
             )
         )
         self.assertTrue(
@@ -466,7 +462,6 @@ class DenialTests(unittest.TestCase):
             mutating=True,
             lease=lease,
             resource_id=resource_id,
-            now=NOW,
         )
 
     def test_all_reasons_are_reported_not_just_the_first(self):
@@ -542,7 +537,7 @@ class NormalizationTests(unittest.TestCase):
 
     def setUp(self):
         self.registry, self.lease = registry_and_lease()
-        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
 
     def test_action_casing_cannot_bypass_the_high_impact_boundary(self):
         # `_is_mutating` lowercased; `_high_impact_boundary` did not. An action
@@ -571,25 +566,32 @@ class NormalizationTests(unittest.TestCase):
                 normalized, _ = self.pep.normalize(request)
                 self.assertEqual(self.pep._high_impact_boundary(normalized).__len__(), 1)
 
-    def test_a_naive_clock_denies_rather_than_raising(self):
-        # `datetime.datetime.now()` is the obvious thing to write. Against a
-        # timezone-aware lease expiry it raised TypeError, which is a crash
-        # shared with every other caller in the process, not a denial.
-        naive = datetime.datetime(2026, 7, 25, 12, 0)
-        decision = self.pep.evaluate(
-            ToolRequest(
-                agent=CHIEF,
-                action="write",
-                resource="APEX/Strategy-Campaigns",
-                owner_brain="APEX",
-                mutating=True,
-                lease=self.lease,
-                resource_id="campaign-alpha",
-                now=naive,
-            )
+    def test_the_clock_cannot_be_set_from_the_request(self):
+        # Expiry was compared against `ToolRequest.now`, supplied by the same
+        # caller asking for authorization -- so a genuinely signed instruction
+        # that expired years ago could be replayed by backdating the request.
+        # The field is gone; the clock lives on the enforcement point.
+        self.assertFalse(
+            hasattr(ToolRequest(agent=CHIEF, action="read", resource="x"), "now"),
+            "a caller-settable clock makes every expiry check advisory",
         )
-        self.assertFalse(decision.allowed)
-        self.assertTrue(any("timezone-naive" in reason for reason in decision.reasons))
+        expired = NOW - datetime.timedelta(days=365)
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = Path(tmp) / "launch_key"
+            key_path.write_bytes(b"test-signing-key")
+            stale = instruction_grant("public_publication", "APEX/Post", key_path, minutes=-1)
+            # Backdating is not available: the PEP's own clock decides.
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
+            reasons = pep._high_impact_boundary(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="public_publication",
+                    resource="APEX/Post",
+                    instruction_grant=stale,
+                )
+            )
+            self.assertTrue(any("expired" in r for r in reasons), reasons)
+            self.assertIsInstance(expired, datetime.datetime)
 
     def test_an_aware_clock_raises_no_clock_objection(self):
         # The naive-clock denial has to be about the clock, not about the
@@ -603,7 +605,6 @@ class NormalizationTests(unittest.TestCase):
             mutating=True,
             lease=self.lease,
             resource_id="campaign-alpha",
-            now=NOW,
         )
         decision = self.pep.evaluate(request)
         self.assertFalse(any("timezone-naive" in reason for reason in decision.reasons))
@@ -623,7 +624,7 @@ class ScopeTests(unittest.TestCase):
 
     def setUp(self):
         self.registry, self.lease = registry_and_lease()
-        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
 
     def test_a_lease_does_not_stretch_to_a_prefix_sibling(self):
         # `startswith` widened every lease to its own prefix family, so a lease
@@ -638,7 +639,6 @@ class ScopeTests(unittest.TestCase):
                 mutating=True,
                 lease=self.lease,
                 resource_id="campaign-alpha",
-                now=NOW,
             )
         )
         self.assertTrue(any("does not cover" in reason for reason in reasons), reasons)
@@ -873,14 +873,13 @@ class ScopeTests(unittest.TestCase):
             # A PEP anchored to a *different* key must refuse it.
             trusted_key = Path(tmp) / "trusted_key"
             trusted_key.write_bytes(b"the-real-key")
-            pep = PolicyEnforcementPoint(ROOT, launch_key_path=trusted_key)
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=trusted_key, clock=lambda: NOW)
             reasons = pep._high_impact_boundary(
                 ToolRequest(
                     agent=CHIEF,
                     action="financial_transaction",
                     resource="account",
                     instruction_grant=forged,
-                    now=NOW,
                 )
             )
             self.assertTrue(any("signature is invalid" in r for r in reasons), reasons)
@@ -899,7 +898,6 @@ class ScopeTests(unittest.TestCase):
                 mutating=True,
                 lease=self.lease,
                 resource_id=None,
-                now=NOW,
             )
         )
         self.assertTrue(any("declares no resource_id" in r for r in reasons), reasons)
@@ -950,7 +948,14 @@ class ScopeTests(unittest.TestCase):
         # is blocked by _lifecycle_stage, and requiring the chief to be the
         # addressee blocked the only actor permitted to execute. Authority comes
         # from the lease, which the registry verifies.
-        packet = {"agent": SPECIALIST, "owner_brain": "APEX", "writer_agent": CHIEF}
+        # A realistic handoff: it proposes the write it is asking to have
+        # executed, which is what binds it to this target.
+        packet = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "writer_agent": CHIEF,
+            "proposed_writes": [{"write_target": "APEX/Strategy-Campaigns", "operation": "append"}],
+        }
         self.assertEqual(
             self.pep._packet_scope_errors(
                 ToolRequest(
@@ -962,6 +967,93 @@ class ScopeTests(unittest.TestCase):
                     packet=packet,
                     lease=self.lease,
                     resource_id="campaign-alpha",
+                    operation="append",
+                )
+            ),
+            [],
+        )
+
+    def test_a_packet_proposing_append_does_not_authorize_replace(self):
+        # Target, resource id, brain, and lease can all match while the
+        # executed operation is strictly more destructive than the one the
+        # validated packet proposed. Binding everything about *where* a write
+        # lands and nothing about *what it does* is not a bound authorization.
+        packet = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "writer_agent": CHIEF,
+            "proposed_writes": [{"write_target": "APEX/Strategy-Campaigns", "operation": "append"}],
+        }
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                packet=packet,
+                lease=self.lease,
+                resource_id="campaign-alpha",
+                operation="replace",
+            )
+        )
+        self.assertTrue(any("proposes" in r for r in reasons), reasons)
+
+    def test_a_read_only_delegation_does_not_authorize_a_write(self):
+        # The two allow-lists were unioned, so a delegation granting only
+        # allowed_read_namespaces conferred write authority when paired with a
+        # genuine lease. The lease proves exclusive execution; it does not
+        # prove the bounded assignment permitted a write.
+        read_only = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "writer_agent": CHIEF,
+            "allowed_read_namespaces": ["APEX::Strategy-Campaigns::apex_war_architect"],
+            "allowed_write_targets": [],
+        }
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                packet=read_only,
+                lease=self.lease,
+                resource_id="campaign-alpha",
+            )
+        )
+        self.assertTrue(any("no scope permitting a write" in r for r in reasons), reasons)
+
+    def test_an_unscoped_handoff_does_not_authorize_any_same_brain_resource(self):
+        # "Declares no scope" was reaching an unconditional success path, so a
+        # read-only handoff authorized any same-brain canonical resource.
+        bare = {"agent": SPECIALIST, "owner_brain": "APEX"}
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="APEX/Intel-Sources",
+                owner_brain="APEX",
+                packet=bare,
+            )
+        )
+        self.assertTrue(any("absent scope is not unrestricted" in r for r in reasons), reasons)
+
+    def test_a_handoff_is_bound_to_its_own_memory_namespace(self):
+        scoped = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "memory_namespace": "APEX::Strategy-Campaigns::apex_war_architect",
+        }
+        self.assertEqual(
+            self.pep._packet_scope_errors(
+                ToolRequest(
+                    agent=SPECIALIST,
+                    action="read",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                    packet=scoped,
                 )
             ),
             [],
@@ -997,7 +1089,6 @@ class ScopeTests(unittest.TestCase):
                 mutating=True,
                 lease=self.lease,
                 resource_id="campaign-alpha",
-                now=NOW,
             )
         )
         self.assertTrue(any("no owner_brain" in r for r in reasons), reasons)

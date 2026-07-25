@@ -301,6 +301,16 @@ class HonestyContractTests(unittest.TestCase):
         source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
         self.assertIn("mode.responsibility", source)
 
+    def test_the_run_artifact_retains_scores_for_passing_tests(self):
+        # pytest's default `junit_logging=no` omits captured output for PASSING
+        # tests, so every judge score and reason on a successful run was
+        # discarded -- while evals/README.md calls the published directory the
+        # "scored result". An artifact recording "passed" without what it
+        # scored cannot be the promotion evidence the gate asks for.
+        source = (EVALS / "run_evaluations.py").read_text(encoding="utf-8")
+        self.assertIn("junit_logging=all", source)
+        self.assertIn("junit_log_passing_tests=True", source)
+
     def test_runner_documents_that_results_leave_the_repository(self):
         source = (EVALS / "run_evaluations.py").read_text(encoding="utf-8")
         self.assertIn("Evaluations", source)

@@ -245,7 +245,10 @@ class ToolRequest:
     packet_schema: str = "delegation_packet.schema.json"
     lease: dict[str, Any] | None = None
     resource_id: str | None = None
-    now: datetime.datetime | None = None
+    # The write verb the executor will actually perform (`append`, `replace`,
+    # `delete`), matched against what the packet proposed. Without it, every
+    # check bound *where* a write lands and none bound *what it does*.
+    operation: str | None = None
     # Signed grant material, not an assertion. `launch_grant_verified` used to be
     # a plain bool the caller set, which is the same "trust the caller" defect as
     # the mutating flag: any caller could claim a grant it never held.
@@ -316,8 +319,16 @@ class PolicyEnforcementPoint:
         guard: PacketGuard | None = None,
         registry: Any | None = None,
         launch_key_path: Path | None = None,
+        clock: Any | None = None,
     ) -> None:
         self.root = root
+        # The clock belongs to the enforcement point, for the same reason the
+        # signing key does. Expiry was compared against `ToolRequest.now`, which
+        # the caller supplies -- so anyone holding an expired instruction could
+        # replay it by backdating the request. A grant that expired in 2020 was
+        # accepted with `now` set before its expiry. Injectable only so tests
+        # can pin it; no request can move it.
+        self._clock_fn = clock or (lambda: datetime.datetime.now(datetime.UTC))
         # The trust anchor belongs to the enforcement point, not to the request.
         # `ToolRequest.launch_key_path` let a caller write its own key file,
         # sign a `financial_transaction` instruction with it, point the request
@@ -418,13 +429,6 @@ class PolicyEnforcementPoint:
 
         if PolicyEnforcementPoint._is_mutating(normalized) and not normalized.mutating:
             normalized = replace(normalized, mutating=True)
-
-        if request.now is not None and request.now.tzinfo is None:
-            errors.append(
-                "request clock is timezone-naive; policy compares it against "
-                "timezone-aware lease expiries, so an offset must be stated"
-            )
-            normalized = replace(normalized, now=None)
 
         return normalized, errors
 
@@ -653,7 +657,7 @@ class PolicyEnforcementPoint:
                 # resolve a referenced constraint or confirm a lease is uniquely
                 # active, so it refused lawful packets -- and the separate lease
                 # rule cannot lift a denial raised during admission.
-                list(request.active_leases),
+                self._lease_ledger(request),
                 delegations=list(request.delegations),
                 constraint_packets=list(request.constraint_packets),
                 private_constraint_packets=list(request.private_constraint_packets),
@@ -787,6 +791,32 @@ class PolicyEnforcementPoint:
         errors.extend(self._lease_expiry_errors(lease, request))
         return errors
 
+    def _lease_ledger(self, request: ToolRequest) -> list[Any]:
+        """The lease ledger PacketGuard validates against, from the registry.
+
+        Forwarding `request.active_leases` handed the guard a ledger the caller
+        wrote. A caller who knew a genuine active lease id could submit a
+        schema-valid fabricated entry carrying that id but a different
+        `mission_id`, have the guard validate a write-bearing packet against the
+        fabricated mission, and then pair it with the real registry lease --
+        which matches on brain, target, resource, and writer, so
+        `_writer_lease` raises no objection either. Two checks, each satisfied
+        by a different object.
+
+        The registry is authoritative when present; the caller's copy is used
+        only when there is none, and in that case `_writer_lease` already
+        refuses every mutation.
+        """
+        if self.registry is None:
+            return list(request.active_leases)
+        issued = getattr(self.registry, "_active", None)
+        if isinstance(issued, dict):
+            return [dict(lease) for lease in issued.values()]
+        # Unknown registry shape: fall back to the one lease we can look up
+        # authoritatively rather than trusting the submitted ledger.
+        _, verified = self._registry_membership(request.lease or {})
+        return [verified] if verified else []
+
     def _registry_membership(self, lease: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         """Look the lease up and return the authoritative copy alongside errors."""
         if self.registry is None:
@@ -873,7 +903,58 @@ class PolicyEnforcementPoint:
                 f"packet resource {resource!r} does not match the requested {request.resource_id!r}"
             )
         errors.extend(self._packet_namespace_errors(request, packet))
+        errors.extend(self._packet_operation_errors(request, packet))
         return errors
+
+    @staticmethod
+    def _handoff_scope(packet: dict[str, Any]) -> list[str] | None:
+        """What a handoff is bound to, since it carries no allow-lists.
+
+        Its own `memory_namespace`, plus whatever its `proposed_writes` name.
+        Returns None when neither is present, so the caller denies rather than
+        treating an unscoped packet as an unscoped grant.
+        """
+        scope = [entry for entry in [packet.get("memory_namespace")] if entry]
+        for write in packet.get("proposed_writes") or []:
+            if isinstance(write, dict) and write.get("write_target"):
+                scope.append(write["write_target"])
+        return scope or None
+
+    @staticmethod
+    def _packet_operations(packet: dict[str, Any]) -> set[str]:
+        """Operations the packet actually proposes or permits."""
+        allowed = {
+            str(operation).strip().lower()
+            for operation in (packet.get("mutation_contract") or {}).get("allowed_operations", [])
+        }
+        for write in packet.get("proposed_writes") or []:
+            if isinstance(write, dict) and write.get("operation"):
+                allowed.add(str(write["operation"]).strip().lower())
+        return allowed
+
+    def _packet_operation_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
+        """The executed operation must be the one the packet proposed.
+
+        Target, resource id, brain, and lease could all match while the request
+        performed a strictly more destructive operation than the validated
+        packet asked for -- a packet restricted to `append` raised no objection
+        against a `replace`. Matching everything about *where* a write lands and
+        nothing about *what it does* is not a bound authorization.
+        """
+        if not request.mutating:
+            return []
+        allowed = self._packet_operations(packet)
+        if not allowed:
+            return []  # nothing proposed; the lease and target checks stand alone
+        if not request.operation:
+            return [
+                f"packet permits operations {sorted(allowed)} but the request names none; "
+                "an unstated operation cannot be matched against the one proposed"
+            ]
+        operation = request.operation.strip().lower()
+        if operation not in allowed:
+            return [f"packet proposes {sorted(allowed)}, not {operation!r}"]
+        return []
 
     def _packet_namespace_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
         """The packet must authorize *this* resource, not merely exist.
@@ -886,14 +967,32 @@ class PolicyEnforcementPoint:
         holding any delegation is holding all of them, and the bounded
         assignment the packet exists to express means nothing.
         """
-        declared = [
-            *packet.get("allowed_read_namespaces", []),
-            *packet.get("allowed_write_targets", []),
-        ]
+        # Selected by operation kind, never unioned. Merging the two lists let a
+        # read-only delegation authorize a write: the chief could pair a
+        # Strategy-Campaigns delegation granting only `allowed_read_namespaces`
+        # with a genuine lease for that target and pass, though
+        # `allowed_write_targets` was empty. The lease proves exclusive
+        # execution; it does not prove the bounded assignment permitted a write.
+        if request.mutating:
+            declared = list(packet.get("allowed_write_targets", []))
+            kind = "write"
+        else:
+            declared = list(packet.get("allowed_read_namespaces", []))
+            kind = "read"
+
         if not declared:
-            # A packet declaring no scope cannot widen one. Handoffs carry no
-            # allow-lists, so this is the normal path for them.
-            return []
+            # A handoff carries no allow-lists, so it used to reach an
+            # unconditional success path -- and "declares no scope" was read as
+            # "unrestricted scope", which is the fail-open shape this module
+            # keeps rediscovering. A handoff is bound to its own
+            # memory_namespace, and failing that to nothing at all.
+            fallback = self._handoff_scope(packet)
+            if fallback is None:
+                return [
+                    f"packet declares no scope permitting a {kind} of "
+                    f"{request.resource!r}; absent scope is not unrestricted scope"
+                ]
+            declared = fallback
         resource = self._canonical_resource(request.resource)
         for entry in declared:
             # Namespaces are written `APEX::Strategy-Campaigns::agent` and write
@@ -909,26 +1008,25 @@ class PolicyEnforcementPoint:
             f"{sorted(str(entry) for entry in declared)}"
         ]
 
-    @staticmethod
-    def _clock(request: ToolRequest) -> datetime.datetime:
-        """The comparison clock, always timezone-aware.
+    def _clock(self, request: ToolRequest | None = None) -> datetime.datetime:
+        """The comparison clock: enforcement-owned, always timezone-aware.
 
-        `normalize()` already rejects a naive clock on the `evaluate()` path.
-        This is the same guard at the point of use, so a rule invoked directly
-        still denies rather than raising `TypeError` mid-comparison.
+        `request` is accepted and ignored, so existing call sites read the same
+        way. It used to be the source, which made every expiry check advisory:
+        a caller could present a genuinely signed instruction that expired years
+        ago and set the clock to just before its expiry.
         """
-        now = request.now or datetime.datetime.now(datetime.UTC)
+        now = self._clock_fn()
         if now.tzinfo is None:
             return now.replace(tzinfo=datetime.UTC)
         return now
 
-    @staticmethod
-    def _lease_expiry_errors(lease: dict[str, Any], request: ToolRequest) -> list[str]:
+    def _lease_expiry_errors(self, lease: dict[str, Any], request: ToolRequest) -> list[str]:
         """An expired lease is a closed lease. Unparseable timestamps fail closed."""
         expiry = lease.get("expires_at")
         if not expiry:
             return ["lease declares no expiry"]
-        now = PolicyEnforcementPoint._clock(request)
+        now = self._clock(request)
         try:
             deadline = datetime.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
         except ValueError:

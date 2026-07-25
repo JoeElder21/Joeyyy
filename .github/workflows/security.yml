@@ -132,18 +132,34 @@ jobs:
           # Triaged findings live in osv-scanner.toml with reasons and expiry
           # dates. The gate stays hard: anything not listed there fails.
           #
-          # All three Python manifests, not just the lock. The lock pins
-          # autogen-agentchat 0.7.5, but the validation workflow installs
-          # `requirements.txt`, which asks for >=0.2.35,<0.3 -- a different set
-          # entirely -- and the documented evaluation path installs
-          # runtime-evaluation.txt, whose deepeval and pytest are absent from
-          # the lock. Scanning only the lock could report a clean audit while
-          # every path anyone actually installs held a vulnerable dependency.
+          # This step scans only the ALREADY-RESOLVED inputs. The floating
+          # manifests moved to the step below, because `--no-resolve` on a
+          # ranged file scans the declared ranges rather than the concrete
+          # versions an install selects -- so a vulnerable transitive
+          # dependency stayed invisible. Applying one global flag to inputs of
+          # two different kinds was the error: correct for a lockfile, wrong
+          # for a requirements file with `>=`.
           scan-args: |-
             --no-resolve
             --config=osv-scanner.toml
             --lockfile=requirements.txt:requirements/lock-2026-07-24.txt
+            --lockfile=connectors/aps/package-lock.json
+      - name: Resolve and scan the floating install manifests
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          # No --no-resolve: these are the sets CI and the workstation actually
+          # install (`requirements.txt` asks for autogen-agentchat >=0.2.35,<0.3
+          # where the lock pins 0.7.5; runtime-evaluation.txt carries deepeval
+          # and pytest, which appear in no lock at all). Resolution is what
+          # turns a declared range into the versions a `pip install` would
+          # choose, and only those can be checked against advisories.
+          #
+          # This step depends on the resolver being reachable, which the pinned
+          # scan deliberately does not. That is the cost of scanning a file that
+          # has no resolved form of its own; the fix is to generate locks for
+          # these tiers, which is already recorded as open work.
+          scan-args: |-
+            --config=osv-scanner.toml
             --lockfile=requirements.txt:requirements.txt
             --lockfile=requirements.txt:requirements/runtime-contracts.txt
             --lockfile=requirements.txt:requirements/runtime-evaluation.txt
-            --lockfile=connectors/aps/package-lock.json

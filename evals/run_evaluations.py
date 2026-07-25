@@ -223,7 +223,23 @@ def execute(stamp: str | None) -> int:
     # rewritten afterwards from the actual results -- see below.
     (out_dir / "coverage.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     results = out_dir / "results.xml"
-    code = pytest.main([str(target), "-q", f"--junitxml={results}"])
+    # `-o junit_logging=all` is the load-bearing flag. pytest's default is
+    # `junit_logging=no`, which omits captured output for PASSING tests -- so
+    # every judge score and reason on a successful run was discarded, while
+    # evals/README.md described the published directory as the scored result.
+    # A run artifact that records "passed" and not what it scored cannot serve
+    # as the promotion evidence the acceptance gate asks for.
+    code = pytest.main(
+        [
+            str(target),
+            "-q",
+            f"--junitxml={results}",
+            "-o",
+            "junit_logging=all",
+            "-o",
+            "junit_log_passing_tests=True",
+        ]
+    )
 
     # Without this, every published run reported `modes_proven: 0` permanently:
     # coverage.json was written before pytest and nothing read results.xml
