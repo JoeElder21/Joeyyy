@@ -162,9 +162,9 @@ class TrustedLauncher:
         if missing:
             raise GrantDeniedError(f"grant claims missing required fields: {missing}")
 
-        non_string = sorted(f for f in required if f in claims and not isinstance(claims[f], str))
-        if non_string:
-            raise GrantDeniedError(f"grant claims fields must be strings: {non_string}")
+        non_string_fields = sorted(f for f in required if f in claims and not isinstance(claims[f], str))
+        if non_string_fields:
+            raise GrantDeniedError(f"grant claims fields must be strings: {non_string_fields}")
 
         expected_signature = sign_claims(claims, secret)
         if not hmac.compare_digest(signature, expected_signature):
