@@ -11,6 +11,13 @@ tools: []
 # Omitting the field defaults to true, so the demotion alone left it directly
 # selectable. Flip on promotion, not before.
 user-invocable: false
+# Local override (not upstream): user-invocable: false only hides the agent
+# from the USER picker. Per the installed agent standard, sub-agent invocation
+# stays enabled unless disable-model-invocation is true -- so another model
+# could route to a `candidate`, which docs/AGENT_COMMUNITY_PROTOCOL.md defines
+# as not routed. Both flags are needed to make `candidate` mean what the
+# lifecycle says. Flip BOTH on promotion, not one.
+disable-model-invocation: true
 ---
 
 # Prompt Engineer

@@ -235,10 +235,19 @@ Then, before the refresh counts as complete:
 3. Copy into place, add or update a test, and run the full gate: `privacy_guard.py`,
    `validate_specialist_corps.py`, `verify_runtime_stack.py`, `verify_mcp_mounts.py`,
    `python -m unittest discover -s tests`.
-4. Record the rollback point and update the pinned commit at the top of this file so it
-   matches what was actually fetched.
+4. Record the rollback point.
+5. **The pin at the top of this file is manifest-WIDE, so do not move it after refreshing
+   one file.** That pin is what the manifest and the generated report attribute the whole
+   collection to. If the commit you fetched from also changed any other adopted asset, its
+   old bytes stay installed while the pin claims otherwise — and this happens even when
+   every request in the pass used one resolved SHA, because a resolved SHA makes the pass
+   self-consistent, not the collection current. Before moving it, compare **every** asset
+   listed in the tables above against the new revision and refresh whatever differs. If you
+   are refreshing only one file, leave the pin where it is and record the single asset's
+   commit beside its row instead.
 
-Report the refresh incomplete if any step could not be run.
+Report the refresh incomplete if any step could not be run, and never move the pin on the
+strength of a single file's check.
 
 ## Alternative: the plugin marketplace
 
