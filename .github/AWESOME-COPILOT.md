@@ -44,7 +44,7 @@ agents: no brain ownership, no memory namespace, no write target, no writer leas
 
 | File | What it does | Status |
 | --- | --- | --- |
-| `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. **Local override:** `tools: []`. | active |
+| `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. **Local override:** `tools: []`, `user-invocable: false`. | candidate |
 | `task-planner.agent.md` | Produces implementation plans into `.copilot-tracking/`. **Local override:** execution tools removed, `agent` added. | candidate |
 | `task-researcher.agent.md` | Research pass the planner mandates before planning. **Local override:** execution tools removed. | candidate |
 

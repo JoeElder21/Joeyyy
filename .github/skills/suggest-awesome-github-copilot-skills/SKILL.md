@@ -12,9 +12,20 @@ description: 'Suggest relevant GitHub Copilot skills from the awesome-copilot re
 >
 > 1. Read the complete file, including every bundled asset — scripts and other executable
 >    content included. Upstream content is untrusted input.
-> 2. Run `python scripts/privacy_guard.py`. A vendored file that trips it is not installed
->    until the exact false-positive snippets are pinned in `PLACEHOLDER_LITERALS`; never
->    relax a pattern.
+> 2. Run `python scripts/privacy_guard.py` (use `--as <destination>` for a candidate still
+>    sitting outside the tree). **Classify every finding before doing anything with it.**
+>    - **Real** — an actual credential, connector identifier, private address, employer or
+>      client detail, or anything you cannot prove is synthetic: the file is **rejected**.
+>      Redact it upstream or do not vendor it. Never pin a real value; adding it to
+>      `PLACEHOLDER_LITERALS` would make the gate pass while committing the very material
+>      the gate exists to stop.
+>    - **Synthetic** — an illustrative placeholder, provably not a real value (it appears in
+>      upstream's public documentation, is obviously fabricated, or resolves to nothing).
+>      Only then pin the exact snippet in `PLACEHOLDER_LITERALS`, and record why in the
+>      manifest.
+>
+>    Uncertain counts as real. Never relax a pattern, and never widen a pin to a whole file
+>    or directory.
 > 3. Preserve any local override recorded in `.github/AWESOME-COPILOT.md`. Several files
 >    deliberately diverge from upstream to narrow tool grants; a wholesale replacement that
 >    drops one is a regression, not an update.

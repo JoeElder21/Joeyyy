@@ -6,6 +6,11 @@ name: 'Prompt Engineer'
 # tool, which would turn prompt injection into repository or connector
 # actions. It needs none of them. See .github/AWESOME-COPILOT.md.
 tools: []
+# Local override (not upstream): user-invocable: false keeps this agent out of
+# the picker while it is lifecycle stage `candidate` in docs/AGENT_REGISTRY.md.
+# Omitting the field defaults to true, so the demotion alone left it directly
+# selectable. Flip on promotion, not before.
+user-invocable: false
 ---
 
 # Prompt Engineer
