@@ -46,6 +46,9 @@ reason is audit evidence; a missing line is a gap.
 - [ ] Awesome Copilot layer read (.github/AWESOME-COPILOT.md)
 - [ ] Discovery skills checked — run, not just listed, if scope touches .github/
 - [ ] Ownership classified (APEX | JEOS | shared | governance | unknown)
+- [ ] Mission staffed from the full registered corps, scaled to the mission,
+      one designated writer per shared resource (AGENTS.md; `[-]` with the
+      reason if Agent 007 ran it alone)
 - [ ] Existing contract/registry/tests read before changing them
 - [ ] First meaningful edit made
 - [ ] VALIDATION RUN #1 — immediately after that edit, not at the end
