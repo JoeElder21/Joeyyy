@@ -1,5 +1,6 @@
 from pathlib import Path
 import tomllib
+import re
 import unittest
 
 
@@ -367,6 +368,93 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+
+
+    # References a vendored asset makes that are NOT claims about a location in
+    # this repository, each reviewed once and recorded with its reason. The test
+    # below fails on anything not listed here and not present on disk, so a new
+    # dangling path cannot land quietly -- and an entry cannot be added without
+    # writing down why it is not a repository claim.
+    REVIEWED_NON_REPOSITORY_REFERENCES = {
+        ("agent-skills.instructions.md", "references/"):
+            "structure INSIDE a skill being authored, not a repository folder",
+        ("agent-skills.instructions.md", "templates/"):
+            "structure INSIDE a skill being authored, not a repository folder",
+        ("agent-skills.instructions.md", "assets/"):
+            "structure INSIDE a skill being authored, not a repository folder",
+        ("agent-skills.instructions.md", "hello-world/"):
+            "example scaffold name in a table of skill-internal layouts",
+        ("agents.instructions.md", "agents/"):
+            "the organization/enterprise-level location, offered as the "
+            "alternative to the repository-level .github/agents/ used here",
+        ("github-actions-ci-cd-best-practices.instructions.md", "actions/"):
+            "the GitHub `actions` ORGANIZATION (actions/checkout), not a path",
+    }
+
+    def test_no_vendored_asset_points_at_a_path_that_does_not_exist(self):
+        """Assert the CLASS, not the reference that was reported.
+
+        Upstream files were written for a different repository layout, so they
+        cite paths that do not exist here. Three separate instances were found
+        and fixed one at a time -- task-planner's Plan Template, two in
+        task-researcher, and task-implementation's standards pointer -- because
+        each fix repaired the reported line instead of sweeping the shape. A
+        dangling path is not cosmetic: it sends an implementer looking for
+        standards somewhere the real standards are not.
+
+        Every extracted reference must either exist on disk or be reviewed
+        above. A purely heuristic sweep was tried first and flagged generic
+        authoring guidance; tuning the heuristic until it passed would have
+        been asserting the example again, in a new costume.
+        """
+        vendored = sorted(
+            list((ROOT / ".github" / "instructions").glob("*.instructions.md"))
+            + list((ROOT / ".github" / "agents").glob("*.agent.md"))
+            + list((ROOT / ".github" / "skills").glob("*/SKILL.md"))
+        )
+        self.assertTrue(vendored, "no vendored assets found to check")
+
+        candidate = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9._/-]*/)[`\s]")
+        unexplained = []
+        for path in vendored:
+            in_comment = False
+            for line in path.read_text(encoding="utf-8").splitlines():
+                # Local-override annotations explain a repair by naming the
+                # broken path; they are the fix, not an instance of the defect.
+                if in_comment or "<!--" in line:
+                    in_comment = "-->" not in line
+                    continue
+                if "http" in line or "~/" in line or "{{" in line:
+                    continue
+                for ref in candidate.findall(line + " "):
+                    target = ref.rstrip("/")
+                    if any(ch in target for ch in "*?<>") or "/" in target:
+                        continue
+                    if (ROOT / target).exists():
+                        continue
+                    key = (path.name, ref)
+                    if key not in self.REVIEWED_NON_REPOSITORY_REFERENCES:
+                        unexplained.append(
+                            f"{path.relative_to(ROOT)}: `{ref}` does not exist "
+                            "and is not a reviewed non-repository reference")
+        self.assertEqual(sorted(set(unexplained)), [], "\n".join(unexplained))
+
+    def test_every_reviewed_reference_exception_is_still_needed(self):
+        """A stale exception is a hole. If upstream drops one of these, the
+        entry must go with it rather than sitting there excusing a future
+        reference that happens to reuse the name."""
+        text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(
+                list((ROOT / ".github" / "instructions").glob("*.instructions.md"))
+                + list((ROOT / ".github" / "agents").glob("*.agent.md"))
+                + list((ROOT / ".github" / "skills").glob("*/SKILL.md")))
+        )
+        for (filename, ref) in self.REVIEWED_NON_REPOSITORY_REFERENCES:
+            with self.subTest(file=filename, ref=ref):
+                self.assertIn(f"`{ref}`", text,
+                              "reviewed exception no longer appears in any "
+                              "vendored asset; remove it")
 
 
 if __name__ == "__main__":
