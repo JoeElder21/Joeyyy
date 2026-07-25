@@ -19,7 +19,7 @@ for it there, and anything unlisted is unreachable.
 
 | Mount | Server | Transport |
 |---|---|---|
-| `terraform` | `hashicorp/terraform-mcp-server:1.1.0` (official HashiCorp) | stdio via Docker |
+| `terraform` | `hashicorp/terraform-mcp-server` pinned by digest (official HashiCorp) | stdio via Docker |
 | `azure` | `@azure/mcp@2.0.5 server start` (official Microsoft) | stdio via npx |
 
 Commands were taken from each project's own README, not inferred.
@@ -28,7 +28,7 @@ Commands were taken from each project's own README, not inferred.
 
 ```toml
 command = ["docker", "run", "-i", "--rm", "-e", "TFE_TOKEN", "-e", "TFE_ADDRESS",
-           "hashicorp/terraform-mcp-server:1.1.0"]
+           "hashicorp/terraform-mcp-server:1.1.0@sha256:312d63756b5474df384b1844af55b58ca48cbe0996871e1d6c4239bfcd6fcd29"]
 ```
 
 The bare `-e NAME` form forwards a variable from the launcher's environment into the
@@ -43,9 +43,12 @@ Two tiers of capability in one server:
 - **Workspace operations** — `list_workspaces` and siblings against Terraform
   Enterprise / HCP Terraform. Requires `TFE_TOKEN` and `TFE_ADDRESS`.
 
-The image tag is pinned. `latest` would let the tool surface change under the
-governance contract without a commit, which the connector policy exists to
-prevent.
+The image is pinned **by digest**, not merely by tag. A tag is mutable -- it can
+be repointed at different bytes without the version string changing -- so a tag
+alone would still let the tool surface move under the governance contract with no
+commit here. `test_container_images_are_pinned_by_digest` enforces the digest
+form. Copy this command verbatim during a rebuild or rollback; restoring the bare
+tag silently drops the guarantee and fails that test.
 
 ### azure
 
