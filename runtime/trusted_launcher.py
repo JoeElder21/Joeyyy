@@ -180,8 +180,14 @@ class TrustedLauncher:
         if operation not in self.tool_catalog[tool_id]:
             raise GrantDeniedError(f"operation {operation!r} is not allowlisted for {tool_id!r}")
 
-        issued_at = _parse_timestamp(claims["issued_at"], "claims.issued_at")
-        expires_at = _parse_timestamp(claims["expires_at"], "claims.expires_at")
+        try:
+            issued_at = _parse_timestamp(claims["issued_at"], "claims.issued_at")
+        except (ValueError, TypeError) as exc:
+            raise GrantDeniedError(f"invalid issued_at timestamp: {exc}") from exc
+        try:
+            expires_at = _parse_timestamp(claims["expires_at"], "claims.expires_at")
+        except (ValueError, TypeError) as exc:
+            raise GrantDeniedError(f"invalid expires_at timestamp: {exc}") from exc
         if expires_at <= issued_at:
             raise GrantDeniedError("grant expires_at must be after issued_at")
         if expires_at - issued_at > self.max_grant_lifetime:
@@ -199,7 +205,10 @@ class TrustedLauncher:
     def _used_grants(self) -> set[str]:
         if not self.ledger_path.exists():
             return set()
-        content = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+        try:
+            content = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise GrantDeniedError(f"ledger read/parse failure: {exc}") from exc
         used = content.get("used_grants", [])
         return {item for item in used if isinstance(item, str)}
 

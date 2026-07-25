@@ -34,9 +34,7 @@ class RollbackTests(unittest.TestCase):
         cls.has_git_history = probe.returncode == 0 and probe.stdout.strip() == "true"
         cls.has_rollback_commit = False
         if cls.has_git_history:
-            with (ROOT / "config" / "specialist_corps.toml").open("rb") as source:
-                manifest = tomllib.load(source)
-            rollback = manifest["rollback_parent"]
+            rollback = cls.manifest["rollback_parent"]
             commit_probe = subprocess.run(
                 ["git", "cat-file", "-e", f"{rollback}^{{commit}}"],
                 cwd=ROOT,
