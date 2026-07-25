@@ -128,7 +128,11 @@ def enforce_toml() -> tuple[list[str], list[str]]:
     checked: list[str] = []
     errors: list[str] = []
     for toml_path in sorted(ROOT.rglob("*.toml")):
-        if {".git", "node_modules"} & set(toml_path.parts):
+        # Match against the repository-relative path: an absolute-path test
+        # would skip every file when the checkout itself happens to sit under
+        # a directory named .git or node_modules, silently reporting `valid`
+        # with nothing checked.
+        if {".git", "node_modules"} & set(toml_path.relative_to(ROOT).parts):
             continue
         # Vendored submodules under vendor/ carry the upstream project's TOML
         # contract, not this repository's, and are never committed here beyond

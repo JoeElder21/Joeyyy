@@ -54,6 +54,40 @@ class RuntimeStackTests(unittest.TestCase):
             for _module, dist in packages:
                 self.assertIn(dist.lower(), declared, f"{dist} not declared for tier {tier}")
 
+    def test_toml_exclusions_match_relative_paths_not_absolute_ones(self) -> None:
+        """A checkout sitting under a node_modules/.git directory still gets checked.
+
+        The dependency-directory exclusion must be applied to the
+        repository-relative path. Testing the absolute path would skip every
+        file in such a checkout, reporting `valid` with nothing checked.
+        """
+        import tempfile
+
+        sys.path.insert(0, str(ROOT))
+        try:
+            from scripts import verify_runtime_stack
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as directory:
+            # The repository root itself lives under a "node_modules" segment.
+            nested = Path(directory) / "node_modules" / "checkout"
+            nested.mkdir(parents=True)
+            (nested / "pyproject.toml").write_text('[tool.x]\nk = "v"\n', encoding="utf-8")
+            (nested / "node_modules").mkdir()
+            (nested / "node_modules" / "dep.toml").write_text("this is not valid toml\n", encoding="utf-8")
+
+            original = verify_runtime_stack.ROOT
+            verify_runtime_stack.ROOT = nested
+            try:
+                checked, errors = verify_runtime_stack.enforce_toml()
+            finally:
+                verify_runtime_stack.ROOT = original
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(checked), 1, f"expected only the root manifest, got {checked}")
+        self.assertIn("pyproject.toml", checked[0])
+
     @unittest.skipUnless(_module_available("jsonschema"), "jsonschema not installed")
     def test_jsonschema_enforces_every_schema_and_fixture(self) -> None:
         sys.path.insert(0, str(ROOT / "scripts"))

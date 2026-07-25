@@ -135,6 +135,12 @@ def repository_files(root: Path = ROOT) -> list[Path]:
             capture_output=True,
             check=True,
         ).stdout.split(b"\0")
+        # The index mode is the only evidence used here. `.gitmodules` text is
+        # deliberately not consulted: a stale or malformed `path =` entry
+        # naming a tracked regular directory would otherwise exclude
+        # first-party files this repository really does publish. Submodule
+        # contents never reach this list anyway — `git ls-files` does not
+        # recurse into a submodule's own index.
         paths: list[Path] = []
         for entry in tracked:
             if not entry:
@@ -142,9 +148,7 @@ def repository_files(root: Path = ROOT) -> list[Path]:
             metadata, _, name = entry.decode("utf-8").partition("\t")
             if metadata.split()[0] == GITLINK_MODE:
                 continue
-            path = root / name
-            if not is_vendored(path, root):
-                paths.append(path)
+            paths.append(root / name)
         return paths
     return [
         path

@@ -135,5 +135,48 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             )
 
 
+class StaleGitmodulesScanTests(unittest.TestCase):
+    """The tracked-file scan trusts the index mode, never `.gitmodules` text.
+
+    A stale or malformed `path =` entry naming a tracked regular directory
+    must not exclude first-party files from the scan. Only a real gitlink
+    (mode 160000) is a submodule, and submodule contents never appear in this
+    repository's index at all.
+    """
+
+    def test_stale_gitmodules_path_does_not_hide_tracked_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def run(*args: str) -> None:
+                subprocess.run(args, cwd=root, check=True, capture_output=True)
+
+            run("git", "init", "-q", ".")
+            run("git", "config", "user.email", "privacy-guard-fixture")
+            run("git", "config", "user.name", "privacy-guard-fixture")
+            # Declares a submodule at "private" while actually tracking a
+            # regular file there — the drift case.
+            (root / ".gitmodules").write_text(
+                '[submodule "private"]\n\tpath = private\n\turl = https://example.invalid/x.git\n',
+                encoding="utf-8",
+            )
+            (root / "private").mkdir()
+            # Content is deliberately innocuous — this repository's own privacy
+            # guard scans this test file, and a credential-shaped literal here
+            # would be a finding. The assertion below is on the filename rule.
+            (root / "private" / "token.json").write_text("{}\n", encoding="utf-8")
+            run("git", "add", "-A")
+            run("git", "commit", "-qm", "fixture")
+
+            self.assertEqual(submodule_paths(root), frozenset({"private"}))
+            scanned = {str(path.relative_to(root)) for path in repository_files(root)}
+            self.assertIn("private/token.json", scanned)
+            findings = scan_repository(root)
+            self.assertTrue(
+                any("prohibited private filename" in finding for finding in findings),
+                f"stale .gitmodules path hid a tracked file: {findings}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
