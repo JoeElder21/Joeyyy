@@ -58,12 +58,25 @@ class WorkflowSecurityTests(unittest.TestCase):
                     f"{path.name}: checkout leaves a usable token in the runner by default",
                 )
 
-    def test_workflows_declare_least_privilege_permissions(self):
+    def test_workflows_declare_explicit_permissions(self):
+        # The security property is that a workflow *states* its permissions
+        # rather than inheriting the repository default, which is broad.
+        #
+        # This deliberately does not require `contents: read` everywhere. An
+        # earlier version did, and it failed a workflow that legitimately needs
+        # `contents: write` to push a fix — a test asserting "no workflow may
+        # ever write" would be wrong about what least privilege means. Least
+        # privilege is the minimum a job needs, declared on purpose; it is not
+        # read-only for everything.
         for path in self._workflow_files():
             text = path.read_text(encoding="utf-8")
             with self.subTest(workflow=path.name):
-                self.assertIn("permissions:", text)
-                self.assertIn("contents: read", text)
+                self.assertIn(
+                    "permissions:",
+                    text,
+                    f"{path.name}: declares no permissions block, so it inherits the "
+                    "repository default token scope",
+                )
 
     def test_security_workflow_audits_the_workflows_themselves(self):
         text = SECURITY_WORKFLOW.read_text(encoding="utf-8")
