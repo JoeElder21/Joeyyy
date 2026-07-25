@@ -608,6 +608,39 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 self.assertIn("brain", body.lower())
                 self.assertIn("audit/*.jsonl", body)
 
+    def test_report_rows_are_reconciled_not_just_counted(self):
+        """Reconciling the manifest against the tracked tree is half the check.
+
+        The rationale tables are separate hardcoded lists, so an asset could be
+        tracked, listed in the manifest, and still absent from the report --
+        counted in the totals but published with no row saying why it was
+        selected."""
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        self.assertIn("def rendered_names()", source)
+        for token in ("INSTRUCTION_ROWS", "AGENT_ROWS", "SKILL_ROWS"):
+            self.assertIn(token, source)
+        self.assertIn("renders no row", source)
+        self.assertIn("the manifest does not claim", source)
+        # And the check must actually consult the rendered rows.
+        self.assertIn("shown = rendered_names()", source)
+
+    def test_researcher_does_not_block_on_user_dialogue(self):
+        """It runs as a sub-agent: its result returns to task-planner, not to
+        the user. The planner cannot answer a preference question from evidence
+        and may not plan until the research is complete, so a comparative task
+        deadlocked at its mandatory first step."""
+        body = (ROOT / ".github" / "agents" / "task-researcher.agent.md").read_text(
+            encoding="utf-8")
+        self.assertIn("You WILL NOT ask the user questions", body)
+        self.assertIn("Decisions for the invoker", body)
+        for stalling in (
+            'You WILL ask "Which approach aligns better with your objectives?"',
+            'You WILL confirm "Should I focus the research on',
+            'You WILL verify "Should I remove the other approaches',
+        ):
+            self.assertNotIn(stalling, body)
+
     def test_gate_rows_come_from_the_importable_helper(self):
         """The report builder runs its gates and writes the PDF at import time,
         so the helpers must live outside it or they cannot be tested without

@@ -325,6 +325,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             # Folded across multiple indented lines, as YAML allows.
             ("credential assignment",
              "TFE_TOKEN: |-\n  atlasv1.\n  abcdefghijklmnop\n"),
+            # YAML allows the indentation and chomping indicators in either
+            # order. Accepting only one left the other unfolded, which is the
+            # same bypass with two extra characters.
+            ("credential assignment", f"AZURE_CLIENT_SECRET: |2-\n  {secret}\n"),
+            ("credential assignment", f"AZURE_CLIENT_SECRET: |-2\n  {secret}\n"),
+            ("credential assignment", "TFE_TOKEN: >2+\n  atlasv1.abcdefghijkl\n"),
         )
         for label, probe in cases:
             with self.subTest(label=label, probe=probe):

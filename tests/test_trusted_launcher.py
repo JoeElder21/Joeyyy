@@ -11,7 +11,8 @@ import unittest
 
 from scripts.agent_runtime import AuditLedger
 from scripts.trusted_launcher import (
-    BASELINE_ENV, LaunchDenied, authorize, issue_grant, mount_env,
+    BASELINE_ENV, CONNECTOR_STAGE, LaunchDenied, authorize, issue_grant,
+    mount_env, specialist_stage, stage_permits_connector,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,63 @@ class TrustedLauncherTests(unittest.TestCase):
         key = Path(tmp) / "launch_key"
         ledger = AuditLedger(Path(tmp) / "launcher.jsonl")
         return key, ledger
+
+    def test_a_shadow_specialist_cannot_be_granted_a_mount(self):
+        """Being on a mount's allowlist is necessary, not sufficient.
+
+        Those lists record which specialist WILL own a mount once promoted.
+        Making them executable without a lifecycle check handed mutation-capable
+        connectors -- the repository-wide filesystem mount among them -- to
+        agents the contract confines to analysis and proposed writes. Every
+        rostered specialist is `shadow`, so in practice Agent 007 is the only
+        identity that can hold a grant, which is the documented arrangement.
+        """
+        import tomllib
+
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        scoped = [(m["name"], agent) for m in mounts
+                  for agent in m.get("agents", [])
+                  if agent != "*" and specialist_stage(agent) is not None]
+        self.assertTrue(scoped, "no rostered specialist appears on any mount")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            for mount, agent in scoped:
+                with self.subTest(mount=mount, agent=agent):
+                    with self.assertRaises(LaunchDenied) as caught:
+                        issue_grant(mount, 30, key_path=key,
+                                    out_dir=Path(tmp) / "grants",
+                                    agent=agent, ledger=ledger)
+                    self.assertIn("lifecycle stage", str(caught.exception))
+            # Every refusal is recorded; a denied mint is exactly the event an
+            # audit should surface.
+            events = [json.loads(line)["event"]
+                      for line in (Path(tmp) / "launcher.jsonl")
+                      .read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(set(events), {"grant_denied"})
+            self.assertEqual(len(events), len(scoped))
+
+    def test_the_designated_executor_is_not_stage_gated(self):
+        """Agent 007 is not a rostered specialist. It is the designated
+        executor, which is the whole reason the specialists are restricted."""
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            path = issue_grant("terraform", 30, key_path=key,
+                               out_dir=Path(tmp) / "grants",
+                               agent="apex_chief_of_staff", ledger=ledger)
+            self.assertTrue(path.exists())
+            self.assertIsNone(specialist_stage("apex_chief_of_staff"))
+
+    def test_an_unrecognised_stage_fails_closed(self):
+        """An unknown stage is not evidence of promotion."""
+        self.assertFalse(stage_permits_connector("not-a-stage"))
+        self.assertFalse(stage_permits_connector("shadow"))
+        self.assertFalse(stage_permits_connector("candidate"))
+        self.assertTrue(stage_permits_connector(CONNECTOR_STAGE))
+        self.assertTrue(stage_permits_connector("value-proven"))
+        # Not a rostered specialist -> not stage-gated at all.
+        self.assertTrue(stage_permits_connector(None))
 
     def test_grant_for_an_agent_scoped_mount_needs_an_identity(self):
         """The identity lives in the signed grant, so it must be supplied when

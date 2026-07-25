@@ -203,7 +203,11 @@ _TOKEN_CHAR = r"[\w.@:/+-]"
 
 _BLOCK_SCALAR_HEADER = re.compile(
     r"^(?P<indent>[ \t]*)(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*"
-    r"[|>][+-]?\d*\s*(?:#.*)?$"
+    # YAML lets the indentation indicator and the chomping indicator appear in
+    # either order -- "|2-" and "|-2" are both valid headers, and a parser
+    # reconstructs the value from both. Accepting only one order left the other
+    # unfolded, which is the same bypass this function exists to close.
+    r"[|>](?:\d+[+-]?|[+-]\d*)?\s*(?:#.*)?$"
 )
 
 

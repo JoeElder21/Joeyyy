@@ -58,6 +58,45 @@ def _load_mounts() -> dict[str, dict]:
         return {mount["name"]: mount for mount in tomllib.load(source)["mounts"]}
 
 
+CORPS = ROOT / "config" / "specialist_corps.toml"
+# The first stage at which a specialist may hold a connector of its own.
+# Below it, docs/AGENT_COMMUNITY_PROTOCOL.md restricts a specialist to analysis
+# and proposed writes, with Agent 007 as the sole executor.
+CONNECTOR_STAGE = "active"
+
+
+def _corps() -> dict:
+    with CORPS.open("rb") as source:
+        return tomllib.load(source)
+
+
+def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
+    """The lifecycle stage of a roster specialist, or None if not one.
+
+    The corps declares one `deployed_stage` covering every rostered specialist
+    rather than a per-agent field, so that is what this reports. Agent 007 is
+    not a rostered specialist and is not stage-gated here: it is the designated
+    executor, which is the whole reason the specialists are not.
+    """
+    corps = corps if corps is not None else _corps()
+    roster = set(corps.get("apex_roster", [])) | set(corps.get("jeos_roster", []))
+    if agent not in roster:
+        return None
+    return corps.get("lifecycle", {}).get("deployed_stage")
+
+
+def stage_permits_connector(stage: str | None, corps: dict | None = None) -> bool:
+    """Whether a specialist at `stage` may hold a mount of its own."""
+    if stage is None:
+        return True
+    corps = corps if corps is not None else _corps()
+    order = corps.get("lifecycle", {}).get("stages", [])
+    if stage not in order or CONNECTOR_STAGE not in order:
+        # An unrecognised stage is not evidence of promotion. Fail closed.
+        return False
+    return order.index(stage) >= order.index(CONNECTOR_STAGE)
+
+
 def _load_or_create_key(key_path: Path) -> bytes:
     if not key_path.exists():
         key_path.parent.mkdir(parents=True, exist_ok=True)
@@ -112,6 +151,22 @@ def issue_grant(
                 f"agent {agent!r} is not on {mount!r}'s allowlist "
                 f"({', '.join(allowed) or 'none'})"
             )
+
+    # Being on the allowlist is necessary, not sufficient. Those lists record
+    # which specialist WILL own a mount once promoted; making them executable
+    # without a lifecycle check handed mutation-capable connectors to agents
+    # the contract confines to analysis and proposed writes. Every rostered
+    # specialist is currently `shadow`, so in practice this leaves Agent 007 as
+    # the only identity that can hold a grant -- which is the documented
+    # arrangement, now enforced rather than described.
+    stage = specialist_stage(agent) if agent else None
+    if not stage_permits_connector(stage):
+        raise refuse(
+            f"agent {agent!r} is lifecycle stage {stage!r}; a specialist may "
+            f"not hold a connector before {CONNECTOR_STAGE!r}. Promote it "
+            "through docs/AGENT_COMMUNITY_PROTOCOL.md first, or mint the grant "
+            "for the designated executor."
+        )
 
     now = now if now is not None else time.time()
     payload = {
