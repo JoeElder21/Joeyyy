@@ -22,6 +22,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -156,14 +157,62 @@ def execute(stamp: str | None) -> int:
             "overwriting recorded evidence."
         )
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Written before the run so a crashed run still leaves its inventory, and
+    # rewritten afterwards from the actual results -- see below.
     (out_dir / "coverage.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    code = pytest.main([str(target), "-q", f"--junitxml={out_dir / 'results.xml'}"])
+    results = out_dir / "results.xml"
+    code = pytest.main([str(target), "-q", f"--junitxml={results}"])
+
+    # Without this, every published run reported `modes_proven: 0` permanently:
+    # coverage.json was written before pytest and nothing read results.xml
+    # afterwards, so the harness could never record the passing-run evidence its
+    # own gate demands. A gate whose evidence can never be produced is not a
+    # gate, it is a wall.
+    report = _record_passes(report, results, identifier)
+    (out_dir / "coverage.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+
     print(
         f"\nResults written to {out_dir}.\n"
+        f"{report['modes_proven']}/{report['modes_total']} material modes have a "
+        f"recorded passing run in {identifier}.\n"
         f"Publish this directory to the '{DRIVE_FOLDER_NAME}' folder on Drive "
         "through the approved connector; do not commit it.",
     )
     return int(code)
+
+
+def _record_passes(report: dict, results: Path, identifier: str) -> dict:
+    """Fold the run's actual outcomes back into the coverage summary.
+
+    Reads the JUnit XML pytest just wrote, so a pass is recorded because a test
+    passed rather than because a case file exists. A test that errored, failed,
+    or was skipped records nothing: `skipped` matters here because the whole
+    suite skips when no evaluation runtime is installed, and counting a skip as
+    a pass would let an uninstalled dependency attest the corps.
+    """
+    coverage = build_coverage()
+    if results.exists():
+        for case in ElementTree.parse(results).getroot().iter("testcase"):
+            key = _mode_key_from(case.get("name") or "")
+            if not key:
+                continue
+            if any(child.tag in {"failure", "error", "skipped"} for child in case):
+                continue
+            coverage.passed[key] = identifier
+    updated = coverage.summary()
+    # Preserve the descriptive sections the pre-run report carried.
+    for extra in ("metric_contract", "cases", "deepeval_available"):
+        if extra in report:
+            updated[extra] = report[extra]
+    updated["run_id"] = identifier
+    return updated
+
+
+def _mode_key_from(test_name: str) -> str:
+    """Recover the mode key from a parametrized test id, e.g. `test_x[apex/a/b]`."""
+    if "[" not in test_name or not test_name.rstrip().endswith("]"):
+        return ""
+    return test_name[test_name.index("[") + 1 : test_name.rindex("]")]
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -65,6 +65,25 @@ METRIC_CONTRACT = {
 BASELINE_METRICS = ("packet_validity", "role_adherence", "brain_isolation", "case_criteria")
 
 
+# Acceptance gates from docs/SPECIALIST_ACCEPTANCE_TESTS.md that this harness
+# does NOT evaluate and must never be read as attesting. They are longitudinal
+# or runtime properties — repeated missions over weeks, evidence that a
+# connector handle never reached a specialist, a readback against live target
+# state — and no single evaluation run can produce any of them.
+#
+# Listed as data, and emitted in every summary, because the earlier flag was
+# named `promotion_ready` while proving only "each mode passed once". A name
+# that overstates what was measured is the same defect as a metric that always
+# returns 1: it reads as evidence and is not.
+GATES_NOT_MODELLED = (
+    "longitudinal mission counts (e.g. four weekly WAR Architect missions, "
+    "five Delivery Commander missions, three Systems Blacksmith shadow runs)",
+    "runtime connector-isolation evidence (gate 20)",
+    "mutation readback and rollback evidence against live target state (gates 9, 14)",
+    "net-time and value thresholds measured over weeks",
+)
+
+
 @dataclass(frozen=True)
 class Mode:
     """One material mode of one specialist — the unit the active gate counts."""
@@ -79,6 +98,12 @@ class Mode:
     write_targets: tuple[str, ...]
     artifact_types: tuple[str, ...]
     connector_policy: str
+    # The manifest's own scope sentence. `class_id` is deliberately generic and
+    # shared across mirrored specialists — the APEX War Architect and the JEOS
+    # Life Architect are both `strategy` — so judging role adherence by class
+    # cannot distinguish professional campaigns from personal outcomes, and
+    # would pass work belonging to the other brain's same-class owner.
+    responsibility: str = ""
 
     @property
     def key(self) -> str:
@@ -136,10 +161,18 @@ class Coverage:
             "uncovered_keys": [mode.key for mode in self.uncovered],
             # Inventory. Says a case exists, never that it passed.
             "cases_complete": not self.uncovered,
-            # Evidence. Requires a recorded passing run for every material mode.
+            # Evidence, and only of one thing: every material mode has at least
+            # one recorded passing run. Formerly `promotion_ready`, which was a
+            # claim this harness cannot support — the acceptance gates also
+            # require repeated missions, connector-isolation evidence, and
+            # mutation readback, none of which a single run produces. The flag
+            # was accurate about what it measured and wrong about what it meant.
             "modes_proven": len(self.passed),
-            "promotion_ready": bool(self.modes) and not self.unproven,
+            "behavioral_modes_proven": bool(self.modes) and not self.unproven,
             "promotion_blockers": blockers,
+            # Emitted on every summary so a reader who sees the flag above also
+            # sees what it excludes, in the same object.
+            "gates_not_modelled": list(GATES_NOT_MODELLED),
         }
 
 
@@ -163,6 +196,7 @@ def load_modes(root: Path = ROOT) -> list[Mode]:
                         write_targets=tuple(spec.get("write_targets", [])),
                         artifact_types=tuple(spec.get("artifact_types", [])),
                         connector_policy=spec.get("connector_policy", ""),
+                        responsibility=spec.get("responsibility", ""),
                     )
                 )
     return sorted(modes, key=lambda m: m.key)

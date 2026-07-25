@@ -14,11 +14,15 @@ actually executed.
 """
 
 import datetime
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
 from runtime.writer_lease import LeaseRegistry
+from scripts.agent_runtime import AuditLedger
 from scripts.policy_enforcement import (
+    AUTHORIZATION_SCHEMAS,
     CHIEF,
     HIGH_IMPACT_ACTIONS,
     NON_EXECUTING_STAGES,
@@ -407,6 +411,199 @@ class EnforceTests(unittest.TestCase):
         # So `if not enforce(...)` reads correctly even though enforce raises.
         self.assertFalse(bool(Decision(allowed=False, reasons=("x",))))
         self.assertTrue(bool(Decision(allowed=True)))
+
+    def test_ledger_records_the_derived_status_not_the_submitted_one(self):
+        # The audit trail has to agree with the decision it records. Logging the
+        # caller's object described an inferred mutation as `mutating: false`,
+        # so incident review would read that the lease and lifecycle rules had
+        # not applied when in fact they had.
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = AuditLedger(Path(tmp) / "audit.jsonl")
+            with self.assertRaises(PolicyDenied):
+                enforce(
+                    ToolRequest(
+                        agent=SPECIALIST,
+                        action="WRITE",  # neither lowercase nor flagged
+                        resource="APEX/Strategy-Campaigns",
+                        owner_brain="APEX",
+                    ),
+                    ledger=ledger,
+                )
+            entry = json.loads(ledger.path.read_text(encoding="utf-8").splitlines()[-1])
+            payload = entry["detail"]
+            self.assertEqual(entry["event"], "policy_denied")
+            self.assertTrue(payload["mutating"], "derived mutation must reach the ledger")
+            self.assertTrue(payload["mutation_derived"])
+            self.assertEqual(payload["action"], "write")
+            self.assertEqual(payload["action_as_submitted"], "WRITE")
+
+
+class NormalizationTests(unittest.TestCase):
+    """Round 4: three bypasses that all lived in "which form of the request?"."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
+
+    def test_action_casing_cannot_bypass_the_high_impact_boundary(self):
+        # `_is_mutating` lowercased; `_high_impact_boundary` did not. An action
+        # spelled FINANCIAL_TRANSACTION was therefore treated as a mutation and
+        # still walked past the explicit-instruction requirement.
+        for spelling in (
+            "FINANCIAL_TRANSACTION",
+            "Financial_Transaction",
+            " financial_transaction ",
+        ):
+            with self.subTest(spelling=spelling):
+                decision = self.pep.evaluate(
+                    ToolRequest(agent=CHIEF, action=spelling, resource="account")
+                )
+                self.assertFalse(decision.allowed)
+                self.assertTrue(
+                    any("high-impact boundary" in reason for reason in decision.reasons),
+                    f"{spelling!r} evaded the boundary: {decision.reasons}",
+                )
+
+    def test_every_high_impact_action_resists_casing(self):
+        # The whole set, not the one example that was reported.
+        for action in sorted(HIGH_IMPACT_ACTIONS):
+            with self.subTest(action=action):
+                request = ToolRequest(agent=CHIEF, action=action.upper(), resource="target")
+                normalized, _ = self.pep.normalize(request)
+                self.assertEqual(self.pep._high_impact_boundary(normalized).__len__(), 1)
+
+    def test_a_naive_clock_denies_rather_than_raising(self):
+        # `datetime.datetime.now()` is the obvious thing to write. Against a
+        # timezone-aware lease expiry it raised TypeError, which is a crash
+        # shared with every other caller in the process, not a denial.
+        naive = datetime.datetime(2026, 7, 25, 12, 0)
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                lease=self.lease,
+                resource_id="campaign-alpha",
+                now=naive,
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("timezone-naive" in reason for reason in decision.reasons))
+
+    def test_an_aware_clock_raises_no_clock_objection(self):
+        # The naive-clock denial has to be about the clock, not about the
+        # request being unauthorized for some other reason anyway. Same request,
+        # aware clock: the lease rule is satisfied and no clock reason appears.
+        request = ToolRequest(
+            agent=CHIEF,
+            action="write",
+            resource="APEX/Strategy-Campaigns",
+            owner_brain="APEX",
+            mutating=True,
+            lease=self.lease,
+            resource_id="campaign-alpha",
+            now=NOW,
+        )
+        decision = self.pep.evaluate(request)
+        self.assertFalse(any("timezone-naive" in reason for reason in decision.reasons))
+        self.assertEqual(self.pep._writer_lease(request), [])
+
+    def test_the_decision_carries_the_request_the_rules_saw(self):
+        decision = self.pep.evaluate(
+            ToolRequest(agent=CHIEF, action="WRITE", resource="x", owner_brain="APEX")
+        )
+        self.assertIsNotNone(decision.request)
+        self.assertEqual(decision.request.action, "write")
+        self.assertTrue(decision.request.mutating)
+
+
+class ScopeTests(unittest.TestCase):
+    """Round 4: authorizations that stretched further than they were issued."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
+
+    def test_a_lease_does_not_stretch_to_a_prefix_sibling(self):
+        # `startswith` widened every lease to its own prefix family, so a lease
+        # for APEX/Strategy-Campaigns covered APEX/Strategy-Campaigns-Evil and
+        # any other target reachable by appending characters.
+        reasons = self.pep._writer_lease(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns-Evil",
+                owner_brain="APEX",
+                mutating=True,
+                lease=self.lease,
+                resource_id="campaign-alpha",
+                now=NOW,
+            )
+        )
+        self.assertTrue(any("does not cover" in reason for reason in reasons), reasons)
+
+    def test_a_non_authorization_schema_cannot_admit_a_request(self):
+        # `packet_schema` is caller-supplied. Pointing it at writer_lease
+        # satisfied admission with an object that authorizes nothing.
+        reasons = self.pep._packet_admission(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                packet=dict(self.lease),
+                packet_schema="writer_lease.schema.json",
+            )
+        )
+        self.assertTrue(any("does not authorize" in reason for reason in reasons), reasons)
+
+    def test_every_non_authorization_schema_is_refused(self):
+        # The property, not the one schema that was reported. Any schema in
+        # schemas/ that is not a delegation or handoff must be refused.
+        for schema in sorted(p.name for p in (ROOT / "schemas").glob("*.json")):
+            with self.subTest(schema=schema):
+                reasons = self.pep._packet_admission(
+                    ToolRequest(
+                        agent=CHIEF,
+                        action="read",
+                        resource="x",
+                        owner_brain="APEX",
+                        packet_schema=schema,
+                    )
+                )
+                if schema in AUTHORIZATION_SCHEMAS:
+                    self.assertEqual(reasons, [])
+                else:
+                    self.assertTrue(reasons, f"{schema} was accepted as an authorization")
+
+    def test_a_specialist_cannot_read_a_connector_directly(self):
+        # `packet_only_no_direct_connectors` is a statement about reads too.
+        # Only mutations were guarded, so a direct mount read was allowed.
+        for resource in ("mount:gdrive", "connector:aps"):
+            with self.subTest(resource=resource):
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=resource, owner_brain="APEX"
+                    )
+                )
+                self.assertFalse(decision.allowed)
+                self.assertTrue(
+                    any("may not touch connector" in reason for reason in decision.reasons),
+                    decision.reasons,
+                )
+
+    def test_the_chief_still_reaches_connectors(self):
+        # The sole cross-brain agent performs connector work on the corps'
+        # behalf; denying it too would be an outage, not a control.
+        self.assertEqual(
+            self.pep._connector_policy(
+                ToolRequest(agent=CHIEF, action="read", resource="mount:gdrive")
+            ),
+            [],
+        )
 
 
 class BoundaryDataTests(unittest.TestCase):

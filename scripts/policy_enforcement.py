@@ -72,6 +72,24 @@ HIGH_IMPACT_ACTIONS = frozenset(
 # configuration the runtime has never been shown to be safe under.
 PACKET_ONLY = "packet_only_no_direct_connectors"
 
+# Resource prefixes that denote a connector or MCP mount rather than a memory
+# namespace or write target. Under the packet-only policy these are Agent 007's
+# alone -- a specialist reaches them through a packet, never directly.
+CONNECTOR_PREFIXES = ("mount:", "connector:")
+
+# The only schemas that can authorize a tool invocation. `packet_schema` is a
+# caller-supplied string, so without this list a caller could point it at
+# `writer_lease.schema.json` (or any other schema in schemas/) and satisfy
+# packet admission with an object that authorizes nothing -- a lease, a memory
+# record, a roundtable memo. Admission checked that the packet was *valid*
+# without ever checking it was the *kind of thing that grants permission*.
+AUTHORIZATION_SCHEMAS = frozenset(
+    {
+        "delegation_packet.schema.json",
+        "handoff_packet.schema.json",
+    }
+)
+
 # Specialists in these stages may not execute mutations themselves. Per
 # AGENTS.md, while specialists are in shadow, Agent 007 alone executes and
 # verifies mutations.
@@ -171,11 +189,20 @@ class ToolRequest:
 
 @dataclass
 class Decision:
-    """Allow or deny, with the reasons either way."""
+    """Allow or deny, with the reasons either way.
+
+    `request` is the *normalized* request the rules actually saw, not the one
+    the caller handed in. Without it, an audit record built from the caller's
+    object describes a different request than the one that was judged — an
+    inferred mutation logged as `mutating: false`, a `FINANCIAL_TRANSACTION`
+    logged in whatever casing it arrived in. Incident review reads the ledger,
+    so the ledger has to hold the evaluated form.
+    """
 
     allowed: bool
     reasons: tuple[str, ...] = ()
     checks_run: tuple[str, ...] = field(default_factory=tuple)
+    request: ToolRequest | None = None
 
     def __bool__(self) -> bool:
         return self.allowed
@@ -249,12 +276,50 @@ class PolicyEnforcementPoint:
             return True
         return action in HIGH_IMPACT_ACTIONS
 
-    def evaluate(self, request: ToolRequest) -> Decision:
-        # Re-derive once, up front, so every rule sees the same answer.
-        if self._is_mutating(request) and not request.mutating:
-            request = replace(request, mutating=True)
+    @staticmethod
+    def normalize(request: ToolRequest) -> tuple[ToolRequest, list[str]]:
+        """Put the request in the one form every rule reads.
 
-        reasons: list[str] = []
+        Two separate defects lived in the gap between "what the caller sent" and
+        "what a rule happened to look at":
+
+        * `_is_mutating()` lowercased the action; `_high_impact_boundary()` did
+          not. `action="FINANCIAL_TRANSACTION"` was therefore classified as a
+          mutation *and* walked past the explicit-instruction boundary, because
+          the boundary compared a raw string against a lowercase frozenset.
+          Normalizing in one place, once, is the only version of this that does
+          not regress the moment a ninth rule is added.
+
+        * A timezone-naive `now` compared against a timezone-aware lease expiry
+          raises `TypeError` rather than denying. An enforcement point that
+          raises on an input a caller can supply by writing the obvious
+          `datetime.datetime.now()` is not fail-closed, it is a crash. Naive
+          clocks are rejected as a reason, and dropped so the remaining rules
+          still evaluate against real UTC instead of exploding.
+        """
+        errors: list[str] = []
+        normalized = request
+
+        action = (request.action or "").strip().lower()
+        if action != request.action:
+            normalized = replace(normalized, action=action)
+
+        if PolicyEnforcementPoint._is_mutating(normalized) and not normalized.mutating:
+            normalized = replace(normalized, mutating=True)
+
+        if request.now is not None and request.now.tzinfo is None:
+            errors.append(
+                "request clock is timezone-naive; policy compares it against "
+                "timezone-aware lease expiries, so an offset must be stated"
+            )
+            normalized = replace(normalized, now=None)
+
+        return normalized, errors
+
+    def evaluate(self, request: ToolRequest) -> Decision:
+        # Normalize once, up front, so every rule sees the same answer to
+        # "which action is this, is it a mutation, and what time is it".
+        request, reasons = self.normalize(request)
         checks: list[str] = []
 
         for name, check in (
@@ -270,7 +335,12 @@ class PolicyEnforcementPoint:
             checks.append(name)
             reasons.extend(check(request))
 
-        return Decision(allowed=not reasons, reasons=tuple(reasons), checks_run=tuple(checks))
+        return Decision(
+            allowed=not reasons,
+            reasons=tuple(reasons),
+            checks_run=tuple(checks),
+            request=request,
+        )
 
     # --- rules ----------------------------------------------------------
     # Each returns a list of reasons the request must be denied. Empty means
@@ -331,9 +401,30 @@ class PolicyEnforcementPoint:
             return []
         if policy != PACKET_ONLY:
             return [f"connector policy {policy!r} is not the approved {PACKET_ONLY!r}"]
+        # `packet_only_no_direct_connectors` is a statement about *reads* as much
+        # as writes. Only the mutating path was guarded, so a shadow specialist
+        # could read `mount:gdrive` directly and be allowed -- the exact direct
+        # connector access the policy name forbids. Checking the policy string
+        # and then permitting the thing it prohibits is not enforcement.
+        if any(request.resource.startswith(prefix) for prefix in CONNECTOR_PREFIXES):
+            return [
+                f"{request.agent!r} is {PACKET_ONLY!r} and may not touch connector "
+                f"resource {request.resource!r} directly, read or write; "
+                f"{CHIEF} performs connector work on its behalf"
+            ]
         return []
 
     def _packet_admission(self, request: ToolRequest) -> list[str]:
+        # An unrecognised schema is refused before the packet is read at all.
+        # `packet_schema` is caller-supplied: pointing it at a non-authorization
+        # schema let a caller satisfy admission with a schema-valid object that
+        # grants nothing -- a writer lease, a memory record -- so the check
+        # proved wellformedness where it was supposed to prove permission.
+        if request.packet_schema not in AUTHORIZATION_SCHEMAS:
+            return [
+                f"packet schema {request.packet_schema!r} does not authorize a tool "
+                f"invocation; admission accepts only {sorted(AUTHORIZATION_SCHEMAS)}"
+            ]
         if request.packet is None:
             if request.mutating:
                 return ["mutating request carries no packet; packet-only policy admits nothing"]
@@ -423,7 +514,14 @@ class PolicyEnforcementPoint:
                 f"{request.owner_brain!r}"
             )
         target = lease.get("write_target")
-        if target and request.resource and not request.resource.startswith(target):
+        # Exact equality, matching PacketGuard's authoritative lease matching.
+        # `startswith` silently widened every lease to its own prefix family: a
+        # genuine lease for `APEX/Strategy-Campaigns` covered
+        # `APEX/Strategy-Campaigns-Evil`, and any target an attacker could name
+        # by appending characters. There is no declared resource hierarchy in
+        # this repository, so prefix containment was inventing an authorization
+        # relationship rather than reading one.
+        if target and request.resource and request.resource != target:
             errors.append(f"lease covers {target!r}, which does not cover {request.resource!r}")
         if request.resource_id and lease.get("resource_id") != request.resource_id:
             errors.append(
@@ -496,12 +594,25 @@ class PolicyEnforcementPoint:
         return errors
 
     @staticmethod
+    def _clock(request: ToolRequest) -> datetime.datetime:
+        """The comparison clock, always timezone-aware.
+
+        `normalize()` already rejects a naive clock on the `evaluate()` path.
+        This is the same guard at the point of use, so a rule invoked directly
+        still denies rather than raising `TypeError` mid-comparison.
+        """
+        now = request.now or datetime.datetime.now(datetime.UTC)
+        if now.tzinfo is None:
+            return now.replace(tzinfo=datetime.UTC)
+        return now
+
+    @staticmethod
     def _lease_expiry_errors(lease: dict[str, Any], request: ToolRequest) -> list[str]:
         """An expired lease is a closed lease. Unparseable timestamps fail closed."""
         expiry = lease.get("expires_at")
         if not expiry:
             return ["lease declares no expiry"]
-        now = request.now or datetime.datetime.now(datetime.UTC)
+        now = PolicyEnforcementPoint._clock(request)
         try:
             deadline = datetime.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
         except ValueError:
@@ -524,7 +635,11 @@ class PolicyEnforcementPoint:
         return []
 
     def _high_impact_boundary(self, request: ToolRequest) -> list[str]:
-        if request.action in HIGH_IMPACT_ACTIONS and not request.explicit_instruction:
+        # Compare the normalized action. `evaluate()` normalizes before any rule
+        # runs; lowercasing again here keeps a directly-invoked rule honest
+        # rather than making the boundary depend on the caller's entry point.
+        action = (request.action or "").strip().lower()
+        if action in HIGH_IMPACT_ACTIONS and not request.explicit_instruction:
             return [
                 f"{request.action!r} is a high-impact boundary and requires explicit "
                 "task-level instruction from Joe"
@@ -562,7 +677,7 @@ class PolicyEnforcementPoint:
         expected = _sign_grant(key_path.read_bytes(), payload)
         if not hmac.compare_digest(expected, str(grant.get("sig", ""))):
             return ["launch grant signature is invalid"]
-        now = request.now or datetime.datetime.now(datetime.UTC)
+        now = self._clock(request)
         try:
             expires = float(payload["expires_at"])
         except (TypeError, ValueError):
@@ -586,14 +701,22 @@ def enforce(
     """
     pep = pep or PolicyEnforcementPoint()
     decision = pep.evaluate(request)
+    # Record what was *judged*, not what was submitted. Logging the caller's
+    # object described an inferred mutation as `mutating: false` and a
+    # `FINANCIAL_TRANSACTION` in its original casing, so the audit trail
+    # disagreed with the decision it was recording — precisely when it matters,
+    # during incident review.
+    judged = decision.request or request
     if ledger is not None:
         ledger.append(
             "policy_allowed" if decision.allowed else "policy_denied",
             {
-                "agent": request.agent,
-                "action": request.action,
-                "resource": request.resource,
-                "mutating": request.mutating,
+                "agent": judged.agent,
+                "action": judged.action,
+                "action_as_submitted": request.action,
+                "resource": judged.resource,
+                "mutating": judged.mutating,
+                "mutation_derived": judged.mutating and not request.mutating,
                 "reasons": list(decision.reasons),
             },
         )

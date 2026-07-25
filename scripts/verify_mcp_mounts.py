@@ -36,8 +36,13 @@ async def _probe(command: list[str]) -> list[str]:
         return sorted(tool.name for tool in listed.tools)
 
 
-def main() -> int:
-    report: dict = {"mounts": []}
+def main(argv: list[str] | None = None) -> int:
+    # `--strict` treats a degraded verification as a failure. Without it the
+    # script reported "unverified (mcp package not installed)" and exited 0,
+    # which in CI -- where the dependency is installed deliberately -- means the
+    # probe silently did not run and a broken MCP server stays green.
+    strict = "--strict" in (argv if argv is not None else sys.argv[1:])
+    report: dict = {"mounts": [], "strict": strict}
     try:
         import mcp  # noqa: F401
 
@@ -64,10 +69,15 @@ def main() -> int:
                 entry["status"] = f"probe failed: {error}"
         report["mounts"].append(entry)
 
+    acceptable = ("verified", "registered")
     report["valid"] = all(
-        entry["status"] in ("verified", "registered") or entry["status"].startswith("unverified")
+        entry["status"] in acceptable or (not strict and entry["status"].startswith("unverified"))
         for entry in report["mounts"]
     )
+    if strict:
+        report["degraded"] = [
+            entry["name"] for entry in report["mounts"] if entry["status"].startswith("unverified")
+        ]
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["valid"] else 1
 

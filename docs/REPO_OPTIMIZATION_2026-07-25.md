@@ -465,6 +465,41 @@ now correctly ignores, meaning those tests had been asserting against a value
 the code no longer consults. They now change registry state, which is what they
 always claimed to test.
 
+### Automated review, fourth pass — twelve findings, eleven fixed
+
+The fourth round found three more P1s in the enforcement point, all of the same
+shape: an authorization that stretched further than it was issued.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| `packet_schema` was caller-controlled | **Correct** | A mutating request could set it to `writer_lease.schema.json` and pass admission with a schema-valid object that authorizes nothing. Admission now accepts only delegation and handoff schemas; a test asserts every other schema in `schemas/` is refused. |
+| Writer-lease targets matched by `startswith` | **Correct** | A lease for `APEX/Strategy-Campaigns` covered `APEX/Strategy-Campaigns-Evil` — and any target reachable by appending characters. Exact equality now, matching `PacketGuard`. There is no declared resource hierarchy here, so prefix containment was inventing an authorization relationship rather than reading one. |
+| Action casing bypassed the high-impact boundary | **Correct** | `_is_mutating()` lowercased; `_high_impact_boundary()` compared a raw string against a lowercase set, so `FINANCIAL_TRANSACTION` was classified as a mutation *and* walked past the explicit-instruction requirement. The request is now normalized once, before any rule runs. |
+| Specialists could read connectors directly | **Correct** | Only the mutating path was guarded, so a shadow specialist could read `mount:gdrive` and be allowed — the exact access `packet_only_no_direct_connectors` names. Reads are denied too; Agent 007 does connector work on the corps' behalf. |
+| A naive clock raised `TypeError` instead of denying | **Correct** | `datetime.datetime.now()` is the obvious thing to write, and against a timezone-aware lease expiry it crashed the evaluation rather than failing closed. Naive clocks are now a denial reason. |
+| `enforce()` logged the caller's `mutating`, not the derived one | **Correct** | The audit trail described an inferred mutation as non-mutating — disagreeing with the decision it was recording, exactly during incident review. `Decision` now carries the normalized request and the ledger reads from it. |
+| Judged metrics were "gated" by list order | **Correct** | `assert_test` runs every metric it is handed, so putting `packet_validity` first bought a full set of G-Eval calls on a packet the runtime would refuse. The gate is now an explicit branch before any judge runs. |
+| `packet_validity` never received the originating delegation | **Correct** | `PacketGuard` refuses a handoff whose `delegation_id` does not resolve to exactly one validated delegation, so scoring the handoff alone failed every lawful packet — a metric that could only ever return zero. Dispatch now returns the delegations and they travel with the packet. |
+| Brain-isolation judge could not see the case context | **Correct** | The JEOS weekly-reflection seed permits a professional-deadline reference only via its context; without it the judge was told to reject that reference as detail beyond the mission. A false failure built into the metric. `CONTEXT` is now an evaluation param. |
+| Role judge read `class_id`, not `responsibility` | **Correct** | Mirrored specialists share generic class ids by design — both architects are `strategy` — so the judge could not tell professional campaigns from personal outcomes. `Mode` now carries the manifest's responsibility sentence. |
+| `promotion_ready` ignored the longitudinal gates | **Correct** | One pass per mode is not what `docs/SPECIALIST_ACCEPTANCE_TESTS.md` requires. Renamed to `behavioral_modes_proven`, and every summary now emits `gates_not_modelled` naming what it excludes. Modelling those gates as data would duplicate the acceptance document and drift from it; naming the exclusion is the honest option. |
+| `coverage.json` written before pytest, so `modes_proven` stayed 0 | **Correct** | Every published run permanently reported zero proven modes, so the harness could never produce the evidence its own gate demands. The runner now folds the JUnit results back in — skips and errors record nothing, because the whole suite skips when no runtime is installed. |
+| Ruff unpinned in CI while pre-commit pinned `v0.14.6` | **Correct** | Pinned to match. An unchanged commit could otherwise start failing on a ruff release, and a contributor's local gate could disagree with CI about the same file. |
+| MCP mount verification degraded to "unverified" and still exited 0 | **Correct** | The `mcp` package was never installed in CI, so the step launched nothing and went green regardless. Added `--strict`, installed `requirements/runtime-contracts.txt`, and moved it to its own job — probing the filesystem mount fetches from npm, and a registry outage should name itself rather than fail "Contracts and tests" twice over. |
+| osv-scanner scanned a lock CI does not install | **Correct** | The lock pins `autogen-agentchat` 0.7.5; `requirements.txt` asks for `>=0.2.35,<0.3`. All three Python manifests are scanned now. |
+
+**The class, not the instance — again, and this time it was anticipated.** The
+three P1s here are one defect wearing three hats: a check that reads a
+caller-supplied value where it should read a constrained one. Rounds two and
+three had already taught this (`mutating`, then `launch_grant_verified`), so this
+round each fix was followed by a search for the same shape elsewhere in the file
+— which is how the connector-read hole was found, since no reviewer had raised
+it. The tests assert the property (every non-authorization schema is refused,
+every high-impact action resists casing) rather than the reported example.
+
+**One finding carried forward, unchanged from round one.** `enforce()` still has
+no live call site. It remains the top follow-up, for the reason given below.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

@@ -35,10 +35,40 @@ jobs:
           python scripts/privacy_guard.py
           python scripts/validate_specialist_corps.py
           python -m unittest discover -s tests -v
-      - name: Verify runtime stack and MCP mounts
-        run: |
-          python scripts/verify_runtime_stack.py
-          python scripts/verify_mcp_mounts.py
+      - name: Verify the runtime stack
+        run: python scripts/verify_runtime_stack.py
+
+  mounts:
+    name: MCP mounts (launched, not assumed)
+    runs-on: ubuntu-latest
+    # Its own job rather than a step in the matrix above, for two reasons: it
+    # needs a dependency set the contract suite deliberately does not, and
+    # probing the filesystem mount fetches an npm package -- so a registry
+    # outage should name itself here rather than failing "Contracts and tests"
+    # twice over on both Python versions.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install the MCP contract runtime
+        # Without the `mcp` package, verify_mcp_mounts.py reported every
+        # offline-verifiable mount as "unverified (mcp package not installed)"
+        # and still exited 0 -- so the CI step launched nothing, listed no
+        # tools, and went green regardless of whether the governance and
+        # filesystem servers worked at all. A verifier that cannot verify has to
+        # be given what it needs or made to fail, not left reporting success.
+        run: python -m pip install -r requirements/runtime-contracts.txt
+      - name: Launch each offline-verifiable mount and list its tools
+        # --strict: with the dependency installed above, "unverified" can only
+        # mean the probe did not happen, and that is a failure rather than a
+        # note in a report nobody reads.
+        run: python scripts/verify_mcp_mounts.py --strict
 
   lint:
     name: Lint (ruff)
@@ -51,7 +81,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff
-        run: python -m pip install ruff
+        # Pinned to the same version the pre-commit hook uses. Installing
+        # whatever is latest meant an unchanged commit could start failing on a
+        # ruff release, and that a contributor's local gate and CI could
+        # disagree about the same file. Bump both together or not at all.
+        run: python -m pip install ruff==0.14.6
       - name: Lint agent-generated Python
         run: ruff check --output-format=github .
       - name: Check formatting

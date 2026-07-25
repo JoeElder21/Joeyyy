@@ -93,8 +93,17 @@ def build_metric(threshold: float = 1.0):
             self.success = False
 
         def measure(self, test_case) -> float:
-            packet = getattr(test_case, "additional_metadata", None) or {}
-            verdict = score_packet(packet.get("packet"))
+            meta = getattr(test_case, "additional_metadata", None) or {}
+            # The delegations are not optional colour. `PacketGuard` refuses a
+            # handoff whose `delegation_id` does not resolve to exactly one
+            # validated originating delegation, so scoring the handoff alone
+            # rejected every lawful delegated packet as "not uniquely
+            # validated" -- a metric that could only ever return zero, which is
+            # as useless as one that only ever returns one.
+            kwargs = {
+                name: meta[name] for name in ("delegations", "active_leases") if meta.get(name)
+            }
+            verdict = score_packet(meta.get("packet"), **kwargs)
             self.score = verdict.score
             self.reason = verdict.reason()
             self.success = verdict.score >= self.threshold

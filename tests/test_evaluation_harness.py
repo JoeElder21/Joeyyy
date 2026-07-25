@@ -37,35 +37,70 @@ class ModeInventoryTests(unittest.TestCase):
                 self.assertTrue(mode.write_targets)
                 self.assertTrue(mode.connector_policy)
 
-    def test_promotion_readiness_requires_passed_runs_not_case_files(self):
-        # The honesty property. An earlier version set promotion_ready from case
+    def test_behavioral_proof_requires_passed_runs_not_case_files(self):
+        # The honesty property. An earlier version derived the flag from case
         # files existing, so authoring 39 JSON files would have reported the
-        # corps promotable without one evaluation having run.
+        # corps proven without one evaluation having run.
         coverage = harness.build_coverage()
         # Give every mode a case, and no mode a passing run.
         coverage.covered = {mode.key: Path("synthetic") for mode in coverage.modes}
         summary = coverage.summary()
         self.assertTrue(summary["cases_complete"], "inventory should read complete")
         self.assertFalse(
-            summary["promotion_ready"],
+            summary["behavioral_modes_proven"],
             "case files are inventory; promotion needs recorded passing runs",
         )
         self.assertEqual(summary["modes_proven"], 0)
         self.assertTrue(summary["promotion_blockers"])
 
-    def test_promotion_ready_only_when_every_mode_has_a_passing_run(self):
+    def test_the_summary_states_which_gates_it_does_not_model(self):
+        # The rename is only half the fix. `behavioral_modes_proven` is an
+        # accurate name for "each mode passed once", but a reader still needs to
+        # see, in the same object, that the acceptance gates additionally
+        # require repeated missions, connector-isolation evidence, and mutation
+        # readback -- none of which any single run produces.
+        summary = harness.build_coverage().summary()
+        self.assertNotIn(
+            "promotion_ready",
+            summary,
+            "a name that overstates what was measured reads as evidence and is not",
+        )
+        self.assertTrue(summary["gates_not_modelled"])
+        joined = " ".join(summary["gates_not_modelled"]).lower()
+        for gate in ("longitudinal", "connector-isolation", "readback"):
+            self.assertIn(gate, joined)
+
+    def test_modes_carry_the_manifest_responsibility_not_only_a_class_id(self):
+        # Mirrored specialists share generic class ids on purpose, so a role
+        # judge given only `class_id` cannot tell an APEX campaign from a JEOS
+        # personal outcome -- both architects are `strategy`.
+        modes = harness.load_modes()
+        for mode in modes:
+            with self.subTest(mode=mode.key):
+                self.assertTrue(mode.responsibility, f"{mode.agent} has no responsibility")
+        by_class: dict[str, set[str]] = {}
+        for mode in modes:
+            by_class.setdefault(mode.class_id, set()).add(mode.responsibility)
+        shared = {cls: seen for cls, seen in by_class.items() if len(seen) > 1}
+        self.assertTrue(
+            shared,
+            "if no class id is shared across differing responsibilities, this "
+            "distinction is untested and the finding should be re-examined",
+        )
+
+    def test_behavioral_proof_only_when_every_mode_has_a_passing_run(self):
         coverage = harness.build_coverage()
         coverage.covered = {mode.key: Path("synthetic") for mode in coverage.modes}
         coverage.passed = {mode.key: "run-1" for mode in coverage.modes}
-        self.assertTrue(coverage.summary()["promotion_ready"])
+        self.assertTrue(coverage.summary()["behavioral_modes_proven"])
         # One mode losing its run is enough to block the whole corps.
         coverage.passed.pop(coverage.modes[0].key)
-        self.assertFalse(coverage.summary()["promotion_ready"])
+        self.assertFalse(coverage.summary()["behavioral_modes_proven"])
 
-    def test_an_empty_corps_is_not_promotion_ready(self):
+    def test_an_empty_corps_proves_nothing(self):
         # `not self.unproven` is vacuously true on an empty list; readiness must
         # not fall out of having nothing to prove.
-        self.assertFalse(harness.Coverage().summary()["promotion_ready"])
+        self.assertFalse(harness.Coverage().summary()["behavioral_modes_proven"])
 
     def test_a_new_mode_reads_as_uncovered_not_as_missing(self):
         # The whole point of deriving from the manifests: adding a mode must move
@@ -238,6 +273,33 @@ class HonestyContractTests(unittest.TestCase):
         source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
         self.assertIn("tools_called=tools_called", source)
         self.assertIn('"packet": emitted_packet', source)
+        # And the originating delegation, without which PacketGuard refuses
+        # every lawful handoff as "not uniquely validated".
+        self.assertIn('"delegations": delegations', source)
+
+    def test_judged_metrics_are_gated_by_a_branch_not_by_list_order(self):
+        # Position in a metrics list is not a gate: `assert_test` runs every
+        # metric it is handed, so an earlier version that merely put
+        # packet_validity first still paid for a full set of judge calls on a
+        # packet the runtime would refuse. The gate has to be a branch.
+        source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
+        gate = source.index("verdict = score_packet(")
+        judged = source.index("assert_test(")
+        self.assertLess(gate, judged, "packet validity must be decided before any judge runs")
+        self.assertIn("if not verdict.passed:", source)
+        self.assertIn("pytest.fail(", source)
+
+    def test_the_case_context_reaches_the_judges(self):
+        # The JEOS weekly-reflection seed permits a professional-deadline
+        # reference only via its context. A judge that cannot see the context is
+        # told to reject that reference as detail beyond the mission -- a false
+        # failure built into the metric.
+        source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
+        self.assertIn("LLMTestCaseParams.CONTEXT", source)
+
+    def test_the_role_judge_reads_the_registered_responsibility(self):
+        source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
+        self.assertIn("mode.responsibility", source)
 
     def test_runner_documents_that_results_leave_the_repository(self):
         source = (EVALS / "run_evaluations.py").read_text(encoding="utf-8")
