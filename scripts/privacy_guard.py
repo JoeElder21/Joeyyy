@@ -74,6 +74,36 @@ PATTERNS = {
         re.IGNORECASE,
     ),
 }
+# Patterns that match the shape of a real credential and effectively never fire on
+# documentation. These stay armed everywhere, including vendored trees.
+HIGH_CONFIDENCE_PATTERNS = frozenset(
+    {"secret token", "private key", "cloud access key", "bearer credential"}
+)
+# Vendored third-party documentation. These trees are prose and code samples built on
+# RFC 2606 reserved example domains, dummy password literals, and sample postal
+# addresses, so the remaining heuristic patterns produce only false positives here.
+# They are exempted for these paths alone; first-party source is still held to every
+# pattern, including the heuristic ones.
+DOCUMENTATION_ONLY_PREFIXES = (Path(".claude/agents/awesome-claude-agents"),)
+
+
+def applicable_patterns(relative: Path) -> dict[str, re.Pattern[str]]:
+    """Return the patterns enforced for ``relative``.
+
+    Vendored documentation is checked against the high-confidence credential
+    patterns only; everything else is checked against the full set.
+    """
+    vendored = any(
+        prefix == relative or prefix in relative.parents
+        for prefix in DOCUMENTATION_ONLY_PREFIXES
+    )
+    if not vendored:
+        return PATTERNS
+    return {
+        label: pattern
+        for label, pattern in PATTERNS.items()
+        if label in HIGH_CONFIDENCE_PATTERNS
+    }
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:
@@ -124,7 +154,7 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             continue
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
-        for label, pattern in PATTERNS.items():
+        for label, pattern in applicable_patterns(relative).items():
             if pattern.search(text):
                 findings.append(f"{relative}: possible {label}")
     return findings

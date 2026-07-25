@@ -7,6 +7,25 @@ from scripts.privacy_guard import repository_files, scan_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# Vendored third-party documentation. Mirrors DOCUMENTATION_ONLY_PREFIXES in
+# scripts/privacy_guard.py. Restated here rather than imported so that loosening the
+# guard cannot silently loosen this test too. Only the heuristic patterns below are
+# skipped for these paths; credential-shaped patterns stay armed everywhere and are
+# asserted by test_vendored_documentation_exemption_is_narrow.
+DOCUMENTATION_ONLY_PREFIXES = (Path(".claude/agents/awesome-claude-agents"),)
+HEURISTIC_CHECKS = {
+    "generic credential assignment",
+    "email address",
+    "phone number",
+    "street address",
+}
+
+
+def is_vendored_documentation(relative: Path) -> bool:
+    return any(
+        prefix == relative or prefix in relative.parents
+        for prefix in DOCUMENTATION_ONLY_PREFIXES
+    )
 
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
@@ -35,10 +54,42 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             ),
         }
         for path in text_paths:
+            relative = path.relative_to(ROOT)
+            vendored = is_vendored_documentation(relative)
             text = path.read_text(encoding="utf-8")
             for label, pattern in prohibited.items():
-                with self.subTest(path=path.relative_to(ROOT), check=label):
+                if vendored and label in HEURISTIC_CHECKS:
+                    continue
+                with self.subTest(path=relative, check=label):
                     self.assertIsNone(pattern.search(text))
+
+    def test_vendored_documentation_exemption_is_narrow(self):
+        """The vendored-docs exemption must not disarm credential-shaped patterns."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            vendored = root / ".claude" / "agents" / "awesome-claude-agents"
+            vendored.mkdir(parents=True)
+            # Heuristic matches here are documentation noise and must be tolerated.
+            # Literals are split so this test file itself stays clean under the guard.
+            sample_email = "test@" + "example.com"
+            sample_street = "123 Main" + " St"
+            sample_password = "pass" + "word=" + "placeholder-value"
+            (vendored / "agent.md").write_text(
+                "Contact " + sample_email + " at " + sample_street + "\n"
+                + sample_password + "\n",
+                encoding="utf-8",
+            )
+            findings = scan_repository(root)
+            self.assertEqual(findings, [], findings)
+
+            # A real credential in the same tree must still be caught.
+            token = "gh" + "o_" + ("A" * 24)
+            (vendored / "leak.md").write_text(token + "\n", encoding="utf-8")
+            findings = scan_repository(root)
+        self.assertTrue(
+            any("leak.md" in finding and "secret token" in finding for finding in findings),
+            findings,
+        )
 
     def test_dedicated_privacy_guard_scans_every_tracked_text_file(self):
         self.assertEqual(scan_repository(ROOT), [])
