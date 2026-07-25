@@ -821,6 +821,27 @@ Fixed by stubbing the inner probe with a sleeping coroutine, **not** by skipping
 
 That is the second consecutive round in which chasing a missed mutation produced a real finding rather than confirming a redundant fix. The rule is now explicit in the working checklist: **a missed mutation is a missing test, and must be investigated rather than noted.**
 
+### Automated review, twenty-second pass — two findings, two fixed
+
+**Both were fail-opens living inside the previous two rounds' fixes, and both are exact repeats of shapes already in this list.**
+
+**The `current-message` exemption waived the whole rule.** Added in the nineteenth pass to give the documented direct-invocation path a lawful route, it was written as an early return — so it skipped the comparison of the caller's declared brain against its registered one. `jeos_reflection_forge` reading `current-message` while declaring `owner_brain="APEX"`, or omitting the field entirely, was allowed. **APEX message content could be routed through a JEOS specialist with no objection.**
+
+That is shape (e) — an exemption ordered ahead of a check it has nothing to do with — for the **third** time, after chief-vs-mount-registration and chief-vs-escape. And it arrived *in the fix for* the third deadlock. The sentinel genuinely waives one thing: message text has no owning brain, so ownership resolution cannot classify it. Everything about the principal still applies, and the exemption now says so in its own body rather than by position.
+
+**The test asserting the sentinel had a lawful path was asserting the fail-open.** It omitted `owner_brain` and passed — because the exemption skipped that check too. **Fourth test in this change set found encoding the defect it was written to prevent.** A lawful direct invocation declares its brain like any other request.
+
+**Namespace opacity carried the defect the previous round removed.** The twentieth pass narrowed `_canonical_resource`'s opacity test from "a colon before the first slash" to "a connector prefix **or contains `::`**". The second clause has the same flaw: any path-shaped string containing `::` skipped normalization, so `scripts/../../outside::secret` matched the `scripts/` neutral prefix **on its raw text**, took the brain-neutral packetless exemption, and was allowed — while a filesystem executor resolves it outside the repository. Anchored to `^(APEX|JEOS)::` now, which is what a memory namespace actually looks like.
+
+That is shape (a) — fixing the instance and missing the class — **inside the fix for a previous instance of the same class**. The single-colon case was corrected and the double-colon case was written in the same line.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Sentinel exemption skipped the brain comparison | **Correct — P1 fail-open, mine, three rounds old** | Exemption scoped to resource ownership; principal's brain still compared. Both directions tested, and the test that encoded the hole corrected. |
+| `::` anywhere made a path opaque | **Correct — P1 fail-open, mine, two rounds old** | Opacity anchored to real namespace syntax, case-insensitively; traversal through a `::` suffix now normalizes, escapes, and is refused. |
+
+**What these two say together.** Every fail-open this round was introduced by a fix for a fail-open, and each reproduced a failure shape already written down in this record. The checklist is not the problem — both shapes were on it. The problem is that the checklist is applied to the *reported* defect and not to the *repair*, and a repair is new code with the same standing as any other. Reviewing one's own fix against the list before pushing is now part of the working procedure, not an afterthought.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

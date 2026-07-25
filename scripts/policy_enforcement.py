@@ -171,6 +171,15 @@ CURRENT_MESSAGE = "current-message"
 # reason a Windows path was being treated as an opaque handle rather than a path.
 _DRIVE_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 
+# A memory namespace is `APEX::…` or `JEOS::…`. Anchored, because merely
+# CONTAINING `::` was still enough to be treated as opaque -- so
+# `scripts/../../outside::secret` skipped normalization AND matched the
+# `scripts/` neutral prefix on its raw text, making it a packetless read of a
+# path a filesystem executor resolves outside the repository. That is the same
+# defect the previous round removed for a single colon, arriving through the
+# clause written to replace it: the instance was fixed and the class was not.
+_BRAIN_NAMESPACE = re.compile(r"^(APEX|JEOS)::", re.IGNORECASE)
+
 # Lease statuses under which a mutation may proceed. Anything else -- released,
 # verified, expired -- is a closed lease and authorizes nothing further.
 ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
@@ -631,13 +640,6 @@ class PolicyEnforcementPoint:
         spec = self._spec(request.agent)
         if not spec:
             return []  # _agent_registered already denies this
-        # Message text belongs to no brain, so there is no lock to apply. This
-        # is not an exemption from ownership; it is the absence of a resource to
-        # own. Compared exactly -- `current-message-secrets` is a resource like
-        # any other, and the sibling-matching defect one round earlier is
-        # exactly why this is equality rather than a prefix.
-        if request.resource == CURRENT_MESSAGE:
-            return []
         # Escape is checked BEFORE the chief exemption, because the exemption is
         # about which BRAIN may be touched, not about whether the target is
         # inside the governed tree at all. Returning early for the chief skipped
@@ -666,6 +668,27 @@ class PolicyEnforcementPoint:
                 "must state its brain, and omitting it does not waive the lock"
             ]
         agent_brain = spec.get("brain")
+        # The sentinel waives RESOURCE OWNERSHIP, not the principal's brain.
+        #
+        # Placing it as an early return skipped the whole rule, including the
+        # comparison of the caller's declared brain against its registered one:
+        # `jeos_reflection_forge` reading `current-message` while declaring
+        # `owner_brain="APEX"` -- or omitting the field entirely -- was allowed.
+        # APEX message content could be routed through a JEOS specialist with no
+        # objection. That is the same shape as the two exemption-ordering
+        # fail-opens already recorded here, and it arrived in the fix for the
+        # third deadlock. An exemption has to name what it waives.
+        #
+        # What it genuinely waives: message text has no owning brain, so the
+        # ownership resolution below cannot classify it and would deny. Everything
+        # about the PRINCIPAL still applies.
+        if request.resource == CURRENT_MESSAGE:
+            if agent_brain != request.owner_brain:
+                return [
+                    f"brain lock: {request.agent!r} belongs to {agent_brain!r}, "
+                    f"request declares {request.owner_brain!r}"
+                ]
+            return []
         errors = []
         # Refused before any prefix comparison. A resource that climbs out of
         # the tree cannot be classified as owned or neutral, and guessing is
@@ -731,7 +754,7 @@ class PolicyEnforcementPoint:
         # nor `/`. The chief could read it with no denial reasons -- on the one
         # platform the workstation actually runs. The escape check added the
         # round before was correct and simply never reached.
-        if resource.startswith(CONNECTOR_PREFIXES) or "::" in resource:
+        if resource.startswith(CONNECTOR_PREFIXES) or _BRAIN_NAMESPACE.match(resource):
             return resource  # mount:/connector: handles and namespaces are not paths
         return posixpath.normpath(resource.replace("\\", "/"))
 

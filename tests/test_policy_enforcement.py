@@ -2138,8 +2138,18 @@ class NineteenthPassRegressionTests(unittest.TestCase):
         # non-canonical -- but the brain lock classified it as an unresolvable
         # resource, so the documented direct path was denied by exactly one
         # rule. Third deadlock of this shape in this change set.
+        #
+        # This originally omitted `owner_brain`, and passed -- because the
+        # exemption was an early return that skipped the whole rule, including
+        # the principal's brain declaration. So the test asserting the sentinel
+        # has a lawful path was simultaneously asserting that the sentinel
+        # waives the brain lock. Fourth test in this change set found encoding
+        # the defect it was written to prevent. A lawful direct invocation
+        # declares its brain like any other.
         decision = self.pep.evaluate(
-            ToolRequest(agent=SPECIALIST, action="read", resource="current-message")
+            ToolRequest(
+                agent=SPECIALIST, action="read", resource="current-message", owner_brain="APEX"
+            )
         )
         self.assertTrue(decision.allowed, decision.reasons)
 
@@ -2335,6 +2345,88 @@ class TwentiethPassRegressionTests(unittest.TestCase):
     def test_ordinary_repository_paths_are_not_escapes(self):
         for resource in ("docs/README.md", "scripts/policy_enforcement.py", "docs/"):
             with self.subTest(resource=resource):
+                self.assertFalse(self.pep._escapes_the_tree(resource))
+
+
+class TwentySecondPassRegressionTests(unittest.TestCase):
+    """Two fail-opens, each inside a fix from the previous two rounds."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def test_the_sentinel_does_not_waive_the_principals_brain(self):
+        # The exemption was an early return, so it skipped the comparison of the
+        # caller's declared brain against its registered one. A JEOS specialist
+        # reading `current-message` while declaring APEX -- or omitting the
+        # field -- was allowed, so APEX message content could be routed through
+        # a JEOS specialist with no objection. An exemption has to name what it
+        # waives: here, resource ownership, and nothing about the principal.
+        for agent, declared in (
+            (JEOS_SPECIALIST, "APEX"),
+            (JEOS_SPECIALIST, None),
+            (SPECIALIST, "JEOS"),
+        ):
+            with self.subTest(agent=agent, declared=declared):
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=agent,
+                        action="read",
+                        resource="current-message",
+                        owner_brain=declared,
+                    )
+                )
+                self.assertFalse(decision.allowed, f"{agent}/{declared}: {decision.reasons}")
+
+    def test_a_matching_brain_still_reads_the_sentinel(self):
+        # The other direction: the documented direct-invocation path must stay
+        # open for the specialist whose brain it is.
+        for agent, declared in ((SPECIALIST, "APEX"), (JEOS_SPECIALIST, "JEOS"), (CHIEF, "APEX")):
+            with self.subTest(agent=agent, declared=declared):
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=agent,
+                        action="read",
+                        resource="current-message",
+                        owner_brain=declared,
+                    )
+                )
+                self.assertTrue(decision.allowed, f"{agent}/{declared}: {decision.reasons}")
+
+    def test_a_double_colon_does_not_make_a_path_opaque(self):
+        # The previous round narrowed opacity from "a colon before the first
+        # slash" to "a connector prefix OR contains `::`" -- and the `::` clause
+        # carried the same defect the narrowing removed. Any path-shaped string
+        # containing `::` skipped normalization, so `scripts/../../outside::secret`
+        # matched the `scripts/` neutral prefix on its RAW text and was readable
+        # packetlessly, while a filesystem executor resolves it outside the
+        # repository.
+        for resource in (
+            "scripts/../../outside::secret",
+            "docs/../../etc/passwd::x",
+            "config/../../../root/.ssh::id",
+        ):
+            with self.subTest(resource=resource):
+                self.assertTrue(self.pep._escapes_the_tree(resource))
+                self.assertFalse(self.pep._is_brain_neutral(resource))
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=resource, owner_brain="APEX"
+                    )
+                )
+                self.assertFalse(decision.allowed, f"{resource}: {decision.reasons}")
+
+    def test_real_namespaces_are_still_opaque(self):
+        # Opacity must survive for the syntax it exists to protect, in either
+        # case, since the manifests spell brains uppercase and the harness
+        # lowercase.
+        for resource in (
+            "APEX::Strategy-Campaigns::apex_war_architect",
+            "JEOS::Roundtable",
+            "jeos::Weekly",
+        ):
+            with self.subTest(resource=resource):
+                self.assertEqual(self.pep._canonical_resource(resource), resource)
                 self.assertFalse(self.pep._escapes_the_tree(resource))
 
 
