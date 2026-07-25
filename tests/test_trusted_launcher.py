@@ -11,8 +11,8 @@ import unittest
 
 from scripts.agent_runtime import AuditLedger
 from scripts.trusted_launcher import (
-    BASELINE_ENV, CONNECTOR_STAGES, LaunchDenied, ManifestUnavailable,
-    authorize, issue_grant, mount_env, specialist_stage,
+    BASELINE_ENV, LaunchDenied, ManifestUnavailable,
+    authorize, connector_stages, issue_grant, mount_env, specialist_stage,
     stage_permits_connector,
 )
 
@@ -92,7 +92,7 @@ class TrustedLauncherTests(unittest.TestCase):
         for stage in declared:
             with self.subTest(stage=stage):
                 self.assertEqual(
-                    stage_permits_connector(stage), stage in CONNECTOR_STAGES)
+                    stage_permits_connector(stage), stage in connector_stages())
 
         for exit_stage in ("restricted", "deprecated", "retired"):
             with self.subTest(stage=exit_stage):
@@ -272,7 +272,7 @@ class TrustedLauncherTests(unittest.TestCase):
             "jeos_roster": [],
             "governance": {"designated_executor": "apex_chief_of_staff"},
         }
-        for permissive in sorted(CONNECTOR_STAGES):
+        for permissive in sorted(connector_stages()):
             corps = {**base, "lifecycle": {"deployed_stage": permissive}}
             with self.subTest(snapshot=permissive, shape="no manifest path"):
                 self.assertFalse(stage_permits_connector(
@@ -338,6 +338,83 @@ class TrustedLauncherTests(unittest.TestCase):
             ][-1]
             self.assertEqual(granted["detail"].get("agent"),
                              "apex_systems_blacksmith")
+
+    def test_an_identity_in_both_rosters_is_refused(self):
+        """Brain-locking means exactly one owner, so "both" is not a tie-break.
+
+        Preferring APEX silently let the more permissive of two manifests
+        decide: an APEX entry reading `active` beat an authoritative JEOS
+        `restricted`, and the specialist could mint and consume a connector
+        grant. That is the same widening the owning-brain lookup was introduced
+        to stop, reached from the other side."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        corps = {
+            "apex_roster": ["both_probe"],
+            "jeos_roster": ["both_probe"],
+            "apex_brain_manifest": "brains/apex/agents.toml",
+            "jeos_brain_manifest": "brains/jeos/agents.toml",
+            "governance": {"designated_executor": "apex_chief_of_staff"},
+            "lifecycle": {"deployed_stage": "active",
+                          "connector_stages": ["active", "value-proven"]},
+        }
+
+        # Whichever brain holds the permissive entry, the answer is refusal --
+        # so this cannot pass by accident of which manifest is read first.
+        for permissive in ("apex", "jeos"):
+            def manifest(path, permissive=permissive):
+                status = "active" if permissive in path else "restricted"
+                return {"agents": {"both_probe": {"status": status}}}
+            with mock.patch.object(launcher, "_brain_manifest", manifest):
+                with self.subTest(permissive_brain=permissive):
+                    with self.assertRaises(ManifestUnavailable) as caught:
+                        specialist_stage("both_probe", corps=corps)
+                    self.assertIn("both", str(caught.exception))
+
+        # A single-roster identity in the same registry still resolves, so the
+        # check refuses ambiguity rather than refusing everything.
+        single = {**corps, "jeos_roster": []}
+        with mock.patch.object(
+                launcher, "_brain_manifest",
+                lambda path: {"agents": {"both_probe": {"status": "shadow"}}}):
+            self.assertEqual(specialist_stage("both_probe", corps=single),
+                             "shadow")
+
+    def test_connector_eligibility_is_read_from_the_registry(self):
+        """Governance rules belong in the configuration the runtime reads.
+
+        `.github/instructions/agent-safety.instructions.md` is an active
+        standard here, and this allowlist is a governance rule: hardcoding it
+        meant the corps registry and its validators could accept a renamed or
+        added stage while the launcher went on enforcing a stale set — denying
+        the intended stage, or keeping authority for a removed one. It fails
+        closed rather than falling back, because a silent default is the exact
+        failure the key exists to remove."""
+        import tomllib
+
+        with (ROOT / "config" / "specialist_corps.toml").open("rb") as source:
+            declared = tomllib.load(source)["lifecycle"]["connector_stages"]
+        self.assertEqual(connector_stages(), frozenset(declared))
+
+        # The registry decides, not the module: a registry naming a different
+        # set must change the answer.
+        renamed = {"lifecycle": {"connector_stages": ["in-service"]}}
+        self.assertTrue(stage_permits_connector("in-service", corps=renamed))
+        self.assertFalse(stage_permits_connector("active", corps=renamed))
+
+        # Absent or malformed must deny, never default.
+        for label, lifecycle in (
+            ("missing", {}),
+            ("empty", {"connector_stages": []}),
+            ("not a list", {"connector_stages": "active"}),
+            ("non-string member", {"connector_stages": ["active", 3]}),
+            ("empty member", {"connector_stages": [""]}),
+        ):
+            with self.subTest(registry=label):
+                with self.assertRaises(ManifestUnavailable):
+                    connector_stages({"lifecycle": lifecycle})
 
     def test_only_the_named_executor_escapes_the_lifecycle_gate(self):
         """The exemption belongs to an identity, not to a gap in the registry.

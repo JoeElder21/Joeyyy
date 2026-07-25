@@ -604,11 +604,28 @@ def strip_known_placeholders(relative: Path, text: str) -> str:
     continue a token. (The example is described rather than written out: this
     file is scanned by its own patterns.)
 
+    An approved snippet is exempt only where it stands ALONE. Removing it
+    wherever the boundary check passed also removed the key and the delimiter,
+    so an approved assignment that had been EXTENDED -- the pinned sample
+    followed by a concatenation operator and a second, real value -- left an
+    unkeyed opaque string behind: the credential-assignment pattern had lost
+    its key, the secret-token pattern needs a vendor prefix, and the file
+    reported clean. Whitespace before the operator satisfied the boundary
+    check, so nothing caught it. An extended snippet is not the snippet that
+    was approved, so the exemption does not apply to it and the whole
+    assignment is scanned -- which reports it, as it should. (Described rather
+    than written out: this file is scanned by its own patterns, which have now
+    caught seven of my own additions.)
+
     Everything else in the file is still scanned by every pattern.
     """
     for literal in PLACEHOLDER_LITERALS.get(relative, ()):
         text = re.sub(
-            rf"(?<!{_TOKEN_CHAR}){re.escape(literal)}(?!{_TOKEN_CHAR})",
+            rf"(?<!{_TOKEN_CHAR}){re.escape(literal)}(?!{_TOKEN_CHAR})"
+            # Not followed, after optional spacing, by anything that continues
+            # the expression: concatenation, formatting, a method call, a line
+            # continuation, or an adjacent string literal (implicit concat).
+            rf"(?![ \t]*(?:[+%*.\\]|['\"`]))",
             "",
             text,
         )

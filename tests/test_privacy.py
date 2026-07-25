@@ -1189,6 +1189,57 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "these tests need the YAML parser but carry no PyYAML gate, so a "
             "stdlib-only run fails instead of skipping")
 
+    def test_an_extended_placeholder_loses_its_exemption(self):
+        """An approved snippet is exempt only where it stands ALONE.
+
+        Stripping removed the key and the delimiter along with the pinned
+        sample, so an approved assignment that had been EXTENDED — the sample,
+        a concatenation operator, then a second real value — left an unkeyed
+        opaque string behind. The credential-assignment pattern had lost its
+        key, the secret-token pattern needs a vendor prefix, and the file
+        reported clean. Whitespace before the operator satisfied the existing
+        boundary check, so nothing caught it."""
+        relative = Path(
+            ".github/instructions/security-and-owasp.instructions.md")
+        placeholder = PLACEHOLDER_LITERALS[relative][0]
+        real = "real" + "OpaqueCredentialValue123"
+
+        # Every way an expression can continue, not just the reported one.
+        extensions = {
+            "concatenation": f"{placeholder} + '{real}'",
+            "concatenation, no spaces": f"{placeholder}+'{real}'",
+            "implicit adjacency": f"{placeholder} '{real}'",
+            "percent formatting": f"{placeholder} % '{real}'",
+            "method call": f"{placeholder}.concat('{real}')",
+            "line continuation": f"{placeholder} \\\n    + '{real}'",
+        }
+        for label, line in extensions.items():
+            stripped = strip_known_placeholders(relative, line)
+            with self.subTest(extension=label):
+                self.assertTrue(
+                    any(pattern.search(stripped)
+                        for pattern in PATTERNS.values()),
+                    f"{label}: an extended approved snippet must not stay "
+                    f"exempt -- stripped to {stripped!r}")
+
+        # The approved snippet standing alone must still be exempt, in every
+        # context it actually appears in: statement terminator, end of line,
+        # and inside an object literal.
+        for label, line in {
+            "terminated": f"const {placeholder};",
+            "end of line": f"const {placeholder}\n",
+            "object literal": f"{placeholder} }});",
+        }.items():
+            with self.subTest(standalone=label):
+                self.assertFalse(
+                    any(pattern.search(strip_known_placeholders(relative, line))
+                        for pattern in PATTERNS.values()),
+                    f"{label}: the approved snippet itself must stay exempt")
+
+        # And the real tracked files must still pass, which is what stops this
+        # from being fixed by simply refusing to strip anything.
+        self.assertEqual(scan_repository(ROOT), [])
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

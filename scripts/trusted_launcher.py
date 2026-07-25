@@ -71,18 +71,6 @@ def _load_mounts() -> dict[str, dict]:
 
 
 CORPS = ROOT / "config" / "specialist_corps.toml"
-# The stages at which a specialist may hold a connector of its own. This is an
-# explicit allowlist, NOT "active or later in the stage list".
-#
-# The ordinal test it replaces was wrong in the one direction that matters: the
-# stage list runs candidate, shadow, active, value-proven, restricted,
-# deprecated, retired -- so every ADMINISTRATIVE EXIT sorts after `active` and
-# compared as a promotion. A specialist that the lifecycle graph moved to
-# `restricted` for writing outside its lease kept minting full connector
-# grants, as did a deprecated or retired one. Naming the eligible stages means
-# a new stage is denied by default instead of inheriting authority from its
-# position in a list.
-CONNECTOR_STAGES = frozenset({"active", "value-proven"})
 
 
 class ManifestUnavailable(Exception):
@@ -162,10 +150,20 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     # made to depend on the other brain's files, which is precisely the
     # coupling AGENTS.md separates the brains to avoid. A read failure is still
     # an authorization failure, but only for the brain that owns the agent.
-    if agent in set(corps.get("apex_roster", [])):
-        manifest_key = "apex_brain_manifest"
-    else:
-        manifest_key = "jeos_brain_manifest"
+    in_apex = agent in set(corps.get("apex_roster", []))
+    in_jeos = agent in set(corps.get("jeos_roster", []))
+    if in_apex and in_jeos:
+        # Brain-locking is the point: an identity belongs to exactly one brain,
+        # so listing it in both is not a preference to resolve but a registry
+        # that cannot say who owns the agent. Silently preferring APEX let the
+        # more permissive of two manifests decide -- APEX `active` beating an
+        # authoritative JEOS `restricted` -- which is the widening the
+        # owning-brain lookup was introduced to stop, reached by a different
+        # route. Ambiguous ownership is an authorization failure.
+        raise ManifestUnavailable(
+            f"{agent!r} is listed in both the APEX and JEOS rosters; brain "
+            "ownership is ambiguous, so no authoritative stage exists")
+    manifest_key = "apex_brain_manifest" if in_apex else "jeos_brain_manifest"
     per_agent = None
     manifest_path = corps.get(manifest_key)
     if manifest_path:
@@ -195,15 +193,48 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     return per_agent
 
 
+def connector_stages(corps: dict | None = None) -> frozenset[str]:
+    """The stages at which a specialist may hold a connector, from the registry.
+
+    This is a governance rule, and
+    `.github/instructions/agent-safety.instructions.md` requires governance
+    rules to live in the configuration the runtime actually reads rather than
+    in application logic. Hardcoding it meant a rename or addition in the
+    registry's own `stages` list could be accepted by the registry and its
+    validators while this module went on enforcing a stale set -- denying the
+    intended stage, or keeping authority for one that had been removed.
+
+    Fails closed when the key is missing or malformed, and deliberately does
+    NOT fall back to a built-in default: a silent default is the exact failure
+    this key exists to remove.
+    """
+    corps = corps if corps is not None else _corps()
+    declared = corps.get("lifecycle", {}).get("connector_stages")
+    if (not isinstance(declared, list) or not declared
+            or not all(isinstance(stage, str) and stage for stage in declared)):
+        raise ManifestUnavailable(
+            f"{CORPS.name}: [lifecycle] connector_stages must be a non-empty "
+            "list of stage names; connector eligibility cannot be resolved")
+    return frozenset(declared)
+
+
 def stage_permits_connector(stage: str | None, corps: dict | None = None) -> bool:
     """Whether a specialist at `stage` may hold a mount of its own.
 
-    Membership, not ordering: see CONNECTOR_STAGES. An unrecognised stage is
-    not evidence of promotion, so it is denied.
+    MEMBERSHIP, not ordering. The ordinal test this replaced was wrong in the
+    one direction that matters: the stage list runs candidate, shadow, active,
+    value-proven, restricted, deprecated, retired -- so every ADMINISTRATIVE
+    EXIT sorts after `active` and compared as a promotion. A specialist the
+    lifecycle graph moved to `restricted` for writing outside its lease kept
+    minting full connector grants, as did a deprecated or retired one. Naming
+    the eligible stages means a new stage is denied by default instead of
+    inheriting authority from its position in a list.
+
+    An unrecognised stage is not evidence of promotion, so it is denied.
     """
     if stage is None:
         return True
-    return stage in CONNECTOR_STAGES
+    return stage in connector_stages(corps)
 
 
 def _load_or_create_key(key_path: Path) -> bytes:
@@ -288,7 +319,7 @@ def issue_grant(
         raise refuse(
             f"agent {agent!r} is lifecycle stage {stage!r}; a specialist may "
             "hold a connector only at "
-            f"{', '.join(sorted(CONNECTOR_STAGES))}. Promote it through "
+            f"{', '.join(sorted(connector_stages()))}. Promote it through "
             "docs/AGENT_COMMUNITY_PROTOCOL.md first, or mint the grant for the "
             "designated executor."
         )
@@ -432,7 +463,7 @@ def authorize(
             raise deny(
                 f"agent {identity!r} is lifecycle stage {stage!r}; a specialist "
                 "may hold a connector only at "
-                f"{', '.join(sorted(CONNECTOR_STAGES))}. The grant was valid "
+                f"{', '.join(sorted(connector_stages()))}. The grant was valid "
                 "when minted; eligibility was withdrawn before launch."
             )
 
