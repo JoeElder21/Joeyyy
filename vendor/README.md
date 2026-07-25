@@ -88,10 +88,18 @@ The complete reversible set:
 | `multi-agent-ai-in-civil-engineering` additionally | `requirements/vendor-multi-agent-kg.txt` **and its `DERIVED_DEPENDENCY_DECLARATIONS` entry** |
 | `civil-innovation-agent` additionally | nothing — it declares no dependencies |
 
-Withdrawing **all four** additionally reverts the scanner scoping in
-`scripts/privacy_guard.py` (`gitlink_paths`, `tracked_paths`,
-`index_is_authoritative`, `submodule_paths`, `is_vendored`, and the symlink
-handling in `scan_repository`) and in `scripts/verify_runtime_stack.py`, plus
+Withdrawing **all four** additionally deletes the two container files
+themselves — **`.gitmodules`** and **this file** — because the per-repo step
+only removes each `[submodule]` block and each table row, which leaves an
+empty `.gitmodules` and a `vendor/README.md` describing nothing. Neither
+existed at `89a2c15`, so a withdrawal that keeps them has not returned to the
+recorded rollback point; it has left vendoring metadata for a stack that is
+gone.
+
+It also reverts the scanner scoping in `scripts/privacy_guard.py`
+(`gitlink_paths`, `tracked_paths`, `index_is_authoritative`,
+`submodule_paths`, `is_vendored`, and the symlink and gitlink-path handling in
+`scan_repository`) and in `scripts/verify_runtime_stack.py`, plus
 `tests/test_vendor.py`, the `is_vendored` call sites in
 `tests/test_privacy.py`, and the `vendor/` and `requirements/` lines in the
 root `README.md`.

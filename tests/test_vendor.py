@@ -387,10 +387,17 @@ class VendorSubmoduleTests(unittest.TestCase):
         )
 
         self.assertIn("Vendored at", rows, "connector README has no Vendored at row")
-        self.assertIn(
+        # The tag token, compared exactly — `RELAY_TAG in cell` also accepts
+        # `v11.2.0-rc1` and `not-v11.2.0`, either of which would be a false
+        # source-tag claim that every gate waved through.
+        connector_tag = re.search(r"tag `([^`]+)`", rows["Vendored at"])
+        self.assertIsNotNone(
+            connector_tag, f"Vendored at row records no tag: {rows['Vendored at']}"
+        )
+        self.assertEqual(
+            connector_tag.group(1),
             RELAY_TAG,
-            rows["Vendored at"],
-            f"Vendored at row does not name {RELAY_TAG}",
+            f"Vendored at row claims tag {connector_tag.group(1)!r}, pinned to {RELAY_TAG}",
         )
         # Only this last comparison needs the index. Guarding the whole test on
         # it would take the manifest, lockfile, README and Node-engine checks
