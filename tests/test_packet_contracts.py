@@ -1,14 +1,13 @@
-from copy import deepcopy
-from datetime import datetime, timedelta, timezone
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from scripts.packet_guard import PacketGuard
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,7 +27,7 @@ def evidence(
 class PacketContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         issued_at = (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
         expires_at = (now + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
         cls.guard = PacketGuard(ROOT)
@@ -254,7 +253,7 @@ class PacketContractTests(unittest.TestCase):
         )
 
     def test_v20_private_constraint_is_rejected_unless_historical(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         issued = (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
         expires = (now + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
         private = {
@@ -700,7 +699,7 @@ class PacketContractTests(unittest.TestCase):
         self.assertInvalid("writer_lease.schema.json", no_expiry)
         too_long = deepcopy(self.lease)
         too_long["expires_at"] = (
-            (datetime.now(timezone.utc) + timedelta(days=30)).isoformat().replace("+00:00", "Z")
+            (datetime.now(UTC) + timedelta(days=30)).isoformat().replace("+00:00", "Z")
         )
         self.assertInvalid("writer_lease.schema.json", too_long)
 
@@ -849,7 +848,7 @@ class PacketContractTests(unittest.TestCase):
         self.assertInvalid("memory_record.schema.json", verified, [lease])
 
     def test_cross_and_private_constraints_are_scoped_fresh_and_resolvable(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         issued = now.isoformat().replace("+00:00", "Z")
         expires = (now + timedelta(hours=24)).isoformat().replace("+00:00", "Z")
         cross = {

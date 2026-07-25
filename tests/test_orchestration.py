@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
-from pathlib import Path
 import tempfile
 import tomllib
 import unittest
+from pathlib import Path
 
 from scripts.agent_runtime import CHIEF, AuditLedger, load_roster
 from scripts.jeos_knowledge import GraphAccessDenied, JeosKnowledgeGraph
@@ -35,7 +35,7 @@ class LifecycleGraphTests(unittest.TestCase):
             {
                 "agent": "apex_war_architect",
                 "stage": "shadow",
-                "gates": {gate: True for gate in ACTIVE_GATES},
+                "gates": dict.fromkeys(ACTIVE_GATES, True),
             }
         )
         self.assertEqual(satisfied["stage"], "active")
@@ -44,7 +44,7 @@ class LifecycleGraphTests(unittest.TestCase):
             {
                 "agent": "apex_war_architect",
                 "stage": "shadow",
-                "gates": {gate: True for gate in ACTIVE_GATES[:-1]},
+                "gates": dict.fromkeys(ACTIVE_GATES[:-1], True),
             }
         )
         self.assertEqual(missing["stage"], "shadow")

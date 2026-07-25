@@ -13,8 +13,10 @@ extend-exclude = ["connectors/aps/node_modules"]
 
 [tool.ruff.lint]
 # Enforced in CI and clean across the tree, so the gate is real rather than
-# aspirational.
-select = ["E", "F", "W"]
+# aspirational. Widened from ["E", "F", "W"] on 2026-07-25: import order (I),
+# modernization (UP), likely-bug patterns (B), comprehension clarity (C4), and
+# simplification (SIM).
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
 ignore = [
     # ruff-format owns line length; the linter flagging it too is just noise.
     "E501",

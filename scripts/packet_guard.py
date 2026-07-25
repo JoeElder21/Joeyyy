@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
 import json
-from pathlib import Path
 import re
 import sys
 import tomllib
-from typing import Any, Iterable
 import unicodedata
-
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY = {"public": 0, "internal": 1, "confidential": 2, "restricted": 3}
@@ -869,7 +869,7 @@ class PacketGuard:
                     f"delegated action {action_for_type!r}"
                 )
         timestamp = self._parse_timestamp(packet["timestamp"], "timestamp", errors)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if timestamp and timestamp > now + timedelta(minutes=5):
             errors.append("roundtable timestamp is in the future")
         target = self.roundtable_targets[brain]
@@ -928,10 +928,10 @@ class PacketGuard:
         if (
             packet["status"] == "active"
             and issued
-            and issued > datetime.now(timezone.utc) + timedelta(minutes=5)
+            and issued > datetime.now(UTC) + timedelta(minutes=5)
         ):
             errors.append("active writer lease is not yet valid")
-        if packet["status"] == "active" and expires and expires <= datetime.now(timezone.utc):
+        if packet["status"] == "active" and expires and expires <= datetime.now(UTC):
             errors.append("active writer lease is expired")
         return errors
 
@@ -958,7 +958,7 @@ class PacketGuard:
         if packet["writer_agent"] not in self._eligible_writers(brain, packet["write_target"]):
             errors.append("memory writer is not eligible for the target at the deployed stage")
         created_at = self._parse_timestamp(packet["created_at"], "created_at", errors)
-        if created_at and created_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+        if created_at and created_at > datetime.now(UTC) + timedelta(minutes=5):
             errors.append("memory record created_at is in the future")
         errors.extend(
             self._evidence_errors(
@@ -1055,7 +1055,7 @@ class PacketGuard:
         errors: list[str] = []
         issued = self._parse_timestamp(packet["issued_at"], "issued_at", errors)
         expires = self._parse_timestamp(packet["expires_at"], "expires_at", errors)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if issued and expires:
             if expires <= issued:
                 errors.append("constraint expires_at must be after issued_at")
@@ -1166,7 +1166,7 @@ class PacketGuard:
             errors.append(f"{field} precedes writer-lease issuance")
         if expires and timestamp > expires:
             errors.append(f"{field} occurs after writer-lease expiry")
-        if timestamp > datetime.now(timezone.utc) + timedelta(minutes=5):
+        if timestamp > datetime.now(UTC) + timedelta(minutes=5):
             errors.append(f"{field} is in the future")
         return errors
 
@@ -1180,7 +1180,7 @@ class PacketGuard:
         if parsed.tzinfo is None:
             errors.append(f"{field} must include a timezone")
             return None
-        return parsed.astimezone(timezone.utc)
+        return parsed.astimezone(UTC)
 
 
 def _read_json(path: str) -> Any:

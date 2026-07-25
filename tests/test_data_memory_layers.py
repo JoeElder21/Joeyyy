@@ -4,11 +4,11 @@ tests skip cleanly so stdlib CI stays green."""
 
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
-from pathlib import Path
 import tempfile
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from scripts.agent_runtime import CHIEF, AuditLedger, load_roster
 from scripts.memory_layer import (
@@ -115,8 +115,8 @@ class EvidenceIndexTests(unittest.TestCase):
 @unittest.skipUnless(_available("crewai"), "crewai not installed")
 class CrewBridgeTests(unittest.TestCase):
     def test_roster_maps_to_crew_and_admission_is_fail_closed(self):
-        from scripts.crew_bridge import build_brain_crew, crew_agent
         from scripts.agent_runtime import HandoffRejected
+        from scripts.crew_bridge import build_brain_crew, crew_agent
 
         roster = load_roster(ROOT)
         agent = crew_agent("apex_war_architect", roster["apex_war_architect"])

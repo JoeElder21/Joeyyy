@@ -7,12 +7,12 @@ is absent so the stdlib CI environment stays green.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from scripts.agent_runtime import (
     CHIEF,

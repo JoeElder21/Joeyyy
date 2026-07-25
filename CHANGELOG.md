@@ -35,9 +35,17 @@ stage changed; all ten specialists remain in `shadow`.
   section in `.github/ISSUE_TEMPLATE/absorption-candidate.yml` and a provenance
   block in `templates/agent-intake.md`, both stating the scope limit alongside the
   requirement — candidate only, never Joe's configured estate.
-- **`ruff-format` enabled** and enforced in CI and pre-commit, applied as one
-  mechanical commit; the expanded lint set (`I`, `UP`, `B`, `C4`, `SIM`) adopted in
-  a separate commit rather than deferred again.
+- **`ruff-format` enabled** and enforced in CI (`ruff format --check`) and
+  pre-commit, applied as one mechanical commit across 46 files with no behavior
+  change.
+- **Lint rule set widened** to `E, F, W, I, UP, B, C4, SIM` in a separate commit:
+  92 findings, 86 auto-fixed, 6 resolved by hand. The hand fixes were judgment
+  calls, not mechanical: `assertRaises(Exception)` narrowed to `LeaseError` so the
+  test asserts the lease actually closed rather than that anything at all went
+  wrong; `zip()` given an explicit `strict=False` because the ragged pair is the
+  point of the pairwise walk; and `Stage` moved to `StrEnum`, which is
+  behavior-neutral here only because every call site already stringifies through
+  `.value` — checked before changing it.
 - `.gitignore` — `evals/output/`.
 
 ## 2026-07-25 — Repository engineering substrate

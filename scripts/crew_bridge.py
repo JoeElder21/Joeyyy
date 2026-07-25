@@ -88,7 +88,7 @@ if CREWAI_AVAILABLE:
         guard: PacketGuard | None = None,
         ledger: AuditLedger | None = None,
         root: Path = ROOT,
-    ) -> "Crew":
+    ) -> Crew:
         """Build one single-brain sequential crew from admitted packets."""
         guard = guard or PacketGuard(root)
         roster = load_roster(root)

@@ -113,7 +113,7 @@ def _tool_functions(
 
 if MCP_AVAILABLE:
 
-    def build_server(root: Path = ROOT, ledger_path: Path = DEFAULT_LEDGER) -> "FastMCP":
+    def build_server(root: Path = ROOT, ledger_path: Path = DEFAULT_LEDGER) -> FastMCP:
         """Build the governance MCP server; construction is offline."""
         guard = PacketGuard(root)
         roster = load_roster(root)

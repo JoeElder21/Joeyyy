@@ -33,8 +33,8 @@ class DebateRefused(Exception):
     """The requested debate or chat violates the manifest governance."""
 
 
-from dataclasses import dataclass  # noqa: E402
 import tomllib  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -101,7 +101,7 @@ if AUTOGEN_AVAILABLE:
         model_client,
         max_turns: int = 4,
         root: Path = ROOT,
-    ) -> "RoundRobinGroupChat":
+    ) -> RoundRobinGroupChat:
         """A registered challenge pair as a real two-agent debate."""
         manifest = load_manifest(brain, root)
         registered = {
@@ -136,7 +136,7 @@ if AUTOGEN_AVAILABLE:
         cadence: str,
         model_client,
         root: Path = ROOT,
-    ) -> "RoundRobinGroupChat":
+    ) -> RoundRobinGroupChat:
         """A cadence route as a group chat; manifest order is speaking order."""
         manifest = load_manifest(brain, root)
         route = next(item for item in manifest["cadence_routes"] if item["cadence"] == cadence)
@@ -149,7 +149,7 @@ if AUTOGEN_AVAILABLE:
         plan: GroupChatPlan,
         model_client,
         root: Path = ROOT,
-    ) -> "RoundRobinGroupChat":
+    ) -> RoundRobinGroupChat:
         """Construct the chat a validated plan describes, in plan order."""
         roster = load_roster(root)
         agents = [_assistant(name, roster[name], model_client) for name in plan.speaker_order]
@@ -160,7 +160,7 @@ if AUTOGEN_AVAILABLE:
         model_client,
         max_turns: int = 8,
         root: Path = ROOT,
-    ) -> "SelectorGroupChat":
+    ) -> SelectorGroupChat:
         """Dynamic who-speaks-next over one brain's specialists plus 007."""
         roster = load_roster(root)
         members = [

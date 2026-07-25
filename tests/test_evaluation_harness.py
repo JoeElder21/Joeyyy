@@ -4,10 +4,10 @@ Record: docs/EVALUATION_HARNESS.md. These tests run without deepeval installed â
 that degradation is itself part of the contract, so it is asserted here.
 """
 
-from pathlib import Path
 import json
 import sys
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EVALS = ROOT / "evals"

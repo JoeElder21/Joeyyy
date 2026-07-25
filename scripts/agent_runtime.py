@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
-from pathlib import Path
 import tomllib
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from scripts.packet_guard import PacketGuard
@@ -98,7 +98,7 @@ class AuditLedger:
 
     def append(self, event: str, detail: dict[str, Any]) -> dict[str, Any]:
         entry = {
-            "at": datetime.now(timezone.utc).isoformat(),
+            "at": datetime.now(UTC).isoformat(),
             "detail": detail,
             "event": event,
             "prev_hash": self._last_hash(),

@@ -15,7 +15,8 @@ call, and nothing here invokes it implicitly.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from scripts.agent_runtime import (
     AuditLedger,

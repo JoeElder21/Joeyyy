@@ -8,13 +8,13 @@ green.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
 import types
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from scripts.agent_runtime import AuditLedger, load_roster
 from scripts.claude_runtime import (

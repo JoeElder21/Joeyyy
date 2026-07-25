@@ -7,13 +7,12 @@ validate synthetic schema-2.1 packets for every specialist.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
-from pathlib import Path
 import sys
 import tomllib
+from copy import deepcopy
+from pathlib import Path
 from typing import Any
-
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -21,7 +20,6 @@ if str(ROOT) not in sys.path:
 
 from scripts.packet_guard import PacketGuard  # noqa: E402
 from scripts.privacy_guard import scan_repository  # noqa: E402
-
 
 RESULT_FIELDS = {
     "valid",

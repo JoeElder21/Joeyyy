@@ -30,11 +30,10 @@ async def _probe(command: list[str]) -> list[str]:
 
     executable = sys.executable if command[0] == "python" else command[0]
     params = StdioServerParameters(command=executable, args=command[1:], cwd=str(ROOT))
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            listed = await session.list_tools()
-            return sorted(tool.name for tool in listed.tools)
+    async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+        await session.initialize()
+        listed = await session.list_tools()
+        return sorted(tool.name for tool in listed.tools)
 
 
 def main() -> int:

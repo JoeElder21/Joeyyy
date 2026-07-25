@@ -4,9 +4,9 @@ before any activation path is trusted. Stdlib-only — always runs in CI."""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from scripts.agent_runtime import AuditLedger
 from scripts.trusted_launcher import LaunchDenied, authorize, issue_grant

@@ -5,9 +5,9 @@ from __future__ import annotations
 import datetime
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -19,20 +19,20 @@ from runtime.writer_lease import (  # noqa: E402
     canonical_key,
 )
 
-NOW = datetime.datetime(2026, 7, 24, 12, 0, tzinfo=datetime.timezone.utc)
+NOW = datetime.datetime(2026, 7, 24, 12, 0, tzinfo=datetime.UTC)
 
 
 def _issue(registry: LeaseRegistry, **overrides):
-    kwargs = dict(
-        mission_id="m-001",
-        owner_brain="APEX",
-        writer_agent="apex_chief_of_staff",
-        write_target="APEX/Strategy-Campaigns",
-        resource_id="campaign-alpha",
-        expected_state="campaign record absent",
-        rollback="delete created record",
-        now=NOW,
-    )
+    kwargs = {
+        "mission_id": "m-001",
+        "owner_brain": "APEX",
+        "writer_agent": "apex_chief_of_staff",
+        "write_target": "APEX/Strategy-Campaigns",
+        "resource_id": "campaign-alpha",
+        "expected_state": "campaign record absent",
+        "rollback": "delete created record",
+        "now": NOW,
+    }
     kwargs.update(overrides)
     return registry.issue(**kwargs)
 
@@ -127,7 +127,7 @@ class LeaseQueueTests(unittest.TestCase):
         outcome = bundle["submit_mutation"](lease, "create SOP record", lambda o: True)
         self.assertEqual(outcome["lease_status"], "verified")
         # Lease is closed: a second mutation without a new lease fails.
-        with self.assertRaises(Exception):
+        with self.assertRaises(LeaseError):
             bundle["submit_mutation"](lease, "second write", lambda o: True)
 
 

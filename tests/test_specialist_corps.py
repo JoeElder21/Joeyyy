@@ -1,8 +1,7 @@
-from pathlib import Path
 import json
 import tomllib
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_DIR = ROOT / ".codex" / "agents"

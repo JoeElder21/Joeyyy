@@ -1,19 +1,18 @@
+import importlib.util
+import sys
+import tomllib
+import unittest
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
-import importlib.util
-import sys
-import tomllib
-import unittest
 
 from runtime.autogen_orchestrator import (
     AutoGenMissionOrchestrator,
     MissionResult,
 )
 from tests import test_packet_contracts as packet_contracts
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -180,13 +179,15 @@ class AutoGenMissionOrchestratorTests(unittest.TestCase):
                 changed_route.pop("integrator")
             else:
                 changed_route["integrator"] = invalid
-            with self.subTest(integrator=invalid):
-                with patch(
+            with (
+                self.subTest(integrator=invalid),
+                patch(
                     "runtime.autogen_orchestrator.tomllib.load",
                     return_value=changed,
-                ):
-                    with self.assertRaisesRegex(ValueError, "integrator"):
-                        self.orchestrator.plan_cadence("APEX", "daily")
+                ),
+                self.assertRaisesRegex(ValueError, "integrator"),
+            ):
+                self.orchestrator.plan_cadence("APEX", "daily")
         self.assertEqual(route["integrator"], "apex_chief_of_staff")
 
     def test_delegations_require_exact_unique_brain_matched_packets(self):
@@ -244,21 +245,25 @@ class AutoGenMissionOrchestratorTests(unittest.TestCase):
             replace(plan, challenges=()),
         )
         for forged in forged_plans:
-            with self.subTest(forged=forged):
-                with self.assertRaisesRegex(ValueError, "current manifest"):
-                    self.build_chat(plan=forged)
+            with (
+                self.subTest(forged=forged),
+                self.assertRaisesRegex(ValueError, "current manifest"),
+            ):
+                self.build_chat(plan=forged)
 
-        with patch.dict(sys.modules, {"autogen": self.fake_autogen}):
-            with self.assertRaisesRegex(ValueError, "functions or tools"):
-                self.orchestrator.build_group_chat(
-                    plan,
-                    self.daily_packets(),
-                    llm_config={
-                        "config_list": [{"model": "verified-model"}],
-                        "tools": [{"type": "function"}],
-                    },
-                    system_message_factory=lambda packet: packet["agent"],
-                )
+        with (
+            patch.dict(sys.modules, {"autogen": self.fake_autogen}),
+            self.assertRaisesRegex(ValueError, "functions or tools"),
+        ):
+            self.orchestrator.build_group_chat(
+                plan,
+                self.daily_packets(),
+                llm_config={
+                    "config_list": [{"model": "verified-model"}],
+                    "tools": [{"type": "function"}],
+                },
+                system_message_factory=lambda packet: packet["agent"],
+            )
 
     def test_selector_ignores_non_specialists_and_terminates_deterministically(self):
         plan, specialists, manager = self.build_chat()

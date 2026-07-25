@@ -9,13 +9,13 @@ in a chat, and shadow-stage specialists remain advisory.
 
 from __future__ import annotations
 
+import tomllib
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-import tomllib
-from typing import Any, Callable, Iterable, Literal
+from typing import Any, Literal
 
 from scripts.packet_guard import PacketGuard
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

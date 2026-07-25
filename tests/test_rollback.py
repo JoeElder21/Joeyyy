@@ -1,8 +1,7 @@
-from pathlib import Path
 import subprocess
 import tomllib
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RETIRED_NATIVE_FILES = {

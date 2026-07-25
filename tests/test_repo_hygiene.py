@@ -5,10 +5,9 @@ themselves exist and stay wired up, so a later change cannot quietly drop a CI
 step, unpin an action, or remove a boundary document.
 """
 
-from pathlib import Path
 import re
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"

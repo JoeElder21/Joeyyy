@@ -10,8 +10,9 @@ below is the activation step.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from scripts.agent_runtime import AuditLedger
 from scripts.orchestration_graphs import load_manifest

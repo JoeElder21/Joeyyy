@@ -1,10 +1,9 @@
-from pathlib import Path
 import re
 import tempfile
 import unittest
+from pathlib import Path
 
 from scripts.privacy_guard import repository_files, scan_repository
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -14,7 +14,8 @@ start one worker per queue (``celery -A ... worker -Q <queue> -c 1``).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .writer_lease import LeaseRegistry, MutationAdmission, canonical_key
 

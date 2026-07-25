@@ -20,10 +20,10 @@ being silently missed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
 import json
 import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BRAINS = ("apex", "jeos")

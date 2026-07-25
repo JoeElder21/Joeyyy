@@ -12,11 +12,10 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
-from pathlib import Path
 import sys
 import tomllib
+from pathlib import Path
 from typing import Any
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "config" / "specialist_corps.toml"

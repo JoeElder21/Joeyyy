@@ -23,12 +23,12 @@ three checks, one appended ISO-dated status line, append-only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import datetime as _dt
-from pathlib import Path
 import subprocess
 import sys
 import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATOR = "apex_chief_of_staff"

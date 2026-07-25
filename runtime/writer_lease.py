@@ -18,9 +18,9 @@ Stdlib-pure; ``runtime/lease_queue.py`` adds the Celery per-target queues.
 from __future__ import annotations
 
 import datetime as _dt
-from dataclasses import dataclass, field
 import unicodedata
 import uuid
+from dataclasses import dataclass, field
 
 MAX_LEASE_HOURS = 24
 _BRAINS = {"APEX", "JEOS"}
@@ -77,7 +77,7 @@ class LeaseRegistry:
         if hours <= 0 or hours > MAX_LEASE_HOURS:
             raise LeaseError(f"lease duration must be within (0, {MAX_LEASE_HOURS}] hours")
         key = canonical_key(owner_brain, write_target, resource_id)
-        now = now or _dt.datetime.now(_dt.timezone.utc)
+        now = now or _dt.datetime.now(_dt.UTC)
         self._expire(now)
         if key in self._active:
             holder = self._active[key]["writer_agent"]

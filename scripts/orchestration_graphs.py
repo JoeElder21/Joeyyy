@@ -22,8 +22,9 @@ activation-time injection).
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, TypedDict
+from typing import Any, TypedDict
 
 try:  # degrade cleanly when the runtime stack is not installed
     from langgraph.checkpoint.memory import MemorySaver
@@ -174,7 +175,9 @@ def build_cadence_graph(
     for agent in order:
         graph.add_node(agent, make_node(agent))
     graph.set_entry_point(order[0])
-    for current, nxt in zip(order, order[1:]):
+    # Deliberately ragged: order[1:] is one shorter, which is what makes this
+    # a pairwise walk. strict=False is the intent, stated rather than implied.
+    for current, nxt in zip(order, order[1:], strict=False):
         graph.add_edge(current, nxt)
     graph.add_edge(order[-1], END)
     return graph.compile()

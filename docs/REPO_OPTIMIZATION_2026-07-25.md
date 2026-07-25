@@ -227,7 +227,7 @@ Cedar itself only if the boundary rules outgrow readable Python.
 
 | Repository / project | Verification | Note |
 | --- | --- | --- |
-| `astral-sh/ruff` | Verified (in use) | Already adopted in this change. The formatter is deliberately *not* enabled — it would reformat 45 of 54 files and make this diff unreviewable. Enable separately as a single mechanical commit if wanted. |
+| `astral-sh/ruff` | Verified (in use) | Adopted in this change, lint-only at first because the formatter would have reformatted 46 files and made the diff unreviewable. Both were enabled the same day per decision 4 below — the reformat landed as its own mechanical commit, and the widened rule set as another. |
 | `google/osv-scanner` | Corroborated | Vulnerability scanning against the OSV database for both Python and npm trees. Cheap and credential-free, but most Python deps here are optional and loosely pinned, so signal would be low until `requirements/lock-*.txt` governs the real install. Revisit when the lockfile is authoritative. |
 | `arize-ai/phoenix` | Already registered (ID 14) | Already in `EXTERNAL_RUNTIME_REGISTER`; noted here only because it is OpenTelemetry-native and `scripts/observability.py` already emits OTEL spans — it is the shortest path from existing instrumentation to evaluation traces if DeepEval's own tracing is not wanted. |
 | `trufflesecurity/trufflehog` | Corroborated | One-off history sweep, per Tier 1 #3. Not a standing gate. |

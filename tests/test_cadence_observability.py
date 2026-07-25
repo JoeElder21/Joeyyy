@@ -3,11 +3,11 @@ Both skip cleanly when the runtime stack is absent."""
 
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
-from pathlib import Path
 import tempfile
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from scripts.agent_runtime import AuditLedger, load_roster
 from scripts.orchestration_graphs import load_manifest
