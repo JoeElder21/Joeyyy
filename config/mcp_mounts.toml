@@ -15,6 +15,12 @@
 # reported success whatever list_tools() returned, including an empty one.
 # Declaring the contract makes a regressed tool registration a CI failure
 # rather than a green check.
+# tools_are_exhaustive = true -> expected_tools is the COMPLETE surface, so an
+# undeclared tool fails verification too. Checking only for missing tools let a
+# server add anything and stay green; on a mount granted to agents = ["*"] that
+# is a new capability reaching the whole corps unreviewed. Set it where this
+# repository owns the server and the list is the full contract; leave it off
+# where the list is the subset we depend on from an upstream release.
 
 [[mounts]]
 name = "governance"
@@ -23,7 +29,10 @@ agents = ["*"]
 purpose = "Packet validation, fail-closed admission, return validation, audit verification, roster."
 verify_offline = true
 # This repository's own server, so the contract is exact: these five are the
-# governance surface every agent depends on.
+# governance surface every agent depends on. Mounted to every agent, which is
+# why the list is closed rather than a floor -- a sixth tool appearing here
+# reaches the entire corps.
+tools_are_exhaustive = true
 expected_tools = [
   "admit_delegation_packet",
   "list_registered_roster",

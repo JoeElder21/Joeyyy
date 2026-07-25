@@ -665,6 +665,30 @@ The repair, and the rule that should have been applied the first time: a suppres
 
 **What the alternation means, stated once.** Three consecutive attempts to correct this one interaction produced, in order, a gate that denied everything, a gate that admitted invalid packets, and a gate that denied every mutation. Each fix was locally reasoned and locally tested. The failure is not carelessness in any single change — it is that this interaction has more states than the tests written alongside each fix were covering, and each repair was validated against the failure it targeted rather than against the whole space. That is a signal to stop patching and let a human decide the shape, which is what the deferrals now reflect.
 
+### Automated review, fifteenth pass — seven findings, five fixed, two deferred
+
+**The fourth alternation, and it was hiding underneath the third.** The fourteenth pass ended by declaring the lease/packet interaction frozen. This pass found that the state which survived rounds 12–14 was fail-**open** in a way none of those rounds had looked for: `PacketGuard.validate()` returns at the *first* lease-ledger error, so feeding it a genuine `2.1` registry lease against a schema pinned to `2.0` meant `_lease_match_errors` — the check that binds *this* packet to *that* lease — **never executed at all**. The suppression rule then deleted the one error that had been produced. A delegation carrying a `writer_lease_id` that was never issued and a `mission_id` the lease does not cover was admitted, because target, resource, brain, and writer all matched and so `_writer_lease` raised no objection either.
+
+Reproduced before fixing, and the repair is the one thing the previous three rounds did not try: **reconcile the defect instead of suppressing the error it produces.** The enforcement point rewrites `schema_version` on a *copy* of the lease, and only when the value is exactly what `runtime/writer_lease.py` issues. The ledger then validates cleanly, every downstream relational check runs, and no filter exists at all. It is strictly narrower than what it replaces: the old filter dropped `expected const '2.0'` whatever the offending value was, so a lease claiming `9.9` was tolerated too.
+
+Both directions were verified before the change was committed, per the rule set after round 14: a genuine `LeaseRegistry` lease with a matching packet still passes end to end, **and** a semantically broken packet still fails. Reintroducing the round-14 behaviour is now caught by five tests.
+
+**Two pre-existing tests were asserting the fail-open**, which is why fourteen rounds did not surface it. `test_a_lawful_write_bearing_packet_is_not_denied_by_the_semantic_pass` named `writer_lease_id = "lease-1"` — an id no registry ever issued — and asserted it must not be denied; it passed only because the relationship check was unreachable. `test_lease_held_by_another_agent_is_denied` passed for a similarly accidental reason. Both now use the lease the registry actually issued, and the scenario the second one used to describe is kept under its real name: an ineligible writer cannot hold a lease at all.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Packet-to-lease relationship never validated | **Correct — fail-open, fourth alternation** | Reconciliation replaces suppression; the guard's relational checks run for the first time against a registry lease. |
+| Targetless Chief request allowed with no reasons | **Correct — fail-open** | `evaluate(agent=CHIEF, action="read", resource="")` returned `allowed=True` with an *empty* reason tuple: `_brain_lock` and `_packet_admission` both exempt the chief, and every other rule reads the resource, so a blank one matched no prefix and objected to nothing. Principal, action, and resource are now required in `normalize()`, before any rule and therefore before any exemption. The blank-*action* case had been caught only by accident — a blank action classifies as mutating, so the lease rules happened to fire. |
+| Governance mount accepted undeclared tools | **Correct** | `_verdict()` checked only for *missing* tools, so appending `delete_all` to the server's registration passed. That mount is granted to `agents = ["*"]`. `tools_are_exhaustive` now distinguishes a closed contract (this repository's own servers) from a floor (the upstream filesystem subset, where naming every tool would make any additive release a CI failure). |
+| Mount verifier ignored unknown flags | **Correct** | `"--strict" in argv` meant `--strcit` silently ran the permissive path — unverified mounts, exit 0, CI green. `argparse` now rejects it. Same silent-degradation class as the three CI gates fixed in round 13, this time in the reader of the flag rather than the checker. |
+| Manual gate omitted the formatter | **Correct** | `ruff check` does not verify formatting; CI runs `ruff format --check` separately, so a contributor could run every documented command and still be rejected. **Found in four places, not the one reported** — `CONTRIBUTING.md`, `README.md`, `CLAUDE.md`, and `task lint`. `README.md` also still ran `verify_runtime_stack.py` before installing its dependencies, the exact ordering defect fixed in `CONTRIBUTING.md` one round earlier. Both hygiene tests were generalized from one file to all of them. |
+| Pre-commit hooks pinned to mutable tags | **Correct, deferred** | Real, and the argument matches the SHA-pinning applied to Actions. Deferred because resolving four `rev` tags to commit SHAs cannot be verified offline here, and a wrong SHA breaks every contributor's pre-commit rather than failing one CI job. Joe's call. |
+| Filesystem mount's npm package unlocked and unscanned | **Correct, deferred** | The top-level version is pinned; its transitive set is not, and no committed lock covers it. The fix is a new npm manifest, `npm ci` in the mounts job, and a fourth entry in the osv scan — a supply-chain change with its own review surface, not an appendix to this one. |
+
+**On the freeze.** Round 14 froze `scripts/policy_enforcement.py` to genuine breakage only. Both P1s here qualify — each is a fail-open in code this change set introduced — so both were fixed. Neither of the two deferred findings touches that module. The five architectural decisions listed below remain untouched and unactioned.
+
+**What the fourth alternation adds to the lesson.** Rounds 12–14 each validated a fix against the failure it targeted. This round shows a fifth state none of them tested: not "does the gate deny what it should" or "does it allow what it should", but **"does the check run at all"**. A short-circuiting validator makes those different questions, and a passing test suite cannot distinguish a check that ran and approved from a check that never executed — which is the same configured-vs-executed error this record opens with, now found inside the enforcement point itself rather than in CI. Two of the tests guarding this area were asserting the bug.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
@@ -685,5 +709,15 @@ Not a decision backlog — the actual work the harness exposed:
   it belongs in its own reviewed change rather than appended to this one. It is
   the top follow-up.
 - **The writer-lease schema mismatch** (`2.1` issued vs `2.0` required) needs a
-  contract decision before the enforcement point can validate leases without a
-  scoped exception.
+  contract decision. The enforcement point now reconciles it at the boundary
+  rather than suppressing the error, so no check is skipped — but the underlying
+  disagreement between `schemas/writer_lease.schema.json` and
+  `runtime/writer_lease.py` is still there, and `scripts/memory_layer.py` would
+  still reject a real registry lease. One of the two has to move.
+- **Pre-commit hooks are pinned to mutable tags** while Actions are pinned to
+  SHAs. Resolving the four `rev` values needs network verification and a wrong
+  SHA breaks every contributor's local gate, so it is a deliberate step rather
+  than a mechanical one.
+- **The filesystem mount's npm package has no committed lock** and is outside
+  the vulnerability scan. Its top-level version is pinned; its transitive set is
+  not.

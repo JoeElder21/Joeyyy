@@ -215,6 +215,46 @@ class ContributorSurfaceTests(unittest.TestCase):
             "provenance checks must be required fields, not optional prompts",
         )
 
+    def test_every_documented_manual_gate_includes_the_formatter(self):
+        # `ruff check` does not verify formatting; CI runs `ruff format --check`
+        # as a separate required step. Four surfaces listed the manual gate and
+        # all four stopped at `ruff check`, so a contributor could run every
+        # documented command, pass, and still be rejected by CI.
+        #
+        # Asserted across all four rather than the one that was reported. Fixing
+        # only CONTRIBUTING.md would have left three copies of the same defect,
+        # which is the failure mode this record keeps re-learning: an instance
+        # is not a class.
+        for relative in ("CONTRIBUTING.md", "README.md", "CLAUDE.md", "pyproject.toml"):
+            with self.subTest(path=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn("ruff check", text, f"{relative}: no lint step to compare against")
+                self.assertIn(
+                    "ruff format --check",
+                    text,
+                    f"{relative}: documents `ruff check` without the formatter CI also requires",
+                )
+
+    def test_every_documented_gate_installs_validators_first(self):
+        # Generalized from the CONTRIBUTING-only version below, which is how
+        # README.md kept the defect after CONTRIBUTING.md was fixed: it ran
+        # verify_runtime_stack.py three lines BEFORE installing jsonschema and
+        # rtoml, so the audit passed having validated nothing.
+        for relative in ("CONTRIBUTING.md", "README.md"):
+            with self.subTest(path=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                install = text.index("pip install -r requirements/runtime-contracts.txt")
+                for verifier in (
+                    "python scripts/verify_runtime_stack.py",
+                    "python scripts/verify_mcp_mounts.py",
+                ):
+                    self.assertLess(
+                        install,
+                        text.index(verifier),
+                        f"{relative}: {verifier} runs before the dependencies it needs, "
+                        "so it reports success having checked nothing",
+                    )
+
     def test_documented_manual_gate_installs_validators_first(self):
         # verify_runtime_stack.py catches the ImportError for jsonschema and
         # rtoml, reports zero schemas and zero TOML files checked, and exits 0 --
@@ -283,6 +323,66 @@ class ContributorSurfaceTests(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+
+
+class MountVerifierTests(unittest.TestCase):
+    """The mount verifier's own failure modes, found in the fifteenth pass."""
+
+    def test_an_exact_contract_refuses_undeclared_tools(self):
+        # Checking only for MISSING tools meant a server could register anything
+        # extra and still verify. The governance mount is granted to
+        # `agents = ["*"]`, so an undeclared tool reaches the whole corps with
+        # CI green.
+        from scripts.verify_mcp_mounts import _verdict
+
+        exact = {"expected_tools": ["a", "b"], "tools_are_exhaustive": True}
+        self.assertEqual(_verdict(exact, ["a", "b"]), "verified")
+        self.assertIn("undeclared", _verdict(exact, ["a", "b", "delete_all"]))
+
+    def test_a_subset_contract_still_tolerates_upstream_additions(self):
+        # The other half of the fix: naming every tool an upstream release ships
+        # would turn any additive change into a CI failure, so the filesystem
+        # mount's list stays a floor.
+        from scripts.verify_mcp_mounts import _verdict
+
+        subset = {"expected_tools": ["a", "b"]}
+        self.assertEqual(_verdict(subset, ["a", "b", "new_upstream_tool"]), "verified")
+        self.assertIn("missing", _verdict(subset, ["a"]))
+
+    def test_the_governance_mount_declares_an_exact_contract(self):
+        # The config half. Without the declaration the code change enforces
+        # nothing, and the two would drift silently.
+        import tomllib
+
+        data = tomllib.loads((ROOT / "config" / "mcp_mounts.toml").read_text(encoding="utf-8"))
+        governance = next(m for m in data["mounts"] if m["name"] == "governance")
+        self.assertTrue(governance.get("tools_are_exhaustive"))
+        self.assertTrue(governance.get("expected_tools"))
+
+    def test_a_misspelled_flag_is_rejected_rather_than_ignored(self):
+        # `"--strict" in argv` meant `--strcit` in a workflow file silently ran
+        # the permissive path: mounts unverified, exit 0, CI green -- the exact
+        # false success strict mode was added to remove.
+        import contextlib
+        import io
+
+        from scripts.verify_mcp_mounts import main
+
+        # redirect_stderr suppresses argparse's usage text, nothing more.
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+            main(["--strcit"])
+        self.assertNotEqual(raised.exception.code, 0)
+
+    def test_the_strict_flag_still_parses(self):
+        # A rejection test alone would pass if the flag stopped working
+        # entirely, which would be a worse version of the same silence.
+        import inspect
+
+        from scripts.verify_mcp_mounts import main
+
+        source = inspect.getsource(main)
+        self.assertIn('"--strict"', source)
+        self.assertIn("argparse", source)
 
 
 if __name__ == "__main__":

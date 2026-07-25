@@ -9,6 +9,7 @@ runtime stack is required.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -38,6 +39,20 @@ def _verdict(mount: dict, tools: list[str]) -> str:
     mount declares it, every named tool must be present; where it does not, an
     empty list is still refused, because a mount offering no tools cannot be
     what any agent was granted.
+
+    Presence alone was not enough. Checking only for MISSING tools meant a
+    server could offer anything ADDITIONAL and still verify -- appending a
+    `delete_all` to the governance server's registration passed. The governance
+    mount is granted to `agents = ["*"]`, so an accidentally or maliciously
+    registered tool would reach every agent in the corps with CI green.
+
+    `tools_are_exhaustive` is how a mount states which it means. This
+    repository's own servers declare their full surface, so an unexpected tool
+    is a defect. The upstream filesystem mount declares only the subset it is
+    mounted for, because naming every tool an upstream release happens to ship
+    would turn any additive upstream change into a CI failure. Extra tools are
+    refused where the contract is exact and permitted where it is a floor;
+    conflating the two is what made the strict check permissive.
     """
     if not tools:
         return "probe returned no tools; a mount that offers nothing is not verified"
@@ -45,6 +60,10 @@ def _verdict(mount: dict, tools: list[str]) -> str:
     missing = sorted(expected - set(tools))
     if missing:
         return f"missing declared tools: {', '.join(missing)}"
+    if mount.get("tools_are_exhaustive") and expected:
+        unexpected = sorted(set(tools) - expected)
+        if unexpected:
+            return f"undeclared tools offered: {', '.join(unexpected)}"
     return "verified"
 
 
@@ -65,7 +84,23 @@ def main(argv: list[str] | None = None) -> int:
     # script reported "unverified (mcp package not installed)" and exited 0,
     # which in CI -- where the dependency is installed deliberately -- means the
     # probe silently did not run and a broken MCP server stays green.
-    strict = "--strict" in (argv if argv is not None else sys.argv[1:])
+    #
+    # Parsed rather than membership-tested. `"--strict" in argv` meant a typo --
+    # `--strcit` in a workflow file -- silently ran the permissive path: mounts
+    # reported unverified, exit 0, CI green. That is precisely the false success
+    # strict mode was added to remove, reintroduced by the way the flag is read.
+    # An unknown argument is now a usage error, so a misspelling fails loudly on
+    # the first run instead of disabling the check indefinitely.
+    parser = argparse.ArgumentParser(
+        prog="verify_mcp_mounts.py",
+        description="Launch each offline-verifiable MCP mount and list its tools.",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="treat a degraded (unverified) probe as a failure",
+    )
+    strict = parser.parse_args(argv if argv is not None else sys.argv[1:]).strict
     report: dict = {"mounts": [], "strict": strict}
     try:
         import mcp  # noqa: F401

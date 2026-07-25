@@ -121,9 +121,30 @@ CHIEF = "apex_chief_of_staff"
 # verified, expired -- is a closed lease and authorizes nothing further.
 ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
 
-# The single schema error tolerated on a writer lease, and only this one.
-# See the comment in PolicyEnforcementPoint._writer_lease for why.
-VERSION_MISMATCH_DEFECT = "$.schema_version: expected const '2.0'"
+# The known repository defect: schemas/writer_lease.schema.json pins
+# schema_version to const "2.0" while runtime/writer_lease.py issues "2.1", so
+# every lease the registry produces fails its own schema. Resolving which of the
+# two is authoritative is a contract decision for Joe -- see
+# docs/REPO_OPTIMIZATION_2026-07-25.md.
+#
+# Until then the enforcement point reconciles the defect rather than suppressing
+# the error it produces. Suppression was tried twice and failed twice, in
+# opposite directions: dropping the error string deleted the guard's ONLY finding
+# (it short-circuits), and retaining it denied every legitimate write. The
+# suppression that survived those two rounds was still fail-open in a third way
+# -- PacketGuard.validate() returns as soon as the lease ledger has any error, so
+# the packet-to-lease relationship checks (writer_lease_id uniqueness, and
+# mission_id / resource_id / owner_brain / writer_agent / write_target equality)
+# never ran at all. A delegation with a forged writer_lease_id and a foreign
+# mission_id was admitted; reproduced before this fix.
+#
+# Reconciling the one field instead means the ledger validates cleanly and every
+# downstream relational check executes. It is deliberately narrower than the
+# filter it replaces: the filter dropped the const error whatever the actual
+# version was, so a lease claiming "9.9" was tolerated too. This rewrites the
+# value ONLY when it is exactly what the registry issues.
+ISSUED_LEASE_SCHEMA_VERSION = "2.1"
+DECLARED_LEASE_SCHEMA_VERSION = "2.0"
 
 # The error the guard emits purely BECAUSE the ledger was withheld. It carries
 # no information on the semantic pass -- that pass always omits the ledger, so
@@ -444,6 +465,33 @@ class PolicyEnforcementPoint:
         if action != request.action:
             normalized = replace(normalized, action=action)
 
+        # The three fields every rule is a statement ABOUT. A request missing
+        # any of them describes no decision, so there is nothing to allow.
+        #
+        # This is checked here, before any rule and therefore before any
+        # exemption. `evaluate(agent=CHIEF, action="read", resource="")`
+        # returned allowed=True with an empty reason tuple: `_brain_lock` and
+        # `_packet_admission` both exempt the chief, and every remaining rule
+        # reads the resource, so a blank one simply matched no prefix and
+        # objected to nothing. The gate reported approval having verified
+        # neither ownership nor mount registration -- while the tool arguments
+        # an executor actually receives may well name a real target.
+        #
+        # The empty ACTION case was caught only by accident: a blank action is
+        # classified as mutating, so the lease rules happened to fire. Accident
+        # is not enforcement, so all three are stated.
+        for name, value in (
+            ("agent", request.agent),
+            ("action", action),
+            ("resource", request.resource),
+        ):
+            if not (value or "").strip():
+                errors.append(
+                    f"request declares no {name}; a decision cannot be made about an "
+                    "unstated principal, action, or resource, and no exemption applies "
+                    "to a request that names nothing"
+                )
+
         if PolicyEnforcementPoint._is_mutating(normalized) and not normalized.mutating:
             normalized = replace(normalized, mutating=True)
 
@@ -658,11 +706,12 @@ class PolicyEnforcementPoint:
         # pass still covers the underlying property.
         semantic = [error for error in semantic if error != LEDGER_ABSENT_ARTIFACT]
         seen = set(semantic)
-        # Only the *additional* errors the ledger produced are eligible for the
-        # narrow version tolerance, and only that exact string.
-        extra = [
-            error for error in bound if error not in seen and VERSION_MISMATCH_DEFECT not in error
-        ]
+        # No version filter here any more. The ledger is reconciled at source in
+        # `_lease_ledger`, so the bound pass no longer stops at a lease-schema
+        # error before it reaches `_lease_match_errors` -- which is the check
+        # that binds this packet to that lease. Every error the bound pass now
+        # reports is a real one, so none is dropped.
+        extra = [error for error in bound if error not in seen]
         return [f"packet rejected: {error}" for error in [*semantic, *extra]]
 
     def _is_canonical_resource(self, resource: str) -> bool:
@@ -795,25 +844,17 @@ class PolicyEnforcementPoint:
         # change writer_agent (or status, or expiry), and pass -- the id matched
         # a real lease while every authorization-relevant field came from the
         # attacker. The id is the lookup key; it is not the authorization.
-        lease = issued
+        # Reconciled for the known 2.1-vs-2.0 defect only; see
+        # `_reconciled_lease`. Every other schema error still denies, and a
+        # lease claiming any version other than the one the registry issues is
+        # not reconciled at all -- which the error filter this replaces could
+        # not distinguish, because it dropped the const error whatever the
+        # offending value was.
+        lease = self._reconciled_lease(issued)
 
-        raw = self.guard.validate("writer_lease.schema.json", lease)
-        # KNOWN REPOSITORY DEFECT, scoped deliberately narrowly.
-        #
-        # schemas/writer_lease.schema.json pins schema_version to const "2.0",
-        # but runtime/writer_lease.py issues "2.1". Every lease the registry
-        # produces therefore fails its own schema. Nothing caught it because the
-        # only test touching both checks required-field presence, not the const,
-        # and the packet-contract fixtures hand-build 2.0 leases.
-        # scripts/memory_layer.py would already reject a real registry lease.
-        #
-        # Blocking on it here would deny every legitimate mutation; silently
-        # skipping schema validation would recreate the forged-lease hole this
-        # rule exists to close. So exactly one error string is tolerated, and
-        # every other schema error still denies. Resolving the mismatch is a
-        # contract decision for Joe — see docs/REPO_OPTIMIZATION_2026-07-25.md.
         errors = [
-            f"lease rejected: {error}" for error in raw if VERSION_MISMATCH_DEFECT not in error
+            f"lease rejected: {error}"
+            for error in self.guard.validate("writer_lease.schema.json", lease)
         ]
         if errors:
             # A lease that is not schema-valid is not a lease; comparing its
@@ -895,14 +936,39 @@ class PolicyEnforcementPoint:
         refuses every mutation.
         """
         if self.registry is None:
-            return list(request.active_leases)
+            return [self._reconciled_lease(lease) for lease in request.active_leases]
         issued = getattr(self.registry, "_active", None)
         if isinstance(issued, dict):
-            return [dict(lease) for lease in issued.values()]
+            # Reconciled, so the ledger validates and the guard proceeds to the
+            # packet-to-lease relationship checks instead of returning at the
+            # first ledger error. Without this the ledger is authoritative but
+            # never actually compared against the packet.
+            return [self._reconciled_lease(lease) for lease in issued.values()]
         # Unknown registry shape: fall back to the one lease we can look up
         # authoritatively rather than trusting the submitted ledger.
         _, verified = self._registry_membership(request.lease or {})
-        return [verified] if verified else []
+        return [self._reconciled_lease(verified)] if verified else []
+
+    @staticmethod
+    def _reconciled_lease(lease: Any) -> Any:
+        """Neutralize the known 2.1-vs-2.0 defect, and nothing else.
+
+        Returns a copy whose `schema_version` reads as the schema's declared
+        const, but only when the stored value is exactly the version
+        `runtime/writer_lease.py` issues. Any other value -- including one a
+        caller invented -- is left alone so the schema still rejects it.
+
+        Everything except this one field is untouched, so a lease with a second
+        schema defect still fails, and a lease that does not match the packet
+        still fails the relational checks this reconciliation exists to let run.
+        """
+        if not isinstance(lease, dict):
+            return lease
+        if lease.get("schema_version") != ISSUED_LEASE_SCHEMA_VERSION:
+            return lease
+        reconciled = dict(lease)
+        reconciled["schema_version"] = DECLARED_LEASE_SCHEMA_VERSION
+        return reconciled
 
     def _registry_membership(self, lease: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         """Look the lease up and return the authoritative copy alongside errors."""

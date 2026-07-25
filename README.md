@@ -110,12 +110,16 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 Repository validation and the optional AutoGen adapter require Python 3.11 or 3.12. Run:
 
 ```bash
+# The install comes first: verify_runtime_stack.py catches the ImportError for
+# jsonschema and rtoml, reports zero schemas and zero TOML files checked, and
+# exits 0 -- so running it beforehand passes the audit while validating nothing.
+python -m pip install -r requirements/runtime-contracts.txt
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 python scripts/verify_runtime_stack.py
-python -m pip install -r requirements/runtime-contracts.txt
 python scripts/verify_mcp_mounts.py --strict
 ruff check .
+ruff format --check .
 python -m unittest discover -s tests -v
 ```
 

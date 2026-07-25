@@ -384,10 +384,42 @@ class DenialTests(unittest.TestCase):
         self.assertEqual(reasons, [])
 
     def test_lease_held_by_another_agent_is_denied(self):
+        # Reversed direction, deliberately. The original issued the lease TO the
+        # specialist and had the chief present it; that scenario is now caught
+        # one rule earlier -- the guard's own "writer is not eligible for the
+        # target at the deployed lifecycle stage" -- because reconciling the
+        # 2.1-vs-2.0 defect finally lets the guard's lease semantics run against
+        # a registry lease at all. They never had before: the schema error
+        # short-circuited every one of them.
+        #
+        # So the holder comparison is exercised the way it is actually
+        # reachable: a genuine lease issued to the chief, presented by a
+        # specialist. The chief is always an eligible writer, so eligibility
+        # passes and the holder mismatch is what denies.
+        registry, lease = registry_and_lease()
+        pep = PolicyEnforcementPoint(ROOT, registry=registry, clock=lambda: NOW)
+        reasons = pep._writer_lease(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="write",
+                resource=lease["write_target"],
+                owner_brain=lease["owner_brain"],
+                mutating=True,
+                lease=lease,
+                resource_id=lease["resource_id"],
+            )
+        )
+        self.assertTrue(any("held by" in reason for reason in reasons), reasons)
+
+    def test_an_ineligible_writer_cannot_hold_a_lease_at_all(self):
+        # The scenario the test above used to cover, kept and asserted on its
+        # real grounds. A shadow specialist is not an eligible writer for the
+        # target, so a lease naming it authorizes nothing regardless of who
+        # presents it.
         registry, lease = registry_and_lease(writer_agent=SPECIALIST)
-        pep = PolicyEnforcementPoint(ROOT, registry=registry)
+        pep = PolicyEnforcementPoint(ROOT, registry=registry, clock=lambda: NOW)
         reasons = pep._writer_lease(self._mutating(lease=lease))
-        self.assertTrue(any("held by" in reason for reason in reasons))
+        self.assertTrue(any("not eligible" in reason for reason in reasons), reasons)
 
     def test_lease_does_not_stretch_to_another_target(self):
         reasons = self.pep._writer_lease(
@@ -1315,6 +1347,14 @@ class ScopeTests(unittest.TestCase):
         # retained "write-bearing packet requires the active writer-lease
         # ledger" from the deliberately ledger-free pass -- so NO governed
         # mutation could pass at all (shut again).
+        #
+        # This test itself then encoded the FOURTH state. It named
+        # `writer_lease_id = "lease-1"`, an id no registry ever issued, and
+        # asserted that packet must not be denied -- which held only because the
+        # bound pass short-circuited before `_lease_match_errors` could compare
+        # the packet against the ledger. It was asserting the fail-open. The
+        # fixture now names the lease the registry actually issued, so the test
+        # means what its name says: a LAWFUL packet passes.
         from copy import deepcopy
 
         from tests.test_packet_contracts import PacketContractTests
@@ -1328,9 +1368,12 @@ class ScopeTests(unittest.TestCase):
         write_bearing.update(
             {
                 "approval_level": "L2",
-                "allowed_write_targets": ["APEX/Strategy-Campaigns"],
-                "writer_agent": CHIEF,
-                "writer_lease_id": "lease-1",
+                "allowed_write_targets": [self.lease["write_target"]],
+                "writer_agent": self.lease["writer_agent"],
+                "writer_lease_id": self.lease["lease_id"],
+                "mission_id": self.lease["mission_id"],
+                "resource_id": self.lease["resource_id"],
+                "owner_brain": self.lease["owner_brain"],
                 "mutation_contract": {
                     "allowed_operations": ["upsert"],
                     "require_expected_version": True,
@@ -1399,6 +1442,161 @@ class BoundaryDataTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
         self.assertEqual(len(HIGH_IMPACT_ACTIONS), 6)
+
+
+class FifteenthPassRegressionTests(unittest.TestCase):
+    """The two fail-opens the fifteenth review pass found, both reproduced first."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _write_bearing_delegation(self, **overrides):
+        """A schema-valid 2.1 delegation that carries a write."""
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        packet, _ = PacketContractTests().v21_readonly_pair()
+        packet = json.loads(json.dumps(packet))  # deep copy without the import
+        packet["mutation_contract"]["allowed_operations"] = ["upsert"]
+        packet.update(
+            {
+                "writer_lease_id": self.lease["lease_id"],
+                "mission_id": self.lease["mission_id"],
+                "resource_id": self.lease["resource_id"],
+                "owner_brain": self.lease["owner_brain"],
+                "writer_agent": self.lease["writer_agent"],
+                "allowed_write_targets": [self.lease["write_target"]],
+            }
+        )
+        packet.update(overrides)
+        return packet
+
+    def _request(self, packet):
+        return ToolRequest(
+            agent=CHIEF,
+            action="write",
+            resource=self.lease["write_target"],
+            owner_brain=self.lease["owner_brain"],
+            mutating=True,
+            packet=packet,
+            packet_schema="delegation_packet.schema.json",
+            lease=self.lease,
+            resource_id=self.lease["resource_id"],
+        )
+
+    def test_a_forged_writer_lease_id_is_refused(self):
+        # The fail-open: PacketGuard.validate() returns at the first lease-ledger
+        # error, so feeding it a genuine 2.1 lease against a schema pinned to
+        # 2.0 meant `_lease_match_errors` -- the check that binds THIS packet to
+        # THAT lease -- never ran, and the suppression rule then deleted the one
+        # error that had been produced. A packet naming a lease that was never
+        # issued was admitted.
+        packet = self._write_bearing_delegation(writer_lease_id="never-issued")
+        errors = self.pep._guard_errors(self._request(packet))
+        self.assertTrue(
+            any("not uniquely active" in error for error in errors),
+            f"a packet naming an unissued lease must be refused: {errors}",
+        )
+
+    def test_a_foreign_mission_id_is_refused(self):
+        # Same hole, different field: the packet claimed a mission the lease
+        # does not cover, and target/resource/brain/writer all matched, so
+        # `_writer_lease` had no objection either.
+        packet = self._write_bearing_delegation(mission_id="mission-the-lease-excludes")
+        errors = self.pep._guard_errors(self._request(packet))
+        self.assertTrue(errors, "a packet bound to a foreign mission must be refused")
+
+    def test_a_genuine_lease_and_matching_packet_still_pass(self):
+        # The other direction, asserted in the same class as the fix. Every
+        # previous repair here broke this or its opposite; a test that only
+        # proves the gate shuts cannot tell a fix from a lockout.
+        request = self._request(self._write_bearing_delegation())
+        self.assertEqual(self.pep._guard_errors(request), [])
+        self.assertEqual(self.pep._writer_lease(request), [])
+
+    def test_reconciliation_covers_only_the_version_the_registry_issues(self):
+        # Strictly narrower than the error filter it replaces: that filter
+        # dropped "expected const '2.0'" whatever the offending value was, so a
+        # lease claiming any version at all was tolerated.
+        self.assertEqual(
+            self.pep._reconciled_lease(self.lease)["schema_version"],
+            "2.0",
+        )
+        invented = dict(self.lease, schema_version="9.9")
+        self.assertEqual(self.pep._reconciled_lease(invented)["schema_version"], "9.9")
+        # And it still fails the schema, so leaving it alone means denial rather
+        # than a value that merely passes through unchanged.
+        self.assertTrue(self.pep.guard.validate("writer_lease.schema.json", invented))
+
+    def test_an_unissued_version_in_the_ledger_is_not_reconciled(self):
+        # Asserted through the ledger rather than through `_writer_lease`: that
+        # rule looks the lease up and reads the REGISTRY's copy, so a version a
+        # caller invents never reaches validation there at all. The ledger is
+        # where a stored lease's own version is consulted.
+        tampered = dict(self.lease, schema_version="9.9")
+        self.assertTrue(
+            self.pep.guard.validate_lease_ledger([self.pep._reconciled_lease(tampered)]),
+            "only the version the registry issues is reconciled; any other still fails",
+        )
+        self.assertEqual(
+            self.pep.guard.validate_lease_ledger([self.pep._reconciled_lease(self.lease)]),
+            [],
+            "the registry's own lease must validate once reconciled",
+        )
+
+    def test_reconciliation_does_not_mutate_the_registry_copy(self):
+        before = self.lease["schema_version"]
+        self.pep._reconciled_lease(self.lease)
+        self.assertEqual(self.lease["schema_version"], before)
+
+
+class TargetlessRequestTests(unittest.TestCase):
+    """A request that names nothing describes no decision, so nothing is allowed."""
+
+    def setUp(self):
+        self.pep = PolicyEnforcementPoint(ROOT, clock=lambda: NOW)
+
+    def test_a_chief_read_with_no_resource_is_refused(self):
+        # Reproduced exactly as reported: allowed=True with an EMPTY reason
+        # tuple. `_brain_lock` and `_packet_admission` both exempt the chief,
+        # and every remaining rule reads the resource -- so a blank one matched
+        # no prefix and drew no objection from anything. The gate reported
+        # approval having checked neither ownership nor mount registration.
+        for blank in ("", "   ", "\t"):
+            with self.subTest(resource=blank):
+                decision = self.pep.evaluate(
+                    ToolRequest(agent=CHIEF, action="read", resource=blank)
+                )
+                self.assertFalse(decision.allowed)
+                self.assertTrue(any("declares no resource" in r for r in decision.reasons))
+
+    def test_a_blank_action_is_refused_on_its_own_terms(self):
+        # It was already denied, but only by accident: a blank action is
+        # classified as mutating, so the lease rules happened to fire. Accident
+        # is not enforcement, and the accident disappears the moment the
+        # mutation classifier changes.
+        decision = self.pep.evaluate(
+            ToolRequest(agent=CHIEF, action="", resource="APEX/Strategy-Campaigns")
+        )
+        self.assertTrue(any("declares no action" in r for r in decision.reasons))
+
+    def test_a_blank_agent_is_refused(self):
+        decision = self.pep.evaluate(ToolRequest(agent="   ", action="read", resource="docs/"))
+        self.assertTrue(any("declares no agent" in r for r in decision.reasons))
+
+    def test_the_check_precedes_every_exemption(self):
+        # Stated as its own property because the defect was not "a rule missed
+        # this" but "every rule that could have caught it exempts the chief".
+        # Ordering is the fix, so ordering is what is asserted.
+        decision = self.pep.evaluate(ToolRequest(agent=CHIEF, action="read", resource=""))
+        self.assertEqual(len(decision.reasons), 1)
+
+    def test_a_fully_stated_chief_read_is_still_allowed(self):
+        decision = self.pep.evaluate(
+            ToolRequest(agent=CHIEF, action="read", resource="docs/README.md")
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
 
 
 if __name__ == "__main__":

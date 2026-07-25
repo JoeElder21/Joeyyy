@@ -24,6 +24,7 @@ python scripts/validate_specialist_corps.py # roster, isolation, schema, registr
 python scripts/verify_runtime_stack.py     # dependency and contract audit
 python scripts/verify_mcp_mounts.py --strict  # approved MCP mounts, launched not assumed
 ruff check .                               # house Python standard
+ruff format --check .                      # CI enforces this separately from `check`
 python -m unittest discover -s tests -v    # full suite
 ```
 

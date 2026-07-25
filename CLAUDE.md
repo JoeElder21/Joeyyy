@@ -13,6 +13,7 @@ Everything below is Claude-runtime-specific and additive.
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 ruff check .
+ruff format --check .
 python -m unittest discover -s tests -v
 ```
 
