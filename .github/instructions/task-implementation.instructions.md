@@ -44,7 +44,13 @@ Implementation progress MUST be tracked in a corresponding changes files located
 ### 3. Implementation Quality Standards
 
 **Every implementation MUST:**
-- Follow existing workspace patterns and conventions (check `copilot/` folder for standards)
+<!-- Local override (not upstream): upstream pointed at a `copilot/` folder for
+     standards. No such directory, guide, or generator for one exists in this
+     repository, so the guidance was un-actionable and pointed implementers
+     away from where the standards actually live. Repointed to the vendored
+     instruction set, matching the same repair already made to task-planner's
+     Plan Template. See .github/AWESOME-COPILOT.md. -->
+- Follow existing workspace patterns and conventions (standards live in `.github/instructions/`; repository contracts in `AGENTS.md`)
 - Implement complete, working functionality that meets all task requirements
 - Include appropriate error handling and validation
 - Use consistent naming conventions and code structure from the workspace

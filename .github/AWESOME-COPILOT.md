@@ -108,6 +108,16 @@ invocation requires that tool, and a `#file` reference only loads a spec into co
 the tool enabled but the instructions unchanged the planner still loaded the researcher's
 definition instead of running it, and so still blocked before producing any plan.
 
+**Dangling upstream paths — three instances, now swept.** Upstream files were written for a
+different repository layout, so several cite locations that do not exist here. Each was found
+and repaired one at a time, which is why a test now asserts the shape rather than the three
+reported lines: `task-implementation.instructions.md` told implementers to "check `copilot/`
+folder for standards" and is repointed to `.github/instructions/`, alongside the two planner
+repairs below. `tests/test_agent_contract.py` fails on any vendored asset naming a repository
+location that does not exist, unless the reference is recorded there as reviewed and
+non-repository (a skill's internal `references/`, an organization-level `agents/`, the GitHub
+`actions` organization) with its reason.
+
 Its Plan Template also emitted a `#file:../../copilot/<language>.md` standards row, but no
 `copilot/` directory, language guide, or generator for one exists here, so every generated
 plan carried a dangling dependency. The row is removed: the adjacent row already resolves
