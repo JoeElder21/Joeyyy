@@ -75,6 +75,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
+- `docs/ADK_SAMPLES_ABSORPTION.md` — google/adk-samples absorption record: nine patterns absorbed, eight dropped as already-built, two observability defects fixed.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
 - `docs/INTEGRATION_ROADMAP.md` — phased runtime-stack integration program with recorded conflicts and intake gates.
