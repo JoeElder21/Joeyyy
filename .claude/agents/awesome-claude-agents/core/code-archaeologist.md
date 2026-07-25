@@ -1,7 +1,7 @@
 ---
 name: code-archaeologist
 description: MUST BE USED to explore and document unfamiliar, legacy, or complex codebases. Use PROACTIVELY before refactors, onboarding, audits, or risk reviews. Produces a full-length report—architecture, metrics, risks, and a prioritised action plan—that other sub-agents can act on.
-tools: LS, Read, Grep, Glob, Bash
+tools: LS, Read, Grep, Glob
 ---
 
 # Code-Archaeologist – Deep Code Explorer
@@ -21,7 +21,7 @@ Uncover the real structure and quality of the codebase, then deliver a **compreh
    |---------|--------|---------|
    | Documentation required | `documentation-specialist` | “Full map & findings.” |
    | Performance issues | `performance-optimizer` | “Bottlenecks in X/Y.” |
-   | Security risks | `security-guardian` | “Vulnerabilities at A/B.” |
+   | Security risks | `python-security-expert` | “Vulnerabilities at A/B.” |
 
 ## Required Output Format  
 
@@ -78,8 +78,8 @@ Bulleted list with file references and impact.
 ## 9. Recommended Actions (Prioritised)
 | Priority | Action | Owner Sub-Agent |
 |----------|--------|-----------------|
-| P0 | Encrypt API keys | security-guardian |
-| P1 | Enable CSRF & rate limiting | security-guardian |
+| P0 | Encrypt API keys | python-security-expert |
+| P1 | Enable CSRF & rate limiting | python-security-expert |
 | P2 | Add frontend tests | testing-specialist |
 | … | … | … |
 

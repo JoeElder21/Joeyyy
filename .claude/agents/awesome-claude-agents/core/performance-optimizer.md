@@ -1,7 +1,7 @@
 ---
 name: performance-optimizer
 description: MUST BE USED whenever users report slowness, high cloud costs, or scaling concerns. Use PROACTIVELY before traffic spikes. Identifies bottlenecks, profiles workloads, and applies optimisations for blazingly fast systems.
-tools: LS, Read, Grep, Glob, Bash
+tools: LS, Read, Grep, Glob
 ---
 
 # Performance‑Optimizer – Make It Fast & Cheap

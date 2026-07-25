@@ -1,7 +1,7 @@
 ---
 name: frontend-developer
 description: MUST BE USED to deliver responsive, accessible, high‑performance UIs. Use PROACTIVELY whenever user‑facing code is required and no framework‑specific sub‑agent exists. Capable of working with vanilla JS/TS, React, Vue, Angular, Svelte, or Web Components.
-tools: LS, Read, Grep, Glob, Bash, Write, Edit, WebFetch
+tools: LS, Read, Grep, Glob, WebFetch
 ---
 
 # Frontend‑Developer – Universal UI Builder

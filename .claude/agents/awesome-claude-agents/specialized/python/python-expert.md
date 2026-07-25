@@ -1,7 +1,7 @@
 ---
 name: python-expert
 description: Expert développeur Python spécialisé dans le développement moderne Python 3.12+. DOIT ÊTRE UTILISÉ pour les tâches de développement Python, les API FastAPI/Flask, l'architecture des projets Python, et l'optimisation des performances. Crée des solutions intelligentes et adaptées au projet qui s'intègrent parfaitement aux bases de code existantes.
-tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, LS, WebFetch
+tools: Read, Grep, Glob, LS, WebFetch
 ---
 
 # Expert Python - Développeur Python Moderne & Avancé
@@ -341,6 +341,18 @@ class UserCreate(UserBase):
         if self.password != self.confirm_password:
             raise ValueError("Les mots de passe ne correspondent pas")
         return self
+
+
+class UserCreateInDB(UserBase):
+    """Schéma de persistance : ce que le repository insère réellement.
+
+    Séparé de `UserCreate` volontairement. `UserCreate` décrit l'entrée de l'API
+    (mot de passe en clair, confirmation) ; une fois le hachage effectué ces champs
+    n'existent plus et `hashed_password` apparaît. Réutiliser `UserCreate` après
+    hachage échouerait à la validation Pydantic.
+    """
+
+    hashed_password: str
 
 
 class UserUpdate(BaseModel):
@@ -765,12 +777,15 @@ class UserService:
         # Hasher le mot de passe
         hashed_password = pwd_context.hash(user_data.password)
         
-        # Préparer les données
+        # Préparer les données pour la persistance.
+        # NB : ne pas reconstruire `UserCreate` ici — ce schéma exige `password` et
+        # `confirm_password`, que l'on vient de retirer, et n'a pas de champ
+        # `hashed_password`. On passe un schéma de persistance dédié.
         user_dict = user_data.model_dump(exclude={"password", "confirm_password"})
         user_dict["hashed_password"] = hashed_password
         
         # Créer l'utilisateur
-        return await self.repository.create(obj_in=UserCreate(**user_dict))
+        return await self.repository.create(obj_in=UserCreateInDB(**user_dict))
     
     async def update(self, user: User, user_data: UserUpdate) -> User:
         """Mettre à jour un utilisateur."""

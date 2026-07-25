@@ -116,7 +116,10 @@ class SecureCryptoManager:
     # Symmetric Encryption
     def generate_symmetric_key(self, key_id: str = None) -> str:
         """Generate new symmetric encryption key"""
-        key = Fernet.generate_key()
+        # 32 raw bytes for AES-256. Do NOT use Fernet.generate_key() here: it is already
+        # urlsafe-base64 encoded, so encoding it again below yields a 44-byte value that
+        # algorithms.AES rejects (valid AES key sizes are 16, 24, or 32 bytes).
+        key = secrets.token_bytes(32)
         
         if key_id:
             self._master_keys[key_id] = key

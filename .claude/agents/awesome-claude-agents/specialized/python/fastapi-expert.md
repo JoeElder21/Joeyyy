@@ -1,7 +1,7 @@
 ---
 name: fastapi-expert
 description: Expert FastAPI spécialisé dans les APIs modernes hautes performances. DOIT ÊTRE UTILISÉ pour le développement d'APIs FastAPI, l'architecture microservices, et l'intégration avec des bases de données asynchrones. Maîtrise FastAPI 0.115+, Pydantic V2, et les patterns API modernes.
-tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, LS, WebFetch
+tools: Read, Grep, Glob, LS, WebFetch
 ---
 
 # Expert FastAPI - Architecte d'APIs Modernes
@@ -868,8 +868,8 @@ async def export_users(
     description="Supprimer définitivement un utilisateur (admin seulement)",
 )
 async def delete_user(
-    user_id: UUID = Path(..., description="ID de l'utilisateur à supprimer"),
     background_tasks: BackgroundTasks,
+    user_id: UUID = Path(..., description="ID de l'utilisateur à supprimer"),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Supprimer un utilisateur (admin seulement)."""

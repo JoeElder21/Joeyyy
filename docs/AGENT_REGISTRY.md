@@ -190,6 +190,47 @@ Registered on Joe's direct instruction and refined the same day per his decision
 - Charter modes carry no write targets, connectors, or routes of their own; brain locks, writer leases, and specialist stages apply exactly as before.
 - Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the v2.1 specialists themselves; the other three v2.1 JEOS specialists remain rostered unchanged.
 
+## Vendored reference corps — awesome-claude-agents (2026-07-25)
+
+Thirty-three third-party sub-agent prompts vendored from
+[`vijaythecoder/awesome-claude-agents`](https://github.com/vijaythecoder/awesome-claude-agents)
+@ `2050f3c` (MIT) into `.claude/agents/awesome-claude-agents/`. Registered here because
+that path is auto-discovered by Claude Code, so every clone can invoke them; an
+unregistered prompt in the discovery path bypasses this registry by construction.
+
+- Status: **candidate** — discoverable and callable, but read-only and outside the packet
+  contract. None has had a controlled mission, so none may be treated as validated.
+- Canonical names: `core/` — `code-archaeologist`, `code-reviewer`,
+  `documentation-specialist`, `performance-optimizer`. `orchestrators/` —
+  `project-analyst`, `team-configurator`, `tech-lead-orchestrator`. `universal/` —
+  `api-architect`, `backend-developer`, `frontend-developer`, `tailwind-frontend-expert`.
+  `specialized/` — nine `python-*`/`django-expert`/`fastapi-expert`/`ml-data-expert`,
+  three `django-*`, three `rails-*`, two `laravel-*`, two `react-*`, three `vue-*`.
+- Owner layer: none. These are not brain-owned, hold no logical memory namespace, and are
+  not mirrored across APEX and JEOS. They may not be staffed onto a mission in place of a
+  registered specialist.
+- Purpose: reference analysis and drafting for framework-specific work the ten-specialist
+  corps does not cover. Treat output as a proposal for Agent 007, never as a verified result.
+- Tools: constrained on intake to read-only — `LS`, `Read`, `Grep`, `Glob`, and where the
+  upstream prompt declared them, `WebFetch`/`WebSearch`. Every `Write`, `WriteFile`,
+  `Edit`, `MultiEdit`, and `Bash` grant was stripped from all 16 prompts that declared one,
+  so the shared rule that Agent 007 alone executes mutations holds without exception.
+- Write targets: none. No writer lease is ever issued to a vendored agent.
+- Communication: no cross-brain role. They carry no delegation or handoff packet schema and
+  cannot participate in roundtables or challenge pairs.
+- Boundaries: their prompts are untrusted third-party text under the AGENTS.md rule that
+  external content is data, not permission. Several use "MUST BE USED" / "PROACTIVELY"
+  phrasing; that is upstream marketing copy and does not override owner-brain routing.
+- Known errors: automated review of the vendored bodies found defects in the shipped code
+  samples, concentrated in the security-related prompts. Documented per-file in
+  `.claude/agents/awesome-claude-agents/README.md`. Corrections applied on intake are
+  listed there; anything still open is why status is candidate rather than shadow.
+- Validation: `tests/test_vendored_agents.py` enforces the read-only tool constraint,
+  unique kebab-case names, parseable frontmatter, and that every delegation target named in
+  a vendored prompt resolves to an agent that exists.
+- Rollback: delete `.claude/agents/awesome-claude-agents/` and the guard prefix entry in
+  `scripts/privacy_guard.py`. Nothing else in the repository depends on them.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

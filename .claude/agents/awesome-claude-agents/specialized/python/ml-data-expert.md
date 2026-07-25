@@ -1,7 +1,7 @@
 ---
 name: ml-data-expert
 description: Expert en Machine Learning et Data Science avec Python. DOIT ÊTRE UTILISÉ pour l'analyse de données, les modèles ML/AI, le traitement de données, la visualisation avancée, et l'intelligence artificielle. Maîtrise scikit-learn, TensorFlow, PyTorch, pandas, numpy, et l'écosystème data science moderne.
-tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, LS, WebFetch
+tools: Read, Grep, Glob, LS, WebFetch
 ---
 
 # Expert ML & Data Science - Architecte Intelligence Artificielle
@@ -1186,13 +1186,26 @@ class NeuralNetworkPyTorch(BaseModel, nn.Module):
         
         if problem_type == 'classification' and output_dim == 1:
             layers_list.append(nn.Sigmoid())
-        elif problem_type == 'classification' and output_dim > 1:
-            layers_list.append(nn.Softmax(dim=1))
+        # NB : pas de Softmax en sortie pour le multiclasse. L'entraînement utilise
+        # nn.CrossEntropyLoss, qui applique déjà un log-softmax en interne et attend des
+        # logits bruts ; ajouter un Softmax ici l'appliquerait deux fois et fausserait
+        # les gradients. Utiliser predict_proba() quand des probabilités sont voulues.
         
         self.network = nn.Sequential(*layers_list)
+        self.problem_type = problem_type
+        self.output_dim = output_dim
         
     def forward(self, x):
+        """Renvoie des logits bruts pour le multiclasse (voir la note ci-dessus)."""
         return self.network(x)
+    
+    @torch.no_grad()
+    def predict_proba(self, x):
+        """Probabilités calibrées, à utiliser pour l'inférence et non l'entraînement."""
+        logits = self.network(x)
+        if self.problem_type == 'classification' and self.output_dim > 1:
+            return torch.softmax(logits, dim=1)
+        return logits
     
     def build_model(self, **kwargs):
         """Interface pour compatibilité avec BaseModel."""

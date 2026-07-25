@@ -161,7 +161,7 @@ class AsyncScraper:
     async def fetch_page(self, url: str, **kwargs) -> Dict[str, Any]:
         """Fetch a single page with error handling"""
         async with self.semaphore:
-            headers = kwargs.get('headers', {})
+            headers = dict(kwargs.pop('headers', {}))
             headers['User-Agent'] = self._get_random_user_agent()
             
             try:

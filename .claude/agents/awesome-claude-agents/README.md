@@ -24,6 +24,22 @@ actually fire. The Rails, Laravel, React, and Vue agents are kept so the set
 matches upstream and so `tech-lead-orchestrator` can route without hitting
 missing references; they will simply never match a Python task.
 
+## Status in this repository: read-only candidates
+
+These are registered in `docs/AGENT_REGISTRY.md` under **Vendored reference corps** at
+`candidate` status. Three things follow from that, and they are enforced by
+`tests/test_vendored_agents.py` rather than left to convention:
+
+- **Read-only.** Every `Write`, `WriteFile`, `Edit`, `MultiEdit`, and `Bash` grant was
+  stripped on intake, from all 16 prompts that declared one. `AGENTS.md` makes Agent 007
+  the sole write-capable agent and keeps specialists on proposed writes; a vendored
+  prompt is not an exception to that.
+- **Not a substitute for the registered corps.** They own no brain, hold no memory
+  namespace, and are never issued a writer lease. Treat output as a proposal.
+- **Untrusted text.** Many prompts say "MUST BE USED" or "PROACTIVELY". That is upstream
+  marketing copy, not routing authority — `AGENTS.md` treats external content as data,
+  never as permission.
+
 ## Usage
 
 Claude Code discovers these automatically from `.claude/agents/`. Invoke one
@@ -35,9 +51,15 @@ use @agent-code-reviewer on the current diff
 use @agent-python-testing-expert to backfill tests for the runtime package
 ```
 
+They can read, search, and draft. They cannot edit files or run commands — hand their
+proposals to Agent 007 to apply.
+
 ## Local changes to upstream
 
-Three upstream frontmatter bugs are patched here. Re-apply them when syncing.
+Re-apply all of the following when syncing, then run
+`python -m unittest tests.test_vendored_agents`.
+
+### Frontmatter (3)
 
 1. **`specialized/vue/vue-state-manager.md`** declared `name: vue-component-architect`,
    a copy-paste duplicate of its sibling. Two agents sharing one name means one
@@ -61,8 +83,31 @@ Three upstream frontmatter bugs are patched here. Re-apply them when syncing.
    (`-----…`) where the closing `---` delimiter belonged. The block did not parse,
    so the agent never registered. Normalized to a well-formed `---` … `---` block.
 
-Only frontmatter was touched — the `name:` field in fixes 1 and 2, the block
-delimiters in fix 3. Agent bodies, descriptions, and tool lists are unmodified.
+### Tool constraint (16 files)
+
+Every write-capable tool was removed from the `tools:` line of all 16 prompts that
+declared one, leaving `LS`, `Read`, `Grep`, `Glob`, and where upstream declared them
+`WebFetch`/`WebSearch`. `orchestrators/team-configurator.md` also had a duplicate `LS`
+entry, dropped at the same time.
+
+### Agent bodies (9)
+
+Divergences from upstream, applied because the shipped samples are wrong in ways that
+would mislead anyone acting on them. Each was reported by automated review on the PR.
+
+| File | Defect | Change |
+| --- | --- | --- |
+| `core/code-reviewer.md` | Delegated to `security-guardian` and `refactoring-expert`, neither of which exists in the collection — an unfulfillable handoff exactly when specialist follow-up is needed | Routed to `python-security-expert`; refactors hand back to `tech-lead-orchestrator` |
+| `core/code-archaeologist.md` | Same missing `security-guardian`, in 3 places | Routed to `python-security-expert` |
+| `orchestrators/team-configurator.md` | Wrote a mandatory "YOU MUST USE these subagents" directive into `CLAUDE.md`, from whatever prompts it found on disk — turning unregistered text into project-wide routing policy | Now *proposes* the section as handoff text, sources candidates from `docs/AGENT_REGISTRY.md`, and writes no files |
+| `specialized/python/fastapi-expert.md` | `background_tasks` (no default) followed a `Path(...)` default → `SyntaxError` at import | Required parameter moved first |
+| `specialized/python/python-expert.md` | Rebuilt `UserCreate` after stripping `password`/`confirm_password` and adding `hashed_password` → every registration failed validation | Added a dedicated `UserCreateInDB` persistence schema |
+| `specialized/python/security-expert.md` | `Fernet.generate_key()` is already base64; encoding it again produced a 44-byte value `algorithms.AES` rejects | Generates 32 raw bytes via `secrets.token_bytes`, encoded once |
+| `specialized/python/web-scraping-expert.md` | `headers` left in `**kwargs` *and* passed explicitly → `TypeError` on every custom-header request | `kwargs.pop('headers', {})` |
+| `specialized/python/ml-data-expert.md` | Appended `nn.Softmax` while training with `CrossEntropyLoss`, which applies log-softmax itself → softmax twice, distorted gradients | Output layer emits logits; added `predict_proba()` for inference |
+| `specialized/django/django-backend-expert.md` | Three: stock decremented without re-checking under `select_for_update` (oversell); payment captured *inside* `transaction.atomic` (charged customer, rolled-back order); success-rate division by zero on a valid empty import | Re-validates under the lock; capture moved to `transaction.on_commit` with an idempotency key and explicit compensation; guarded denominator |
+
+Everything else is byte-identical to upstream.
 
 ## Syncing with upstream
 
@@ -70,8 +115,10 @@ delimiters in fix 3. Agent bodies, descriptions, and tool lists are unmodified.
 git clone https://github.com/vijaythecoder/awesome-claude-agents.git /tmp/aca
 rsync -a --delete --exclude README.md /tmp/aca/agents/ .claude/agents/awesome-claude-agents/
 cp /tmp/aca/LICENSE .claude/agents/awesome-claude-agents/LICENSE
-# Then re-apply ALL THREE fixes documented above (duplicate vue name, five python
-# agent names, frontend-developer frontmatter block) and update the commit SHA here.
-# Verify before committing: every file must parse as `---` frontmatter with a
-# kebab-case `name`, and no two agents may share a name.
+# Then re-apply EVERY local change documented above — 3 frontmatter, the tool
+# constraint across 16 files, and 9 agent-body fixes — and update the commit SHA here.
+python -m unittest tests.test_vendored_agents   # must pass before committing
 ```
+
+A sync that skips the tool constraint silently re-grants `Write`/`Bash` to 16 agents, so
+treat a failing `test_vendored_agents` as a blocker rather than a lint nit.

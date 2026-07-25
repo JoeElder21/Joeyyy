@@ -242,6 +242,14 @@ class OrderService:
                 product = Product.objects.select_for_update().get(
                     id=item['product_id']
                 )
+                # Re-check under the lock. The earlier _validate_inventory() read was
+                # unlocked, so two concurrent buyers can both pass it for the last unit;
+                # decrementing without re-checking here commits negative stock.
+                if product.stock < item['quantity']:
+                    raise InsufficientStock(
+                        f"{product.name}: {product.stock} left, "
+                        f"{item['quantity']} requested"
+                    )
                 order_item = OrderItem(
                     order=order,
                     product=product,
@@ -256,26 +264,60 @@ class OrderService:
             
             OrderItem.objects.bulk_create(order_items)
             
-            # Process payment
-            payment_result = self._process_payment(order, user)
-            
-            if payment_result.success:
-                order.status = Order.Status.PAID
-                order.payment_id = payment_result.transaction_id
-                order.save()
-                
-                # Send confirmation email
-                self._send_order_confirmation(order)
-                
-                # Trigger order placed signal
-                order_placed.send(sender=self.__class__, order=order)
-            else:
-                raise PaymentError(payment_result.error_message)
+            # Capture payment only AFTER the transaction commits. Inside the atomic
+            # block, a later failure (save, signal receiver, email, or the commit
+            # itself) rolls back the order while the external charge remains, leaving
+            # a charged customer with no order and no compensation path.
+            transaction.on_commit(
+                lambda: self._capture_payment_and_finalize(order.pk, user.pk)
+            )
             
             return order
             
         except Exception as e:
             logger.error(f"Order creation failed: {str(e)}")
+            raise
+    
+    def _capture_payment_and_finalize(self, order_id: int, user_id: int) -> None:
+        """Capture payment after the order transaction has committed.
+
+        Runs outside the atomic block on purpose. Capturing inside it means any later
+        failure - a save, a signal receiver, the confirmation email, or the commit
+        itself - rolls back the order while the external charge stands, leaving a
+        charged customer with no order and no compensation path.
+
+        Must be idempotent: on_commit hooks and task retries are at-least-once, and the
+        gateway must not double-charge. Key the capture on the order id.
+        """
+        order = Order.objects.get(id=order_id)
+        user = User.objects.get(id=user_id)
+        
+        if order.status != Order.Status.PENDING:
+            return  # already captured by an earlier delivery of this hook
+        
+        payment_result = self._process_payment(order, user, idempotency_key=str(order.pk))
+        
+        if not payment_result.success:
+            order.status = Order.Status.PAYMENT_FAILED
+            order.save(update_fields=['status'])
+            self._release_inventory(order)
+            logger.error("Payment failed for order %s: %s", order.pk, payment_result.error_message)
+            return
+        
+        order.status = Order.Status.PAID
+        order.payment_id = payment_result.transaction_id
+        order.save(update_fields=['status', 'payment_id'])
+        
+        # Compensate explicitly if anything after capture fails: the money has moved,
+        # so the order must not be silently rolled back.
+        try:
+            self._send_order_confirmation(order)
+            order_placed.send(sender=self.__class__, order=order)
+        except Exception:
+            logger.exception(
+                "Post-payment step failed for paid order %s; payment %s stands and "
+                "needs reconciliation", order.pk, payment_result.transaction_id
+            )
             raise
     
     def _validate_inventory(self, cart_items: List[Dict]) -> None:
@@ -485,10 +527,14 @@ def send_import_notification(import_id: int):
     """Send email notification after import completion"""
     import_obj = DataImport.objects.get(id=import_id)
     
+    # An empty but valid import has zero of both, so guard the denominator rather
+    # than letting a successful import fail its own notification task.
+    total_rows = import_obj.processed_rows + import_obj.error_rows
+    success_rate = (import_obj.processed_rows / total_rows * 100) if total_rows else 100.0
+    
     context = {
         'import': import_obj,
-        'success_rate': (import_obj.processed_rows / 
-                        (import_obj.processed_rows + import_obj.error_rows) * 100)
+        'success_rate': success_rate,
     }
     
     html_message = render_to_string(
