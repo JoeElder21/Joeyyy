@@ -13,9 +13,11 @@ Output: docs/reports/AWESOME_COPILOT_SELECTION_REPORT.pdf (gitignored).
 import datetime as _dt
 import re
 import subprocess
-from xml.sax.saxutils import escape
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from report_gates import measure_test_suite, run_gate  # noqa: E402
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -95,73 +97,6 @@ def manifest_pin() -> str:
         return "unknown (manifest unreadable)"
     found = re.search(r"Pinned at commit:\*{0,2}\s*`([0-9a-f]{7,40})`", text)
     return found.group(1)[:8] if found else "unknown (no pin in manifest)"
-
-
-def run_gate(script: str) -> str:
-    """Run one validation script and report its real outcome.
-
-    These rows used to be hardcoded "Passed" / '"valid": true', so a report
-    regenerated while a gate was failing still published success -- in the one
-    document meant to serve as verification evidence.
-    """
-    path = Path(__file__).resolve().parents[1] / "scripts" / script
-    try:
-        completed = subprocess.run(
-            [sys.executable, str(path)],
-            cwd=path.parents[1],
-            capture_output=True, text=True, timeout=600, check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        return f"not measured at build time ({type(error).__name__})"
-
-    # Paragraph() parses its input as XML-ish markup, so a finding naming a real
-    # file such as docs/R&D<draft>.pdf would raise a parse error and destroy the
-    # very PDF meant to record the failure. Escape anything derived from output.
-    if completed.returncode != 0:
-        first = next(
-            (line.strip() for line in
-             (completed.stdout + completed.stderr).splitlines() if line.strip()),
-            "no output",
-        )
-        return escape(f"FAILED (exit {completed.returncode}) — {first[:110]}")
-
-    output = completed.stdout.strip()
-    if '"valid": true' in output:
-        checked = re.search(r'"(\w+_checked)":\s*(\d+)', output)
-        detail = (f" — {checked.group(2)} {checked.group(1).replace('_', ' ')}"
-                  if checked else "")
-        return escape(f'passed, "valid": true{detail}')
-    return escape(f"passed — {output.splitlines()[-1][:90]}") if output else "passed"
-
-
-def measure_test_suite() -> str:
-    """Run the suite and report what it actually did.
-
-    The count was previously hardcoded, so every regenerated report published a
-    stale figure the moment a test was added -- in a document whose whole
-    purpose is to be change evidence. Never fabricate a result here: if the
-    suite cannot run, say so.
-    """
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
-            cwd=Path(__file__).resolve().parents[1],
-            capture_output=True, text=True, timeout=900, check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        return f"not measured at build time ({type(error).__name__})"
-
-    output = completed.stderr + completed.stdout
-    ran = re.search(r"Ran (\d+) tests?", output)
-    if not ran:
-        return "not measured at build time (unrecognised output)"
-    count = ran.group(1)
-    if completed.returncode != 0:
-        failures = re.search(r"(FAILED \([^)]*\))", output)
-        return escape(f"{count} tests, {failures.group(1) if failures else 'FAILED'}")
-    skipped = re.search(r"skipped=(\d+)", output)
-    tail = f" ({skipped.group(1)} skipped)" if skipped else ""
-    return f"{count} tests, OK{tail}"
 
 
 def count_tracked_at(ref: str, pattern: str) -> int:

@@ -59,12 +59,17 @@ PATTERNS = {
         r"(?i)\btfe?[_-]?address\s*[:=]\s*[\"']?https?://"
         r"(?!app\.terraform\.io\b)(?!localhost\b)(?!127\.0\.0\.1\b)"
         r"(?!0\.0\.0\.0\b)"
+        # IPv6 loopback and unspecified, in the bracketed URL form.
+        r"(?!\[(?:::1|::)\])"
         r"(?!<)(?!your[-_.])(?!example\.)(?!\S*\.example\b)"
-        # A private installation is just as often an IPv4 literal or a
-        # single-label intranet name as a dotted FQDN. Requiring a dot and an
-        # alphabetic TLD missed both, which is the majority of the private
-        # cases this pattern exists for.
-        r"(?:\d{1,3}(?:\.\d{1,3}){3}"
+        # A private installation is just as often an IPv4 literal, a bracketed
+        # IPv6 literal, or a single-label intranet name as a dotted FQDN.
+        # Requiring a dot and an alphabetic TLD missed all three, which is the
+        # majority of the private cases this pattern exists for. IPv6 is the
+        # most likely form for a ULA-addressed internal Terraform Enterprise
+        # install, so it must be matched, not just the v4 literal.
+        r"(?:\[[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*\](?::\d+)?"
+        r"|\d{1,3}(?:\.\d{1,3}){3}"
         r"|[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}"
         r"|[A-Za-z0-9][A-Za-z0-9-]*)"
     ),

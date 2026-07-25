@@ -6,10 +6,15 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
+import os
 from pathlib import Path
+import re
+import sys
 import tempfile
 import tomllib
 import unittest
+from unittest import mock
 
 from scripts.agent_runtime import CHIEF, AuditLedger, load_roster
 from scripts.jeos_knowledge import GraphAccessDenied, JeosKnowledgeGraph
@@ -265,6 +270,70 @@ class McpMountRegistryTests(unittest.TestCase):
                         f"{name} must stay out of the JEOS brain, got {agent}",
                     )
 
+    def test_declared_env_covers_every_variable_the_mount_documents(self):
+        """The launcher passes a mount only the variables it declares in `env`,
+        so an undeclared one is silently dropped at launch.
+
+        Both places a mount names its variables are checked: the `-e NAME` flags
+        in its own command line, and the variable names written into its
+        `activation` note. A mount whose documentation promises a variable the
+        registry does not declare launches degraded -- either failing to
+        authenticate, or, worse, falling back to a server-side default and
+        quietly talking to the wrong host.
+        """
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        for mount in mounts:
+            declared = set(mount.get("env", []))
+            command = list(mount["command"])
+            forwarded = {
+                command[index + 1]
+                for index, token in enumerate(command)
+                if token == "-e" and index + 1 < len(command)
+                and "=" not in command[index + 1]
+            }
+            # Drop file paths first: docs/CIVIL3D_MCP_BUILDOUT.md is shaped
+            # exactly like a variable name and is not one.
+            prose = re.sub(r"\S*/\S*\.\w+", " ", mount.get("activation", ""))
+            documented = set(
+                re.findall(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b", prose)
+            )
+            with self.subTest(mount=mount["name"]):
+                self.assertLessEqual(
+                    forwarded, declared,
+                    f"{mount['name']} forwards {sorted(forwarded - declared)} "
+                    "with -e but does not declare it in env",
+                )
+                self.assertLessEqual(
+                    documented, declared,
+                    f"{mount['name']} documents "
+                    f"{sorted(documented - declared)} in its activation note "
+                    "but does not declare it in env",
+                )
+
+    def test_launcher_passes_every_declared_variable_through(self):
+        """The declaration above is only worth anything if the launcher honours
+        it, so assert the real allowlist behaviour rather than the config."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import trusted_launcher
+        finally:
+            sys.path.pop(0)
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        probes = {
+            name: f"probe-{name.lower()}"
+            for mount in mounts for name in mount.get("env", [])
+        }
+        with mock.patch.dict(os.environ, {**probes, "UNRELATED_SECRET": "no"},
+                             clear=False):
+            for mount in mounts:
+                passed = trusted_launcher.mount_env(mount)
+                with self.subTest(mount=mount["name"]):
+                    for name in mount.get("env", []):
+                        self.assertEqual(passed.get(name), probes[name])
+                    self.assertNotIn("UNRELATED_SECRET", passed)
+
     def test_mount_commands_pin_immutable_versions(self):
         """A mutable tag lets a mount's tool surface change with no commit,
         which defeats the point of the approved-mounts registry. Reference
@@ -328,6 +397,51 @@ class SelectionReportBaselineTests(unittest.TestCase):
             "silently becomes zero",
         )
         self.assertIn("PRE_INSTALL_BASELINE", body)
+
+    def test_a_passing_gate_still_names_what_it_could_not_probe(self):
+        """`"valid": true` means the registry is self-consistent, not that every
+        mount was reached. A mount whose offline probe could not run comes back
+        "unverified", and rendering that row as a bare "passed" publishes an
+        unrun check as a clean one."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            from report_gates import unverified_note
+        finally:
+            sys.path.pop(0)
+
+        stalled = json.dumps({
+            "mounts": [
+                {"name": "governance",
+                 "status": "unverified (mcp package not installed)"},
+                {"name": "github", "status": "registered"},
+                {"name": "filesystem",
+                 "status": "unverified (mcp package not installed)"},
+            ],
+            "valid": True,
+        })
+        note = unverified_note(stalled)
+        self.assertIn("governance", note)
+        self.assertIn("filesystem", note)
+        self.assertNotIn("github", note)
+
+        clean = json.dumps({
+            "mounts": [{"name": "github", "status": "registered"}],
+            "valid": True,
+        })
+        self.assertEqual(unverified_note(clean), "")
+
+        # Non-JSON output must not be read as "nothing unverified".
+        self.assertNotEqual(unverified_note("2 unverified mounts"), "")
+        self.assertEqual(unverified_note("all mounts reached"), "")
+
+    def test_gate_rows_come_from_the_importable_helper(self):
+        """The report builder runs its gates and writes the PDF at import time,
+        so the helpers must live outside it or they cannot be tested without
+        regenerating the document."""
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        self.assertIn("from report_gates import", source)
+        self.assertNotIn("def run_gate(", source)
 
 
 if __name__ == "__main__":

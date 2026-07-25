@@ -210,7 +210,11 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         name = "TFE" + "_ADDRESS"
         scheme = "https" + "://"
         for host in ("terraform.client-company.com", "tfe.someorg.internal.net",
-                     "10.20.30.40", "terraform-internal"):
+                     "10.20.30.40", "terraform-internal",
+                     # An internal install on a ULA or site-local IPv6 address
+                     # is written bracketed in a URL, and identifies the network
+                     # just as precisely as the v4 literal above.
+                     "[fd00::1234]:443", "[2001:db8:85a3::8a2e:370:7334]"):
             with self.subTest(host=host, expect="flagged"):
                 self.assertIsNotNone(
                     pattern.search(f'{name} = "{scheme}{host}"'))
@@ -218,6 +222,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             f'{name} = "{scheme}app.terraform.io"',
             f'{name} = "<your-tfe-host>"',
             f'{name} = "{scheme}localhost:8080"',
+            f'{name} = "{scheme}[::1]:8080"',
+            f'{name} = "{scheme}[::]"',
             name,
         ):
             with self.subTest(probe=probe, expect="clean"):
