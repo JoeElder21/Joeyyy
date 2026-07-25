@@ -170,9 +170,7 @@ def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is None or listing.returncode != 0:
         return frozenset()
-    return frozenset(
-        name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE
-    )
+    return frozenset(name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE)
 
 
 def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
@@ -197,9 +195,7 @@ def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
     return frozenset(name for _mode, name in _parse_ls_files(listing.stdout))
 
 
-def is_vendored(
-    path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None
-) -> bool:
+def is_vendored(path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None) -> bool:
     """Report whether ``path`` lies inside a vendored third-party submodule.
 
     Submodules record only a gitlink commit here, so their file contents are
@@ -253,9 +249,7 @@ def repository_files(root: Path = ROOT) -> list[Path]:
         # contents never reach this list anyway — `git ls-files` does not
         # recurse into a submodule's own index.
         return [
-            root / name
-            for mode, name in _parse_ls_files(listing.stdout)
-            if mode != GITLINK_MODE
+            root / name for mode, name in _parse_ls_files(listing.stdout) if mode != GITLINK_MODE
         ]
     gitlinks = gitlink_paths(root)
     return [
@@ -319,16 +313,12 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             findings.append(f"{relative}: unreadable ({exc})")
             continue
         if b"\0" in raw:
-            findings.append(
-                f"{relative}: binary file is not allowed in this public source tree"
-            )
+            findings.append(f"{relative}: binary file is not allowed in this public source tree")
             continue
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
-            findings.append(
-                f"{relative}: non-UTF-8 file is not allowed in this public source tree"
-            )
+            findings.append(f"{relative}: non-UTF-8 file is not allowed in this public source tree")
             continue
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(
