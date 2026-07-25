@@ -7,9 +7,7 @@
   "scripts": {
     "gate": "node src/gate.mjs",
     "gate:auth": "node src/gate.mjs --step 2",
-    "gate:dm": "node src/gate.mjs --step 3",
-    "gate:translate": "node src/gate.mjs --step 4",
-    "gate:properties": "node src/gate.mjs --step 5"
+    "gate:dm": "node src/gate.mjs --step 3"
   },
   "engines": {
     "node": ">=18"

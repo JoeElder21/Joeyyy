@@ -24,14 +24,19 @@ are absent, before any network call.
 npm install
 npm run gate            # steps 2..5 in order, stops on first failure
 npm run gate:auth       # step 2 only: two-legged token
-npm run gate:dm         # step 3 only: hub/project enumeration (read-only)
-npm run gate:translate  # step 4 only: OSS upload + Model Derivative translate
-npm run gate:properties # step 5 only: element properties vs generator ground truth
+npm run gate:dm         # step 3 only: explicitly named sandbox hub (read-only)
 ```
 
 Evidence for each run is written to `evidence/gate-<timestamp>.json` (gitignored — hub, project,
 and file names are private data and must not reach this public repository). Tokens are never
-written; only a SHA-256 prefix appears in evidence.
+written; only a SHA-256 prefix appears in evidence. Steps 4 and 5 are inseparable: the full gate
+uploads only the checked-in synthetic DXF to a fresh transient bucket and deletes that object and
+bucket before reporting success. The runner rejects environment overrides for a model, bucket, or
+URN so it cannot be redirected at project data.
+
+Step 3 requires an explicit task-level authorization for a personally owned sandbox hub and both
+`APS_SANDBOX_HUB_ID` and a short-lived three-legged `APS_SANDBOX_ACCESS_TOKEN`. It reads only that
+named hub and its project list; it never discovers or enumerates account hubs with an app token.
 
 ## Test model
 
@@ -48,6 +53,6 @@ step 5 spot-checks the properties APS returns against this same ground truth.
 ## Scope boundaries
 
 Two-legged auth with `data:read`/`viewables:read`; step 4 additionally uses
-`data:write data:create bucket:create bucket:read` against a transient sandbox OSS bucket only.
-No employer/client ACC hub is ever touched by this harness; hub access requires explicit
-task-level authorization per `docs/APS_SDK_BUILDOUT.md`.
+`data:write data:create bucket:create bucket:read bucket:delete` against a fresh transient sandbox
+OSS bucket only. No employer/client ACC hub is ever touched by this harness; hub access requires
+explicit task-level authorization per `docs/APS_SDK_BUILDOUT.md`.
