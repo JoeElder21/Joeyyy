@@ -647,6 +647,8 @@ What was fixed this round is bounded to: the fail-open the previous round create
 
 The generalisation is sharper than the one recorded earlier in this document. It is not only that a configured tool differs from an executed one — it is that **a checker which degrades silently reports success in the same shape as a checker that passed**, so the failure is invisible precisely where verification was supposed to be strongest. A degradation path that returns an empty result set is the dangerous form; one that raises, or exits non-zero, is not.
 
+**The fix for this finding broke CI, and the repair is the same lesson a third time.** Installing the validators made the schema check real; the failure was elsewhere — a test written in the same commit imported PyYAML, which is in no live requirements manifest. The obvious repair was `skipUnless(yaml)`, and that is exactly the pattern this round removed from three CI steps: a test that skips itself reports the same green as a test that passed. Asserted per-block against the file text instead, with no new dependency, and mutation-tested by reintroducing the round-11 half-measure to confirm the assertion actually fails on it. The previous version of that test counted `required: true` across the whole file, which is why a required box in the wrong group had satisfied it.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

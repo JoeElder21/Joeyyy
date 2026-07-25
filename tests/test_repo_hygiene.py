@@ -221,18 +221,42 @@ class ContributorSurfaceTests(unittest.TestCase):
         # established neither branch: a submitter could tick that box alone and
         # leave the scan and every safety result blank. Applicability has to be
         # a separate required answer, or the attestations are unenforceable.
-        import yaml
-
-        form = yaml.safe_load(
-            (ROOT / ".github" / "ISSUE_TEMPLATE" / "absorption-candidate.yml").read_text(
-                encoding="utf-8"
-            )
+        #
+        # Asserted per-block rather than by parsing YAML: PyYAML is not in any
+        # live requirements manifest, and the alternatives were both worse than
+        # this. Adding a dependency for one assertion is heavy; guarding the
+        # test with `skipUnless(yaml)` would be the silent-degradation pattern
+        # this very round was spent removing from three CI steps -- a test that
+        # skips itself reports the same green as a test that passed.
+        #
+        # Block-scoped is also what the old version lacked: it counted
+        # `required: true` across the whole file, which is why a required box
+        # in the wrong group satisfied it.
+        text = (ROOT / ".github" / "ISSUE_TEMPLATE" / "absorption-candidate.yml").read_text(
+            encoding="utf-8"
         )
-        applies = [b for b in form["body"] if b.get("id") == "agent-scan-applies"]
-        self.assertTrue(applies, "no explicit scan-applicability question")
-        self.assertEqual(applies[0]["type"], "dropdown")
-        self.assertTrue(applies[0].get("validations", {}).get("required"))
-        self.assertEqual(len(applies[0]["attributes"]["options"]), 2)
+        blocks = {}
+        for chunk in text.split("\n  - type: "):
+            for line in chunk.splitlines():
+                if line.strip().startswith("id: "):
+                    blocks[line.split("id: ", 1)[1].strip()] = chunk
+                    break
+
+        applies = blocks.get("agent-scan-applies")
+        self.assertIsNotNone(applies, "no explicit scan-applicability question")
+        self.assertTrue(applies.startswith("dropdown"), "applicability must be a dropdown")
+        self.assertIn("required: true", applies)
+        # Exactly two branches: applies, or does not. An ambiguous third option
+        # would reintroduce the "either ... or" problem.
+        self.assertEqual(applies.count('\n        - "'), 2)
+
+        attestations = blocks.get("agent-scan")
+        self.assertIsNotNone(attestations)
+        self.assertNotIn(
+            "required: true",
+            attestations,
+            "attestations must not carry the applicability decision themselves",
+        )
 
     def test_optimization_record_states_findings_and_decision_outcomes(self):
         text = OPTIMIZATION_RECORD.read_text(encoding="utf-8")
