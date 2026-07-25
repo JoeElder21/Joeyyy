@@ -567,6 +567,47 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # It must run at generation time, not merely be defined.
         self.assertIn("raise SystemExit", source)
 
+    def test_manifest_parsing_accepts_any_vendored_skill(self):
+        """Reconciliation must not abort on a valid intake.
+
+        Matching only the `suggest-awesome-github-copilot-*` family meant that
+        vendoring any other skill -- the ordinary outcome of a discovery pass --
+        left it unparsed, so reconciliation saw a tracked skill the manifest
+        "did not list" and refused to generate the report."""
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        bullet = re.search(r'skills = re\.findall\(\s*r"([^"]+)"', source)
+        self.assertIsNotNone(bullet, "skill bullet pattern not found")
+        pattern = re.compile(bullet.group(1), re.MULTILINE)
+
+        manifest = (ROOT / ".github" / "AWESOME-COPILOT.md").read_text(
+            encoding="utf-8")
+        self.assertEqual(
+            len(pattern.findall(manifest)), 3,
+            "the three discovery skills must still parse")
+        self.assertIn(
+            "gh-cli", pattern.findall(manifest + "\n- `gh-cli/`\n"),
+            "a future vendored skill must parse too, or reconciliation "
+            "aborts generation on a valid intake")
+
+    def test_planner_agents_scope_reads_to_one_brain(self):
+        """These agents' output is returned for persistence, so anything they
+        read can be copied into a durable artifact -- which makes an unscoped
+        read the same leak as an unscoped write, one step later. AGENTS.md
+        makes Agent 007 the sole cross-brain agent, and neither of these is
+        that."""
+        for name in ("task-planner", "task-researcher"):
+            body = (ROOT / ".github" / "agents" / f"{name}.agent.md").read_text(
+                encoding="utf-8")
+            with self.subTest(agent=name):
+                self.assertNotIn(
+                    "throughout the entire workspace", body,
+                    "an unscoped read grant lets this agent ingest the other "
+                    "brain's records into a persisted artifact")
+                self.assertNotIn("across the entire workspace", body)
+                self.assertIn("brain", body.lower())
+                self.assertIn("audit/*.jsonl", body)
+
     def test_gate_rows_come_from_the_importable_helper(self):
         """The report builder runs its gates and writes the PDF at import time,
         so the helpers must live outside it or they cannot be tested without

@@ -8,6 +8,7 @@ from scripts.privacy_guard import (
     scan_paths,
     PLACEHOLDER_LITERALS,
     applicable_patterns,
+    fold_block_scalars,
     repository_files,
     scan_repository,
     strip_known_placeholders,
@@ -290,6 +291,58 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         for pattern_name, probe in cases:
             with self.subTest(pattern=pattern_name, probe=probe):
                 self.assertIsNotNone(PATTERNS[pattern_name].search(probe))
+
+    def test_single_dot_tenant_domains_are_detected(self):
+        """A verified custom Azure tenant domain is an ordinary one-dot company
+        domain. Requiring two dots caught only the *.onmicrosoft.com default and
+        missed every custom one, in both the assignment and JSON forms."""
+        pattern = PATTERNS["connector identifier"]
+        for value in ("northside-utilities.com", "acme.co.uk",
+                      "acme-eng.onmicrosoft.com"):
+            for probe in (f'AZURE_TENANT_ID = "{value}"',
+                          '{"AZURE_TENANT_ID": "%s"}' % value):
+                with self.subTest(value=value, probe=probe, expect="flagged"):
+                    self.assertIsNotNone(pattern.search(probe))
+        # Reserved placeholder domains stay excused; a vendor's fictional
+        # company name is deliberately NOT one of them, because excusing it
+        # would excuse the exact shape this pattern exists to catch.
+        for value in ("example.com", "your-tenant.com", "<your-tenant>",
+                      "tenant.example"):
+            with self.subTest(value=value, expect="clean"):
+                self.assertIsNone(
+                    pattern.search(f'AZURE_TENANT_ID = "{value}"'))
+
+    def test_yaml_block_scalars_are_folded_before_scanning(self):
+        """Every value pattern reads a key and its value from one line, so a
+        YAML block scalar split them apart and the value branch saw only the
+        "|-" marker -- while any YAML parser reconstructs the credential."""
+        secret = "Xy7Q" + "secretValue0192"
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        cases = (
+            ("credential assignment", f"AZURE_CLIENT_SECRET: |-\n  {secret}\n"),
+            ("credential assignment", "TFE_TOKEN: >-\n  atlasv1.abcdefghijklmnop\n"),
+            ("connector identifier", f"AZURE_TENANT_ID: |\n  {guid}\n"),
+            # Folded across multiple indented lines, as YAML allows.
+            ("credential assignment",
+             "TFE_TOKEN: |-\n  atlasv1.\n  abcdefghijklmnop\n"),
+        )
+        for label, probe in cases:
+            with self.subTest(label=label, probe=probe):
+                self.assertIsNone(
+                    PATTERNS[label].search(probe),
+                    "probe must be one the raw patterns genuinely miss, "
+                    "otherwise this asserts nothing about folding",
+                )
+                self.assertIsNotNone(
+                    PATTERNS[label].search(fold_block_scalars(probe)))
+
+        # An ordinary prose block must not become a finding.
+        prose = "description: |\n  Ordinary prose describing the mount.\n"
+        folded = fold_block_scalars(prose)
+        self.assertEqual(
+            [name for name, pattern in PATTERNS.items() if pattern.search(folded)],
+            [],
+        )
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.

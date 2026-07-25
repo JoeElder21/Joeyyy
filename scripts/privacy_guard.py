@@ -98,10 +98,16 @@ PATTERNS = {
         # configuration is stored -- bypassed the guard entirely.
         r"[\"']?\s*[:=]\s*[\"']?"
         # GUID, opaque token, or -- for Azure -- the tenant *domain* form,
-        # which is neither and was therefore invisible.
+        # which is neither and was therefore invisible. The domain branch
+        # accepts a single dot: a verified custom tenant domain is an ordinary
+        # one-dot company domain, and requiring two dots caught only the
+        # *.onmicrosoft.com default while missing every custom one. Only the
+        # RFC-reserved placeholder domains are excused; a vendor's fictional
+        # company name is not one of them, and treating it as such would
+        # excuse the exact form this pattern exists to catch.
         r"(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-        r"|(?!your[-_.])(?!<)(?!example\.)"
-        r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+\.[A-Za-z]{2,}"
+        r"|(?!your[-_.])(?!<)(?!example\.)(?!\S*\.example\b)"
+        r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
         r"|[A-Za-z0-9_-]{16,})[\"']?"
     ),
     # Credential-bearing names. A Terraform or GitHub token carries no
@@ -193,6 +199,57 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
 # A placeholder only counts when it stands as a complete lexical unit. These
 # are the characters that would make it a prefix or suffix of something longer.
 _TOKEN_CHAR = r"[\w.@:/+-]"
+
+
+_BLOCK_SCALAR_HEADER = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*"
+    r"[|>][+-]?\d*\s*(?:#.*)?$"
+)
+
+
+def fold_block_scalars(text: str) -> str:
+    """Rewrite YAML block scalars onto their key line before scanning.
+
+    Every value pattern reads a key and its value from one line. A YAML block
+    scalar puts them on different lines --
+
+        AZURE_CLIENT_SECRET: |-
+          <the actual secret>
+
+    -- so the value branch saw only the "|-" marker and the file scanned clean,
+    even though any YAML parser reconstructs the credential. Folding is done
+    here, once, rather than by teaching every pattern to span lines.
+
+    The folded copy is appended rather than substituted, so line-oriented
+    checks elsewhere still see the original text.
+    """
+    if "|" not in text and ">" not in text:
+        return text
+    lines = text.splitlines()
+    folded: list[str] = []
+    index = 0
+    while index < len(lines):
+        header = _BLOCK_SCALAR_HEADER.match(lines[index])
+        if not header:
+            index += 1
+            continue
+        base = len(header.group("indent"))
+        body: list[str] = []
+        cursor = index + 1
+        while cursor < len(lines):
+            line = lines[cursor]
+            if not line.strip():
+                body.append("")
+                cursor += 1
+                continue
+            if len(line) - len(line.lstrip()) <= base:
+                break
+            body.append(line.strip())
+            cursor += 1
+        if body:
+            folded.append(f"{header.group('key')}: {' '.join(body).strip()}")
+        index = cursor
+    return text + "\n" + "\n".join(folded) if folded else text
 
 
 def strip_known_placeholders(relative: Path, text: str) -> str:
@@ -302,7 +359,7 @@ def _scan_files(
             continue
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
-        scannable = strip_known_placeholders(relative, text)
+        scannable = strip_known_placeholders(relative, fold_block_scalars(text))
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")

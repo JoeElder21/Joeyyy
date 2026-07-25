@@ -115,7 +115,12 @@ def manifest_names() -> dict[str, set[str]]:
     rows = [line for line in text.splitlines() if line.lstrip().startswith("|")]
     found = re.findall(
         r"`([A-Za-z0-9._-]+(?:\.instructions\.md|\.agent\.md))`", "\n".join(rows))
-    skills = re.findall(r"^- `(suggest-awesome-github-copilot-[a-z-]+)/`",
+    # Every skill bullet, not one hard-coded family. Matching only the
+    # `suggest-awesome-github-copilot-*` discovery skills meant that vendoring
+    # any other skill -- the ordinary outcome of a discovery pass -- left it
+    # unparsed, so reconciliation saw a tracked skill the manifest "did not
+    # list" and aborted generation on a perfectly valid intake.
+    skills = re.findall(r"^\s*[-*] `([A-Za-z0-9][A-Za-z0-9._-]*)/`",
                         text, re.MULTILINE)
     return {
         "instructions": {n for n in found if n.endswith(".instructions.md")},
