@@ -739,7 +739,20 @@ class PolicyEnforcementPoint:
             errors.append(
                 f"lease status {status!r} is not active; a closed lease authorizes nothing"
             )
-        if request.owner_brain and lease.get("owner_brain") != request.owner_brain:
+        # Required on mutations, for the chief too. `_brain_lock` exempts the
+        # chief because it is the sole cross-brain agent, which left the brain
+        # comparison here and in `_packet_scope_errors` both conditional on a
+        # field the chief could simply omit. A schema-valid JEOS handoff could
+        # then be paired with a genuine APEX lease for the same `resource_id`
+        # and authorize an APEX write -- cross-brain leakage through the one
+        # agent permitted to see both sides, which is exactly the actor the
+        # isolation rules exist to constrain.
+        if not request.owner_brain:
+            errors.append(
+                "mutation declares no owner_brain; being the cross-brain agent permits "
+                "acting for either brain, not for an unstated one"
+            )
+        elif lease.get("owner_brain") != request.owner_brain:
             errors.append(
                 f"lease is scoped to {lease.get('owner_brain')!r}, request declares "
                 f"{request.owner_brain!r}"
@@ -842,7 +855,15 @@ class PolicyEnforcementPoint:
                     f"packet addresses {addressee!r}, not the requesting agent {request.agent!r}"
                 )
         brain = packet.get("owner_brain")
-        if brain and request.owner_brain and brain != request.owner_brain:
+        if brain and request.mutating and not request.owner_brain:
+            # The same omission, from the packet side. A mutating request that
+            # states no brain cannot be checked against the packet's, so the
+            # comparison silently passed on the one path where it matters most.
+            errors.append(
+                f"packet is scoped to {brain!r} but the mutating request declares no "
+                "owner_brain, so the two cannot be matched"
+            )
+        elif brain and request.owner_brain and brain != request.owner_brain:
             errors.append(
                 f"packet owner_brain {brain!r} does not match the request's {request.owner_brain!r}"
             )

@@ -982,6 +982,41 @@ class ScopeTests(unittest.TestCase):
         )
         self.assertTrue(any("addresses" in r for r in reasons), reasons)
 
+    def test_a_chief_mutation_must_state_its_brain(self):
+        # `_brain_lock` exempts the chief as the sole cross-brain agent, which
+        # left both brain comparisons conditional on a field the chief could
+        # omit. A JEOS handoff paired with a genuine APEX lease for the same
+        # resource_id then authorized an APEX write -- cross-brain leakage
+        # through the one agent permitted to see both sides.
+        reasons = self.pep._writer_lease(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain=None,
+                mutating=True,
+                lease=self.lease,
+                resource_id="campaign-alpha",
+                now=NOW,
+            )
+        )
+        self.assertTrue(any("no owner_brain" in r for r in reasons), reasons)
+
+    def test_an_opposite_brain_packet_cannot_ride_an_unstated_brain(self):
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain=None,
+                mutating=True,
+                packet={"agent": SPECIALIST, "owner_brain": "JEOS", "writer_agent": CHIEF},
+                lease=self.lease,
+                resource_id="campaign-alpha",
+            )
+        )
+        self.assertTrue(any("cannot be matched" in r for r in reasons), reasons)
+
     def test_the_chief_still_reaches_connectors(self):
         # The sole cross-brain agent performs connector work on the corps'
         # behalf; denying it too would be an outage, not a control.

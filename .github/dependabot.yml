@@ -12,7 +12,15 @@ version: 2
 # the largest diff and the least review time upstream.
 updates:
   - package-ecosystem: pip
-    directory: /
+    # Both directories. The root holds only `requirements.txt`, which does not
+    # include the tiered manifests -- so watching `/` alone left deepeval,
+    # pytest, mcp, and anthropic outside the update mechanism entirely while
+    # this file claimed Python coverage. Those are the manifests CI and the
+    # workstation actually install, which is the same gap the dependency scan
+    # had before it was pointed at them.
+    directories:
+      - /
+      - /requirements
     schedule:
       interval: weekly
       day: monday

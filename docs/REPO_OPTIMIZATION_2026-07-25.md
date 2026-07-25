@@ -555,6 +555,17 @@ Adding two entries would have fixed the instance and left the class intact, whic
 
 **A formatting hook rewrote a dated record, and the damage was already committed.** `trailing-whitespace` stripped the hard line breaks from `docs/ROSTER_MIGRATION_2026-07-23.md`, collapsing its Date / Governor / verified-parent block into one rendered paragraph — in a repository whose own rule is that dated records are append-only in spirit. It also flattened the empty numbered slots (`1. ` → `1.`) that are the fill-in structure of three templates, and reflowed an unrelated master-plan document this change set had no business touching. All restored; `--markdown-linebreak-ext=md` handles hard breaks and `templates/` is excluded, because that flag only preserves the *double* trailing space of a break, not the single one an empty list slot needs.
 
+### Automated review, ninth pass — two findings, two fixed
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Dependabot watched only the repository root | **Correct** | The root holds `requirements.txt` alone, which does not include the tiered manifests — so deepeval, pytest, mcp, and anthropic sat outside the update mechanism while the file claimed Python coverage. `/requirements` added. Same shape as the dependency-scan gap two rounds earlier: a mechanism pointed at a file that is not the one anyone installs. |
+| Chief mutations could omit `owner_brain` | **Correct** | `_brain_lock` exempts the chief as the sole cross-brain agent, which left the brain comparison in both `_writer_lease` and `_packet_scope_errors` conditional on a field the chief could simply leave out. A schema-valid JEOS handoff paired with a genuine APEX lease for the same `resource_id` then authorized an APEX write — cross-brain leakage through the one agent permitted to see both sides, which is precisely the actor the isolation rules exist to constrain. Required on mutations now, and matched across packet, lease, and request. |
+
+**The volume moved.** Nine rounds: 9, 8, 7, 12, 6, 3, 4, 10, 2 findings. This round produced no P1s and both findings were narrow. That is the first round that looks like convergence rather than a fresh seam, and it is worth recording alongside the two rounds where a fix introduced the next round's defect — the loop has been productive throughout, but "still finding things" and "still finding *serious* things" stopped being the same statement here.
+
+**An exemption is not a hole until someone omits the field.** The chief's cross-brain exemption was correct in `_brain_lock` and wrong everywhere it silently propagated. Being permitted to act for either brain is not the same as being permitted to act for an unstated one — a distinction that reads as obvious once written down and was invisible while the field was merely optional.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
