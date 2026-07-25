@@ -482,18 +482,57 @@ class MountVerifierTests(unittest.TestCase):
             "main() must call the bounded probe, not the unbounded one",
         )
 
-        # Exercised, not merely asserted about: a command that never responds
-        # must raise rather than hang, or this test proves only that a string
-        # appears in the source.
-        original = module.PROBE_TIMEOUT_SECONDS
+        # Exercised, not merely asserted about: a probe that never responds must
+        # raise rather than hang, or this test proves only that a string appears
+        # in the source.
+        #
+        # The inner probe is STUBBED, because the real one imports the optional
+        # `mcp` package. Calling it made `python -m unittest discover -s tests`
+        # -- the repository's mandatory command -- error outright in any
+        # checkout without the runtime-contracts install, which the documented
+        # pre-commit path does not perform. This suite's whole contract is that
+        # it runs on the standard library alone.
+        #
+        # Stubbed rather than skipped, deliberately. A `skipUnless(mcp)` would
+        # report the same green as a passing test on exactly the machines where
+        # the dependency is missing, which is the silent-degradation shape this
+        # change set has removed from three CI gates. The timeout lives in
+        # `_probe_with_timeout`, so wrapping a sleeping coroutine tests the real
+        # thing without the dependency.
+        async def _never_answers(_command):
+            await asyncio.sleep(60)
+
+        original_probe = module._probe
+        original_timeout = module.PROBE_TIMEOUT_SECONDS
+        module._probe = _never_answers
         module.PROBE_TIMEOUT_SECONDS = 1
         try:
             with self.assertRaises(TimeoutError):
-                asyncio.run(
-                    module._probe_with_timeout(["python", "-c", "import time; time.sleep(60)"])
-                )
+                asyncio.run(module._probe_with_timeout(["irrelevant"]))
         finally:
-            module.PROBE_TIMEOUT_SECONDS = original
+            module._probe = original_probe
+            module.PROBE_TIMEOUT_SECONDS = original_timeout
+
+    def test_the_unit_suite_needs_no_optional_runtime(self):
+        # The suite's stated contract, asserted rather than assumed. A test that
+        # imports an optional package turns the mandatory command into one that
+        # errors on a fresh checkout -- which is how the timeout test above
+        # started life.
+        import importlib
+        import unittest.mock
+
+        real_import = __import__
+
+        def blocked(name, *args, **kwargs):
+            if name == "mcp" or name.startswith("mcp."):
+                raise ModuleNotFoundError("No module named 'mcp'")
+            return real_import(name, *args, **kwargs)
+
+        module = importlib.import_module("scripts.verify_mcp_mounts")
+        with unittest.mock.patch("builtins.__import__", blocked):
+            # The verifier itself must still import and report, degraded.
+            self.assertTrue(callable(module.main))
+            self.assertEqual(module._verdict({"expected_tools": ["a"]}, ["a"]), "verified")
 
     def test_a_misspelled_flag_is_rejected_rather_than_ignored(self):
         # `"--strict" in argv` meant `--strcit` in a workflow file silently ran

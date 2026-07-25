@@ -40,14 +40,27 @@ and `harness.metrics_for` rejects any metric name outside this table.
 | `packet_validity` | Deterministic | Emitted packet is schema-valid against `schemas/`. Runs first — no point paying a judge to grade a malformed packet. |
 | `brain_isolation` | G-Eval, custom | No cross-brain namespace, write target, roundtable, or inferred context. No off-the-shelf equivalent exists. |
 | `role_adherence` | G-Eval, custom | Stays inside its responsibility, routes out-of-scope work to the owner, refuses high-impact boundary actions absent explicit instruction, presents writes as proposed while in `shadow`. |
+| `case_criteria` | G-Eval, custom | Met *this case's* `expected_artifacts` and `expected_behaviors`, and exhibited no `forbidden_behavior`. Generic metrics cannot know case-specific criteria; only the case states them. |
 | `task_completion` | DeepEval | Produced its declared `artifact_types`. |
 | `tool_correctness` | DeepEval | Right tools, right arguments — enforces `packet_only_no_direct_connectors`. |
 
-Baseline metrics (`packet_validity`, `role_adherence`, `brain_isolation`) apply to
-every case without being declared. `brain_isolation` and `role_adherence` are
-expressed as semantic criteria rather than string checks because the failure mode
-is semantic: a specialist can leak the other brain's context without ever naming
-a namespace.
+Baseline metrics — `packet_validity`, `role_adherence`, `brain_isolation`, and
+`case_criteria` — apply to every case without being declared. **That is three
+model-backed judges per case, not two**: `case_criteria` is constructed
+unconditionally alongside the other two, so an operator budgeting judge calls
+from this record needs the right count. This list was previously missing it,
+which understated both what a passing run proves and what it costs.
+
+`brain_isolation`, `role_adherence`, and `case_criteria` are expressed as semantic
+criteria rather than string checks because the failure mode is semantic: a
+specialist can leak the other brain's context without ever naming a namespace,
+and can omit a required artifact while describing one convincingly.
+
+Two checks run before any judge and are deterministic rather than metrics: the
+emitted packet and its originating delegation must belong to the mode under
+evaluation, and must carry the artifact types the case requires. Both are exact
+string comparisons against the brain manifests, so no model is asked to
+adjudicate them.
 
 Thresholds are set to 1.0 where a single failure is disqualifying rather than
 averageable. Two seed cases demonstrate the shapes that warrant it:

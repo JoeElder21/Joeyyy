@@ -74,6 +74,37 @@ def run_id(stamp: str | None) -> str:
         )
     if cleaned in {".", ".."} or cleaned.startswith("."):
         raise UnsafeRun(f"--run-id {stamp!r} is not a usable directory name")
+    # Windows filename rules, enforced on every platform.
+    #
+    # The natural identifier for a run is a timestamp, and `2026-07-25T12:00`
+    # contains a colon -- legal on Linux, forbidden on Windows. It passed every
+    # check above and then raised an uncaught `OSError` from `mkdir()` on the
+    # documented workstation: a crash instead of evidence or a stated refusal.
+    #
+    # Applied everywhere rather than gated on `sys.platform`, because a run id
+    # that works on one machine and crashes on another is worse than one
+    # refused consistently -- and these results are meant to be portable
+    # evidence, not per-host artifacts. The refusal names the offending
+    # character so the fix is obvious.
+    invalid = {character for character in cleaned if character in '<>:"|?*'}
+    if invalid or any(ord(character) < 32 for character in cleaned):
+        raise UnsafeRun(
+            f"--run-id {stamp!r} contains {''.join(sorted(invalid)) or 'a control character'}, "
+            "which cannot be a directory name on Windows. Use hyphens: "
+            "2026-07-25T12-00 rather than 2026-07-25T12:00."
+        )
+    # Trailing dot only: Windows also forbids a trailing space, but `.strip()`
+    # above has already removed it, so checking for one here would be a branch
+    # that can never run.
+    if cleaned.endswith("."):
+        raise UnsafeRun(f"--run-id {stamp!r} may not end in a dot on Windows")
+    # `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9` are device names
+    # at any extension, so `NUL.json` is still the null device.
+    reserved = {"con", "prn", "aux", "nul"}
+    reserved |= {f"com{digit}" for digit in range(1, 10)}
+    reserved |= {f"lpt{digit}" for digit in range(1, 10)}
+    if cleaned.split(".", 1)[0].lower() in reserved:
+        raise UnsafeRun(f"--run-id {stamp!r} is a reserved Windows device name")
     return cleaned
 
 

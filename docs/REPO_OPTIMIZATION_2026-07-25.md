@@ -803,6 +803,24 @@ That is the second time an exemption placed before a check has produced a fail-o
 
 **The intake finding completes an arc worth stating.** Three consecutive rounds touched that form: first the gates were optional and unenforceable; then applicability became its own required question, which was the pattern the absorption form already used; then that very split turned out to be the defect, because the two answers could contradict. The correct shape was neither optional nor split — it was *one* required answer that carries the attestation. Both forms now satisfy a shared test asserting that every required dropdown option states an outcome rather than deferring to boxes elsewhere.
 
+### Automated review, twenty-first pass — three findings, three fixed
+
+**The most consequential was a test of mine that broke the repository's own mandatory command.** `tests/test_repo_hygiene.py` exercised the mount-probe timeout by calling the real `_probe()`, which imports the optional `mcp` package. In any checkout without `requirements/runtime-contracts.txt` installed — which the documented `pre-commit` path does not install — `python -m unittest discover -s tests` **errored outright** rather than running. This suite's stated contract is that it runs on the standard library alone, and the test enforcing one gate had quietly broken that contract for every other gate.
+
+Fixed by stubbing the inner probe with a sleeping coroutine, **not** by skipping. A `skipUnless(mcp)` would report the same green as a passing test on exactly the machines missing the dependency — the silent-degradation shape this change set removed from three CI gates. The timeout lives in `_probe_with_timeout`, so wrapping a sleeping coroutine exercises the real mechanism with no dependency. A companion test now asserts the dependency-free property directly, so the next such test fails on arrival.
+
+**Verifying this finding required getting the simulation right, and the first attempt was wrong.** Blocking `mcp` by patching `builtins.__import__` also produced an unrelated error in `test_native_runtime`, which looked like a second instance of the same defect. It was not: that class guards itself with `skipUnless(_available("mcp"))`, and `_available` uses `importlib.util.find_spec`, which does not route through `__import__`. Re-run with a `meta_path` finder that hides the module from both, the suite is clean — 0 errors, 26 skipped. **A faulty reproduction can manufacture a finding as easily as it can miss one**, and this one was two lines from being reported as real.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Timeout test required the optional `mcp` package | **Correct — mine, three rounds old** | Inner probe stubbed; dependency-free property now asserted on its own. |
+| Windows-invalid run identifiers crashed `mkdir()` | **Correct** | `2026-07-25T12:00` — the natural timestamp id — is legal on Linux and forbidden on Windows, so it passed validation and raised an uncaught `OSError` on the documented workstation. Reserved characters, control characters, trailing dots, and device names (`NUL.json` is still the null device) are now refused with a stated reason, on every platform rather than gated on `sys.platform`: an id that works on one machine and crashes on another is worse than one refused consistently. |
+| `case_criteria` missing from the documented metric table | **Correct** | It is a baseline metric constructing a G-Eval judge for every case, so the record understated the judge count — **three model-backed judges per case, not two** — and therefore what a passing run proves and what it costs. |
+
+**Mutation testing again found more than the review did, and this time it found gaps in my own tests.** Two of the three fixes were initially reported as MISSED: there was no test at all for Windows-invalid run identifiers (I had verified it by hand in a shell and not written one), and the metric-table test checked for the metric name *anywhere in the document*, so renaming the table row still passed — the name also appears in the prose beneath it. **A test satisfied by the paragraph describing the table is not a test of the table.** Both strengthened; all three mutations now caught.
+
+That is the second consecutive round in which chasing a missed mutation produced a real finding rather than confirming a redundant fix. The rule is now explicit in the working checklist: **a missed mutation is a missing test, and must be investigated rather than noted.**
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

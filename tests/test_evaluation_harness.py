@@ -504,5 +504,87 @@ class CaseArtifactTests(unittest.TestCase):
                 )
 
 
+class RecordAgreesWithImplementationTests(unittest.TestCase):
+    """The metric record is tested, because an operator budgets from it."""
+
+    RECORD = ROOT / "docs" / "EVALUATION_HARNESS.md"
+
+    def test_every_contract_metric_appears_in_the_documented_table(self):
+        # `case_criteria` was a baseline metric constructing a G-Eval judge for
+        # every case, and the record's table omitted it -- so the document
+        # understated the number of model-backed judges, what a passing run
+        # proves, and what it costs to run.
+        # Asserted against the TABLE ROW, not the file. The first version
+        # checked for the metric name anywhere in the document and still passed
+        # when the table row was renamed, because the name also appears in the
+        # prose beneath it -- a test satisfied by the paragraph that describes
+        # the table rather than by the table. Found by mutation-testing it.
+        text = self.RECORD.read_text(encoding="utf-8")
+        rows = [line for line in text.splitlines() if line.startswith("| `")]
+        documented = {line.split("`")[1] for line in rows}
+        for metric in harness.METRIC_CONTRACT:
+            with self.subTest(metric=metric):
+                self.assertIn(
+                    metric, documented, f"{metric} is implemented but has no row in the table"
+                )
+
+    def test_every_baseline_metric_is_documented_as_baseline(self):
+        text = self.RECORD.read_text(encoding="utf-8")
+        marker = text.index("Baseline metrics")
+        paragraph = text[marker : text.index("\n\n", marker)]
+        for metric in harness.BASELINE_METRICS:
+            with self.subTest(metric=metric):
+                self.assertIn(f"`{metric}`", paragraph)
+
+
+class RunIdentifierTests(unittest.TestCase):
+    """A run id becomes a directory name, so it must be one on every platform."""
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "evals"))
+        import run_evaluations
+
+        self.module = run_evaluations
+
+    def test_windows_invalid_characters_are_refused(self):
+        # The natural identifier for a run is a timestamp, and
+        # `2026-07-25T12:00` is legal on Linux and forbidden on Windows. It
+        # passed every earlier check and then raised an uncaught OSError from
+        # mkdir() on the documented workstation -- a crash instead of evidence
+        # or a stated refusal.
+        for identifier in ("2026-07-25T12:00", "a?b", "a|b", 'a"b', "a<b", "a>b", "a*b"):
+            with self.subTest(identifier=identifier), self.assertRaises(self.module.UnsafeRun):
+                self.module.run_id(identifier)
+
+    def test_reserved_device_names_are_refused(self):
+        # Device names apply at any extension, so NUL.json is still the null
+        # device.
+        for identifier in ("NUL", "nul", "nul.json", "COM1", "lpt9", "AUX", "con.txt"):
+            with self.subTest(identifier=identifier), self.assertRaises(self.module.UnsafeRun):
+                self.module.run_id(identifier)
+
+    def test_a_trailing_dot_is_refused(self):
+        with self.assertRaises(self.module.UnsafeRun):
+            self.module.run_id("run.")
+
+    def test_ordinary_identifiers_are_accepted(self):
+        # The opposite error would refuse every usable name.
+        for identifier in (
+            "war-architect-2026-07-25",
+            "2026-07-25T12-00",
+            "mission_007",
+            "run.1",
+            "console",
+        ):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(self.module.run_id(identifier), identifier)
+
+    def test_separators_and_traversal_are_still_refused(self):
+        # The earlier protection must survive the new one.
+        for identifier in ("../escape", r"..\escape", "a/b", "/absolute", "."):
+            with self.subTest(identifier=identifier), self.assertRaises(self.module.UnsafeRun):
+                self.module.run_id(identifier)
+
+
 if __name__ == "__main__":
     unittest.main()
