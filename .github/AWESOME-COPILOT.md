@@ -71,10 +71,12 @@ access, `runTests`, `runNotebooks`, `extensions`, `vscodeAPI`, `new` and
 `openSimpleBrowser`. Neither implements anything — they write plans under
 `.copilot-tracking/` — and prompt text is not a path restriction, so an
 injection-influenced call could have mutated source or run shell commands. Those tools are
-removed from both. `task-planner` additionally *gains* `agent`, which upstream omitted:
-per `.github/instructions/agents.instructions.md`, sub-agent invocation requires that tool,
-and a `#file` reference invokes nothing — so without it the planner blocked before
-producing any plan.
+removed from both. `task-planner` additionally *gains* `agent`, which upstream omitted, and
+its body text is rewritten from `#file:` references to explicit `agent`-tool invocations.
+Both halves were needed: per `.github/instructions/agents.instructions.md` sub-agent
+invocation requires that tool, and a `#file` reference only loads a spec into context. With
+the tool enabled but the instructions unchanged the planner still loaded the researcher's
+definition instead of running it, and so still blocked before producing any plan.
 
 `task-researcher` is vendored because `task-planner` mandatorily invokes it before any
 planning; without it the planner blocks on a missing dependency on every new task.
@@ -105,6 +107,17 @@ untrusted content — including bundled executable assets — into a public tree
 requires full-file review, a privacy-guard run, preservation of recorded local overrides, a
 test update and full gate, and a rollback record, and requires an install to be reported
 incomplete if any step could not be run.
+
+It also carries two specifics that the general rule does not imply:
+
+- **Scan with explicit paths.** `python scripts/privacy_guard.py` with no arguments
+  enumerates via `git ls-files`, so a just-downloaded file is invisible to it until staged —
+  which made the gate blind to exactly the content it was meant to check. Pass the paths:
+  `python scripts/privacy_guard.py <downloaded-path> ...`, which scans them tracked or not
+  and recurses into directories.
+- **Compare the whole skill.** A skill whose `SKILL.md` matches upstream can still have a
+  changed bundled script, so drift must be judged against the complete remote directory. A
+  `SKILL.md`-only comparison can report clean while executable contents have moved.
 
 ## Selection report
 

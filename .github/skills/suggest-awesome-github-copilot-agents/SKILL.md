@@ -23,6 +23,17 @@ description: 'Suggest relevant GitHub Copilot Custom Agents files from the aweso
 >    `python -m unittest discover -s tests`.
 > 5. Record the rollback point and update the manifest, including the pinned commit.
 >
+>
+> **Drift comparison must cover the whole skill, not just `SKILL.md`.** A skill whose
+> `SKILL.md` is byte-identical upstream can still have gained or changed a bundled script,
+> template or data file. Enumerate the complete remote skill directory and compare every
+> file against the local copy before reporting a skill up to date; a comparison limited to
+> `SKILL.md` may report clean while executable contents have drifted.
+>
+> **Scan downloaded assets with explicit paths.** `python scripts/privacy_guard.py` with no
+> arguments enumerates via `git ls-files`, so a file you have just downloaded is invisible to
+> it until staged. Pass the paths: `python scripts/privacy_guard.py <downloaded-path> ...`,
+> which scans them tracked or not, recursing into directories.
 > Report the install as incomplete if any step could not be run. See `AGENTS.md` and
 > `.github/copilot-instructions.md`.
 
