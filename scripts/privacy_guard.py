@@ -189,9 +189,14 @@ def _scan_files(
                 relative = path.relative_to(root)
             except ValueError:
                 relative = path
-        if path.name.lower() in PROHIBITED_FILENAMES:
+        # Name and suffix checks read the EFFECTIVE path, not the source path.
+        # Keying them on the temp name let `--as credentials.json` or
+        # `--as docs/x.pdf` pass the pre-install gate on a benign temp file that
+        # scan_repository() rejects the moment it is installed -- the gate would
+        # approve exactly what the repository scan forbids.
+        if relative.name.lower() in PROHIBITED_FILENAMES:
             findings.append(f"{relative}: prohibited private filename")
-        if path.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES:
+        if relative.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES:
             findings.append(
                 f"{relative}: non-source artifact type is not allowed in this public repository"
             )

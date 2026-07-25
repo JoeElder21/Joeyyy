@@ -60,6 +60,17 @@ def count_installed(pattern: str) -> int:
     return count_tracked(f".github/{pattern}")
 
 
+# Upstream availability totals, keyed by the commit they were enumerated at.
+# The displayed pin is read from the manifest, so leaving these hardcoded would
+# let a refreshed pin label counts taken from a different revision. An unknown
+# pin yields None and the report says the inventory was not enumerated there
+# rather than asserting a stale figure.
+UPSTREAM_INVENTORY_BY_PIN: dict[str, dict[str, int]] = {
+    "aa280f28": {"instructions": 190, "agents": 221, "skills": 391,
+                 "plugins": 71, "extensions": 20, "hooks": 8, "workflows": 8},
+}
+
+
 def manifest_pin() -> str:
     """Read the upstream pin from .github/AWESOME-COPILOT.md.
 
@@ -165,27 +176,22 @@ PRE_INSTALL_BASELINE = "89a2c1531765355843a1f3ed64ced85cf5d8aed6"
 
 
 def _branch_point() -> str:
-    """The pre-install commit, so 'added' stays a fixed, reproducible delta.
+    """The pinned pre-install commit, or "" when it is not reachable.
 
-    Falls back to merge-base only when the pinned commit is not reachable (a
-    shallow clone, say), and the caller reports the figure as unavailable rather
-    than guessing when neither resolves.
+    There is deliberately no merge-base fallback. Falling back to
+    merge-base(HEAD, main) reproduced the very defect the pin was added to fix:
+    once this work merges, that resolves to the merged tip and the delta silently
+    becomes zero. In a shallow clone the honest answer is that the figure cannot
+    be computed, and the report says so rather than printing a confident zero.
     """
     root = Path(__file__).resolve().parents[1]
     try:
         known = subprocess.run(
             ["git", "cat-file", "-e", f"{PRE_INSTALL_BASELINE}^{{commit}}"],
             cwd=root, capture_output=True, text=True, check=False)
-        if known.returncode == 0:
-            return PRE_INSTALL_BASELINE
-        for base in ("origin/main", "main"):
-            out = subprocess.run(["git", "merge-base", "HEAD", base], cwd=root,
-                                 capture_output=True, text=True, check=False)
-            if out.returncode == 0 and out.stdout.strip():
-                return out.stdout.strip()
     except OSError:
         return ""
-    return ""
+    return PRE_INSTALL_BASELINE if known.returncode == 0 else ""
 
 
 MARKDOWN_NOW = count_tracked("*.md")
@@ -281,34 +287,57 @@ story.append(tbl(meta, [0.95 * inch, 2.35 * inch, 0.85 * inch, 1.55 * inch],
 story.append(Spacer(1, 4))
 rule()
 
+PIN = manifest_pin()
+UPSTREAM_INVENTORY = UPSTREAM_INVENTORY_BY_PIN.get(PIN, {})
+PRIMARY_AVAILABLE = sum(
+    UPSTREAM_INVENTORY.get(k, 0) for k in ("instructions", "agents", "skills")
+) or None
+
+
+def _cell(value) -> str:
+    """Render a count, or an explicit not-enumerated marker."""
+    return str(value) if value is not None else "not enumerated at this pin"
+
+
+def _rate(took, avail) -> str:
+    return f"{took / avail * 100:.1f}%" if avail else "—"
+
+
 # ------------------------------------------------------------------- headline
 story.append(Paragraph("1. Upstream inventory considered", H1))
 story.append(Paragraph(
     "The collection is far larger than any single repository should absorb. "
-    "Every category below was enumerated at the pinned commit; the three "
-    "primary asset classes are the figures that drove the decision.", BODY))
+    f"Every availability figure below was enumerated at pin <b>{PIN}</b>; the "
+    "three primary asset classes are what drove the decision. Adoption counts "
+    "are measured from the tracked tree at build time. If the manifest pin "
+    "moves to a commit whose inventory has not been enumerated, the "
+    "availability column says so rather than reusing an older revision's "
+    "totals.", BODY))
 
 inv = [hdr("Asset class", "Available upstream", "Adopted", "Adoption rate")]
 for cls, avail, took in [
-    ("Instructions", 190, count_installed("instructions/*.instructions.md")),
-    ("Agents", 221, count_installed("agents/*.agent.md")),
-    ("Skills", 391, count_installed("skills/*/SKILL.md")),
+    ("Instructions", UPSTREAM_INVENTORY.get("instructions"),
+     count_installed("instructions/*.instructions.md")),
+    ("Agents", UPSTREAM_INVENTORY.get("agents"),
+     count_installed("agents/*.agent.md")),
+    ("Skills", UPSTREAM_INVENTORY.get("skills"),
+     count_installed("skills/*/SKILL.md")),
 ]:
     inv.append([
         Paragraph(f"<b>{cls}</b>", CELL),
-        Paragraph(f"<b>{avail}</b>", CELL),
+        Paragraph(f"<b>{_cell(avail)}</b>", CELL),
         Paragraph(f'<font color="#1B6B4A"><b>{took}</b></font>', CELL),
-        Paragraph(f"{took / avail * 100:.1f}%", CELL),
+        Paragraph(_rate(took, avail), CELL),
     ])
 inv.append([
     Paragraph("<b>Total (primary classes)</b>", CELLB),
-    Paragraph("<b>802</b>", CELLB),
+    Paragraph(f"<b>{_cell(PRIMARY_AVAILABLE)}</b>", CELLB),
     Paragraph(f'<font color="#1B6B4A"><b>{ADOPTED_TOTAL}</b></font>', CELLB),
-    Paragraph(f"<b>{ADOPTED_TOTAL / 802 * 100:.1f}%</b>", CELLB),
+    Paragraph(f"<b>{_rate(ADOPTED_TOTAL, PRIMARY_AVAILABLE)}</b>", CELLB),
 ])
-for cls, avail in [("Plugins", 71), ("Extensions", 20), ("Hooks", 8),
-                   ("Workflows", 8)]:
-    inv.append([Paragraph(cls, CELL), Paragraph(str(avail), CELL),
+for cls in ("plugins", "extensions", "hooks", "workflows"):
+    avail = UPSTREAM_INVENTORY.get(cls)
+    inv.append([Paragraph(cls.title(), CELL), Paragraph(_cell(avail), CELL),
                 Paragraph("0", CELL), Paragraph("—", CELL)])
 
 story.append(tbl(inv, [2.0 * inch, 1.55 * inch, 1.05 * inch, 1.1 * inch],
@@ -474,9 +503,12 @@ story.append(Paragraph(
 # ----------------------------------------------------------------- exclusions
 story.append(Paragraph("6. What was excluded, and why", H1))
 story.append(Paragraph(
-    "788 of the 802 primary assets were not adopted. The exclusions fall into "
-    "a small number of reasons, each of which is a positive judgement rather "
-    "than an oversight.", BODY))
+    (f"{PRIMARY_AVAILABLE - ADOPTED_TOTAL} of the {PRIMARY_AVAILABLE} primary "
+     "assets were not adopted."
+     if PRIMARY_AVAILABLE else
+     "The great majority of the collection was not adopted.")
+    + " The exclusions fall into a small number of reasons, each of which is a "
+    "positive judgement rather than an oversight.", BODY))
 
 ex = [hdr("Excluded group", "Reason")]
 for g, r in [

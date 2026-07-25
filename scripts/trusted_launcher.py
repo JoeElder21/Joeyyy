@@ -152,6 +152,7 @@ def authorize(
     ledger: AuditLedger | None = None,
     now: float | None = None,
     agent: str | None = None,
+    authorized: dict | None = None,
 ) -> dict:
     """Fail-closed authorization. Returns the mount spec or raises LaunchDenied.
 
@@ -163,6 +164,7 @@ def authorize(
     """
     ledger = ledger or AuditLedger(DEFAULT_LEDGER)
     mounts = _load_mounts()
+    authorized = {} if authorized is None else authorized
 
     # Set once the grant's signature verifies. From that point the signed
     # identity is authoritative and is what the ledger must attribute a denial
@@ -221,6 +223,8 @@ def authorize(
         # identity to trust here. test_agent_scoped_mounts_all_require_a_grant
         # keeps that invariant true.
         check_agent(spec, agent)
+        authorized["agent"] = agent
+        authorized["agent_source"] = "caller-supplied" if agent else "not-required"
         ledger.append(
             "launch_authorized",
             {"mount": mount, "agent": agent, "grant": "not-required"},
@@ -259,6 +263,8 @@ def authorize(
             f"grant authorizes {signed_agent!r}, but launch claimed {agent!r}"
         )
     check_agent(spec, signed_agent)
+    authorized["agent"] = signed_agent
+    authorized["agent_source"] = "signed-grant"
 
     ledger.append(
         "launch_authorized",
@@ -300,13 +306,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        spec = authorize(args.mount, args.grant, agent=args.agent)
+        authorized: dict = {}
+        spec = authorize(args.mount, args.grant, agent=args.agent,
+                         authorized=authorized)
     except LaunchDenied as denial:
         print(json.dumps({"authorized": False, "error": str(denial)}))
         return 1
     if args.dry_run:
         print(json.dumps({"authorized": True, "mount": args.mount,
-                          "agent": args.agent, "command": spec["command"],
+                          # The identity that was actually authorized, which for
+                          # the documented launch command comes from the signed
+                          # grant rather than the optional --agent flag. Echoing
+                          # args.agent printed null in exactly the case dry-run
+                          # exists to evidence.
+                          "agent": authorized.get("agent"),
+                          "agent_source": authorized.get("agent_source"),
+                          "command": spec["command"],
                           "dry_run": True}))
         return 0
     env = dict(**os.environ)

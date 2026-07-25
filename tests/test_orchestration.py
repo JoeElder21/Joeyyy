@@ -305,3 +305,32 @@ class McpMountRegistryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class SelectionReportBaselineTests(unittest.TestCase):
+    """The generator is change evidence, so a figure it cannot compute must
+    read as unavailable rather than as a confident zero."""
+
+    def test_branch_point_has_no_moving_fallback(self):
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        start = source.index("def _branch_point()")
+        end = source.index("MARKDOWN_NOW =")
+        body = source[start:end]
+        # Inspect executable code only: the docstring legitimately explains why
+        # the merge-base fallback was removed, and matching prose would make this
+        # test fail on its own rationale.
+        if '"""' in body:
+            opening = body.index('"""')
+            closing = body.index('"""', opening + 3) + 3
+            body = body[:opening] + body[closing:]
+        self.assertNotIn(
+            "merge-base", body,
+            "a merge-base fallback recreates the moving baseline it replaced: "
+            "once this work merges it resolves to the merged tip and the delta "
+            "silently becomes zero",
+        )
+        self.assertIn("PRE_INSTALL_BASELINE", body)
+
+
+if __name__ == "__main__":
+    unittest.main()

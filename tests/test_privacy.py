@@ -159,6 +159,31 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     )
         self.assertGreater(seen, 0, "no mount credential names were checked")
 
+    def test_intake_scan_applies_name_checks_to_the_destination(self):
+        """`--as` declares where a candidate is bound for. Keying the
+        prohibited-name and suffix checks on the temp source name let the
+        pre-install gate approve a file that scan_repository() rejects the
+        moment it is installed -- the gate passing exactly what the repository
+        scan forbids."""
+        from scripts.privacy_guard import scan_paths
+
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "neutral.txt"
+            candidate.write_text("harmless utf-8\n", encoding="utf-8")
+            for destination, why in [
+                ("credentials.json", "prohibited filename"),
+                ("docs/report.pdf", "prohibited artifact suffix"),
+            ]:
+                with self.subTest(destination=destination):
+                    findings = scan_paths(
+                        [candidate], destinations={candidate: Path(destination)})
+                    self.assertTrue(findings, f"{destination} slipped past the gate")
+                    self.assertIn(destination, " ".join(findings))
+            allowed = scan_paths(
+                [candidate],
+                destinations={candidate: Path(".github/instructions/x.instructions.md")})
+            self.assertEqual(allowed, [], allowed)
+
     def test_placeholder_allowlist_has_no_stale_entries(self):
         for relative_path, literals in PLACEHOLDER_LITERALS.items():
             path = ROOT / relative_path
