@@ -603,6 +603,37 @@ That is the fifth distinct failure mode of the same lesson, and the most specifi
 
 **Two fail-shut defects, both introduced by fixes.** Round 8 found that the addressee check made the only lawful mutation path unreachable. Round 11 found that the lease ledger made every registry-backed mutation unreachable. Adversarial review reliably finds fail-open bugs because that is what it looks for; nothing in this loop was watching for the gate becoming unusable, and it happened twice.
 
+### Automated review, twelfth pass — thirteen findings, four fixed, nine deferred
+
+**The eleventh-pass repair was itself a fail-open bypass.** That entry describes fixing a fail-shut defect by tolerating one lease-schema error string at packet admission. `PacketGuard` returns the lease-ledger error and *short-circuits*, so a packet with a genuine semantic defect produced exactly one error — the version mismatch — which the filter then deleted. Reproduced against the repository's own valid fixture:
+
+```
+delegation with another specialist's memory namespace
+  without ledger : ["agent apex_war_architect must use memory namespace
+                     APEX::Strategy-Campaigns::apex_war_architect"]
+  with 2.1 lease : ["leases[0]: $.schema_version: expected const '2.0'"]
+  after filter   : []            -> allowed
+```
+
+So the round-11 commit, whose message says it repaired the gate, converted a gate that denied everything into one that admitted a semantically invalid delegation. **A suppression rule must never be able to remove a finding it was not written for.** Semantics are now established on a pass the ledger cannot short-circuit, and the tolerance applies only to errors the ledger itself introduced.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Version tolerance suppressed semantic errors | **Correct — fail-open introduced by the previous fix** | Two-pass validation; the unfiltered pass is authoritative for semantics. |
+| Empty `allowed_operations: []` read as unrestricted | **Correct** | `replace`, `disable`, and an invented `destroy` all passed. An explicit empty set authorizes nothing — the absent-scope-means-unlimited-scope defect again, in the operation dimension. |
+| Unregistered mount handles allowed | **Correct** | The chief exemption returned before checking registration, so `mount:shadow_it_server` was allowed outright. Registration is checked first now, for every principal. |
+| `LeaseRegistry` returned live mutable records | **Correct, and it undercuts three earlier fixes** | `issue()` and `active_lease()` handed out the stored object, so the authoritative source could be rewritten by anyone holding an issued lease. Reproduced: assigning `writer_agent` on the returned dict changed the registry. Both now return copies. |
+| Operation not derived from the tool action | **Correct, deferred** | `action="delete_file", operation="append"` passes. Needs governed tool metadata. |
+| Mount identity conflated with write target | **Correct, deferred** | A mount-backed write has two governed resources and `ToolRequest.resource` names one. Needs a separate validated mount field. |
+| High-impact grants omit consequential parameters | **Correct, deferred** | A signed instruction for one financial transaction is indistinguishable from another amount or payee on the same account. |
+| Six further P2s (intake requirements, eval stage/dirty-tree/run-id/metric dedup, README pre-commit claim) | **Correct, deferred** | Recorded, not actioned. |
+
+**Nine deferrals, and the reason is now empirical rather than cautious.** Rounds 10, 11, and 12 each found defects introduced by the previous round's fix, and the severity escalated each time: round 10's fix broke CI, round 11's fix broke the gate shut, round 11's *repair* broke it open. Continuing to make architectural changes to this module at this rate is not converging on correctness — it is generating new defects at roughly the rate it removes them.
+
+What was fixed this round is bounded to: the fail-open the previous round created, two narrow fail-opens of the same shape, and a two-line immutability fix in `runtime/writer_lease.py`. Everything requiring a new field, a new registry, or a new trust anchor is deferred to Joe alongside the `enforce()` wiring and the schema decision.
+
+**`runtime/writer_lease.py` is no longer unchanged.** Earlier rounds claimed it was. Returning copies from `issue()` and `active_lease()` alters it. No lease semantics changed — the same records, the same statuses, the same expiry — but the claim was standing and is now false.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

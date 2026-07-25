@@ -681,7 +681,9 @@ class ScopeTests(unittest.TestCase):
     def test_a_specialist_cannot_read_a_connector_directly(self):
         # `packet_only_no_direct_connectors` is a statement about reads too.
         # Only mutations were guarded, so a direct mount read was allowed.
-        for resource in ("mount:gdrive", "connector:aps"):
+        # Both must be REGISTERED mounts, so the denial proves the connector
+        # policy fired rather than the registration check.
+        for resource in ("mount:gdrive", "mount:github"):
             with self.subTest(resource=resource):
                 decision = self.pep.evaluate(
                     ToolRequest(
@@ -1213,6 +1215,98 @@ class ScopeTests(unittest.TestCase):
                 self.assertTrue(
                     any("must be an object" in r for r in decision.reasons), decision.reasons
                 )
+
+    def test_a_semantic_packet_defect_survives_the_lease_version_tolerance(self):
+        # The worst defect in this change set, and it was introduced by the
+        # previous round's own repair. PacketGuard returns the lease-ledger
+        # error and SHORT-CIRCUITS, so a delegation carrying another
+        # specialist's memory namespace produced exactly one error -- the
+        # version mismatch -- which the tolerance filter then deleted. The
+        # fail-shut fix had become a fail-open bypass.
+        from copy import deepcopy
+
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        instance = PacketContractTests(
+            "test_valid_delegation_and_handoff_are_bound_to_lease_and_origin"
+        )
+        delegation, _ = instance.v21_readonly_pair()
+        tampered = deepcopy(delegation)
+        tampered["memory_namespace"] = "JEOS::Weekly::jeos_reflection_forge"
+
+        errors = self.pep._guard_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                packet=tampered,
+            )
+        )
+        self.assertTrue(
+            any("memory namespace" in error for error in errors),
+            f"a semantic defect was suppressed by the version tolerance: {errors}",
+        )
+
+    def test_an_explicit_empty_operation_allowlist_authorizes_nothing(self):
+        packet = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "writer_agent": CHIEF,
+            "allowed_write_targets": ["APEX/Strategy-Campaigns"],
+            "mutation_contract": {"allowed_operations": []},
+        }
+        for operation in ("replace", "disable", "destroy"):
+            with self.subTest(operation=operation):
+                reasons = self.pep._packet_scope_errors(
+                    ToolRequest(
+                        agent=CHIEF,
+                        action="write",
+                        resource="APEX/Strategy-Campaigns",
+                        owner_brain="APEX",
+                        mutating=True,
+                        packet=packet,
+                        lease=self.lease,
+                        resource_id="campaign-alpha",
+                        operation=operation,
+                    )
+                )
+                self.assertTrue(
+                    any("authorizes\nno mutation" in r or "authorizes " in r for r in reasons),
+                    reasons,
+                )
+
+    def test_an_unregistered_mount_handle_is_refused_for_every_principal(self):
+        # The chief exemption returned before checking registration, so handles
+        # naming nothing in config/mcp_mounts.toml were allowed outright.
+        for resource in ("mount:shadow_it_server", "connector:unregistered"):
+            for agent in (CHIEF, SPECIALIST):
+                with self.subTest(resource=resource, agent=agent):
+                    decision = self.pep.evaluate(
+                        ToolRequest(
+                            agent=agent, action="read", resource=resource, owner_brain="APEX"
+                        )
+                    )
+                    self.assertFalse(decision.allowed)
+                    self.assertTrue(
+                        any("names no mount registered" in r for r in decision.reasons),
+                        decision.reasons,
+                    )
+
+    def test_the_registry_cannot_be_rewritten_through_what_it_returns(self):
+        # `issue()` and `active_lease()` handed out the stored object, so the
+        # authoritative source policy enforcement consults could be edited by
+        # anyone holding an issued lease.
+        from runtime.writer_lease import canonical_key
+
+        key = canonical_key("APEX", "APEX/Strategy-Campaigns", "campaign-alpha")
+        issued = self.registry.active_lease(key)
+        issued["writer_agent"] = "impostor"
+        issued["status"] = "forged"
+        fresh = self.registry.active_lease(key)
+        self.assertEqual(fresh["writer_agent"], CHIEF)
+        self.assertEqual(fresh["status"], "active")
 
     def test_the_chief_still_reaches_connectors(self):
         # The sole cross-brain agent performs connector work on the corps'

@@ -100,10 +100,18 @@ class LeaseRegistry:
             "sensitivity": sensitivity,
         }
         self._active[key] = lease
-        return lease
+        # A COPY. Returning the stored object made the registry mutable through
+        # its own return value: issuing a lease to one agent and then assigning
+        # `writer_agent` on the returned dict rewrote the registry's record, so
+        # the "authoritative source" that policy enforcement consults could be
+        # edited by anyone holding an issued lease. Reproduced before fixing.
+        return dict(lease)
 
     def active_lease(self, key: str) -> dict | None:
-        return self._active.get(key)
+        """A copy, for the same reason `issue` returns one: a lookup must not
+        hand out a handle that can rewrite what it looked up."""
+        lease = self._active.get(key)
+        return dict(lease) if lease is not None else None
 
     def release(self, lease_id: str, *, readback_confirmed: bool) -> dict:
         """Close a lease. ``verified`` requires confirmed readback (gate 14)."""

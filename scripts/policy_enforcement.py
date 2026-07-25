@@ -349,6 +349,7 @@ class PolicyEnforcementPoint:
         # this enforcement point exists to eliminate. Found by running it.
         self.manifest = _load_brain_manifests(root)
         self.brain_prefixes = _load_brain_prefixes(root)
+        self._mounts_cache: frozenset[str] | None = None
 
     def _spec(self, agent: str) -> dict[str, Any]:
         """Merged view: brain manifest wins, roster fills the rest."""
@@ -579,6 +580,65 @@ class PolicyEnforcementPoint:
                 return brain.upper()
         return None
 
+    def _registered_mounts(self) -> frozenset[str]:
+        """Mount names declared in config/mcp_mounts.toml, the governed list."""
+        if getattr(self, "_mounts_cache", None) is None:
+            path = self.root / "config" / "mcp_mounts.toml"
+            names: set[str] = set()
+            if path.exists():
+                data = tomllib.loads(path.read_text(encoding="utf-8"))
+                names = {
+                    str(mount["name"]) for mount in data.get("mounts", []) if mount.get("name")
+                }
+            self._mounts_cache = frozenset(names)
+        return self._mounts_cache
+
+    def _guard_errors(self, request: ToolRequest) -> list[str]:
+        """Validate the packet twice, and never let a filter hide a semantic error.
+
+        The previous round tolerated the writer-lease `2.0`-vs-`2.1` mismatch by
+        dropping that one error string from the guard's output. That was a
+        fail-OPEN bug, and a worse one than the fail-shut it replaced:
+        `PacketGuard` returns the lease-ledger error and *short-circuits*, so a
+        packet with a genuine semantic defect -- a delegation carrying another
+        specialist's memory namespace -- produced exactly one error, the
+        version mismatch, which the filter then deleted. Result: `allowed`.
+
+        Reproduced before fixing. Without the ledger the guard says
+        `agent apex_war_architect must use memory namespace
+        APEX::Strategy-Campaigns::apex_war_architect`; with a real 2.1 lease it
+        says only `leases[0]: expected const '2.0'`; after the filter, nothing.
+
+        So semantics are established on a pass that cannot be short-circuited by
+        the ledger at all, and the tolerance is applied only to errors the
+        ledger itself introduced. A suppression rule must never be able to
+        remove a finding it was not written for.
+        """
+        semantic = self.guard.validate(
+            request.packet_schema,
+            request.packet,
+            # No ledger: this pass is about the packet's own consistency, and it
+            # is the pass whose findings are never filtered.
+            delegations=list(request.delegations),
+            constraint_packets=list(request.constraint_packets),
+            private_constraint_packets=list(request.private_constraint_packets),
+        )
+        bound = self.guard.validate(
+            request.packet_schema,
+            request.packet,
+            self._lease_ledger(request),
+            delegations=list(request.delegations),
+            constraint_packets=list(request.constraint_packets),
+            private_constraint_packets=list(request.private_constraint_packets),
+        )
+        seen = set(semantic)
+        # Only the *additional* errors the ledger produced are eligible for the
+        # narrow version tolerance, and only that exact string.
+        extra = [
+            error for error in bound if error not in seen and VERSION_MISMATCH_DEFECT not in error
+        ]
+        return [f"packet rejected: {error}" for error in [*semantic, *extra]]
+
     def _is_canonical_resource(self, resource: str) -> bool:
         """A durable resource, as opposed to text carried in the message itself.
 
@@ -594,6 +654,21 @@ class PolicyEnforcementPoint:
         return self._is_brain_neutral(resource) or self._escapes_the_tree(resource)
 
     def _connector_policy(self, request: ToolRequest) -> list[str]:
+        # Registration is checked BEFORE the chief exemption. The exemption used
+        # to return first, so `mount:shadow_it_server` and
+        # `connector:unregistered` -- handles naming nothing in
+        # config/mcp_mounts.toml -- were allowed outright. The mount contract
+        # says an unlisted server is unreachable; an enforcement point that
+        # accepts any string after `mount:` is not enforcing that.
+        for prefix in CONNECTOR_PREFIXES:
+            if request.resource.startswith(prefix):
+                handle = request.resource[len(prefix) :]
+                if handle not in self._registered_mounts():
+                    return [
+                        f"{request.resource!r} names no mount registered in "
+                        f"config/mcp_mounts.toml; unlisted servers are unreachable"
+                    ]
+                break
         spec = self._spec(request.agent)
         policy = spec.get("connector_policy")
         if policy is None or request.agent == CHIEF:
@@ -648,34 +723,7 @@ class PolicyEnforcementPoint:
         # not a fail-closed decision.
         if not isinstance(request.packet, dict):
             return [f"packet rejected: $: expected an object, got {type(request.packet).__name__}"]
-        errors = [
-            f"packet rejected: {error}"
-            for error in self.guard.validate(
-                request.packet_schema,
-                request.packet,
-                # The authoritative ledgers. Without them the guard cannot
-                # resolve a referenced constraint or confirm a lease is uniquely
-                # active, so it refused lawful packets -- and the separate lease
-                # rule cannot lift a denial raised during admission.
-                self._lease_ledger(request),
-                delegations=list(request.delegations),
-                constraint_packets=list(request.constraint_packets),
-                private_constraint_packets=list(request.private_constraint_packets),
-            )
-            # The SAME narrow tolerance `_writer_lease` applies, and it has to be
-            # here too. Deriving this ledger from the registry (previous round)
-            # started feeding the guard genuine `schema_version: "2.1"` leases,
-            # which its schema pins to "2.0" -- so admission rejected every
-            # mutation backed by the real LeaseRegistry, and the later filter in
-            # `_writer_lease` cannot lift an error raised at this stage.
-            #
-            # That made the gate deny all legitimate mutations: the second
-            # fail-shut defect this change set has produced, both of them
-            # introduced by a fix rather than found in the original code. The
-            # underlying 2.1-vs-2.0 mismatch is still a contract decision for
-            # Joe; this keeps the tolerance consistent wherever leases are read.
-            if VERSION_MISMATCH_DEFECT not in error
-        ]
+        errors = self._guard_errors(request)
         # Scope binding only runs on a packet that survived validation. Running
         # it on a rejected packet reads fields from a structure the guard has
         # already said it cannot vouch for.
@@ -973,7 +1021,20 @@ class PolicyEnforcementPoint:
             return []
         allowed = self._packet_operations(packet)
         if not allowed:
-            return []  # nothing proposed; the lease and target checks stand alone
+            # An EXPLICIT empty list is a schema-permitted way of saying "no
+            # operation is authorized". Reading absence as unrestricted is the
+            # same absent-scope-means-unlimited-scope defect the handoff path
+            # had, in the operation dimension -- `replace`, `disable`, and an
+            # invented `destroy` all passed. The declaration is only absent
+            # when the packet carries no mutation contract AND no proposed
+            # writes at all; a stated empty set authorizes nothing.
+            declared = (packet.get("mutation_contract") or {}).get("allowed_operations")
+            if declared is not None or packet.get("proposed_writes") is not None:
+                return [
+                    "packet declares an empty operation allowlist, which authorizes "
+                    "no mutation; an explicit empty set is not an unrestricted one"
+                ]
+            return []
         if not request.operation:
             return [
                 f"packet permits operations {sorted(allowed)} but the request names none; "
