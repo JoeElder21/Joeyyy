@@ -656,6 +656,46 @@ class SelectionReportBaselineTests(unittest.TestCase):
         ]
         self.assertEqual(offending, [], f"{name}: residual user dialogue")
 
+    def test_planner_artifact_count_is_conditional_not_fixed(self):
+        """An unconditional "exactly three" contradicted the rule requiring the
+        research document as a fourth artifact on a first-time task. An agent
+        resolving that contradiction drops either the research the invoker must
+        persist or one of the planning artifacts -- and which one it drops is
+        not predictable, which is worse than either."""
+        body = (ROOT / ".github" / "agents" / "task-planner.agent.md").read_text(
+            encoding="utf-8")
+        self.assertNotIn("exactly three artifacts", body)
+        self.assertNotIn("three complete artifacts", body)
+        self.assertIn("**four**", body)
+        # Every surface that states the count must state the conditional form.
+        for line in body.splitlines():
+            if "three" in line and "artifact" in line:
+                with self.subTest(line=line.strip()[:90]):
+                    self.assertTrue(
+                        "four" in line or "planning artifact" in line,
+                        "a bare three-artifact claim reintroduces the "
+                        "contradiction",
+                    )
+
+    def test_discovery_fetches_are_pinned_to_a_resolved_sha(self):
+        """The vendored bodies fetch `/main/`, a moving ref: upstream can
+        advance between the inventory fetch and the per-file downloads, so the
+        comparison, the installed bytes and the recorded pin could each
+        describe a different revision. The contract requires one resolved SHA
+        per pass, and the preamble has to say so where the fetches are."""
+        for skill in sorted((ROOT / ".github" / "skills").glob("*/SKILL.md")):
+            text = skill.read_text(encoding="utf-8")
+            with self.subTest(skill=skill.parent.name):
+                self.assertIn("resolved SHA", text)
+                self.assertIn("moving ref", text)
+                # The instruction must appear BEFORE the upstream body that
+                # carries the /main/ URLs, or it is not an override.
+                self.assertLess(
+                    text.index("resolved SHA"),
+                    text.index("raw.githubusercontent.com"),
+                    "the override must precede the fetches it governs",
+                )
+
     def test_gate_rows_come_from_the_importable_helper(self):
         """The report builder runs its gates and writes the PDF at import time,
         so the helpers must live outside it or they cannot be tested without

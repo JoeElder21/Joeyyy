@@ -231,25 +231,56 @@ _TOML_MULTILINE = re.compile(
 )
 
 
-_YAML_TAG = re.compile(
+# A YAML node's "properties" are its tag and its anchor, in either order and
+# either or both present. Both sit between the key and the value.
+_YAML_PROPERTY = r"(?:!(?:!\w+|<[^>]*>|[\w.-]*)|&[\w.-]+)"
+_YAML_NODE_PROPERTIES = re.compile(
     r"(?m)^(?P<lead>[ \t]*(?:-[ \t]+)?" + _KEY + r"[ \t]*:[ \t]*)"
-    r"(?:!(?:!\w+|<[^>]*>|[\w.-]*)[ \t]+)+"
+    r"(?:" + _YAML_PROPERTY + r"[ \t]+)+"
 )
+_YAML_ANCHOR_DEF = re.compile(
+    r"(?m)^[ \t]*(?:-[ \t]+)?" + _KEY + r"[ \t]*:[ \t]*"
+    r"(?:!(?:!\w+|<[^>]*>|[\w.-]*)[ \t]+)?"
+    r"&(?P<name>[\w.-]+)[ \t]+(?P<value>\S.*?)[ \t]*$"
+)
+_YAML_ALIAS = re.compile(r"(?m)(?P<lead>:[ \t]*)\*(?P<name>[\w.-]+)[ \t]*$")
 
 
-def strip_yaml_tags(text: str) -> str:
-    """Drop explicit YAML tags so the value behind them is scanned.
+def strip_yaml_node_properties(text: str) -> str:
+    """Resolve YAML aliases, then drop tags and anchors, so the VALUE is scanned.
 
-    `AZURE_CLIENT_SECRET: !!str the-actual-secret` put an eight-character token
-    between the key and the value. The credential pattern's bare-value branch
-    matched the TAG and stopped at the following space, so the secret was never
-    examined -- and `!!binary` even satisfied the eight-character minimum, which
-    made the scan look like it had found something when it had not.
+    Three things can sit between a key and its value, and each one hid the
+    value from the assignment patterns:
 
-    A YAML parser discards the tag and keeps the value, so this does too, for
-    the `!!type`, `!local` and verbatim `!<...>` forms.
+    * an explicit tag -- `KEY: !!str <secret>`. The bare-value branch matched
+      the tag and stopped at the following space. `!!binary` is itself eight
+      characters, so it even satisfied the length minimum: the scan reported a
+      finding while having examined nothing.
+    * an anchor -- `KEY: &tid <guid>`. Same shape, different token, and it
+      composes with a tag in either order.
+    * an alias -- `KEY: *tid`. Here the value genuinely lives elsewhere, so
+      stripping alone is not enough; the anchor definition is substituted in,
+      which is what a parser hands the application.
+
+    A YAML parser discards the properties and keeps the value, so this does too.
+    Anchor definitions are resolved first, because a definition line carries the
+    anchor AND the value together.
     """
-    return _YAML_TAG.sub(lambda m: m.group("lead"), text)
+    anchors = {
+        match.group("name"): match.group("value")
+        for match in _YAML_ANCHOR_DEF.finditer(text)
+    }
+    if anchors:
+        text = _YAML_ALIAS.sub(
+            lambda m: m.group("lead") + anchors.get(m.group("name"), "*" + m.group("name")),
+            text,
+        )
+    return _YAML_NODE_PROPERTIES.sub(lambda m: m.group("lead"), text)
+
+
+# Retained name: the pipeline and tests referred to tag stripping before
+# anchors and aliases were found to be the same defect in different tokens.
+strip_yaml_tags = strip_yaml_node_properties
 
 
 def fold_toml_multiline(text: str) -> str:
@@ -645,7 +676,7 @@ def _scan_files(
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
         scannable = strip_known_placeholders(
             relative,
-            fold_toml_multiline(fold_block_scalars(strip_yaml_tags(text))))
+            fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text))))
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")

@@ -15,6 +15,7 @@ from scripts.privacy_guard import (
     scan_paths,
     scan_repository,
     strip_known_placeholders,
+    strip_yaml_node_properties,
     strip_yaml_tags,
 )
 
@@ -593,6 +594,57 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 sorted(f.split(": ", 1)[1] for f in direct),
                 sorted(f.split(": ", 1)[1] for f in findings if "notes" in f),
             )
+
+    def test_yaml_node_properties_and_aliases_do_not_hide_the_value(self):
+        """Tag, anchor and alias are three tokens that each sit between a key
+        and its value, and each hid it from the assignment patterns.
+
+        The tag case was fixed first and the anchor case was the same defect in
+        a different token, so this asserts the whole node-property grammar --
+        every token, both orders, composed with the container shapes already
+        normalised -- rather than the reported line."""
+        secret = "Xy7Q" + "secretValue0192"
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        ident = "AZURE" + "_TENANT_ID"
+
+        properties = ("!!str", "&anchor", "&anchor !!str", "!!str &anchor",
+                      "!secret", "!<tag:example.invalid,2026:s>")
+        cases = []
+        for prop in properties:
+            cases.append(("credential assignment", f"{cred}: {prop} {secret}\n"))
+            cases.append(("connector identifier", f"{ident}: {prop} {guid}\n"))
+        cases += [
+            # Composed with the container shapes normalised in earlier rounds.
+            ("credential assignment", f'"{cred}": &a {secret}\n'),
+            ("credential assignment", f"- {cred}: &a {secret}\n"),
+            ("credential assignment", f"{cred}: &a |-\n  {secret}\n"),
+            # An alias defers the value to its anchor; resolving it is what a
+            # parser hands the application, so the scan must see it too.
+            ("credential assignment", f"defaults: &a {secret}\n{cred}: *a\n"),
+        ]
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(cases):
+                probe = root / f"node{index}.yaml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(body=body):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any(label in finding for finding in findings),
+                        f"{body!r} produced {findings}",
+                    )
+
+            clean = root / "clean.yaml"
+            clean.write_text(
+                "description: &d Ordinary prose about a mount.\nother: *d\n",
+                encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
+
+        # The old name stays exported: the pipeline and earlier tests called
+        # this tag stripping before anchors turned out to be the same defect.
+        self.assertIs(strip_yaml_tags, strip_yaml_node_properties)
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
