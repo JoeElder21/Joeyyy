@@ -50,6 +50,41 @@ forget:
 
 Then commit the whole set together.
 
+## Rollback
+
+Per `AGENTS.md`, every persistent change carries a rollback point. For this
+vendored stack that point is **`89a2c15`** — the commit immediately before the
+first vendoring commit, when none of this existed.
+
+Withdrawing a vendored source after a provenance or compatibility failure is
+not a single delete. A partial rollback leaves an installable connector or a
+stale declaration behind after its audited source is gone, which is worse than
+either state alone. The complete reversible set:
+
+| Withdrawing | Files to revert |
+| --- | --- |
+| Any repo | its `vendor/<name>` gitlink; its `[submodule]` block in `.gitmodules`; its row in the contents and provenance tables here; its entry in `EXPECTED_SUBMODULES` and `UPSTREAM_DEPENDENCY_SOURCES` in `tests/test_vendor.py` |
+| `relay` additionally | `connectors/relay/` entirely (manifest, lockfile, README); `RELAY_TAG_COMMIT` and `test_every_relay_provenance_record_agrees` in `tests/test_vendor.py`; the `connectors/relay/` line in the root `README.md` |
+| `awesome-civil-engineering` additionally | `requirements/vendor-civil-domain.txt` |
+| `multi-agent-ai-in-civil-engineering` additionally | `requirements/vendor-multi-agent-kg.txt` |
+| `civil-innovation-agent` additionally | nothing — it declares no dependencies |
+
+Withdrawing **all four** additionally reverts the scanner scoping in
+`scripts/privacy_guard.py` (`gitlink_paths`, `submodule_paths`, `is_vendored`,
+and the symlink handling in `scan_repository`) and in
+`scripts/verify_runtime_stack.py`, plus `tests/test_vendor.py`, the
+`is_vendored` call sites in `tests/test_privacy.py`, and the `vendor/` and
+`requirements/` lines in the root `README.md`.
+
+Note that the symlink handling in `scan_repository` and the `node_modules`
+exclusion in `enforce_toml` fix defects that predate this work. Prefer keeping
+those two even in a full withdrawal; reverting them would reopen a hole in the
+public-source privacy contract rather than restore a clean prior state.
+
+Run the full validate chain after any rollback:
+`privacy_guard`, `validate_specialist_corps`, `verify_runtime_stack`, and the
+unittest suite.
+
 ## Declared dependencies
 
 Vendoring supplies auditable source; these supply the installable artifacts.

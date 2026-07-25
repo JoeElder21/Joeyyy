@@ -9,6 +9,7 @@ repository's own files.
 """
 
 import configparser
+import hashlib
 import json
 import re
 import subprocess
@@ -25,6 +26,33 @@ from scripts.privacy_guard import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# vendor/relay is pinned to the immutable commit that upstream tag v11.2.0
+# points at. Textual agreement between the provenance tables cannot establish
+# this: copying an arbitrary SHA into both of them reads as consistent while
+# the repository goes on claiming, and installing, the v11.2.0 release.
+RELAY_TAG = "v11.2.0"
+RELAY_TAG_COMMIT = "cce0cb9af8035869629afb252518b79d27167dbc"
+
+# sha256 of each upstream repository's own dependency source, recorded at
+# intake. The declarations under requirements/ are derived from these files;
+# if upstream changes one, the derived declaration must be re-derived rather
+# than silently left behind when the gitlink advances.
+UPSTREAM_DEPENDENCY_SOURCES = {
+    "vendor/awesome-civil-engineering": (
+        "requirements.txt",
+        "25adfa7521f75fe7cb54c6c4172221adef3fb3268dea95f032347a2fd6a85441",
+    ),
+    "vendor/multi-agent-ai-in-civil-engineering": (
+        "requirements",
+        "0073ab722a9ca69a55593983e0195c1ccb8b4c00982e9f27236d23d9a2dbfd59",
+    ),
+    "vendor/civil-innovation-agent": (
+        "package.json",
+        "55e3afc066b53b5228a7227717085a582e778c095c810f0a114e433847094f9a",
+    ),
+}
+
 EXPECTED_SUBMODULES = {
     "vendor/multi-agent-ai-in-civil-engineering": (
         "https://github.com/Kimi-chuheng/Multi-Agent-AI-in-Civil-Engineering.git"
@@ -37,7 +65,32 @@ EXPECTED_SUBMODULES = {
 }
 
 
+def _inside_git_worktree(root: Path = ROOT) -> bool:
+    """Whether ``root`` has a git worktree backing it.
+
+    A source archive (``git archive``) carries the tracked files but no index,
+    so every index-derived assertion here is unverifiable rather than failing.
+    Mirrors the probe in ``tests/test_rollback.py``.
+    """
+    probe = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return probe.returncode == 0 and probe.stdout.strip() == "true"
+
+
 class VendorSubmoduleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.has_git_index = _inside_git_worktree()
+
+    def setUp(self) -> None:
+        if not self.has_git_index:
+            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
+
     def test_gitmodules_declares_the_expected_upstreams(self) -> None:
         parser = configparser.ConfigParser()
         parser.read(ROOT / ".gitmodules", encoding="utf-8")
@@ -103,6 +156,50 @@ class VendorSubmoduleTests(unittest.TestCase):
                 self.assertTrue(
                     any(sha.startswith(candidate) for candidate in recorded),
                     f"{name} is pinned at {sha[:7]} but vendor/README.md records {recorded}",
+                )
+
+    def test_relay_gitlink_is_the_documented_release_tag(self) -> None:
+        """The pin must be the tag's commit, not merely a self-consistent SHA.
+
+        Every other assertion here compares records against each other, which
+        an arbitrary commit copied into both provenance tables satisfies. This
+        one binds the index to the immutable commit `v11.2.0` names, so
+        advancing relay off the released tag fails even when the paperwork is
+        internally consistent.
+        """
+        self.assertEqual(
+            self._index_gitlinks()["vendor/relay"],
+            RELAY_TAG_COMMIT,
+            f"vendor/relay must be pinned to {RELAY_TAG} ({RELAY_TAG_COMMIT[:7]}); "
+            "moving off the tag requires updating RELAY_TAG_COMMIT and every "
+            "provenance record together",
+        )
+        self.assertIn(
+            RELAY_TAG,
+            (ROOT / "vendor" / "README.md").read_text(encoding="utf-8"),
+        )
+
+    def test_upstream_dependency_sources_are_unchanged(self) -> None:
+        """Declarations under requirements/ are derived from upstream files.
+
+        Binding the gitlink alone is not enough: advancing a vendored repo
+        whose own requirements changed leaves the derived declaration stale
+        while every SHA still agrees. Hashing the upstream source makes that
+        drift fail, forcing a re-derivation.
+
+        Skipped when submodules are not checked out — CI does not fetch them.
+        """
+        for submodule, (relative, expected) in UPSTREAM_DEPENDENCY_SOURCES.items():
+            source = ROOT / submodule / relative
+            with self.subTest(submodule=submodule):
+                if not source.exists():
+                    self.skipTest(f"{submodule} not checked out; run git submodule update --init")
+                digest = hashlib.sha256(source.read_bytes()).hexdigest()
+                self.assertEqual(
+                    digest,
+                    expected,
+                    f"{submodule}/{relative} changed upstream — re-derive the declaration "
+                    "in requirements/ and update the recorded hash together",
                 )
 
     def test_every_relay_provenance_record_agrees(self) -> None:
@@ -199,6 +296,10 @@ class VendorSubmoduleTests(unittest.TestCase):
 
 
 class VendorScannerExclusionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.has_git_index = _inside_git_worktree()
+
     def test_submodule_paths_are_read_from_gitmodules(self) -> None:
         self.assertEqual(submodule_paths(ROOT), frozenset(EXPECTED_SUBMODULES))
 
@@ -208,6 +309,8 @@ class VendorScannerExclusionTests(unittest.TestCase):
         Scans gate on the index-proven set, so a `.gitmodules` entry with no
         matching gitlink would be inert rather than loud. This makes it loud.
         """
+        if not self.has_git_index:
+            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
         self.assertEqual(submodule_paths(ROOT), gitlink_paths(ROOT))
 
     def test_scans_gate_on_index_proven_gitlinks_not_declarations(self) -> None:
@@ -235,6 +338,8 @@ class VendorScannerExclusionTests(unittest.TestCase):
             self.assertFalse(is_vendored(root / "config" / "settings.toml", root))
 
     def test_upstream_files_are_excluded_from_the_privacy_contract(self) -> None:
+        if not self.has_git_index:
+            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
         for submodule in EXPECTED_SUBMODULES:
             with self.subTest(submodule=submodule):
                 self.assertTrue(is_vendored(ROOT / submodule / "README.md", ROOT))
