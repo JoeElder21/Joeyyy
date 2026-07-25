@@ -22,6 +22,6 @@ __all__ = [
     "TokenStore",
 ]
 
+from connectors.schwab.client import SchwabClient, SchwabError
 from connectors.schwab.config import SchwabSettings
 from connectors.schwab.oauth import TokenBundle, TokenStore
-from connectors.schwab.client import SchwabClient, SchwabError

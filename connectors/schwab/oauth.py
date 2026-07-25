@@ -11,14 +11,14 @@ and is never logged.
 from __future__ import annotations
 
 import base64
-from dataclasses import asdict, dataclass
 import json
 import os
-from pathlib import Path
 import secrets
 import time
-from typing import Callable
 import urllib.parse
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from connectors.schwab.config import (
     ACCESS_RENEW_MARGIN_SECONDS,
@@ -108,7 +108,7 @@ class TokenStore:
 
 
 def _basic_auth_header(settings: SchwabSettings) -> dict[str, str]:
-    pair = f"{settings.app_key}:{settings.app_secret}".encode("utf-8")
+    pair = f"{settings.app_key}:{settings.app_secret}".encode()
     return {
         "Authorization": "Basic " + base64.b64encode(pair).decode("ascii"),
         "Content-Type": "application/x-www-form-urlencoded",
@@ -266,8 +266,7 @@ def ensure_fresh(
     bundle = store.load()
     if bundle is None:
         raise ReconsentRequired(
-            f"No Schwab token found at {store.path}. Run: "
-            "python -m connectors.schwab.cli login"
+            f"No Schwab token found at {store.path}. Run: python -m connectors.schwab.cli login"
         )
     if bundle.access_valid(now()):
         return bundle

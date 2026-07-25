@@ -11,10 +11,11 @@ This module produces *analysis*, not advice and not orders.
 
 from __future__ import annotations
 
+import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-import tomllib
-from typing import Any, Sequence
+from typing import Any
 
 from connectors.schwab import indicators
 from connectors.schwab.portfolio import Holding, Portfolio
@@ -46,7 +47,7 @@ class Policy:
     research: dict[str, float]
 
     @classmethod
-    def load(cls, path: Path) -> "Policy":
+    def load(cls, path: Path) -> Policy:
         try:
             with Path(path).open("rb") as handle:
                 raw = tomllib.load(handle)
@@ -353,9 +354,7 @@ def _research_questions(symbol: str, verdict: str, metrics: Metrics) -> list[str
             "or only by multiple expansion?"
         )
     if metrics.volume_ratio is not None and metrics.volume_ratio > 1.5:
-        questions.append(
-            f"What explains the unusual volume in {symbol} over the last week?"
-        )
+        questions.append(f"What explains the unusual volume in {symbol} over the last week?")
     if metrics.drawdown_from_high is not None and metrics.drawdown_from_high <= -0.2:
         questions.append(
             f"What specifically caused {symbol} to fall "

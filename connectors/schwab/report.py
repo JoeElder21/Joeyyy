@@ -7,7 +7,7 @@ questions the research pass still has to answer.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from connectors.schwab.portfolio import Portfolio
 from connectors.schwab.signals import (
@@ -179,7 +179,7 @@ def render_brief(
     generated_at: datetime | None = None,
 ) -> str:
     """Assemble the full Markdown brief."""
-    stamp = (generated_at or datetime.now(timezone.utc)).astimezone()
+    stamp = (generated_at or datetime.now(UTC)).astimezone()
     counts: dict[str, int] = {}
     for verdict in verdicts:
         counts[verdict.verdict] = counts.get(verdict.verdict, 0) + 1
