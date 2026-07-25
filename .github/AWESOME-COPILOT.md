@@ -52,8 +52,14 @@ agents: no brain ownership, no memory namespace, no write target, no writer leas
 `.github/instructions/agents.instructions.md` grants *every* built-in and MCP tool. This
 agent processes arbitrary user-supplied text, so all-tools access would let prompt
 injection reach the repository and connected systems. `tools: []` is set deliberately.
-The discovery skills will report this file as drifted from upstream — that is expected,
-not staleness.
+
+**Do not dismiss a drift report on this file.** An earlier version of this note told
+maintainers to treat any reported drift as expected — which would have hidden a genuine
+upstream change behind the local override. The comparison procedure in each discovery skill
+now normalizes the overrides recorded here (`tools`, `user-invocable`, and the same for the
+planner agents) out of both sides before comparing every remaining byte. Anything still
+reported after that normalization is a real upstream or local change and must be
+investigated, not waved through.
 
 **`task-planner` capability limits — read before relying on it.** Its frontmatter declares
 `terraform`, `azure_get_schema_for_Bicep`, `Microsoft Docs`, and `context7`. Those names

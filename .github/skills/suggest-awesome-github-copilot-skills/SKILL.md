@@ -29,6 +29,12 @@ description: 'Suggest relevant GitHub Copilot skills from the awesome-copilot re
 > 3. Preserve any local override recorded in `.github/AWESOME-COPILOT.md`. Several files
 >    deliberately diverge from upstream to narrow tool grants; a wholesale replacement that
 >    drops one is a regression, not an update.
+>
+>    **Normalize those overrides out before comparing, then investigate whatever is left.**
+>    Subtract each recorded override from BOTH sides -- the local file and the upstream one
+>    -- and compare every remaining byte. Any difference that survives is a genuine upstream
+>    or local change, never "expected drift". Reporting a file as expectedly drifted, or
+>    dismissing its drift wholesale, hides real updates behind the override.
 > 4. Add or update a test, and run the full gate: privacy guard,
 >    `validate_specialist_corps.py`, `verify_runtime_stack.py`, `verify_mcp_mounts.py`, and
 >    `python -m unittest discover -s tests`.
