@@ -125,6 +125,12 @@ ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
 # See the comment in PolicyEnforcementPoint._writer_lease for why.
 VERSION_MISMATCH_DEFECT = "$.schema_version: expected const '2.0'"
 
+# The error the guard emits purely BECAUSE the ledger was withheld. It carries
+# no information on the semantic pass -- that pass always omits the ledger, so
+# the error is guaranteed and says nothing about the packet. Retaining it made
+# every write-bearing packet fail: no governed mutation could pass at all.
+LEDGER_ABSENT_ARTIFACT = "write-bearing packet requires the active writer-lease ledger"
+
 # Action fragments that read without changing anything. THIS IS AN ALLOWLIST,
 # and the direction is the whole point.
 #
@@ -160,6 +166,16 @@ READ_ONLY_ACTION_VERBS = frozenset(
         "tree",
         "fetch",
         "peek",
+        # The governance mount's own tools. `validate_packet`,
+        # `validate_handoff_return`, and `verify_audit_ledger` inspect data and
+        # change nothing, but led with verbs absent from this list, so three of
+        # that mount's five tools were classified as mutations and denied for
+        # lacking a packet, lease, and launch grant -- on the one mount that is
+        # deliberately grant-free and available to every agent.
+        "validate",
+        "verify",
+        "audit",
+        "check",
     }
 )
 
@@ -631,6 +647,16 @@ class PolicyEnforcementPoint:
             constraint_packets=list(request.constraint_packets),
             private_constraint_packets=list(request.private_constraint_packets),
         )
+        # Drop the one error that exists only because this pass withholds the
+        # ledger. It cannot hide a real lease problem: the bound pass below runs
+        # WITH the ledger and reports genuine lease-match failures, so this
+        # filter removes an artifact rather than a finding.
+        #
+        # Stated explicitly because the last suppression rule written here
+        # caused a fail-open: a filter is safe only when the thing it removes is
+        # provably uninformative in the pass it applies to, and when some other
+        # pass still covers the underlying property.
+        semantic = [error for error in semantic if error != LEDGER_ABSENT_ARTIFACT]
         seen = set(semantic)
         # Only the *additional* errors the ledger produced are eligible for the
         # narrow version tolerance, and only that exact string.

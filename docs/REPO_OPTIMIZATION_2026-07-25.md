@@ -649,6 +649,22 @@ The generalisation is sharper than the one recorded earlier in this document. It
 
 **The fix for this finding broke CI, and the repair is the same lesson a third time.** Installing the validators made the schema check real; the failure was elsewhere — a test written in the same commit imported PyYAML, which is in no live requirements manifest. The obvious repair was `skipUnless(yaml)`, and that is exactly the pattern this round removed from three CI steps: a test that skips itself reports the same green as a test that passed. Asserted per-block against the file text instead, with no new dependency, and mutation-tested by reintroducing the round-11 half-measure to confirm the assertion actually fails on it. The previous version of that test counted `required: true` across the whole file, which is why a required box in the wrong group had satisfied it.
 
+### Automated review, fourteenth pass — five findings, three fixed, two deferred
+
+**Third alternation in one area, all three in my own repairs.** Round 11 made registry leases fail admission (shut). Round 12 suppressed the guard's short-circuit and let semantic defects through (open). Round 12's two-pass repair then retained `write-bearing packet requires the active writer-lease ledger` from the deliberately ledger-free pass — so **no governed mutation could pass at all** (shut again). Reproduced before fixing: a valid v2.1 `L2` delegation with a matching registry lease, denied solely for the omitted ledger.
+
+The repair, and the rule that should have been applied the first time: a suppression is safe only when the thing it removes is **provably uninformative in the pass it applies to** *and* some other pass still covers the underlying property. The ledger-absent error is guaranteed on a pass that never supplies a ledger, so it carries zero information there; the bound pass runs with the ledger and still reports genuine lease-match failures. Both directions are now tested — a lawful write-bearing packet passes, a tampered memory namespace still fails.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Semantic pass rejected every write-bearing packet | **Correct — fail-shut, third alternation** | Ledger-absent artifact dropped from the ledger-free pass only. |
+| Governance mount's inspection tools classified as mutations | **Correct** | `validate_packet`, `validate_handoff_return`, and `verify_audit_ledger` led with verbs absent from the read allowlist, so three of five tools on the one deliberately grant-free mount were denied for lacking a packet, lease, and grant. `validate`/`verify`/`audit`/`check` added; `admit_delegation_packet` correctly stays a mutation, and a test pins that. |
+| `CONTRIBUTING.md` ran the verifier before installing it | **Correct** | The same silent-degradation shape as the CI job fixed one round earlier — the documented manual gate passed while validating nothing. Install moved ahead of the audit, with a test asserting the order. |
+| Instruction nonces never consumed | **Correct, deferred** | The same signed grant can be replayed within its expiry window. Consuming it requires a side effect at the execution boundary, which this module deliberately does not have — a policy evaluation that burns a grant means *asking* whether an action is permitted performs it. The consumption ledger belongs with `enforce()` wiring. |
+| `expected_artifacts` not compared to the emitted packet | **Correct, deferred** | Eval-harness category, blocked behind dispatch. |
+
+**What the alternation means, stated once.** Three consecutive attempts to correct this one interaction produced, in order, a gate that denied everything, a gate that admitted invalid packets, and a gate that denied every mutation. Each fix was locally reasoned and locally tested. The failure is not carelessness in any single change — it is that this interaction has more states than the tests written alongside each fix were covering, and each repair was validated against the failure it targeted rather than against the whole space. That is a signal to stop patching and let a human decide the shape, which is what the deferrals now reflect.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

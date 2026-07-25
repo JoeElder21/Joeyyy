@@ -1308,6 +1308,70 @@ class ScopeTests(unittest.TestCase):
         self.assertEqual(fresh["writer_agent"], CHIEF)
         self.assertEqual(fresh["status"], "active")
 
+    def test_a_lawful_write_bearing_packet_is_not_denied_by_the_semantic_pass(self):
+        # The third alternation in one area. Round 11 made registry leases fail
+        # admission (shut); round 12 suppressed the guard's short-circuit and
+        # let semantic defects through (open); round 12's two-pass repair then
+        # retained "write-bearing packet requires the active writer-lease
+        # ledger" from the deliberately ledger-free pass -- so NO governed
+        # mutation could pass at all (shut again).
+        from copy import deepcopy
+
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        instance = PacketContractTests(
+            "test_valid_delegation_and_handoff_are_bound_to_lease_and_origin"
+        )
+        delegation, _ = instance.v21_readonly_pair()
+        write_bearing = deepcopy(delegation)
+        write_bearing.update(
+            {
+                "approval_level": "L2",
+                "allowed_write_targets": ["APEX/Strategy-Campaigns"],
+                "writer_agent": CHIEF,
+                "writer_lease_id": "lease-1",
+                "mutation_contract": {
+                    "allowed_operations": ["upsert"],
+                    "require_expected_version": True,
+                    "require_idempotency_key": True,
+                },
+            }
+        )
+        errors = self.pep._guard_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                packet=write_bearing,
+            )
+        )
+        self.assertEqual(errors, [], "a lawful write-bearing packet must not be denied")
+
+    def test_the_governance_mounts_inspection_tools_are_reads(self):
+        # Three of that mount's five tools were classified as mutations and
+        # denied for lacking a packet, lease, and launch grant -- on the one
+        # mount that is deliberately grant-free and open to every agent.
+        for action in ("validate_packet", "validate_handoff_return", "verify_audit_ledger"):
+            with self.subTest(action=action):
+                self.assertFalse(
+                    self.pep._is_mutating(
+                        ToolRequest(agent=CHIEF, action=action, resource="mount:governance")
+                    )
+                )
+
+    def test_admitting_a_delegation_is_still_a_mutation(self):
+        # The accept path must not swallow the one governance tool that does
+        # change state.
+        self.assertTrue(
+            self.pep._is_mutating(
+                ToolRequest(
+                    agent=CHIEF, action="admit_delegation_packet", resource="mount:governance"
+                )
+            )
+        )
+
     def test_the_chief_still_reaches_connectors(self):
         # The sole cross-brain agent performs connector work on the corps'
         # behalf; denying it too would be an outage, not a control.

@@ -14,10 +14,14 @@ That installs the same gates CI runs, so failures surface before a push rather t
 To run everything by hand:
 
 ```bash
+# Install first. verify_runtime_stack.py catches the ImportError for jsonschema
+# and rtoml and then reports zero schemas and zero TOML files checked -- exiting
+# 0, so the audit passes while validating nothing. The install has to precede
+# the verifier, not follow it.
+python -m pip install -r requirements/runtime-contracts.txt  # jsonschema, rtoml, mcp
 python scripts/privacy_guard.py            # public-repository boundary
 python scripts/validate_specialist_corps.py # roster, isolation, schema, registry
 python scripts/verify_runtime_stack.py     # dependency and contract audit
-python -m pip install -r requirements/runtime-contracts.txt  # the verifier's dependency
 python scripts/verify_mcp_mounts.py --strict  # approved MCP mounts, launched not assumed
 ruff check .                               # house Python standard
 python -m unittest discover -s tests -v    # full suite

@@ -215,6 +215,18 @@ class ContributorSurfaceTests(unittest.TestCase):
             "provenance checks must be required fields, not optional prompts",
         )
 
+    def test_documented_manual_gate_installs_validators_first(self):
+        # verify_runtime_stack.py catches the ImportError for jsonschema and
+        # rtoml, reports zero schemas and zero TOML files checked, and exits 0 --
+        # so a contributor following the documented order passed the audit while
+        # it validated nothing.
+        text = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        install = text.index("pip install -r requirements/runtime-contracts.txt")
+        verifier = text.index("python scripts/verify_runtime_stack.py")
+        self.assertLess(
+            install, verifier, "the verifier's dependencies must be installed before it runs"
+        )
+
     def test_scan_applicability_is_its_own_required_question(self):
         # The first attempt made one checkbox required with an "either the
         # boxes above are ticked, or this is out of scope" label. That
