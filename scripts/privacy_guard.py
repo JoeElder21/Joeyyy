@@ -246,6 +246,89 @@ _YAML_ANCHOR_DEF = re.compile(
 _YAML_ALIAS = re.compile(r"(?m)(?P<lead>:[ \t]*)\*(?P<name>[\w.-]+)[ \t]*$")
 
 
+# Parsing beats pattern-matching for a format that has a grammar. Six review
+# rounds each found a different token or container that hid a value from the
+# line-oriented patterns -- TOML multiline strings, quoted keys, block scalars
+# in two indicator orders, explicit tags, sequence entries, anchors, aliases,
+# and flow mappings. Each fix was correct and each was bypassed by the next
+# construct, because a regex approximates the grammar and the grammar keeps
+# winning.
+#
+# So the value extraction below asks a real parser what the document MEANS, and
+# scans that. The regex normalisers are kept underneath as a fallback: PyYAML
+# is not in every environment, and losing all coverage when it is absent would
+# trade a partial gap for a total one.
+MAX_PARSE_BYTES = 2_000_000
+
+
+def _yaml_loader():
+    """A safe loader that tolerates tags it does not know.
+
+    Unknown tags (`!secret`, `!<tag:...>`) raise under the plain safe loader,
+    which would drop the whole document back to the regex path -- exactly the
+    documents most likely to be hiding something behind a custom tag.
+    """
+    import yaml
+
+    class _Tolerant(yaml.SafeLoader):
+        pass
+
+    _Tolerant.add_multi_constructor(
+        "", lambda loader, suffix, node: _construct_unknown(loader, node))
+    _Tolerant.add_multi_constructor(
+        "tag:", lambda loader, suffix, node: _construct_unknown(loader, node))
+    return _Tolerant
+
+
+def _construct_unknown(loader, node):
+    import yaml
+
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node, deep=True)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node, deep=True)
+    return loader.construct_scalar(node)
+
+
+def yaml_reconstructed_values(text: str) -> str:
+    """`key: value` lines for every scalar a YAML parser actually produces.
+
+    Anchors, aliases, tags, block scalars, flow mappings and sequence entries
+    are all resolved by the parser, so the patterns see the value the
+    application would receive rather than the syntax that carried it. Returns
+    "" when the text is not YAML, is too large, or PyYAML is unavailable --
+    every one of which leaves the regex normalisers in charge.
+    """
+    if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
+        return ""
+    try:
+        import yaml
+    except ImportError:
+        return ""
+
+    lines: list[str] = []
+
+    def walk(node, key=None):
+        if isinstance(node, dict):
+            for child_key, value in node.items():
+                walk(value, child_key)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                walk(value, key)
+        elif node is not None and key is not None:
+            lines.append(f"{key}: {node}")
+
+    try:
+        # An alias bomb expands geometrically; the size cap plus these guards
+        # keep a hostile document from taking the scan down instead of being
+        # reported by it.
+        for document in yaml.load_all(text, Loader=_yaml_loader()):
+            walk(document)
+    except (Exception, RecursionError):  # noqa: BLE001 - any parse failure falls back
+        return ""
+    return "\n".join(lines)
+
+
 def strip_yaml_node_properties(text: str) -> str:
     """Resolve YAML aliases, then drop tags and anchors, so the VALUE is scanned.
 
@@ -674,9 +757,14 @@ def _scan_files(
             continue
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
+        # Parser output FIRST, regex normalisation underneath. The parser is
+        # authoritative where it works; the normalisers stay so a missing
+        # PyYAML, a non-YAML file, or an oversized document degrades to partial
+        # coverage rather than none.
         scannable = strip_known_placeholders(
             relative,
-            fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text))))
+            fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text)))
+            + "\n" + yaml_reconstructed_values(text))
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")

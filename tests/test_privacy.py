@@ -17,6 +17,7 @@ from scripts.privacy_guard import (
     strip_known_placeholders,
     strip_yaml_node_properties,
     strip_yaml_tags,
+    yaml_reconstructed_values,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -645,6 +646,69 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # The old name stays exported: the pipeline and earlier tests called
         # this tag stripping before anchors turned out to be the same defect.
         self.assertIs(strip_yaml_tags, strip_yaml_node_properties)
+
+    def test_a_parser_reconstructs_values_the_patterns_would_miss(self):
+        """Six rounds each found a different construct hiding a value from the
+        line-oriented patterns. A regex approximates the YAML grammar and the
+        grammar keeps winning, so the value extraction now asks a real parser
+        what the document MEANS and scans that.
+
+        These probes are deliberately shapes no normaliser handles: flow
+        mappings, flow sequences, nesting, and anchors defined outside a
+        mapping value."""
+        secret = "Xy7Q" + "secretValue0192"
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        ident = "AZURE" + "_TENANT_ID"
+        cases = [
+            ("credential assignment", '{"%s": !!str %s}\n' % (cred, secret)),
+            ("credential assignment", '{"%s": &a %s}\n' % (cred, secret)),
+            ("credential assignment", '{outer: {"%s": !secret %s}}\n' % (cred, secret)),
+            ("credential assignment", "%s: [!!str %s]\n" % (cred, secret)),
+            # Anchor defined on a sequence scalar, referenced by a credential key.
+            ("credential assignment", f"defaults:\n  - &cred {secret}\n{cred}: *cred\n"),
+            ("connector identifier",
+             f"a:\n  b:\n    c:\n      {ident}: &t {guid}\n      other: *t\n"),
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(cases):
+                probe = root / f"parsed{index}.yaml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(body=body):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any(label in finding for finding in findings),
+                        f"{body!r} produced {findings}",
+                    )
+
+            clean = root / "clean.yaml"
+            clean.write_text(
+                "description: &d Ordinary prose about a mount.\n"
+                "other: *d\nlist: [a, b]\n",
+                encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
+
+    def test_parser_extraction_degrades_instead_of_failing(self):
+        """The parser is authoritative where it works, but it must never take
+        the scan down: a non-YAML file, an oversized document or a missing
+        PyYAML has to fall through to the regex normalisers rather than raise
+        or return a false clean."""
+        # Genuinely malformed YAML (unbalanced flow) must fall through, not raise.
+        self.assertEqual(yaml_reconstructed_values("{a: [1, 2}\n"), "")
+        # Oversized input is skipped rather than parsed.
+        self.assertEqual(yaml_reconstructed_values("x" * 3_000_000), "")
+        # The property that matters for every other input: never raise, always
+        # return a string. Python source, markdown and JSON all reach this.
+        for probe in ("def f(:\n  not yaml [", "# heading\n\ntext\n",
+                      '{"a": 1}', "", "\x00\x01", "a: *undefined_alias\n"):
+            with self.subTest(probe=probe[:20]):
+                self.assertIsInstance(yaml_reconstructed_values(probe), str)
+        # A document using a tag no constructor knows must still yield values,
+        # not drop to "" -- those are the documents most worth reading.
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        self.assertIn(secret, yaml_reconstructed_values(f"{cred}: !custom {secret}\n"))
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.

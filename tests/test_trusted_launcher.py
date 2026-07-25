@@ -11,8 +11,9 @@ import unittest
 
 from scripts.agent_runtime import AuditLedger
 from scripts.trusted_launcher import (
-    BASELINE_ENV, CONNECTOR_STAGES, LaunchDenied, authorize, issue_grant,
-    mount_env, specialist_stage, stage_permits_connector,
+    BASELINE_ENV, CONNECTOR_STAGES, LaunchDenied, ManifestUnavailable,
+    authorize, issue_grant, mount_env, specialist_stage,
+    stage_permits_connector,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -142,6 +143,51 @@ class TrustedLauncherTests(unittest.TestCase):
                                    lambda agent, corps=None: "active"):
                 authorize("filesystem", grant_path=grant, key_path=key,
                           ledger=ledger)
+
+    def test_an_unreadable_brain_manifest_denies_rather_than_falls_back(self):
+        """Deleting a file must not be a way to gain authority.
+
+        Returning {} on a read failure was a fail-OPEN: with no per-agent entry
+        found, resolution fell back to the corps-wide deployed_stage, so the
+        moment that snapshot reads `active` an unreadable or deleted manifest
+        made every allowlisted roster specialist connector-eligible -- including
+        one whose authoritative status is shadow or restricted. The agent's real
+        status is exactly what could not be read."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            with mock.patch.object(
+                launcher, "_brain_manifest",
+                side_effect=ManifestUnavailable("brains/apex/agents.toml: gone"),
+            ):
+                # Mint-time refusal.
+                with self.assertRaises(LaunchDenied) as caught:
+                    issue_grant("filesystem", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_systems_blacksmith", ledger=ledger)
+                self.assertIn("cannot resolve the lifecycle stage",
+                              str(caught.exception))
+
+            # And at consumption: a grant minted while readable must not survive
+            # the manifest becoming unreadable afterwards.
+            with mock.patch.object(launcher, "specialist_stage",
+                                   lambda agent, corps=None: "active"):
+                grant = issue_grant("filesystem", 30, key_path=key,
+                                    out_dir=Path(tmp) / "grants",
+                                    agent="apex_systems_blacksmith",
+                                    ledger=ledger)
+            with mock.patch.object(
+                launcher, "_brain_manifest",
+                side_effect=ManifestUnavailable("brains/apex/agents.toml: gone"),
+            ):
+                with self.assertRaises(LaunchDenied) as caught:
+                    authorize("filesystem", grant_path=grant, key_path=key,
+                              ledger=ledger)
+                self.assertIn("cannot resolve the lifecycle stage",
+                              str(caught.exception))
 
     def test_lifecycle_resolves_from_the_named_agent_not_the_snapshot(self):
         """A promotion is per agent; a restriction must not be widened.

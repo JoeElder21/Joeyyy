@@ -4,3 +4,8 @@
 # Repository tooling and PacketGuard require Python 3.11–3.12.
 # Use Microsoft's official distribution for the legacy AutoGen 0.2 API.
 autogen-agentchat>=0.2.35,<0.3; python_version >= "3.11" and python_version < "3.13"
+# Used by scripts/privacy_guard.py to reconstruct YAML values before
+# scanning. The guard degrades to regex normalisation without it, so this is
+# a coverage dependency rather than a hard one -- but CI must exercise the
+# parser path, which is the authoritative one.
+PyYAML>=6.0

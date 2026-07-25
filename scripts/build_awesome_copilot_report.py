@@ -376,6 +376,17 @@ PRIMARY_AVAILABLE = sum(
 ) or None
 
 
+def _count_label(kind: str) -> str:
+    """" (N)" when the selected pin enumerated that class, "" when it did not.
+
+    Hardcoding the figure meant a manifest moved to an unknown pin produced a
+    report whose headline said the inventory was not enumerated there while
+    these labels still published the old pin's numbers.
+    """
+    value = UPSTREAM_INVENTORY.get(kind)
+    return f" ({value})" if isinstance(value, int) else ""
+
+
 def _cell(value) -> str:
     """Render a count, or an explicit not-enumerated marker."""
     return str(value) if value is not None else "not enumerated at this pin"
@@ -629,13 +640,17 @@ for g, r in [
      "PHP, Ruby, TypeScript, C#",
      "This repo consumes MCP servers through the mount registry; it does not "
      "author them. Reconsider if that changes."),
-    ("Plugins (71)",
+    # Counts derive from the SELECTED pin's inventory, never hardcoded. The
+    # headline already reports "not enumerated at this pin" when the manifest
+    # moves to an unknown SHA; these labels kept printing the previous pin's
+    # figures beside it, so one regenerated report asserted both.
+    (f"Plugins{_count_label('plugins')}",
      "Bundles of the same agents and skills. Installing one would duplicate "
      "files already chosen individually and pull in unwanted siblings."),
-    ("Hooks (8) and workflows (8)",
+    (f"Hooks{_count_label('hooks')} and workflows{_count_label('workflows')}",
      "Add runtime machinery and scheduled automation beyond the requested "
      "scope."),
-    ("Extensions (20)",
+    (f"Extensions{_count_label('extensions')}",
      "Interactive canvases and dashboards; no fit for a governance repo."),
 ]:
     ex.append([Paragraph(g, CELL), Paragraph(r, CELL)])

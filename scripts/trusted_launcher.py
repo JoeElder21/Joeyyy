@@ -78,12 +78,25 @@ def _corps() -> dict:
         return tomllib.load(source)
 
 
+class ManifestUnavailable(Exception):
+    """A brain manifest could not be read, so no stage can be resolved."""
+
+
 def _brain_manifest(path: str) -> dict:
+    """Load a brain manifest, or raise.
+
+    Returning {} on failure was a fail-OPEN: with no per-agent entry found,
+    specialist_stage() fell back to the corps-wide deployed_stage, so the
+    moment that snapshot reads `active` an unreadable or deleted manifest
+    would make every allowlisted roster specialist connector-eligible --
+    including one whose authoritative per-agent status is shadow or
+    restricted. Deleting a file must not be a way to gain authority.
+    """
     try:
         with (ROOT / path).open("rb") as source:
             return tomllib.load(source)
-    except OSError:
-        return {}
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ManifestUnavailable(f"{path}: {error}") from error
 
 
 def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
@@ -115,6 +128,8 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
         manifest_path = corps.get(key)
         if not manifest_path:
             continue
+        # A read failure is an authorization failure, not an absent override:
+        # the agent's authoritative status is exactly what could not be read.
         entry = _brain_manifest(manifest_path).get("agents", {}).get(agent)
         if isinstance(entry, dict) and entry.get("status"):
             per_agent = entry["status"]
@@ -204,7 +219,14 @@ def issue_grant(
     # specialist is currently `shadow`, so in practice this leaves Agent 007 as
     # the only identity that can hold a grant -- which is the documented
     # arrangement, now enforced rather than described.
-    stage = specialist_stage(agent) if agent else None
+    try:
+        stage = specialist_stage(agent) if agent else None
+    except ManifestUnavailable as error:
+        raise refuse(
+            f"cannot resolve the lifecycle stage of {agent!r}: {error}. "
+            "An unreadable brain manifest is an authorization failure, not an "
+            "absent override."
+        )
     if not stage_permits_connector(stage):
         raise refuse(
             f"agent {agent!r} is lifecycle stage {stage!r}; a specialist may "
@@ -321,7 +343,14 @@ def authorize(
         # still be authorized, because the signature, expiry and allowlist all
         # still check out. An administrative restriction has to revoke
         # outstanding access, not just prevent new grants.
-        stage = specialist_stage(identity)
+        try:
+            stage = specialist_stage(identity)
+        except ManifestUnavailable as error:
+            raise deny(
+                f"cannot resolve the lifecycle stage of {identity!r}: {error}. "
+                "An unreadable brain manifest is an authorization failure, not "
+                "an absent override."
+            )
         if not stage_permits_connector(stage):
             raise deny(
                 f"agent {identity!r} is lifecycle stage {stage!r}; a specialist "

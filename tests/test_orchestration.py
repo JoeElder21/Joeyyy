@@ -696,6 +696,32 @@ class SelectionReportBaselineTests(unittest.TestCase):
                     "the override must precede the fetches it governs",
                 )
 
+    def test_exclusion_labels_derive_from_the_active_pin(self):
+        """The headline already says "not enumerated at this pin" when the
+        manifest moves to an unknown SHA; these labels kept printing the
+        previous pin's plugin/hook/workflow/extension figures beside it, so one
+        regenerated report asserted both."""
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        self.assertIn("def _count_label(", source)
+        for hardcoded in ("Plugins (71)", "Hooks (8) and workflows (8)",
+                          "Extensions (20)"):
+            self.assertNotIn(hardcoded, source)
+
+        # Behavioural: a known pin labels, an unknown pin says nothing.
+        inventory = source[source.index("UPSTREAM_INVENTORY_BY_PIN"):
+                           source.index("def manifest_pin()")]
+        label = source[source.index("def _count_label(kind: str) -> str:"):
+                       source.index("def _cell(value) -> str:")]
+        for pin, expect in (("aa280f28", " (71)"), ("zz000000", "")):
+            namespace: dict = {}
+            exec(inventory, namespace)  # noqa: S102 - reading this module's own source
+            namespace["UPSTREAM_INVENTORY"] = (
+                namespace["UPSTREAM_INVENTORY_BY_PIN"].get(pin, {}))
+            exec(label, namespace)  # noqa: S102
+            with self.subTest(pin=pin):
+                self.assertEqual(namespace["_count_label"]("plugins"), expect)
+
     def test_gate_rows_come_from_the_importable_helper(self):
         """The report builder runs its gates and writes the PDF at import time,
         so the helpers must live outside it or they cannot be tested without
