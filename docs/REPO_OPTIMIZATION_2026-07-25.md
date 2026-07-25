@@ -374,6 +374,44 @@ Part 1 or Part 2 above was revised; this section records the outcomes.
    summary. The privacy guard's working-tree coverage can now be treated as
    complete coverage.
 
+### Automated review, 2026-07-25 — nine findings, seven fixed
+
+A Codex review of this PR raised nine findings. Seven were correct and are fixed;
+two are carried forward deliberately. Recording them because several caught the
+work doing precisely what this record criticises elsewhere.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| `promotion_ready` derived from case files, not passed runs | **Correct, and the worst of the nine** | Split `cases_complete` (inventory) from `promotion_ready` (evidence); the latter now needs a recorded passing run per mode. Three tests pin it. |
+| Brain lock treated an omitted `owner_brain` as no objection | **Correct** | A non-chief agent must now declare its brain; silence is not consent. |
+| Writer lease trusted two matching strings | **Correct** | Lease is validated against its schema, status, expiry, brain, and resource id. A forged dict fails as a lease before any field is read. |
+| DeepEval cloud logging documented but unenforced | **Correct** | The runner now sets the opt-out and refuses to run if telemetry is on or `CONFIDENT_API_KEY` is set. |
+| `packet_validity` never received a packet | **Correct** | Dispatch returns `(output, packet)`; the packet travels in `additional_metadata`. |
+| Case `expected_`/`forbidden_behaviors` fed no metric | **Correct** | New `case_criteria` metric, threshold 1.0 — a forbidden behaviour is not averageable. |
+| Runs without `--run-id` overwrote each other | **Correct** | `--run-id` is required, and a non-empty output directory refuses rather than overwrites. |
+| gitleaks only in pre-commit | **Correct** | Added to CI over working tree and history. A local hook protects nobody who uses the web UI or `--no-verify`. |
+| `enforce()` not wired into execution paths | **Correct, carried forward** | See below. |
+
+**Two things worth stating plainly.**
+
+The `promotion_ready` bug is the one that matters. This record spends paragraphs
+insisting that inventory is not evidence and that an unproven mode must read as
+unproven — and then computed promotion readiness from JSON files existing.
+Authoring 39 case files would have reported the corps promotable with zero
+evaluations run. The principle was stated correctly and implemented wrongly, and
+a reviewer caught it rather than the design.
+
+**A defect surfaced while fixing the lease check, and it is not this PR's to
+fix.** `runtime/writer_lease.py` issues `schema_version: "2.1"`, but
+`schemas/writer_lease.schema.json` pins `const: "2.0"` — so **every lease the
+registry produces fails its own schema**. Nothing caught it because the only test
+spanning both checks required-field presence rather than the const, and the
+packet-contract fixtures hand-build 2.0 leases. `scripts/memory_layer.py` would
+already reject a real registry lease today. The enforcement point tolerates
+exactly that one error string and nothing else, so forged leases still fail.
+Resolving it means changing a schema — a contract decision, and this change set
+promised to touch none.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
@@ -383,6 +421,16 @@ Not a decision backlog — the actual work the harness exposed:
 - **Specialist dispatch is unwired** (`_invoke_specialist` raises). Connecting it
   needs a verified model credential and a connector-isolation decision that is a
   separate, deliberate step.
-- **Confident AI cloud logging must be disabled** before any real mission is
-  evaluated. This is the one setting that turns an approved tool into an
-  unapproved disclosure.
+- **Confident AI cloud logging** is now enforced by the runner rather than only
+  documented — it refuses to run while telemetry is on.
+- **`enforce()` is built and tested but not yet called by any execution path.**
+  `scripts/claude_runtime.py`, `scripts/governance_mcp_server.py`,
+  `scripts/trusted_launcher.py`, and `runtime/lease_queue.py` still go straight
+  to admission. Until one of them calls it, the consolidated gate constrains
+  nothing at runtime — the same "configured, not executed" failure this record
+  spends a section on. Wiring it changes behaviour in tested governance code, so
+  it belongs in its own reviewed change rather than appended to this one. It is
+  the top follow-up.
+- **The writer-lease schema mismatch** (`2.1` issued vs `2.0` required) needs a
+  contract decision before the enforcement point can validate leases without a
+  scoped exception.

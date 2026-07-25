@@ -13,9 +13,11 @@ actually executed.
 `test_no_rule_silently_no_ops` exists so it cannot come back.
 """
 
+import datetime
 import unittest
 from pathlib import Path
 
+from runtime.writer_lease import LeaseRegistry
 from scripts.policy_enforcement import (
     CHIEF,
     HIGH_IMPACT_ACTIONS,
@@ -31,6 +33,28 @@ from scripts.policy_enforcement import (
 ROOT = Path(__file__).resolve().parents[1]
 SPECIALIST = "apex_war_architect"
 JEOS_SPECIALIST = "jeos_reflection_forge"
+NOW = datetime.datetime(2026, 7, 25, 12, 0, tzinfo=datetime.UTC)
+
+
+def real_lease(**overrides):
+    """A genuine lease from the registry, not a stub.
+
+    Tests that hand-build lease-shaped dicts prove only that the checks read
+    those two fields. Issuing a real lease and then breaking exactly one thing
+    proves the check fires against what the runtime actually produces.
+    """
+    fields = {
+        "mission_id": "m-001",
+        "owner_brain": "APEX",
+        "writer_agent": CHIEF,
+        "write_target": "APEX/Strategy-Campaigns",
+        "resource_id": "campaign-alpha",
+        "expected_state": "campaign record absent",
+        "rollback": "delete created record",
+        "now": NOW,
+    }
+    fields.update(overrides)
+    return dict(LeaseRegistry().issue(**fields))
 
 
 class RuleCoverageTests(unittest.TestCase):
@@ -159,33 +183,57 @@ class DenialTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertTrue(any("writer lease" in reason for reason in decision.reasons))
 
-    def test_lease_held_by_another_agent_is_denied(self):
-        decision = self.pep.evaluate(
+    def test_a_forged_lease_dict_is_rejected_before_any_field_is_trusted(self):
+        # The hole this closes: a caller minting its own authorization out of two
+        # matching strings. It must fail as a *lease*, not merely mismatch.
+        forged = {"writer_agent": CHIEF, "write_target": "APEX/Strategy-Campaigns"}
+        reasons = self.pep._writer_lease(
             ToolRequest(
                 agent=CHIEF,
                 action="write",
                 resource="APEX/Strategy-Campaigns",
                 owner_brain="APEX",
                 mutating=True,
-                lease={"writer_agent": SPECIALIST, "write_target": "APEX/Strategy-Campaigns"},
+                lease=forged,
             )
         )
-        self.assertFalse(decision.allowed)
-        self.assertTrue(any("held by" in reason for reason in decision.reasons))
+        self.assertTrue(reasons)
+        self.assertTrue(any("lease rejected" in reason for reason in reasons))
+
+    def test_a_genuine_registry_lease_is_accepted(self):
+        # The accept path matters as much as the reject path: a rule that denies
+        # everything is not enforcement, it is an outage.
+        reasons = self.pep._writer_lease(self._mutating(lease=real_lease()))
+        self.assertEqual(reasons, [])
+
+    def test_lease_held_by_another_agent_is_denied(self):
+        lease = real_lease(writer_agent=SPECIALIST)
+        reasons = self.pep._writer_lease(self._mutating(lease=lease))
+        self.assertTrue(any("held by" in reason for reason in reasons))
 
     def test_lease_does_not_stretch_to_another_target(self):
-        decision = self.pep.evaluate(
-            ToolRequest(
-                agent=CHIEF,
-                action="write",
-                resource="APEX/Decision-Log",
-                owner_brain="APEX",
-                mutating=True,
-                lease={"writer_agent": CHIEF, "write_target": "APEX/Strategy-Campaigns"},
-            )
+        reasons = self.pep._writer_lease(
+            self._mutating(lease=real_lease(), resource="APEX/Decision-Log")
         )
-        self.assertFalse(decision.allowed)
-        self.assertTrue(any("does not cover" in reason for reason in decision.reasons))
+        self.assertTrue(any("does not cover" in reason for reason in reasons))
+
+    def test_expired_lease_is_denied(self):
+        lease = real_lease()
+        lease["expires_at"] = "2020-01-01T00:00:00+00:00"
+        reasons = self.pep._writer_lease(self._mutating(lease=lease))
+        self.assertTrue(any("expired" in reason for reason in reasons))
+
+    def test_closed_lease_authorizes_nothing_further(self):
+        lease = real_lease()
+        lease["status"] = "verified"
+        reasons = self.pep._writer_lease(self._mutating(lease=lease))
+        self.assertTrue(reasons)
+
+    def test_lease_for_another_resource_id_is_denied(self):
+        reasons = self.pep._writer_lease(
+            self._mutating(lease=real_lease(), resource_id="campaign-beta")
+        )
+        self.assertTrue(any("resource" in reason for reason in reasons))
 
     def test_write_capable_mount_requires_a_launch_grant(self):
         request = ToolRequest(
@@ -194,9 +242,21 @@ class DenialTests(unittest.TestCase):
             resource="mount:civil3d",
             owner_brain="APEX",
             mutating=True,
-            lease={"writer_agent": CHIEF, "write_target": "mount:civil3d"},
+            lease=real_lease(write_target="mount:civil3d"),
         )
         self.assertFalse(self.pep.evaluate(request).allowed)
+
+    def _mutating(self, *, lease, resource="APEX/Strategy-Campaigns", resource_id=None):
+        return ToolRequest(
+            agent=CHIEF,
+            action="write",
+            resource=resource,
+            owner_brain="APEX",
+            mutating=True,
+            lease=lease,
+            resource_id=resource_id,
+            now=NOW,
+        )
 
     def test_all_reasons_are_reported_not_just_the_first(self):
         # A caller fixing a denial should see every reason at once.

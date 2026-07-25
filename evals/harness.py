@@ -50,6 +50,11 @@ METRIC_CONTRACT = {
         "Did the specialist reference only its own brain's namespace, write "
         "targets, and roundtable? Custom metric — no off-the-shelf equivalent."
     ),
+    "case_criteria": (
+        "Did the output meet this case's own expected_artifacts and "
+        "expected_behaviors, and avoid every forbidden_behavior? Generic metrics "
+        "cannot know case-specific criteria; only the case states them."
+    ),
     "packet_validity": (
         "Is the emitted handoff/delegation packet schema-valid against schemas/? "
         "Deterministic pre-check; runs before any model-judged metric."
@@ -57,7 +62,7 @@ METRIC_CONTRACT = {
 }
 
 # Every mode is judged on these; a mode may add more in its case file.
-BASELINE_METRICS = ("packet_validity", "role_adherence", "brain_isolation")
+BASELINE_METRICS = ("packet_validity", "role_adherence", "brain_isolation", "case_criteria")
 
 
 @dataclass(frozen=True)
@@ -82,14 +87,34 @@ class Mode:
 
 @dataclass
 class Coverage:
-    """What the harness can and cannot currently attest."""
+    """What the harness can and cannot currently attest.
+
+    Two separate things, deliberately not conflated:
+
+    - `covered` — a mode has a *case file*. That is inventory.
+    - `passed` — a mode has a *recorded passing run*. That is evidence.
+
+    An earlier version computed promotion readiness from `covered` alone, so
+    authoring 39 JSON files would have reported the corps ready for promotion
+    without a single evaluation having run. That is the exact failure this
+    harness exists to prevent — inventory completeness read as behavioural
+    evidence — and it was caught in review rather than by the design.
+    """
 
     modes: list[Mode] = field(default_factory=list)
     covered: dict[str, Path] = field(default_factory=dict)
+    # Mode key -> run identifier that recorded a pass. Empty until a real run
+    # is supplied; nothing here is ever inferred from a case file existing.
+    passed: dict[str, str] = field(default_factory=dict)
 
     @property
     def uncovered(self) -> list[Mode]:
         return [mode for mode in self.modes if mode.key not in self.covered]
+
+    @property
+    def unproven(self) -> list[Mode]:
+        """Modes with no recorded passing run — the set the active gate cares about."""
+        return [mode for mode in self.modes if mode.key not in self.passed]
 
     @property
     def percent(self) -> float:
@@ -98,13 +123,23 @@ class Coverage:
         return 100.0 * len(self.covered) / len(self.modes)
 
     def summary(self) -> dict:
+        blockers = []
+        if self.uncovered:
+            blockers.append(f"{len(self.uncovered)} material modes have no case")
+        if self.unproven:
+            blockers.append(f"{len(self.unproven)} material modes have no recorded passing run")
         return {
             "modes_total": len(self.modes),
             "modes_covered": len(self.covered),
             "modes_uncovered": len(self.uncovered),
             "coverage_percent": round(self.percent, 1),
             "uncovered_keys": [mode.key for mode in self.uncovered],
-            "promotion_ready": not self.uncovered,
+            # Inventory. Says a case exists, never that it passed.
+            "cases_complete": not self.uncovered,
+            # Evidence. Requires a recorded passing run for every material mode.
+            "modes_proven": len(self.passed),
+            "promotion_ready": bool(self.modes) and not self.unproven,
+            "promotion_blockers": blockers,
         }
 
 

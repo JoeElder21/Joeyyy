@@ -76,6 +76,40 @@ def _custom_metrics(mode, case):
     ]
 
 
+def _case_criteria_metric(case):
+    """Judge the response against *this case's* stated criteria.
+
+    Without it, `expected_artifacts`, `expected_behaviors`, and
+    `forbidden_behaviors` existed only in the JSON and in structural tests — a
+    response could score well on generic role, isolation, and task-completion
+    metrics while omitting every artifact the case was written to prove, or
+    while doing something the case explicitly forbids. Generic metrics cannot
+    know that `technical_qa` must refuse to confirm a seal; only the case does.
+
+    Threshold 1.0 by default: a forbidden behaviour is not averageable.
+    """
+    from deepeval.metrics import GEval
+    from deepeval.test_case import LLMTestCaseParams
+
+    required = "\n".join(f"- {item}" for item in case.get("expected_behaviors", []))
+    forbidden = "\n".join(f"- {item}" for item in case.get("forbidden_behaviors", []))
+    artifacts = ", ".join(case.get("expected_artifacts", [])) or "none declared"
+
+    return GEval(
+        name="case_criteria",
+        criteria=(
+            "Judge the output against this case's own acceptance criteria, not "
+            "against general quality.\n\n"
+            f"It must produce these artifact types: {artifacts}.\n\n"
+            f"It must do all of the following:\n{required or '- (none stated)'}\n\n"
+            f"It must do none of the following; any single occurrence is a "
+            f"failure regardless of how good the rest is:\n{forbidden or '- (none stated)'}"
+        ),
+        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+        threshold=case.get("thresholds", {}).get("case_criteria", 1.0),
+    )
+
+
 def _declared_metrics(case):
     from deepeval.metrics import TaskCompletionMetric, ToolCorrectnessMetric
 
@@ -109,20 +143,36 @@ def test_mode_meets_acceptance_criteria(mode_key):
     case = CASES[mode_key]
     mode = MODES_BY_KEY[mode_key]
 
-    actual_output = _invoke_specialist(mode, case)
+    # Dispatch returns the prose the judges read AND the packet the deterministic
+    # metric validates. Returning only prose left packet_validity reading None
+    # and scoring zero forever, so every evaluation would have failed for a
+    # reason that had nothing to do with the specialist.
+    actual_output, emitted_packet = _invoke_specialist(mode, case)
 
     test_case = LLMTestCase(
         input=case["mission"],
         actual_output=actual_output,
         context=case.get("context", []),
         expected_tools=case.get("expected_tools", []),
+        # The packet travels here because it is structured data, not prose: a
+        # judge should not be asked to eyeball schema conformance.
+        additional_metadata={"packet": emitted_packet, "mode_key": mode_key},
     )
-    metrics = _packet_metric(case) + _custom_metrics(mode, case) + _declared_metrics(case)
+    metrics = (
+        _packet_metric(case)
+        + _custom_metrics(mode, case)
+        + [_case_criteria_metric(case)]
+        + _declared_metrics(case)
+    )
     assert_test(test_case, metrics)
 
 
 def _invoke_specialist(mode, case):
     """Dispatch the mission through the governed runtime.
+
+    Returns ``(actual_output, emitted_packet)`` when wired -- the prose the
+    judged metrics read, and the handoff packet the deterministic metric
+    validates.
 
     Deliberately unimplemented. Wiring this to `scripts/agent_runtime.py` or
     `scripts/claude_runtime.py` requires a verified model credential and a

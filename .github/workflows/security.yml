@@ -36,6 +36,33 @@ jobs:
           advanced-security: false
           persona: regular
 
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # gitleaks was originally a pre-commit hook only. A local hook protects
+    # nobody who commits through the web UI, has not run `pre-commit install`,
+    # or passes `--no-verify` -- and this repository is public, so a provider
+    # credential format that the house regex set does not cover would land with
+    # every required check green. Local hook for speed, CI for enforcement.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: the point is to catch a secret in any commit on the
+          # branch, not only in the tip tree.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan working tree and history
+        run: |
+          set -euo pipefail
+          VERSION=8.30.0
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks dir . --no-banner --redact --exit-code 1
+          /tmp/gitleaks git . --no-banner --redact --exit-code 1
+
   dependency-audit:
     name: Known vulnerabilities (osv-scanner)
     runs-on: ubuntu-latest

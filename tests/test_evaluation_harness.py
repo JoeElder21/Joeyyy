@@ -37,6 +37,36 @@ class ModeInventoryTests(unittest.TestCase):
                 self.assertTrue(mode.write_targets)
                 self.assertTrue(mode.connector_policy)
 
+    def test_promotion_readiness_requires_passed_runs_not_case_files(self):
+        # The honesty property. An earlier version set promotion_ready from case
+        # files existing, so authoring 39 JSON files would have reported the
+        # corps promotable without one evaluation having run.
+        coverage = harness.build_coverage()
+        # Give every mode a case, and no mode a passing run.
+        coverage.covered = {mode.key: Path("synthetic") for mode in coverage.modes}
+        summary = coverage.summary()
+        self.assertTrue(summary["cases_complete"], "inventory should read complete")
+        self.assertFalse(
+            summary["promotion_ready"],
+            "case files are inventory; promotion needs recorded passing runs",
+        )
+        self.assertEqual(summary["modes_proven"], 0)
+        self.assertTrue(summary["promotion_blockers"])
+
+    def test_promotion_ready_only_when_every_mode_has_a_passing_run(self):
+        coverage = harness.build_coverage()
+        coverage.covered = {mode.key: Path("synthetic") for mode in coverage.modes}
+        coverage.passed = {mode.key: "run-1" for mode in coverage.modes}
+        self.assertTrue(coverage.summary()["promotion_ready"])
+        # One mode losing its run is enough to block the whole corps.
+        coverage.passed.pop(coverage.modes[0].key)
+        self.assertFalse(coverage.summary()["promotion_ready"])
+
+    def test_an_empty_corps_is_not_promotion_ready(self):
+        # `not self.unproven` is vacuously true on an empty list; readiness must
+        # not fall out of having nothing to prove.
+        self.assertFalse(harness.Coverage().summary()["promotion_ready"])
+
     def test_a_new_mode_reads_as_uncovered_not_as_missing(self):
         # The whole point of deriving from the manifests: adding a mode must move
         # the denominator, so it cannot be silently skipped.

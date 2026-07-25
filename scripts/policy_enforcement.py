@@ -34,6 +34,7 @@ carries its reasons, and callers with a ledger get both outcomes recorded.
 
 from __future__ import annotations
 
+import datetime
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -71,6 +72,14 @@ NON_EXECUTING_STAGES = frozenset({"candidate", "shadow", "restricted", "deprecat
 
 CHIEF = "apex_chief_of_staff"
 
+# Lease statuses under which a mutation may proceed. Anything else -- released,
+# verified, expired -- is a closed lease and authorizes nothing further.
+ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
+
+# The single schema error tolerated on a writer lease, and only this one.
+# See the comment in PolicyEnforcementPoint._writer_lease for why.
+VERSION_MISMATCH_DEFECT = "$.schema_version: expected const '2.0'"
+
 
 def _load_brain_manifests(root: Path = ROOT) -> dict[str, dict[str, Any]]:
     """Status, connector policy, and write targets, from the brain-owned files."""
@@ -102,6 +111,8 @@ class ToolRequest:
     packet: dict[str, Any] | None = None
     packet_schema: str = "delegation_packet.schema.json"
     lease: dict[str, Any] | None = None
+    resource_id: str | None = None
+    now: datetime.datetime | None = None
     explicit_instruction: bool = False
     launch_grant_verified: bool = False
 
@@ -187,10 +198,18 @@ class PolicyEnforcementPoint:
 
     def _brain_lock(self, request: ToolRequest) -> list[str]:
         spec = self._spec(request.agent)
-        if not spec or request.owner_brain is None:
-            return []
+        if not spec:
+            return []  # _agent_registered already denies this
         if request.agent == CHIEF:
             return []  # the sole cross-brain agent, by contract
+        # An omitted owner_brain used to mean "no objection", which let a caller
+        # bypass the brain lock simply by withholding the field. Fail-closed
+        # means a non-chief agent must declare its brain: silence is not consent.
+        if request.owner_brain is None:
+            return [
+                f"brain lock: {request.agent!r} declared no owner_brain; a specialist "
+                "must state its brain, and omitting it does not waive the lock"
+            ]
         if spec.get("brain") != request.owner_brain:
             return [
                 f"brain lock: {request.agent!r} belongs to {spec.get('brain')!r}, "
@@ -216,16 +235,88 @@ class PolicyEnforcementPoint:
         return [f"packet rejected: {error}" for error in errors]
 
     def _writer_lease(self, request: ToolRequest) -> list[str]:
+        """Validate the lease as a lease, not as two matching strings.
+
+        The first version accepted any dict carrying a matching `writer_agent`
+        and `write_target`. That let a caller mint its own authorization:
+        `{"writer_agent": "apex_chief_of_staff", "write_target": "APEX/..."}`
+        passed, though no lease had ever been issued — defeating the
+        single-active-writer invariant precisely where it is supposed to hold.
+
+        The lease is now checked against `schemas/writer_lease.schema.json` by
+        the same guard the runtime uses, then against status, expiry, brain, and
+        resource. A forged dict fails the schema before any field comparison.
+        """
         if not request.mutating:
             return []
         if request.lease is None:
             return [f"mutation of {request.resource!r} requires an active writer lease"]
-        holder = request.lease.get("writer_agent")
+
+        lease = request.lease
+        raw = self.guard.validate("writer_lease.schema.json", lease)
+        # KNOWN REPOSITORY DEFECT, scoped deliberately narrowly.
+        #
+        # schemas/writer_lease.schema.json pins schema_version to const "2.0",
+        # but runtime/writer_lease.py issues "2.1". Every lease the registry
+        # produces therefore fails its own schema. Nothing caught it because the
+        # only test touching both checks required-field presence, not the const,
+        # and the packet-contract fixtures hand-build 2.0 leases.
+        # scripts/memory_layer.py would already reject a real registry lease.
+        #
+        # Blocking on it here would deny every legitimate mutation; silently
+        # skipping schema validation would recreate the forged-lease hole this
+        # rule exists to close. So exactly one error string is tolerated, and
+        # every other schema error still denies. Resolving the mismatch is a
+        # contract decision for Joe — see docs/REPO_OPTIMIZATION_2026-07-25.md.
+        errors = [
+            f"lease rejected: {error}" for error in raw if VERSION_MISMATCH_DEFECT not in error
+        ]
+        if errors:
+            # A lease that is not schema-valid is not a lease; comparing its
+            # fields afterwards would be reading an unvalidated structure.
+            return errors
+
+        holder = lease.get("writer_agent")
         if holder != request.agent:
-            return [f"lease on {request.resource!r} is held by {holder!r}, not {request.agent!r}"]
-        target = request.lease.get("write_target")
+            errors.append(
+                f"lease on {request.resource!r} is held by {holder!r}, not {request.agent!r}"
+            )
+        status = lease.get("status")
+        if status not in ACTIVE_LEASE_STATUSES:
+            errors.append(
+                f"lease status {status!r} is not active; a closed lease authorizes nothing"
+            )
+        if request.owner_brain and lease.get("owner_brain") != request.owner_brain:
+            errors.append(
+                f"lease is scoped to {lease.get('owner_brain')!r}, request declares "
+                f"{request.owner_brain!r}"
+            )
+        target = lease.get("write_target")
         if target and request.resource and not request.resource.startswith(target):
-            return [f"lease covers {target!r}, which does not cover {request.resource!r}"]
+            errors.append(f"lease covers {target!r}, which does not cover {request.resource!r}")
+        if request.resource_id and lease.get("resource_id") != request.resource_id:
+            errors.append(
+                f"lease is for resource {lease.get('resource_id')!r}, request targets "
+                f"{request.resource_id!r}"
+            )
+        errors.extend(self._lease_expiry_errors(lease, request))
+        return errors
+
+    @staticmethod
+    def _lease_expiry_errors(lease: dict[str, Any], request: ToolRequest) -> list[str]:
+        """An expired lease is a closed lease. Unparseable timestamps fail closed."""
+        expiry = lease.get("expires_at")
+        if not expiry:
+            return ["lease declares no expiry"]
+        now = request.now or datetime.datetime.now(datetime.UTC)
+        try:
+            deadline = datetime.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
+        except ValueError:
+            return [f"lease expiry {expiry!r} is not a parseable timestamp"]
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=datetime.UTC)
+        if now > deadline:
+            return [f"lease expired at {expiry}"]
         return []
 
     def _lifecycle_stage(self, request: ToolRequest) -> list[str]:
