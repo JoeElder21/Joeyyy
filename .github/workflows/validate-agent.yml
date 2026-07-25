@@ -131,6 +131,19 @@ jobs:
             rm -f /tmp/resolved.txt
             uv pip compile "$1" -o /tmp/resolved.txt \
               --python-version "${{ matrix.python-version }}" --no-header -q
+            resolved=$(grep -vc '^#\|^$' /tmp/resolved.txt || true)
+            committed=$(grep -vc '^#\|^$' "$2" || true)
+            # Say what was compared and how big it was. Passing silently in
+            # under a second is indistinguishable from not running -- which is
+            # exactly the doubt three other gates in this change set earned, and
+            # a green check nobody can audit is the shape this repository keeps
+            # having to re-learn. The counts make the work visible in the log.
+            echo "$1 -> $2: resolved $resolved packages, lock carries $committed"
+            if [ "$resolved" -eq 0 ]; then
+              echo "::error file=$1::resolving $1 produced nothing; the comparison below would pass vacuously"
+              status=1
+              return
+            fi
             if ! diff -u \
               <(grep -v '^#\|^$' "$2") \
               <(grep -v '^#\|^$' /tmp/resolved.txt); then
