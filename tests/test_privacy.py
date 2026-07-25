@@ -88,8 +88,15 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         for path, literals in PLACEHOLDER_LITERALS.items():
             original = (ROOT / path).read_text(encoding="utf-8")
             stripped = strip_known_placeholders(path, original)
+            # Count boundary-anchored occurrences, which is what stripping
+            # now removes. A plain .count() would also tally an appearance
+            # inside a longer token -- exactly the case stripping must leave
+            # alone -- and would disagree with the code for the wrong reason.
             expected = sum(
-                len(lit) * original.count(lit) for lit in literals
+                len(lit) * len(re.findall(
+                    rf"(?<![\w.@:/+-]){re.escape(lit)}(?![\w.@:/+-])",
+                    original))
+                for lit in literals
             )
             with self.subTest(path=path):
                 self.assertEqual(len(original) - len(stripped), expected)
@@ -133,14 +140,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
         with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
             mounts = tomllib.load(source)["mounts"]
-        pattern = re.compile(
-            r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
-            r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token"
-            r"|tfe?[_-]?token|terraform[_-]?token"
-            r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
-            r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
-            r"\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"']{8,})"
-        )
+        # Use the shipped pattern, not a copy of it. A duplicate here passes
+        # while the real guard regresses -- and it did drift once already, so
+        # the JSON-key fix landed in one and not the other.
+        pattern = PATTERNS["credential assignment"]
         # Env-var-shaped names the guard must recognise. `_ID` is included:
         # AGENTS.md forbids connector identifiers in this public repository
         # alongside credentials, and an earlier version of this test skipped
@@ -228,6 +231,90 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         ):
             with self.subTest(probe=probe, expect="clean"):
                 self.assertIsNone(pattern.search(probe))
+
+    def test_public_host_exemptions_do_not_excuse_suffixed_private_hosts(self):
+        """An exemption must consume the whole hostname.
+
+        A trailing word boundary also matches before a dot, so a private host
+        that merely starts with an exempt name -- localhost.corp,
+        app.terraform.io.corp -- inherited the exemption and passed."""
+        pattern = PATTERNS["private connector endpoint"]
+        name = "TFE" + "_ADDRESS"
+        scheme = "https" + "://"
+        for host in ("localhost.corp", "app.terraform.io.corp",
+                     "127.0.0.1.corp", "localhost.client-company.net"):
+            with self.subTest(host=host, expect="flagged"):
+                self.assertIsNotNone(
+                    pattern.search(f'{name} = "{scheme}{host}"'))
+        # The genuine exemptions must still hold, terminated by a port, a
+        # path, a closing quote or end of input.
+        for host in ("localhost", "localhost:8080", "app.terraform.io",
+                     "app.terraform.io/app/acme", "127.0.0.1"):
+            with self.subTest(host=host, expect="clean"):
+                self.assertIsNone(
+                    pattern.search(f'{name} = "{scheme}{host}"'))
+
+    def test_short_organization_slugs_are_detected(self):
+        """A Terraform organization is an ordinary short slug, not a GUID.
+
+        The opaque-value branch of `connector identifier` needs 16+ characters,
+        which is right for an id and wrong for an organization: a real name like
+        "client-prod" names the client in four fewer characters and passed
+        untouched. Short values are only safe when recognisably placeholders,
+        so the exclusions carry the whole weight here and are asserted."""
+        pattern = PATTERNS["connector organization"]
+        for value in ("client-prod", "acme", "northside-utilities"):
+            with self.subTest(value=value, expect="flagged"):
+                self.assertIsNotNone(
+                    pattern.search(f'TFE_ORGANIZATION = "{value}"'))
+        for value in ("your-org", "<your-org>", "my-org", "example-org",
+                      "placeholder", "organization"):
+            with self.subTest(value=value, expect="clean"):
+                self.assertIsNone(
+                    pattern.search(f'TFE_ORGANIZATION = "{value}"'))
+
+    def test_json_formatted_connector_config_is_not_a_bypass(self):
+        """The closing quote of a JSON key sits between name and delimiter.
+
+        Requiring the delimiter to follow the name immediately meant the
+        ordinary way this configuration is stored -- a JSON object -- bypassed
+        both the identifier and the credential patterns entirely."""
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        secret = "x" * 20
+        cases = (
+            ("connector identifier", '{"AZURE_TENANT_ID": "%s"}' % guid),
+            ("connector identifier", "{'AZURE_CLIENT_ID': '%s'}" % guid),
+            ("credential assignment", '{"AZURE_CLIENT_SECRET": "%s"}' % secret),
+            ("credential assignment", '{"TFE_TOKEN": "%s"}' % secret),
+        )
+        for pattern_name, probe in cases:
+            with self.subTest(pattern=pattern_name, probe=probe):
+                self.assertIsNotNone(PATTERNS[pattern_name].search(probe))
+
+    def test_placeholder_stripping_requires_whole_token_boundaries(self):
+        """A placeholder is only approved as a complete lexical unit.
+
+        Plain substring removal deleted an approved literal wherever it
+        appeared, including as the prefix of a longer real value -- which left
+        a residue that matched nothing and reported the file clean."""
+        relative = Path(
+            ".github/instructions/self-explanatory-code-commenting.instructions.md")
+        # Assembled at runtime so this file does not carry the address itself.
+        placeholder = "username" + "@" + "domain.extension"
+        real = placeholder + ".client-corp.com"
+
+        stripped_real = strip_known_placeholders(relative, f"contact {real} today")
+        self.assertIsNotNone(
+            PATTERNS["email address"].search(stripped_real),
+            "a real address that merely starts with the placeholder must "
+            "survive stripping and still be reported",
+        )
+        stripped_placeholder = strip_known_placeholders(
+            relative, f"write {placeholder} in the sample")
+        self.assertIsNone(
+            PATTERNS["email address"].search(stripped_placeholder),
+            "the approved placeholder itself must still be stripped",
+        )
 
     def test_connector_identifiers_are_detected_but_placeholders_are_not(self):
         pattern = PATTERNS["connector identifier"]

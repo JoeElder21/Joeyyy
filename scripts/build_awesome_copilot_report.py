@@ -68,8 +68,92 @@ def count_installed(pattern: str) -> int:
     scans `git ls-files` only. The report could therefore raise its adoption
     total and publish a passing privacy result that never inspected the asset it
     had just counted. Counting and gating now share one scope.
+
+    Tracking is necessary but not sufficient: see reconcile_with_manifest().
     """
     return count_tracked(f".github/{pattern}")
+
+
+def tracked_names(pattern: str) -> set[str]:
+    """Basenames of tracked assets matching a `.github/` pathspec."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-files", f".github/{pattern}"], cwd=root,
+                             capture_output=True, text=True, check=False)
+    except OSError:
+        return set()
+    names = set()
+    for line in out.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Skills are directories: .github/skills/<name>/SKILL.md -> <name>
+        parts = Path(line).parts
+        names.add(parts[-2] if parts[-1] == "SKILL.md" else parts[-1])
+    return names
+
+
+def manifest_names() -> dict[str, set[str]]:
+    """The assets the manifest actually claims, by class.
+
+    Counting every tracked path under .github/ as upstream adoption is wrong in
+    both directions: a repository-authored file placed in one of these
+    directories is attributed to the pinned Awesome Copilot inventory, and a
+    newly vendored file raises the count while the report's own tables -- which
+    carry each file's selection rationale -- silently omit it. The manifest is
+    the authoritative list, so generation reconciles against it.
+    """
+    manifest = Path(__file__).resolve().parents[1] / ".github" / "AWESOME-COPILOT.md"
+    try:
+        text = manifest.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    # Only the inventory tables count. Prose elsewhere in the manifest names
+    # files illustratively -- the rejected-exemption discussion cites a
+    # hypothetical `local.instructions.md` -- and treating those as claimed
+    # assets would fail reconciliation against a file that was never adopted.
+    rows = [line for line in text.splitlines() if line.lstrip().startswith("|")]
+    found = re.findall(
+        r"`([A-Za-z0-9._-]+(?:\.instructions\.md|\.agent\.md))`", "\n".join(rows))
+    skills = re.findall(r"^- `(suggest-awesome-github-copilot-[a-z-]+)/`",
+                        text, re.MULTILINE)
+    return {
+        "instructions": {n for n in found if n.endswith(".instructions.md")},
+        "agents": {n for n in found if n.endswith(".agent.md")},
+        "skills": set(skills),
+    }
+
+
+def reconcile_with_manifest() -> None:
+    """Refuse to generate a report whose inventory contradicts the manifest."""
+    claimed = manifest_names()
+    if not claimed:
+        raise SystemExit("cannot read .github/AWESOME-COPILOT.md to reconcile "
+                         "the adopted inventory; refusing to publish counts")
+    actual = {
+        "instructions": tracked_names("instructions/*.instructions.md"),
+        "agents": tracked_names("agents/*.agent.md"),
+        "skills": tracked_names("skills/*/SKILL.md"),
+    }
+    problems = []
+    for kind, expected in claimed.items():
+        untracked = expected - actual[kind]
+        unlisted = actual[kind] - expected
+        if untracked:
+            problems.append(f"{kind}: in manifest but not tracked: "
+                            f"{', '.join(sorted(untracked))}")
+        if unlisted:
+            problems.append(f"{kind}: tracked but not in the manifest: "
+                            f"{', '.join(sorted(unlisted))}")
+    if problems:
+        raise SystemExit(
+            "adopted inventory does not match .github/AWESOME-COPILOT.md, so "
+            "the report would misattribute assets to the pinned upstream "
+            "inventory. Update the manifest (and this report's tables) first:\n  "
+            + "\n  ".join(problems))
+
+
+reconcile_with_manifest()
 
 
 # Upstream availability totals, keyed by the commit they were enumerated at.
@@ -310,7 +394,14 @@ prof = [hdr("Signal", "Measured", "Consequence for selection")]
 for sig, val, why in [
     ("Python source", "54 files",
      "Language-level standards are relevant; web-framework sets are not."),
-    ("Markdown", f"{MARKDOWN_NOW} files",
+    # Every other row in this table describes the tree at PRE_INSTALL_BASELINE.
+    # Using the current count here silently mixed two time scopes in one table:
+    # the pinned tree holds 46 markdown files and the branch tip far more, so
+    # the "selection basis" appeared to have been made against files that did
+    # not exist when the selection was made. The current figure belongs to the
+    # delta note below, which says so explicitly.
+    ("Markdown", f"{_MD_BEFORE} files" if _MD_BEFORE >= 0
+     else "not measured (baseline commit unreachable)",
      "Contracts, plans, registries, runbooks. Markdown discipline matters "
      "more here than in a typical code repo."),
     ("GitHub Actions", "1 workflow",

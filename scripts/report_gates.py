@@ -48,6 +48,70 @@ def unverified_note(output: str) -> str:
     return f" (not probed: {', '.join(names)})" if names else ""
 
 
+def missing_dependency_note(output: str) -> str:
+    """Say when a passing gate ran against an empty runtime.
+
+    `verify_runtime_stack.py` validates TOML and schemas, which can all pass on
+    a machine where none of the declared runtime packages is installed -- it
+    reports `installed_count: 0` with 20 entries in `missing` and still exits 0
+    with `"valid": true`. Rendering that as a clean runtime-stack pass presents
+    a machine with no orchestration runtime as a verified one.
+    """
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    missing = payload.get("missing")
+    if not isinstance(missing, list) or not missing:
+        return ""
+    installed = payload.get("installed_count")
+    total = (installed + len(missing)) if isinstance(installed, int) else None
+    scope = f"{len(missing)} of {total}" if total else f"{len(missing)}"
+    return (f" (runtime not installed: {scope} declared packages missing, "
+            "so this checks declarations only)")
+
+
+def failure_detail(completed) -> str:
+    """The most informative line available from a failed gate.
+
+    These gates print JSON, so the first output line is "{" -- taking it
+    produced rows reading `FAILED (exit 1) — {`, which names nothing. Prefer a
+    parsed error, then a substantive stderr line, and fall back to raw output
+    only when neither exists.
+    """
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        for key in ("errors", "error", "failures", "problems"):
+            value = payload.get(key)
+            if isinstance(value, list) and value:
+                return "; ".join(str(item) for item in value[:3])
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    def substantive(stream: str) -> str | None:
+        lines = [line.strip() for line in stream.splitlines() if line.strip()]
+        useful = [line for line in lines
+                  if line not in "{}[]," and not line.startswith('"')]
+        if not useful:
+            return None
+        # A traceback's informative line is its last, not its first: "Traceback
+        # (most recent call last):" names nothing.
+        if useful[0].startswith("Traceback (most recent call last)"):
+            return useful[-1]
+        return useful[0]
+
+    found = substantive(completed.stderr) or substantive(completed.stdout)
+    if found:
+        return found
+    remainder = (completed.stderr + completed.stdout).strip()
+    return remainder.splitlines()[0] if remainder else "no output"
+
+
 def run_gate(script: str) -> str:
     """Run one validation script and report its real outcome.
 
@@ -69,17 +133,14 @@ def run_gate(script: str) -> str:
     # file such as docs/R&D<draft>.pdf would raise a parse error and destroy the
     # very PDF meant to record the failure. Escape anything derived from output.
     if completed.returncode != 0:
-        first = next(
-            (line.strip() for line in
-             (completed.stdout + completed.stderr).splitlines() if line.strip()),
-            "no output",
-        )
-        return escape(f"FAILED (exit {completed.returncode}) — {first[:110]}")
+        return escape(
+            f"FAILED (exit {completed.returncode}) — "
+            f"{failure_detail(completed)[:110]}")
 
     output = completed.stdout.strip()
     if not output:
         return "passed"
-    note = unverified_note(output)
+    note = unverified_note(output) + missing_dependency_note(output)
     if '"valid": true' in output:
         checked = re.search(r'"(\w+_checked)":\s*(\d+)', output)
         detail = (f" — {checked.group(2)} {checked.group(1).replace('_', ' ')}"

@@ -43,6 +43,10 @@ PROHIBITED_ARTIFACT_SUFFIXES = {
     ".xlsx",
     ".zip",
 }
+# A hostname exemption is only safe if it covers the entire host. Anything in
+# this class ends one: a port, a path, a query, a fragment, a closing quote,
+# whitespace, or the end of the input.
+HOST_END = r"(?=[:/?#\s\"']|$)"
 LFS_POINTER_PREFIX = "version https://git-lfs.github.com/" "spec/v1"
 PATTERNS = {
     "secret token": re.compile(
@@ -56,11 +60,18 @@ PATTERNS = {
     # (app.terraform.io) identifies nobody and is deliberately not flagged, nor
     # are placeholder hosts, so this repository's own documentation stays clean.
     "private connector endpoint": re.compile(
-        r"(?i)\btfe?[_-]?address\s*[:=]\s*[\"']?https?://"
-        r"(?!app\.terraform\.io\b)(?!localhost\b)(?!127\.0\.0\.1\b)"
-        r"(?!0\.0\.0\.0\b)"
+        r"(?i)\btfe?[_-]?address[\"']?\s*[:=]\s*[\"']?https?://"
+        # Each public/loopback exemption must consume the WHOLE hostname. A
+        # trailing word boundary matched before a dot, so localhost.corp and
+        # app.terraform.io.corp -- real private hosts that merely start with an
+        # exempt name -- were silently excused. HOST_END requires a port, path,
+        # query, fragment, quote, whitespace or end of input to follow.
+        r"(?!app\.terraform\.io" + HOST_END + r")"
+        r"(?!localhost" + HOST_END + r")"
+        r"(?!127\.0\.0\.1" + HOST_END + r")"
+        r"(?!0\.0\.0\.0" + HOST_END + r")"
         # IPv6 loopback and unspecified, in the bracketed URL form.
-        r"(?!\[(?:::1|::)\])"
+        r"(?!\[(?:::1|::)\]" + HOST_END + r")"
         r"(?!<)(?!your[-_.])(?!example\.)(?!\S*\.example\b)"
         # A private installation is just as often an IPv4 literal, a bracketed
         # IPv6 literal, or a single-label intranet name as a dotted FQDN.
@@ -81,8 +92,11 @@ PATTERNS = {
     "connector identifier": re.compile(
         r"(?i)\b(?:azure[_-]?tenant[_-]?id|azure[_-]?client[_-]?id"
         r"|azure[_-]?subscription[_-]?id|aps[_-]?client[_-]?id"
-        r"|tfe?[_-]?organization|gdrive[_-]?client[_-]?id)"
-        r"\s*[:=]\s*[\"']?"
+        r"|gdrive[_-]?client[_-]?id)"
+        # The closing quote of a JSON key sits between the name and the colon.
+        # Without it, {"AZURE_TENANT_ID":"<guid>"} -- the ordinary way this
+        # configuration is stored -- bypassed the guard entirely.
+        r"[\"']?\s*[:=]\s*[\"']?"
         # GUID, opaque token, or -- for Azure -- the tenant *domain* form,
         # which is neither and was therefore invisible.
         r"(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -102,7 +116,23 @@ PATTERNS = {
         r"|tfe?[_-]?token|terraform[_-]?token"
         r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
         r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
-        r"\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"']{8,})"
+        # As above: allow the closing quote of a JSON key before the delimiter.
+        r"[\"']?\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
+    ),
+    # Organization and workspace slugs. These sit apart from "connector
+    # identifier" because that pattern's opaque-value branch requires 16+
+    # characters -- reasonable for a GUID or an API-style id, but wrong here:
+    # a real Terraform organization is an ordinary short slug like
+    # "client-prod", which named the client and passed the guard untouched.
+    # A short value is only safe to ignore when it is recognisably a
+    # placeholder, so the exclusions carry the whole weight and are explicit.
+    "connector organization": re.compile(
+        r"(?i)\b(?:tfe?[_-]?organization|tfe?[_-]?workspace"
+        r"|terraform[_-]?organization)"
+        r"[\"']?\s*[:=]\s*[\"']?"
+        r"(?!your[-_.])(?!my[-_.])(?!<)(?!example[-_.\s\"']?)(?!placeholder\b)"
+        r"(?!org\b)(?!organization\b)(?!workspace\b)(?!name\b)(?!\.\.\.)"
+        r"[A-Za-z0-9][A-Za-z0-9_-]{2,}"
     ),
     "bearer credential": re.compile(
         r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._~+/-]{12,}={0,2}"
@@ -160,13 +190,31 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
 }
 
 
+# A placeholder only counts when it stands as a complete lexical unit. These
+# are the characters that would make it a prefix or suffix of something longer.
+_TOKEN_CHAR = r"[\w.@:/+-]"
+
+
 def strip_known_placeholders(relative: Path, text: str) -> str:
     """Remove the exact documented false-positive snippets for one file.
+
+    Matching is boundary-anchored, not substring. A bare str.replace() deleted
+    an approved literal wherever it appeared, including as the *prefix* of a
+    longer real value: the approved e-mail placeholder followed by a further
+    dotted company domain left only that company's domain behind, and the scan
+    reported nothing -- even though the same text is caught as an address in
+    any other file. The literal must now be flanked by something that cannot
+    continue a token. (The example is described rather than written out: this
+    file is scanned by its own patterns.)
 
     Everything else in the file is still scanned by every pattern.
     """
     for literal in PLACEHOLDER_LITERALS.get(relative, ()):
-        text = text.replace(literal, "")
+        text = re.sub(
+            rf"(?<!{_TOKEN_CHAR}){re.escape(literal)}(?!{_TOKEN_CHAR})",
+            "",
+            text,
+        )
     return text
 
 

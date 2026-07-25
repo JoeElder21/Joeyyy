@@ -334,6 +334,72 @@ class McpMountRegistryTests(unittest.TestCase):
                         self.assertEqual(passed.get(name), probes[name])
                     self.assertNotIn("UNRELATED_SECRET", passed)
 
+    def test_networked_mounts_receive_transport_variables(self):
+        """A mount that fetches its own package or image must still be able to
+        reach the network through a proxy.
+
+        Filtering the environment closed a credential-spill path but also
+        removed HTTP_PROXY / HTTPS_PROXY / NO_PROXY, so on a proxied
+        workstation authorization succeeded and the launch then failed at
+        download. Proxy variables are opt-in rather than baseline because a
+        proxy URL can carry credentials in its userinfo, so a purely local
+        mount must not see one."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import trusted_launcher
+        finally:
+            sys.path.pop(0)
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+
+        transport = {name: f"http://proxy.invalid/{name.lower()}"
+                     for name in trusted_launcher.NETWORK_ENV}
+        with mock.patch.dict(os.environ, transport, clear=False):
+            for mount in mounts:
+                passed = trusted_launcher.mount_env(mount)
+                networked = bool(mount.get("network"))
+                with self.subTest(mount=mount["name"], networked=networked):
+                    for name in trusted_launcher.NETWORK_ENV:
+                        if networked:
+                            self.assertEqual(passed.get(name), transport[name])
+                        else:
+                            self.assertNotIn(name, passed)
+
+    def test_every_fetching_mount_declares_network(self):
+        """The declaration has to track the command, or a future npx/docker
+        mount silently loses its transport configuration the same way."""
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        for mount in mounts:
+            fetches = mount["command"][0] in {"npx", "npm", "docker", "podman", "uvx"}
+            with self.subTest(mount=mount["name"]):
+                self.assertEqual(
+                    bool(mount.get("network")), fetches,
+                    f"{mount['name']} runs {mount['command'][0]}; "
+                    "network must be declared exactly when the mount fetches",
+                )
+
+    def test_registry_records_the_planners_real_tool_surface(self):
+        """docs/AGENT_REGISTRY.md is what a reviewer audits mutation risk
+        against. Describing these agents' tools as "the upstream list" was
+        false in both directions -- it hid the removals AND the additions."""
+        registry = (ROOT / "docs" / "AGENT_REGISTRY.md").read_text(encoding="utf-8")
+        for agent, must_appear, must_not in (
+            ("task-planner", ("`agent`", "`read`", "`edit/editFiles`"), ()),
+            ("task-researcher", ("`read`",), ()),
+        ):
+            row = next((line for line in registry.splitlines()
+                        if line.startswith(f"| `{agent}`")), None)
+            with self.subTest(agent=agent):
+                self.assertIsNotNone(row, f"no registry row for {agent}")
+                self.assertNotIn(
+                    "Upstream list", row,
+                    "the declared surface is a local override, not upstream")
+                for token in must_appear:
+                    self.assertIn(token, row)
+                for token in must_not:
+                    self.assertNotIn(token, row)
+
     def test_mount_commands_pin_immutable_versions(self):
         """A mutable tag lets a mount's tool surface change with no commit,
         which defeats the point of the approved-mounts registry. Reference
@@ -433,6 +499,73 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # Non-JSON output must not be read as "nothing unverified".
         self.assertNotEqual(unverified_note("2 unverified mounts"), "")
         self.assertEqual(unverified_note("all mounts reached"), "")
+
+    def test_a_passing_gate_says_when_the_runtime_is_absent(self):
+        """TOML and schema checks pass on a machine where none of the declared
+        runtime packages is installed, and the gate still exits 0 with
+        `"valid": true`. Rendering that as a clean runtime-stack pass presents
+        a machine with no orchestration runtime as a verified one."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            from report_gates import missing_dependency_note
+        finally:
+            sys.path.pop(0)
+
+        empty = json.dumps({"valid": True, "installed_count": 0,
+                            "missing": [f"pkg{n}" for n in range(20)],
+                            "toml_files_checked": 18})
+        note = missing_dependency_note(empty)
+        self.assertIn("20 of 20", note)
+        self.assertIn("declarations only", note)
+
+        full = json.dumps({"valid": True, "installed_count": 20, "missing": []})
+        self.assertEqual(missing_dependency_note(full), "")
+
+        partial = json.dumps({"valid": True, "installed_count": 18,
+                              "missing": ["crewai", "prefect"]})
+        self.assertIn("2 of 20", missing_dependency_note(partial))
+
+    def test_a_failed_json_gate_row_names_the_actual_error(self):
+        """These gates print JSON, so the first output line is "{". Taking it
+        produced rows reading `FAILED (exit 1) — {`, which identifies
+        nothing in the one document meant to be failure evidence."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            from report_gates import failure_detail
+        finally:
+            sys.path.pop(0)
+
+        class Completed:
+            def __init__(self, stdout, stderr):
+                self.stdout, self.stderr = stdout, stderr
+
+        structured = Completed(
+            json.dumps({"valid": False,
+                        "errors": ["config/roster.toml: unknown key 'brian'"]},
+                       indent=2),
+            "")
+        self.assertIn("unknown key", failure_detail(structured))
+        self.assertNotEqual(failure_detail(structured).strip(), "{")
+
+        crashed = Completed(
+            "{\n}",
+            "Traceback (most recent call last):\n  File \"x\", line 1\n"
+            "ValueError: no pin in manifest\n")
+        self.assertEqual(failure_detail(crashed), "ValueError: no pin in manifest")
+
+        self.assertEqual(failure_detail(Completed("", "")), "no output")
+
+    def test_report_refuses_to_publish_an_inventory_it_cannot_reconcile(self):
+        """Counting every tracked path under .github/ as upstream adoption
+        misattributes repository-authored files to the pinned inventory, and
+        lets a newly vendored file raise the total while the report's own
+        rationale tables omit it."""
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        self.assertIn("def reconcile_with_manifest()", source)
+        self.assertIn("reconcile_with_manifest()\n", source)
+        # It must run at generation time, not merely be defined.
+        self.assertIn("raise SystemExit", source)
 
     def test_gate_rows_come_from_the_importable_helper(self):
         """The report builder runs its gates and writes the PDF at import time,

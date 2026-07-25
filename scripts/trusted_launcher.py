@@ -281,6 +281,18 @@ BASELINE_ENV = (
     "SYSTEMROOT", "COMSPEC", "PATHEXT", "USERPROFILE",
 )
 
+# Outbound transport configuration. A mount that fetches its own package or
+# image (npx, docker pull) cannot reach the network at all on a proxied
+# workstation once the environment is filtered -- authorization succeeds and
+# the launch then fails at download. These are deliberately NOT in
+# BASELINE_ENV: a proxy URL can carry credentials in its userinfo, so only
+# mounts that declare `network = true` in the registry receive them.
+NETWORK_ENV = (
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+    "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+)
+
 
 def mount_env(spec: dict) -> dict[str, str]:
     """The environment one mount is allowed to see.
@@ -294,8 +306,15 @@ def mount_env(spec: dict) -> dict[str, str]:
     Declaring nothing means the mount gets no credentials at all, which is the
     safe default: a mount that needs one must say so in the registry, where the
     grant reviewer can see it.
+
+    A mount that declares `network = true` additionally receives NETWORK_ENV,
+    without which a proxied workstation cannot fetch the mount's own package or
+    image. That is opt-in rather than baseline because a proxy URL may embed
+    credentials, so a purely local mount has no business seeing one.
     """
     allowed = list(BASELINE_ENV) + list(spec.get("env", []))
+    if spec.get("network"):
+        allowed += list(NETWORK_ENV)
     return {
         name: os.environ[name]
         for name in allowed
