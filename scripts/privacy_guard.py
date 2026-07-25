@@ -210,7 +210,13 @@ _TOKEN_CHAR = r"[\w.@:/+-]"
 _KEY = r"[\"']?[A-Za-z_][A-Za-z0-9_.-]*[\"']?"
 
 _BLOCK_SCALAR_HEADER = re.compile(
-    r"^(?P<indent>[ \t]*)(?P<key>" + _KEY + r")\s*:\s*"
+    # The sequence-entry prefix is part of `indent` on purpose: for
+    # `- KEY: |-` the block body is indented relative to the KEY, not to the
+    # dash, so counting the dash keeps the body-indent comparison right.
+    # Without this branch a credential inside a YAML sequence mapping -- an
+    # ordinary shape for a list of connector entries -- never reached the
+    # value patterns at all.
+    r"^(?P<indent>[ \t]*(?:-[ \t]+)?)(?P<key>" + _KEY + r")\s*:\s*"
     # YAML lets the indentation indicator and the chomping indicator appear in
     # either order -- "|2-" and "|-2" are both valid headers, and a parser
     # reconstructs the value from both. Accepting only one order left the other
@@ -661,14 +667,20 @@ def scan_paths(
     targets: list[Path] = []
     for given in paths:
         candidate = given if given.is_absolute() else (root / given)
-        if candidate.is_dir():
+        if candidate.is_dir() and not candidate.is_symlink():
             targets.extend(
                 child for child in sorted(candidate.rglob("*"))
-                if child.is_file()
+                # is_symlink() as well as is_file(): a DANGLING link answers
+                # False to is_file(), so the recursion dropped exactly the
+                # entry _scan_files() knows how to handle -- it scans a link's
+                # target string, which is what git publishes. A bundle holding
+                # `notes -> /home/<client>/private` passed the pre-install gate
+                # while scanning that same link directly reported it.
+                if (child.is_file() or child.is_symlink())
                 and ".git" not in child.parts
                 and "__pycache__" not in child.parts
             )
-        elif candidate.is_file():
+        elif candidate.is_file() or candidate.is_symlink():
             targets.append(candidate)
         else:
             targets.append(candidate)  # reported as unreadable below

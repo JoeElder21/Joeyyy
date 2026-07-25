@@ -533,6 +533,67 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(scan_paths([clean], root=root), [])
 
+    def test_sequence_entries_are_normalised_like_plain_mappings(self):
+        """A YAML sequence mapping is an ordinary shape for a list of connector
+        entries, and the block-scalar header rejected its `- ` prefix outright.
+
+        Asserted as a matrix over the container shape rather than the reported
+        line: every normalised form has to survive being written as a sequence
+        entry, because that prefix sits in front of ALL of them."""
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        dq = '"' * 3
+        bodies = [
+            f"- {cred}: |-\n    {secret}\n",
+            f'- "{cred}": |-\n    {secret}\n',
+            f"- {cred}: >-\n    {secret}\n",
+            f"- {cred}: |2-\n    {secret}\n",
+            f"- {cred}: !!str {secret}\n",
+            f"entries:\n  - {cred}: |-\n      {secret}\n",
+            f"- {cred} = {dq}{secret}{dq}\n",
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, body in enumerate(bodies):
+                probe = root / f"seq{index}.yaml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(body=body):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any("credential assignment" in f for f in findings),
+                        f"{body!r} produced {findings}",
+                    )
+
+    def test_recursive_intake_does_not_skip_symlinks(self):
+        """_scan_files scans a link's TARGET STRING -- what git publishes -- but
+        the recursion filtered on is_file(), which is False for a dangling link.
+        The pre-install gate therefore skipped exactly the entry the scanner
+        knows how to handle, while scanning that same link directly reported
+        it."""
+        import os
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            # Assembled at runtime; the target names a person and a private path.
+            target = "/home/" + "client-contact" + "@" + "example.invalid/private"
+            os.symlink(target, bundle / "notes")
+            (bundle / "README.md").write_text("ordinary prose\n", encoding="utf-8")
+
+            findings = scan_paths([bundle], root=root)
+            self.assertTrue(
+                any("notes" in f for f in findings),
+                f"the dangling symlink was skipped: {findings}",
+            )
+            # Scanning the link directly must agree with scanning its parent --
+            # the two paths disagreeing is what made this survivable.
+            direct = scan_paths([bundle / "notes"], root=root)
+            self.assertEqual(
+                sorted(f.split(": ", 1)[1] for f in direct),
+                sorted(f.split(": ", 1)[1] for f in findings if "notes" in f),
+            )
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

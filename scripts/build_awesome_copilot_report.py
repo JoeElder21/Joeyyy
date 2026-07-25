@@ -482,11 +482,14 @@ _md_delta = (
     "branch point could not be computed here."
 )
 story.append(Paragraph(
-    "The markdown row above is measured at generation time, as is the delta: "
+    "The markdown row above is the count at the pinned pre-install baseline, "
+    "matching every other row in that table — it describes the repository the "
+    "selection was made against, not the branch tip. The delta and the current "
+    "total are the generation-time figures: "
     + _md_delta
-    + " Both come from the tracked tree and the branch point, not from figures "
-      "recorded by hand — an earlier version stated 46 and 60 and was wrong "
-      "about both.",
+    + " All three are measured from the tracked tree and the pinned branch "
+      "point, not recorded by hand — an earlier version stated 46 and 60 and "
+      "was wrong about both.",
     NOTE))
 
 story.append(PageBreak())

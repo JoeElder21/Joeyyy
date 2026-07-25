@@ -104,6 +104,45 @@ class TrustedLauncherTests(unittest.TestCase):
         # Not a rostered specialist -> not stage-gated at all.
         self.assertTrue(stage_permits_connector(None))
 
+    def test_lifecycle_is_revalidated_when_the_grant_is_consumed(self):
+        """A grant is short-lived but not instantaneous.
+
+        Eligibility can be withdrawn inside its window: a specialist that was
+        `active` at mint and `restricted` at launch would otherwise still be
+        authorized, because the signature, expiry and allowlist all still check
+        out. An administrative restriction has to revoke OUTSTANDING access,
+        not merely prevent new grants."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            with mock.patch.object(launcher, "specialist_stage",
+                                   lambda agent, corps=None: "active"):
+                grant = issue_grant("filesystem", 30, key_path=key,
+                                    out_dir=Path(tmp) / "grants",
+                                    agent="apex_systems_blacksmith",
+                                    ledger=ledger)
+            self.assertTrue(grant.exists(), "mint must succeed while eligible")
+
+            # Every exit stage must revoke it, not just the reported one.
+            for withdrawn in ("restricted", "deprecated", "retired"):
+                with self.subTest(stage=withdrawn):
+                    with mock.patch.object(launcher, "specialist_stage",
+                                           lambda agent, corps=None, s=withdrawn: s):
+                        with self.assertRaises(LaunchDenied) as caught:
+                            authorize("filesystem", grant_path=grant,
+                                      key_path=key, ledger=ledger)
+                    self.assertIn("lifecycle stage", str(caught.exception))
+
+            # And the grant still works while eligibility holds, so the check
+            # is a revocation rather than a blanket refusal.
+            with mock.patch.object(launcher, "specialist_stage",
+                                   lambda agent, corps=None: "active"):
+                authorize("filesystem", grant_path=grant, key_path=key,
+                          ledger=ledger)
+
     def test_lifecycle_resolves_from_the_named_agent_not_the_snapshot(self):
         """A promotion is per agent; a restriction must not be widened.
 

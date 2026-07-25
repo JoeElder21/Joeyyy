@@ -314,6 +314,21 @@ def authorize(
                 f"agent {identity!r} is not on this mount's allowlist "
                 f"({', '.join(allowed) or 'none'})"
             )
+        # Lifecycle is re-read HERE, not trusted from mint time. A grant is
+        # short-lived but not instantaneous, and eligibility can be withdrawn
+        # inside its window: a specialist that was `active` when the grant was
+        # signed and is `restricted` by the time it launches would otherwise
+        # still be authorized, because the signature, expiry and allowlist all
+        # still check out. An administrative restriction has to revoke
+        # outstanding access, not just prevent new grants.
+        stage = specialist_stage(identity)
+        if not stage_permits_connector(stage):
+            raise deny(
+                f"agent {identity!r} is lifecycle stage {stage!r}; a specialist "
+                "may hold a connector only at "
+                f"{', '.join(sorted(CONNECTOR_STAGES))}. The grant was valid "
+                "when minted; eligibility was withdrawn before launch."
+            )
 
     spec = mounts.get(mount)
     if spec is None:
