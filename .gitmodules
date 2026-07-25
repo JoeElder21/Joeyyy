@@ -1,0 +1,12 @@
+[submodule "vendor/multi-agent-ai-in-civil-engineering"]
+	path = vendor/multi-agent-ai-in-civil-engineering
+	url = https://github.com/Kimi-chuheng/Multi-Agent-AI-in-Civil-Engineering.git
+[submodule "vendor/awesome-civil-engineering"]
+	path = vendor/awesome-civil-engineering
+	url = https://github.com/QuantumNovice/awesome-civil-engineering.git
+[submodule "vendor/civil-innovation-agent"]
+	path = vendor/civil-innovation-agent
+	url = https://github.com/Sun3hine7/civil-innovation-agent.git
+[submodule "vendor/relay"]
+	path = vendor/relay
+	url = https://github.com/AgentWorkforce/relay.git

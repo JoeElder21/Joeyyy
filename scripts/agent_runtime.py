@@ -159,20 +159,22 @@ def admit_delegation(
                 f"brain lock: packet owner_brain {packet.get('owner_brain')!r} "
                 f"does not match {target!r} brain {target_brain!r}"
             ]
+    # Correlation keys, identical on the span attributes (scripts/observability.py)
+    # so a ledger entry and its span match each other and both group back to
+    # the mission. Identifiers only — never packet content.
+    keys = {
+        "mission_id": packet.get("mission_id"),
+        "resource_id": packet.get("resource_id"),
+        "delegation_id": packet.get("delegation_id"),
+        "owner_brain": packet.get("owner_brain"),
+        "target": target,
+    }
     if errors:
         if ledger is not None:
-            ledger.append(
-                "handoff_rejected",
-                {"target": target, "errors": errors,
-                 "delegation_id": packet.get("delegation_id")},
-            )
+            ledger.append("handoff_rejected", {**keys, "errors": errors})
         raise HandoffRejected(target, errors)
     if ledger is not None:
-        ledger.append(
-            "handoff_admitted",
-            {"target": target, "delegation_id": packet.get("delegation_id"),
-             "mode": packet.get("mode")},
-        )
+        ledger.append("handoff_admitted", {**keys, "mode": packet.get("mode")})
 
 
 def validate_specialist_return(
@@ -191,8 +193,11 @@ def validate_specialist_return(
     if ledger is not None:
         ledger.append(
             "return_validated" if not errors else "return_rejected",
-            {"agent": handoff_packet.get("agent"),
+            {"mission_id": handoff_packet.get("mission_id"),
+             "resource_id": handoff_packet.get("resource_id"),
              "delegation_id": handoff_packet.get("delegation_id"),
+             "agent": handoff_packet.get("agent"),
+             "owner_brain": handoff_packet.get("owner_brain"),
              "status": handoff_packet.get("status"), "errors": errors},
         )
     return errors

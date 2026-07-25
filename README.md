@@ -26,6 +26,7 @@ The personal Agent 007 skill makes that phrase portable across chats where the s
 - Separate brain-owned manifests, logical memory namespaces, proposed write targets, routes, and private roundtables.
 - Strict brain locks, same-brain challenge pairs, deterministic routing and cadence, mode-bound typed handoffs, writer leases, readback, rollback, and shadow-to-active acceptance gates.
 - A repository-only roster rationale plus a reversible v2 migration record.
+- Market Operator: a standalone JEOS-owned portfolio agent with a read-only Charles Schwab connector, a versioned risk policy, and a research-corroborated daily brief. It recommends; it never trades.
 
 Runtime permissions, connected-service permissions, administrator policies, professional obligations, and mandatory tool controls still apply. No prompt can create access that is not connected or verified.
 
@@ -53,7 +54,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `runtime/autogen_orchestrator.py` — optional AutoGen `ConversableAgent`/`GroupChatManager` cadence adapter; requires a verified host runtime.
 - `docs/FRONTIER_REPO_SCAN_2026-07-24.md` — proactive frontier scan: adoption candidates, absorption patterns, and the FakeGit intake-hardening finding.
 - `docs/INTEGRATION_BUILDOUT_2026-07-24.md` — runtime integration record: installed stack tiers, registered workstation deployments, flagged items, and first build tickets.
-- `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`) and the resolved version lock.
+- `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`), vendored-repo manifests (`vendor-*.txt`), and the resolved version lock.
+- `vendor/` — external repositories installed as pinned git submodules; provenance, declared dependencies, and boundaries in `vendor/README.md`. Fetch with `git submodule update --init --recursive`.
+- `connectors/relay/` — declared `agent-relay` dependency for the vendored Agent Relay transport; a declaration only, with no relay server configured.
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
 - `scripts/agent_runtime.py` — governed-handoff runtime bridge on the OpenAI Agents SDK: fail-closed packet admission, brain-locked topology, hash-chained audit ledger.
 - `docs/AGENT_RUNTIME_BRIDGE.md` — runtime-bridge record: contract-to-runtime mapping, measured dispatch-overhead reduction, boundaries, and rollback.
@@ -78,7 +81,12 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
 - `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation; the cadence engine (`cadence.py`) building validated delegation plans from the brain manifests plus the real TICKET-005 hygiene sweep, and its Prefect scheduling layer (`cadence_flow.py`); the writer-lease registry and serialized mutation admission (`writer_lease.py`) with Celery per-key queues (`lease_queue.py`); the graphiti memory-trial harness (`memory_trial.py`).
 - `docs/RECONCILIATION_2026-07-24.md` — cross-stream ownership record: canonical homes for lifecycle/cadence/leases, ticket-4 absorption, memory-layer decision rule, drift locks.
+- `connectors/schwab/` — read-only Charles Schwab Trader/Market Data client plus portfolio analytics, indicators, policy-driven verdicts, and the daily-brief CLI. Stdlib-only; `GET` requests only, with no order-placement path.
+- `config/portfolio_policy.toml` — the Market Operator rulebook: risk guardrails, indicator windows, scoring weights, and verdict thresholds.
+- `.claude/agents/market-operator.md` — Market Operator operating contract (daily loop, research protocol, hard boundaries).
+- `docs/SCHWAB_TRADING_AGENT.md` — Schwab setup runbook: app registration, OAuth, the 7-day refresh wall, daily scheduling, tuning, and honest limits.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
+- `docs/ADK_SAMPLES_ABSORPTION.md` — google/adk-samples absorption record: nine patterns absorbed, eight dropped as already-built, two observability defects fixed.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
 - `docs/INTEGRATION_ROADMAP.md` — phased runtime-stack integration program with recorded conflicts and intake gates.
