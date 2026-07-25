@@ -53,15 +53,39 @@ jobs:
           # branch, not only in the tip tree.
           fetch-depth: 0
           persist-credentials: false
-      - name: Scan working tree and history
+      - name: Scan working tree and this ref's history
+        env:
+          # Empty on push/schedule; set on pull_request. Quoted through env
+          # rather than interpolated into the script, so a branch name can never
+          # be read as shell.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           VERSION=8.30.0
           curl -sSfL -o /tmp/gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+
+          # Working tree: always, in full.
           /tmp/gitleaks dir . --no-banner --redact --exit-code 1
-          /tmp/gitleaks git . --no-banner --redact --exit-code 1
+
+          # History: only the commits this ref actually introduces.
+          #
+          # The first version scanned every ref. `actions/checkout` with
+          # fetch-depth: 0 fetches all branches, so the job reported five
+          # findings that lived on unrelated unmerged PR branches and had
+          # nothing to do with the pull request under test. A gate that fails
+          # for reasons the author cannot act on is a gate people learn to
+          # ignore, so scope it to what the change is responsible for.
+          #
+          # Whole-repo history coverage is not lost — it moves to the weekly
+          # scheduled run, where a finding anywhere is genuinely actionable.
+          if [ -n "${BASE_SHA}" ]; then
+            /tmp/gitleaks git . --no-banner --redact --exit-code 1 \
+              --log-opts="${BASE_SHA}..HEAD"
+          else
+            /tmp/gitleaks git . --no-banner --redact --exit-code 1
+          fi
 
   dependency-audit:
     name: Known vulnerabilities (osv-scanner)
