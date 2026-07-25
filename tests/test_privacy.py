@@ -1,10 +1,9 @@
-from pathlib import Path
 import re
 import tempfile
 import unittest
+from pathlib import Path
 
-from scripts.privacy_guard import repository_files, scan_repository
-
+from scripts.privacy_guard import gitlink_paths, is_vendored, repository_files, scan_repository
 
 ROOT = Path(__file__).resolve().parents[1]
 # Vendored third-party documentation. Mirrors DOCUMENTATION_ONLY_PREFIXES in
@@ -144,11 +143,13 @@ def non_placeholder_credentials(text: str) -> list[str]:
 class PublicRepositoryPrivacyTests(unittest.TestCase):
     def test_tracked_text_has_no_obvious_private_or_secret_material(self):
         excluded_parts = {"__pycache__", ".git", "node_modules"}
+        gitlinks = gitlink_paths(ROOT)
         text_paths = [
             path
             for path in ROOT.rglob("*")
             if path.is_file()
             and not any(part in excluded_parts for part in path.parts)
+            and not is_vendored(path, ROOT, gitlinks)
             and path.suffix.lower() in {".md", ".toml", ".json", ".py", ".yml", ".yaml"}
         ]
         prohibited = {
@@ -158,9 +159,15 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "generic credential assignment": re.compile(
                 r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*[\"'][^\"']{8,}[\"']"
             ),
-            "email address": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
-            "phone number": re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"),
-            "raw Drive or Docs link": re.compile(r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE),
+            "email address": re.compile(
+                r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE
+            ),
+            "phone number": re.compile(
+                r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"
+            ),
+            "raw Drive or Docs link": re.compile(
+                r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE
+            ),
             "street address": re.compile(
                 r"\b[1-9]\d{1,5}\s+(?:[A-Za-z0-9.'-]+\s+){1,6}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
                 re.IGNORECASE,
@@ -310,9 +317,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
     def test_privacy_guard_fails_closed_on_binary_and_unquoted_secrets(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root / "client-confidential-plan.pdf").write_bytes(
-                b"%PDF-\0private-client-data"
-            )
+            (root / "client-confidential-plan.pdf").write_bytes(b"%PDF-\0private-client-data")
             token = "gh" + "o_" + ("A" * 24)
             google_key = "AI" + "za" + ("B" * 32)
             npm_token = "np" + "m_" + ("C" * 24)
@@ -352,21 +357,11 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 encoding="utf-8",
             )
             findings = scan_repository(root)
-        self.assertTrue(
-            any("binary file is not allowed" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("secret token" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("credential assignment" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("bearer credential" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("Git LFS pointer" in finding for finding in findings)
-        )
+        self.assertTrue(any("binary file is not allowed" in finding for finding in findings))
+        self.assertTrue(any("secret token" in finding for finding in findings))
+        self.assertTrue(any("credential assignment" in finding for finding in findings))
+        self.assertTrue(any("bearer credential" in finding for finding in findings))
+        self.assertTrue(any("Git LFS pointer" in finding for finding in findings))
 
     def test_private_runtime_and_secret_filenames_are_not_present(self):
         prohibited_names = {
@@ -379,8 +374,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "memory.sqlite",
             "memory.sqlite3",
         }
+        gitlinks = gitlink_paths(ROOT)
         for path in ROOT.rglob("*"):
-            if path.is_file() and not {".git", "node_modules"} & set(path.parts):
+            if (
+                path.is_file()
+                and not {".git", "node_modules"} & set(path.parts)
+                and not is_vendored(path, ROOT, gitlinks)
+            ):
                 with self.subTest(path=path.relative_to(ROOT)):
                     self.assertNotIn(path.name.lower(), prohibited_names)
 
@@ -406,7 +406,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         jeos = (ROOT / "brains" / "jeos" / "README.md").read_text(encoding="utf-8")
         self.assertIn("repository is public", apex)
         self.assertIn("repository is public", jeos)
-        self.assertIn("Private runtime memory", (ROOT / "docs" / "PRIVACY_AND_DATA_BOUNDARIES.md").read_text(encoding="utf-8"))
+        self.assertIn(
+            "Private runtime memory",
+            (ROOT / "docs" / "PRIVACY_AND_DATA_BOUNDARIES.md").read_text(encoding="utf-8"),
+        )
 
 
 if __name__ == "__main__":

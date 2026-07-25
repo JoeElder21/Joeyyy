@@ -117,6 +117,23 @@ class EvidenceIndexTests(unittest.TestCase):
             self.assertEqual(len(source.retrieve(CHIEF, "storm revisions")), 1)
 
 
+class CrewTelemetryOptOutTests(unittest.TestCase):
+    """crewAI ships default-on telemetry to telemetry.crewai.com. Mission
+    data must not leave the runtime, so importing the bridge must disable it.
+    Stdlib-only: the opt-out is set before the crewai import is attempted."""
+
+    def test_importing_the_bridge_disables_vendor_telemetry(self):
+        import os
+
+        import scripts.crew_bridge as bridge
+
+        for name in ("CREWAI_DISABLE_TELEMETRY", "CREWAI_TELEMETRY_OPT_OUT",
+                     "OTEL_SDK_DISABLED"):
+            with self.subTest(var=name):
+                self.assertIn(name, bridge.TELEMETRY_OPT_OUTS)
+                self.assertEqual(os.environ.get(name), "true")
+
+
 @unittest.skipUnless(_available("crewai"), "crewai not installed")
 class CrewBridgeTests(unittest.TestCase):
     def test_roster_maps_to_crew_and_admission_is_fail_closed(self):

@@ -30,3 +30,10 @@ brains/jeos/memory/*
 
 # Node vendored dependencies (connectors)
 node_modules/
+
+# Rendered deliverables. scripts/privacy_guard.py rejects binary artifacts in
+# this public tree; keep the Markdown source in docs/ and render out-of-band.
+*.pdf
+*.docx
+*.pptx
+*.xlsx
