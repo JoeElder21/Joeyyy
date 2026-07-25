@@ -30,8 +30,11 @@ Python 3.11 or 3.12. CI validates both.
   example credential or contact detail will fail CI.
 - **Actions must be SHA-pinned.** New workflow steps need a full commit SHA with the
   version as a trailing comment. `tests/test_repo_hygiene.py` fails on floating tags.
-- **`ruff-format` is not enabled.** Do not reformat files you are not otherwise changing;
-  the tree is not formatter-clean and a reformat would bury the real diff.
+- **`ruff-format` is enabled and enforced.** The tree was brought formatter-clean in one
+  mechanical commit, and `ruff format --check --diff .` is now a required CI step with a
+  matching pre-commit hook. Run `ruff format .` before committing; do not hand-format
+  against it. CI and pre-commit both pin ruff to the same version, so a local pass means
+  a CI pass — bump the two together or not at all.
 - **Governance docs are tested.** `tests/test_governance_docs.py` and
   `tests/test_agent_contract.py` assert that documentation, templates, registry, and tests
   agree. Change them as a set.

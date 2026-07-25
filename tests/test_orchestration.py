@@ -243,6 +243,48 @@ class McpMountRegistryTests(unittest.TestCase):
             if not mount.get("verify_offline"):
                 self.assertTrue(mount.get("activation"), mount["name"])
 
+    def test_offline_verifiable_mounts_declare_the_tools_they_must_offer(self):
+        # Without a declared contract, verification asserted only that a process
+        # started and answered. An offline-verifiable mount is the one case
+        # where the expectation can actually be checked, so it must state one.
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        for mount in mounts:
+            if mount.get("verify_offline"):
+                with self.subTest(mount=mount["name"]):
+                    self.assertTrue(
+                        mount.get("expected_tools"),
+                        f"{mount['name']} can be probed but declares no expected_tools",
+                    )
+
+    def test_a_mount_offering_no_tools_is_not_verified(self):
+        # The defect: status was set to "verified" the moment list_tools()
+        # returned, whatever it returned. A server whose tool registration had
+        # regressed completed the handshake, listed nothing, and reported
+        # verified -- CI green, connector unconfirmed.
+        from scripts.verify_mcp_mounts import _verdict
+
+        mount = {"name": "governance", "expected_tools": ["validate_packet"]}
+        self.assertNotEqual(_verdict(mount, []), "verified")
+        self.assertIn("no tools", _verdict(mount, []))
+        self.assertNotEqual(_verdict({"name": "x"}, []), "verified")
+
+    def test_a_mount_missing_a_declared_tool_is_not_verified(self):
+        from scripts.verify_mcp_mounts import _verdict
+
+        mount = {"name": "governance", "expected_tools": ["validate_packet", "gone"]}
+        verdict = _verdict(mount, ["validate_packet"])
+        self.assertIn("missing declared tools: gone", verdict)
+
+    def test_extra_upstream_tools_do_not_fail_the_mount(self):
+        # `expected_tools` is a required subset, not a full listing. Asserting
+        # the exact set would turn any additive upstream release into a CI
+        # failure, which is how a gate gets disabled rather than fixed.
+        from scripts.verify_mcp_mounts import _verdict
+
+        mount = {"name": "filesystem", "expected_tools": ["read_text_file"]}
+        self.assertEqual(_verdict(mount, ["read_text_file", "brand_new_tool"]), "verified")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -187,6 +187,21 @@ class ContributorSurfaceTests(unittest.TestCase):
         self.assertIn("AGENTS.md", text)
         self.assertIn("authoritative", text.lower())
 
+    def test_claude_guidance_agrees_with_the_enforced_formatter(self):
+        # CLAUDE.md told Claude-based contributors that ruff-format was not
+        # enabled while the same change made `ruff format --check` a required
+        # CI step and added the pre-commit hook. Following the guidance would
+        # have produced an avoidable CI failure. Runtime guidance that
+        # contradicts the gate is worse than no guidance: it is trusted.
+        text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "validate-agent.yml").read_text(
+            encoding="utf-8"
+        )
+        formatter_enforced = "ruff format --check" in workflow
+        self.assertTrue(formatter_enforced, "this test assumes CI enforces the formatter")
+        self.assertNotIn("`ruff-format` is not enabled", text)
+        self.assertIn("ruff format", text)
+
     def test_absorption_form_requires_provenance_before_execution(self):
         # The FakeGit finding is only enforced if the check cannot be skipped.
         text = (ROOT / ".github" / "ISSUE_TEMPLATE" / "absorption-candidate.yml").read_text(

@@ -24,6 +24,30 @@ def load_mounts() -> list[dict]:
         return tomllib.load(source)["mounts"]
 
 
+def _verdict(mount: dict, tools: list[str]) -> str:
+    """A completed handshake is not a working mount.
+
+    `status = "verified"` was set the moment `list_tools()` returned, whatever
+    it returned. A server whose tool registration had regressed -- or which
+    registered nothing at all -- completed the handshake, listed zero tools, and
+    was reported as verified, so CI stayed green while claiming the connector
+    had been confirmed. That is the same "configured, not executed" error this
+    script exists to catch, one level in: probed, but not actually checked.
+
+    `expected_tools` in config/mcp_mounts.toml is the declared contract. Where a
+    mount declares it, every named tool must be present; where it does not, an
+    empty list is still refused, because a mount offering no tools cannot be
+    what any agent was granted.
+    """
+    if not tools:
+        return "probe returned no tools; a mount that offers nothing is not verified"
+    expected = set(mount.get("expected_tools", []))
+    missing = sorted(expected - set(tools))
+    if missing:
+        return f"missing declared tools: {', '.join(missing)}"
+    return "verified"
+
+
 async def _probe(command: list[str]) -> list[str]:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -63,8 +87,9 @@ def main(argv: list[str] | None = None) -> int:
             entry["status"] = "unverified (mcp package not installed)"
         else:
             try:
-                entry["tools"] = asyncio.run(_probe(mount["command"]))
-                entry["status"] = "verified"
+                tools = asyncio.run(_probe(mount["command"]))
+                entry["tools"] = tools
+                entry["status"] = _verdict(mount, tools)
             except Exception as error:  # report, never crash the audit
                 entry["status"] = f"probe failed: {error}"
         report["mounts"].append(entry)

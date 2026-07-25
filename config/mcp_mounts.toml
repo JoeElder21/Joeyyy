@@ -10,6 +10,11 @@
 # server in-container and list its tools with no credentials.
 # activation = "..."     -> what unlocks the mount when credentials or a
 # workstation are required.
+# expected_tools = [...] -> the tools this mount must actually offer. A
+# completed handshake proved only that a process started; verification
+# reported success whatever list_tools() returned, including an empty one.
+# Declaring the contract makes a regressed tool registration a CI failure
+# rather than a green check.
 
 [[mounts]]
 name = "governance"
@@ -17,6 +22,15 @@ command = ["python", "scripts/governance_mcp_server.py"]
 agents = ["*"]
 purpose = "Packet validation, fail-closed admission, return validation, audit verification, roster."
 verify_offline = true
+# This repository's own server, so the contract is exact: these five are the
+# governance surface every agent depends on.
+expected_tools = [
+  "admit_delegation_packet",
+  "list_registered_roster",
+  "validate_handoff_return",
+  "validate_packet",
+  "verify_audit_ledger",
+]
 
 [[mounts]]
 name = "filesystem"
@@ -28,6 +42,18 @@ require_grant = true
 # docs/FRONTIER_REPO_SCAN_2026-07-24.md, applied to a package this repository
 # launches on purpose. Bumping this pin is a reviewed change, not a silent one.
 command = ["npx", "-y", "@modelcontextprotocol/server-filesystem@2026.7.10", "."]
+# The subset this mount exists to provide. Deliberately not the full listing:
+# naming every tool an upstream release happens to ship would turn any additive
+# upstream change into a CI failure. These are the ones a scoped file mount is
+# useless without.
+expected_tools = [
+  "create_directory",
+  "directory_tree",
+  "edit_file",
+  "list_directory",
+  "read_text_file",
+  "write_file",
+]
 agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
 purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
 verify_offline = true
