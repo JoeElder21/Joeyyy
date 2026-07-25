@@ -77,6 +77,24 @@ PACKET_ONLY = "packet_only_no_direct_connectors"
 # alone -- a specialist reaches them through a packet, never directly.
 CONNECTOR_PREFIXES = ("mount:", "connector:")
 
+# Repository surfaces that belong to neither brain, so a specialist touching
+# them is not a brain-isolation event. Declared as data because the brain lock
+# now fails closed on any resource whose owner it cannot resolve: without an
+# explicit neutral set, "cannot classify" would deny reading the contract that
+# defines the classification.
+BRAIN_NEUTRAL_PREFIXES = (
+    "docs/",
+    "schemas/",
+    "templates/",
+    "scripts/",
+    "tests/",
+    "runtime/",
+    "config/",
+    "AGENTS.md",
+    "README.md",
+    "CLAUDE.md",
+)
+
 # The only schemas that can authorize a tool invocation. `packet_schema` is a
 # caller-supplied string, so without this list a caller could point it at
 # `writer_lease.schema.json` (or any other schema in schemas/) and satisfy
@@ -179,12 +197,29 @@ class ToolRequest:
     lease: dict[str, Any] | None = None
     resource_id: str | None = None
     now: datetime.datetime | None = None
-    explicit_instruction: bool = False
     # Signed grant material, not an assertion. `launch_grant_verified` used to be
     # a plain bool the caller set, which is the same "trust the caller" defect as
     # the mutating flag: any caller could claim a grant it never held.
     launch_grant: dict[str, Any] | None = None
     launch_key_path: Path | None = None
+    # The third instance of that same defect, and the one that took longest to
+    # find. `explicit_instruction: bool = False` let any caller authorize a
+    # financial transaction, an access change, or a public publication by
+    # setting a flag -- the very boundary AGENTS.md reserves for Joe. It is now
+    # signed material bound to this action and this resource, verified with the
+    # launcher's own primitive so a grant for `read` on one target cannot be
+    # replayed against `financial_transaction` on another.
+    instruction_grant: dict[str, Any] | None = None
+    # Authoritative ledgers, forwarded to PacketGuard. Supplying none of these
+    # meant the guard rejected any delegation that referenced a validated
+    # constraint, or carried a real lease, as unvalidated -- so a lawful
+    # constraint-backed request could not pass admission at all. The guard needs
+    # the same context here that it gets at real admission, or this gate is
+    # stricter than the one it consolidates in a way that denies correct work.
+    active_leases: tuple[Any, ...] = ()
+    delegations: tuple[Any, ...] = ()
+    constraint_packets: tuple[Any, ...] = ()
+    private_constraint_packets: tuple[Any, ...] = ()
 
 
 @dataclass
@@ -385,13 +420,40 @@ class PolicyEnforcementPoint:
                 f"brain lock: resource {request.resource!r} belongs to "
                 f"{resource_brain!r}, and {request.agent!r} is {agent_brain!r}-only"
             )
+        elif resource_brain is None and not self._is_brain_neutral(request.resource):
+            # Unresolvable ownership was treated as no objection, so the lock
+            # held only over resources whose names happened to match a manifest
+            # prefix. `brains/jeos/agents.toml` is plainly JEOS material and
+            # resolved to nothing, so an APEX specialist reading it passed.
+            #
+            # "I cannot tell who owns this" is not "anyone may have it". The
+            # brain-neutral list below is what makes that answerable rather than
+            # an outage: shared repository surfaces are declared, everything
+            # else must be classifiable or it is refused.
+            errors.append(
+                f"brain lock: cannot resolve which brain owns {request.resource!r}, "
+                f"and an unclassifiable resource is not established as {agent_brain!r}'s "
+                f"to touch; name it under a manifest-declared prefix or a brain-neutral one"
+            )
         return errors
 
+    @staticmethod
+    def _is_brain_neutral(resource: str) -> bool:
+        """Shared repository surfaces that belong to neither brain."""
+        return any(resource.startswith(prefix) for prefix in BRAIN_NEUTRAL_PREFIXES)
+
     def _resource_owner(self, resource: str) -> str | None:
-        """Which brain owns this resource, by manifest-declared prefix."""
+        """Which brain owns this resource, by manifest-declared prefix or path."""
         for prefix, owner in self.brain_prefixes.items():
             if resource.startswith(prefix):
                 return owner
+        # Repository paths under `brains/<brain>/` are that brain's material as
+        # plainly as its namespace is, but carry none of the declared prefixes,
+        # so ownership resolution missed them entirely.
+        lowered = resource.lower().lstrip("./")
+        for brain in ("apex", "jeos"):
+            if lowered.startswith(f"brains/{brain}/"):
+                return brain.upper()
         return None
 
     def _connector_policy(self, request: ToolRequest) -> list[str]:
@@ -429,11 +491,34 @@ class PolicyEnforcementPoint:
             if request.mutating:
                 return ["mutating request carries no packet; packet-only policy admits nothing"]
             return []
+        # A packet that is not an object cannot be scope-checked. `.get()` on a
+        # scalar raises AttributeError, so hostile input crashed the evaluation
+        # instead of denying it -- and a gate that raises on input a caller
+        # controls is a denial of service on every other caller in the process,
+        # not a fail-closed decision.
+        if not isinstance(request.packet, dict):
+            return [f"packet rejected: $: expected an object, got {type(request.packet).__name__}"]
         errors = [
             f"packet rejected: {error}"
-            for error in self.guard.validate(request.packet_schema, request.packet)
+            for error in self.guard.validate(
+                request.packet_schema,
+                request.packet,
+                # The authoritative ledgers. Without them the guard cannot
+                # resolve a referenced constraint or confirm a lease is uniquely
+                # active, so it refused lawful packets -- and the separate lease
+                # rule cannot lift a denial raised during admission.
+                list(request.active_leases),
+                delegations=list(request.delegations),
+                constraint_packets=list(request.constraint_packets),
+                private_constraint_packets=list(request.private_constraint_packets),
+            )
         ]
-        return errors + self._packet_scope_errors(request)
+        # Scope binding only runs on a packet that survived validation. Running
+        # it on a rejected packet reads fields from a structure the guard has
+        # already said it cannot vouch for.
+        if errors:
+            return errors
+        return self._packet_scope_errors(request)
 
     def _writer_lease(self, request: ToolRequest) -> list[str]:
         """Validate the lease as a lease, not as two matching strings.
@@ -635,15 +720,55 @@ class PolicyEnforcementPoint:
         return []
 
     def _high_impact_boundary(self, request: ToolRequest) -> list[str]:
+        """The boundary AGENTS.md reserves for Joe, verified rather than asserted.
+
+        This was `explicit_instruction: bool = False` — the third appearance of
+        the same defect, after `mutating` and `launch_grant_verified`, and the
+        one with the worst blast radius: a caller could authorize a financial
+        transaction, a credential change, or a public publication by setting a
+        flag on its own request. The control guarding the actions Joe must
+        personally sanction was the one a caller could sanction for itself.
+
+        The grant is bound to *this* action and *this* resource, so an
+        instruction for one boundary action cannot be replayed against another.
+        Signature only; nonce consumption stays with the launcher, because a
+        policy evaluation must not have side effects.
+        """
         # Compare the normalized action. `evaluate()` normalizes before any rule
         # runs; lowercasing again here keeps a directly-invoked rule honest
         # rather than making the boundary depend on the caller's entry point.
         action = (request.action or "").strip().lower()
-        if action in HIGH_IMPACT_ACTIONS and not request.explicit_instruction:
+        if action not in HIGH_IMPACT_ACTIONS:
+            return []
+        grant = request.instruction_grant
+        if not grant:
             return [
-                f"{request.action!r} is a high-impact boundary and requires explicit "
-                "task-level instruction from Joe"
+                f"{action!r} is a high-impact boundary and requires a signed "
+                "task-level instruction from Joe; none was presented"
             ]
+        payload = {
+            "action": grant.get("action"),
+            "resource": grant.get("resource"),
+            "issued_at": grant.get("issued_at"),
+            "expires_at": grant.get("expires_at"),
+            "nonce": grant.get("nonce"),
+        }
+        if payload["action"] != action:
+            return [f"instruction authorizes {payload['action']!r}, not {action!r}"]
+        if payload["resource"] != request.resource:
+            return [f"instruction is scoped to {payload['resource']!r}, not {request.resource!r}"]
+        key_path = Path(request.launch_key_path or DEFAULT_LAUNCH_KEY)
+        if not key_path.exists():
+            return ["no signing key is present, so the instruction cannot be verified"]
+        expected = _sign_grant(key_path.read_bytes(), payload)
+        if not hmac.compare_digest(expected, str(grant.get("sig", ""))):
+            return ["instruction signature is invalid"]
+        try:
+            expires = float(payload["expires_at"])
+        except (TypeError, ValueError):
+            return ["instruction has no usable expiry"]
+        if self._clock(request).timestamp() > expires:
+            return ["instruction has expired"]
         return []
 
     def _launch_grant(self, request: ToolRequest) -> list[str]:

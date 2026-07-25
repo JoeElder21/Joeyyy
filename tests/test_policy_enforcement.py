@@ -23,6 +23,7 @@ from runtime.writer_lease import LeaseRegistry
 from scripts.agent_runtime import AuditLedger
 from scripts.policy_enforcement import (
     AUTHORIZATION_SCHEMAS,
+    BRAIN_NEUTRAL_PREFIXES,
     CHIEF,
     HIGH_IMPACT_ACTIONS,
     NON_EXECUTING_STAGES,
@@ -33,6 +34,7 @@ from scripts.policy_enforcement import (
     ToolRequest,
     enforce,
 )
+from scripts.trusted_launcher import _sign
 
 ROOT = Path(__file__).resolve().parents[1]
 SPECIALIST = "apex_war_architect"
@@ -60,6 +62,23 @@ def registry_and_lease(**overrides):
     }
     fields.update(overrides)
     return registry, dict(registry.issue(**fields))
+
+
+def instruction_grant(action, resource, key_path, minutes=30):
+    """A genuine signed instruction, built with the launcher's own primitive.
+
+    Signed here rather than stubbed: a test that fabricates its own signature
+    format proves the rule agrees with the test, not that it agrees with the
+    launcher.
+    """
+    payload = {
+        "action": action,
+        "resource": resource,
+        "issued_at": NOW.timestamp(),
+        "expires_at": (NOW + datetime.timedelta(minutes=minutes)).timestamp(),
+        "nonce": "n-0001",
+    }
+    return {**payload, "sig": _sign(key_path.read_bytes(), payload)}
 
 
 def real_lease(**overrides):
@@ -137,7 +156,9 @@ class RuleCoverageTests(unittest.TestCase):
 
     def test_every_check_runs_on_every_request(self):
         decision = self.pep.evaluate(
-            ToolRequest(agent=SPECIALIST, action="read", resource="x", owner_brain="APEX")
+            ToolRequest(
+                agent=SPECIALIST, action="read", resource="docs/README.md", owner_brain="APEX"
+            )
         )
         self.assertEqual(len(decision.checks_run), 8)
         self.assertIn("brain_lock", decision.checks_run)
@@ -180,20 +201,95 @@ class DenialTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertTrue(any("shadow" in reason for reason in decision.reasons))
 
-    def test_every_high_impact_action_requires_explicit_instruction(self):
+    def test_every_high_impact_action_requires_a_signed_instruction(self):
         # Exercised at the rule rather than through evaluate(): high-impact
         # actions are now also classified as mutations, so a full evaluation
         # additionally demands a lease. That is correct -- publishing or
         # transacting is a mutation -- but it is a different rule's business,
         # and folding it in here would stop this test from testing this rule.
-        for action in sorted(HIGH_IMPACT_ACTIONS):
-            with self.subTest(action=action):
-                without = ToolRequest(agent=CHIEF, action=action, resource="target")
-                self.assertTrue(self.pep._high_impact_boundary(without))
-                withi = ToolRequest(
-                    agent=CHIEF, action=action, resource="target", explicit_instruction=True
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = Path(tmp) / "launch_key"
+            key_path.write_bytes(b"test-signing-key")
+            for action in sorted(HIGH_IMPACT_ACTIONS):
+                with self.subTest(action=action):
+                    without = ToolRequest(agent=CHIEF, action=action, resource="target")
+                    self.assertTrue(self.pep._high_impact_boundary(without))
+                    signed = ToolRequest(
+                        agent=CHIEF,
+                        action=action,
+                        resource="target",
+                        instruction_grant=instruction_grant(action, "target", key_path),
+                        launch_key_path=key_path,
+                        now=NOW,
+                    )
+                    self.assertEqual(self.pep._high_impact_boundary(signed), [])
+
+    def test_asserting_an_instruction_without_signing_it_authorizes_nothing(self):
+        # The defect: `explicit_instruction=True` was a caller-set boolean, so
+        # a caller could sanction the very actions AGENTS.md reserves for Joe.
+        # This is the same shape as `mutating` and `launch_grant_verified`, two
+        # rounds apart, and the one with the worst blast radius.
+        self.assertFalse(
+            hasattr(ToolRequest(agent=CHIEF, action="x", resource="y"), "explicit_instruction")
+        )
+        reasons = self.pep._high_impact_boundary(
+            ToolRequest(
+                agent=CHIEF,
+                action="financial_transaction",
+                resource="target",
+                instruction_grant={"action": "financial_transaction", "resource": "target"},
+            )
+        )
+        self.assertTrue(reasons)
+
+    def test_an_instruction_cannot_be_replayed_against_another_action_or_target(self):
+        # A grant is bound to one boundary action on one resource. Without that
+        # binding, an instruction to publish one document would authorize a
+        # financial transaction against anything.
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = Path(tmp) / "launch_key"
+            key_path.write_bytes(b"test-signing-key")
+            grant = instruction_grant("public_publication", "APEX/Post", key_path)
+            wrong_action = self.pep._high_impact_boundary(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="financial_transaction",
+                    resource="APEX/Post",
+                    instruction_grant=grant,
+                    launch_key_path=key_path,
+                    now=NOW,
                 )
-                self.assertEqual(self.pep._high_impact_boundary(withi), [])
+            )
+            self.assertTrue(any("authorizes" in reason for reason in wrong_action))
+            wrong_target = self.pep._high_impact_boundary(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="public_publication",
+                    resource="APEX/Other",
+                    instruction_grant=grant,
+                    launch_key_path=key_path,
+                    now=NOW,
+                )
+            )
+            self.assertTrue(any("scoped to" in reason for reason in wrong_target))
+
+    def test_a_forged_instruction_signature_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = Path(tmp) / "launch_key"
+            key_path.write_bytes(b"test-signing-key")
+            grant = instruction_grant("public_publication", "APEX/Post", key_path)
+            grant["sig"] = "0" * 64
+            reasons = self.pep._high_impact_boundary(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="public_publication",
+                    resource="APEX/Post",
+                    instruction_grant=grant,
+                    launch_key_path=key_path,
+                    now=NOW,
+                )
+            )
+            self.assertTrue(any("signature is invalid" in reason for reason in reasons))
 
     def test_high_impact_actions_are_treated_as_mutations(self):
         # Signing, transacting, or publishing changes the world; classifying them
@@ -394,7 +490,9 @@ class EnforceTests(unittest.TestCase):
 
     def test_enforce_returns_decision_on_allow(self):
         decision = enforce(
-            ToolRequest(agent=SPECIALIST, action="read", resource="x", owner_brain="APEX")
+            ToolRequest(
+                agent=SPECIALIST, action="read", resource="docs/README.md", owner_brain="APEX"
+            )
         )
         self.assertTrue(decision.allowed)
 
@@ -593,6 +691,50 @@ class ScopeTests(unittest.TestCase):
                 self.assertTrue(
                     any("may not touch connector" in reason for reason in decision.reasons),
                     decision.reasons,
+                )
+
+    def test_an_unresolvable_resource_is_refused_not_waved_through(self):
+        # Ownership resolution returning None was treated as "no objection", so
+        # the brain lock held only over resources whose names happened to match
+        # a manifest prefix. Anything else passed on the caller's declaration.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=SPECIALIST, action="read", resource="somewhere/else", owner_brain="APEX"
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("cannot resolve which brain owns" in r for r in decision.reasons))
+
+    def test_a_brain_owned_repository_path_resolves_to_its_brain(self):
+        # The reported case: brains/jeos/agents.toml is plainly JEOS material
+        # but carries none of the declared namespace prefixes, so it resolved to
+        # nothing and an APEX specialist reading it passed.
+        self.assertEqual(self.pep._resource_owner("brains/jeos/agents.toml"), "JEOS")
+        self.assertEqual(self.pep._resource_owner("brains/apex/agents.toml"), "APEX")
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="brains/jeos/agents.toml",
+                owner_brain="APEX",
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("belongs to 'JEOS'" in r for r in decision.reasons))
+
+    def test_shared_repository_surfaces_stay_readable(self):
+        # Fail-closed on unresolvable ownership is only safe because the neutral
+        # set is declared. Without it, a specialist could not read the contract
+        # that defines the classification it is being held to.
+        for prefix in BRAIN_NEUTRAL_PREFIXES:
+            with self.subTest(prefix=prefix):
+                self.assertEqual(
+                    self.pep._brain_lock(
+                        ToolRequest(
+                            agent=SPECIALIST, action="read", resource=prefix, owner_brain="APEX"
+                        )
+                    ),
+                    [],
                 )
 
     def test_the_chief_still_reaches_connectors(self):

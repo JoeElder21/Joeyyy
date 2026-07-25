@@ -500,6 +500,23 @@ every high-impact action resists casing) rather than the reported example.
 **One finding carried forward, unchanged from round one.** `enforce()` still has
 no live call site. It remains the top follow-up, for the reason given below.
 
+### Automated review, fifth pass — six findings, six fixed
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| `explicit_instruction` was a caller-set boolean | **Correct, and the worst finding of all five rounds** | See below. |
+| Unresolvable resource ownership meant "no objection" | **Correct** | The brain lock held only over resources whose names matched a manifest prefix; `brains/jeos/agents.toml` resolved to nothing, so an APEX specialist reading it passed. Ownership now resolves brain-owned repository paths, and an unclassifiable resource is refused. A declared `BRAIN_NEUTRAL_PREFIXES` set is what makes fail-closed viable rather than an outage — without it a specialist could not read the contract defining the classification it is held to. |
+| No authorization ledgers reached `PacketGuard` | **Correct** | `validate()` accepts `active_leases`, `delegations`, `constraint_packets`, and `private_constraint_packets`; the enforcement point passed none, so the guard refused any delegation referencing a validated constraint or carrying a real lease. The separate lease rule cannot lift a denial raised during admission, so lawful work was unpassable. The request now carries the ledgers and forwards them. |
+| A scalar packet crashed the evaluation | **Correct** | `.get()` on `1` or `"bad"` raised `AttributeError` instead of denying. A gate that raises on caller-controlled input is a denial of service on every other caller in the process. Type-checked, and scope binding now runs only on a packet that survived validation. |
+| The filesystem MCP package was unpinned | **Correct** | `npx -y @modelcontextprotocol/server-filesystem` with no version fetches whatever the registry currently serves — the FakeGit-class exposure this repository has a scan for, in a package it launches on purpose, in a job that had just been made required. Pinned to `2026.7.10`. |
+| Evaluation runs recorded no provenance | **Correct** | A run directory held the case inventory and a caller-chosen id, and nothing about what produced the scores. After a prompt edit or model change a passing artifact could not name the implementation it attested to. Runs now record commit, tree-dirty state, Python, deepeval and pytest versions, and the judge model — with `dispatch_wired: false` stated in the artifact, so no reader mistakes today's runs for specialist evidence. |
+
+**The boolean defect, third and worst instance.** `mutating` (round 2) → `launch_grant_verified` (round 3) → `explicit_instruction` (round 5). Each is the same shape: a control that asks the caller whether the caller is authorized. This one guarded the six actions `AGENTS.md` reserves for Joe personally — financial transactions, credential changes, binding commitments, public publication — and any caller could clear it by setting a flag on its own request.
+
+It is worth being precise about why it survived. After round 4 this record claimed that each fix was followed by "a search for the same shape elsewhere in the file". That search found the connector-read hole and missed a `bool = False` field sitting in the same dataclass as the two already-fixed booleans. The search was real but shallow: it looked for the *pattern of the fix* rather than enumerating every caller-supplied field and asking what each one authorizes. The instruction grant is now signed material bound to a specific action and resource, so an instruction to publish one document cannot be replayed as a financial transaction against another.
+
+**`config/mcp_mounts.toml` is no longer untouched.** Earlier rounds stated this change set modified no file under `config/`. Pinning the filesystem server's version changes it. This is not a connector-policy decision — no mount was added, no agent's access changed, no policy string moved — it makes an existing approved mount reproducible. Recorded here rather than left as a silent contradiction of the earlier claim.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

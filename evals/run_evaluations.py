@@ -20,8 +20,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
+from importlib import metadata
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -103,10 +106,69 @@ def assert_telemetry_disabled() -> None:
         )
 
 
+def provenance() -> dict:
+    """What produced this result, recorded so a score stays interpretable.
+
+    A run directory previously held the case inventory and a caller-chosen id
+    and nothing about the implementation that generated it. After a prompt
+    edit, a model-alias change, or a deepeval upgrade, a passing artifact could
+    not say which specialist and which judge it attested to — so it could not
+    serve as the rollback evidence the acceptance gate treats it as.
+
+    Everything here is read from the environment rather than declared, and
+    anything that cannot be established is recorded as unknown rather than
+    guessed. `dispatch_wired: false` is the load-bearing entry today: it says
+    in the artifact itself that no specialist was actually invoked.
+    """
+    record: dict[str, Any] = {
+        "python": sys.version.split()[0],
+        "platform": sys.platform,
+        "dispatch_wired": False,
+    }
+    try:
+        record["commit"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parent,
+        ).stdout.strip()
+        record["tree_dirty"] = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=Path(__file__).resolve().parent,
+            ).stdout.strip()
+        )
+    except (OSError, subprocess.CalledProcessError):
+        # A result produced outside a checkout is still a result; it just
+        # cannot claim a commit. Saying so beats omitting the field.
+        record["commit"] = "unknown"
+        record["tree_dirty"] = "unknown"
+
+    for package in ("deepeval", "pytest"):
+        try:
+            record[f"{package}_version"] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            record[f"{package}_version"] = "not installed"
+
+    # The judge model is whatever DeepEval resolves from the environment. It is
+    # recorded, never defaulted -- an artifact that names the wrong judge is
+    # worse than one that admits it does not know.
+    record["judge_model"] = os.environ.get("DEEPEVAL_JUDGE_MODEL") or os.environ.get(
+        "OPENAI_MODEL_NAME", "unset (deepeval default)"
+    )
+    record["specialist_model"] = "n/a (dispatch not wired)"
+    return record
+
+
 def coverage_report() -> dict:
     coverage = build_coverage()
     cases = load_cases()
     report = coverage.summary()
+    report["provenance"] = provenance()
     report["metric_contract"] = METRIC_CONTRACT
     report["cases"] = {
         key: {
@@ -201,7 +263,7 @@ def _record_passes(report: dict, results: Path, identifier: str) -> dict:
             coverage.passed[key] = identifier
     updated = coverage.summary()
     # Preserve the descriptive sections the pre-run report carried.
-    for extra in ("metric_contract", "cases", "deepeval_available"):
+    for extra in ("metric_contract", "cases", "deepeval_available", "provenance"):
         if extra in report:
             updated[extra] = report[extra]
     updated["run_id"] = identifier

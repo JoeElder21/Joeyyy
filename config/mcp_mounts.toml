@@ -21,7 +21,13 @@ verify_offline = true
 [[mounts]]
 name = "filesystem"
 require_grant = true
-command = ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
+# Version-pinned. `npx -y @modelcontextprotocol/server-filesystem` with no
+# `@<version>` fetches and executes whatever the registry currently serves, so
+# an unchanged commit could run different code on every CI run and on Joe's
+# workstation. That is the FakeGit-class exposure recorded in
+# docs/FRONTIER_REPO_SCAN_2026-07-24.md, applied to a package this repository
+# launches on purpose. Bumping this pin is a reviewed change, not a silent one.
+command = ["npx", "-y", "@modelcontextprotocol/server-filesystem@2026.7.10", "."]
 agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
 purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
 verify_offline = true
