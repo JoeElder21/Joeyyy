@@ -15,6 +15,7 @@ from scripts.privacy_guard import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SKILLS_DIR = ROOT / ".github" / "skills"
 
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
@@ -197,6 +198,53 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 [candidate],
                 destinations={candidate: Path(".github/instructions/x.instructions.md")})
             self.assertEqual(allowed, [], allowed)
+
+    def test_private_connector_endpoint_is_detected_but_public_one_is_not(self):
+        """A private Terraform Enterprise host names an employer or client's own
+        installation, which this public repository forbids. The public SaaS
+        endpoint identifies nobody, and flagging it would fire on this
+        repository's own documentation."""
+        pattern = PATTERNS["private connector endpoint"]
+        # Probes are assembled at runtime: writing them literally would make
+        # this test file itself trip the pattern it is testing.
+        name = "TFE" + "_ADDRESS"
+        scheme = "https" + "://"
+        for host in ("terraform.client-company.com", "tfe.someorg.internal.net"):
+            with self.subTest(host=host, expect="flagged"):
+                self.assertIsNotNone(
+                    pattern.search(f'{name} = "{scheme}{host}"'))
+        for probe in (
+            f'{name} = "{scheme}app.terraform.io"',
+            f'{name} = "<your-tfe-host>"',
+            f'{name} = "{scheme}localhost:8080"',
+            name,
+        ):
+            with self.subTest(probe=probe, expect="clean"):
+                self.assertIsNone(pattern.search(probe))
+
+    def test_connector_identifiers_are_detected_but_placeholders_are_not(self):
+        pattern = PATTERNS["connector identifier"]
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        for name in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "APS_CLIENT_ID"):
+            with self.subTest(name=name, expect="flagged"):
+                self.assertIsNotNone(pattern.search(f'{name} = "{guid}"'))
+        for probe in (f'{"AZURE" + "_TENANT_ID"} = "<your-tenant-id>"',
+                      f'{"TFE" + "_ADDRESS"} = "{"https" + "://"}app.terraform.io"'):
+            with self.subTest(probe=probe, expect="clean"):
+                self.assertIsNone(pattern.search(probe))
+
+    def test_intake_preamble_rejects_real_findings(self):
+        """The preamble told a maintainer to pin the tripping snippet in
+        PLACEHOLDER_LITERALS. For a genuine credential that makes the gate pass
+        while committing the material it exists to stop. It must classify
+        first, reject real findings, and treat uncertainty as real."""
+        for skill in SKILLS_DIR.glob("suggest-awesome-github-copilot-*/SKILL.md"):
+            text = skill.read_text(encoding="utf-8")
+            with self.subTest(skill=skill.parent.name):
+                self.assertIn("Classify every finding", text)
+                self.assertIn("the file is **rejected**", text)
+                self.assertIn("Never pin a real value", text)
+                self.assertIn("Uncertain counts as real", text)
 
     def test_placeholder_allowlist_has_no_stale_entries(self):
         for relative_path, literals in PLACEHOLDER_LITERALS.items():

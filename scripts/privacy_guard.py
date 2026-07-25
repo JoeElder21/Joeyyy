@@ -51,6 +51,16 @@ PATTERNS = {
     ),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "cloud access key": re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
+    # A private Terraform Enterprise host names an employer or client's own
+    # installation, which AGENTS.md forbids publishing. The public SaaS endpoint
+    # (app.terraform.io) identifies nobody and is deliberately not flagged, nor
+    # are placeholder hosts, so this repository's own documentation stays clean.
+    "private connector endpoint": re.compile(
+        r"(?i)\btfe?[_-]?address\s*[:=]\s*[\"']?https?://"
+        r"(?!app\.terraform\.io\b)(?!localhost\b)(?!127\.0\.0\.1\b)"
+        r"(?!<)(?!your[-_.])(?!example\.)(?!\S*\.example\b)"
+        r"[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}"
+    ),
     # Connector identifiers. AGENTS.md forbids these in this public repository
     # alongside credentials: a tenant or client id names Joe's actual cloud
     # tenancy and app registration. They are not secrets, so they are reported

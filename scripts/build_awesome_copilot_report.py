@@ -10,6 +10,7 @@ the tracked source of truth -- run it to reproduce the report.
 Output: docs/reports/AWESOME_COPILOT_SELECTION_REPORT.pdf (gitignored).
 """
 
+import datetime as _dt
 import re
 import subprocess
 from xml.sax.saxutils import escape
@@ -36,6 +37,12 @@ ACCENT = colors.HexColor("#1F4E79")
 BAND = colors.HexColor("#EEF1F6")
 KEEP = colors.HexColor("#1B6B4A")
 DROP = colors.HexColor("#8A5A00")
+
+# The decision date is fixed history; every gate result, test count, pin and
+# tracked-inventory figure below is measured when this runs. Labelling all of it
+# with the original date would falsely timestamp regenerated evidence.
+BUILD_DATE = _dt.date.today().strftime("%-d %B %Y")
+
 
 def count_tracked(pattern: str) -> int:
     """Count tracked files matching a git pathspec, at build time."""
@@ -276,11 +283,13 @@ story.append(Spacer(1, 9))
 
 meta = [
     [Paragraph("Prepared for", CELL), Paragraph("Joe Elder", CELLB),
-     Paragraph("Report date", CELL), Paragraph("25 July 2026", CELLB)],
+     Paragraph("Decision date", CELL), Paragraph("25 July 2026", CELLB)],
     [Paragraph("Prepared by", CELL), Paragraph("Agent 007 / APEX Chief of Staff", CELLB),
      Paragraph("Pull request", CELL), Paragraph("#26", CELLB)],
     [Paragraph("Upstream source", CELL), Paragraph("github/awesome-copilot", CELLB),
      Paragraph("Pinned commit", CELL), Paragraph(manifest_pin(), MONO)],
+    [Paragraph("Built", CELL), Paragraph(BUILD_DATE, CELLB),
+     Paragraph("", CELL), Paragraph("", CELL)],
 ]
 story.append(tbl(meta, [0.95 * inch, 2.35 * inch, 0.85 * inch, 1.55 * inch],
                  header=False, zebra=False))
@@ -453,7 +462,7 @@ story.append(Paragraph(
 ag = [hdr("File", "Role", "Status and limits")]
 for f, role, note in [
     ("prompt-engineer", "Prompt rewriting",
-     "<b>active.</b> Carries a local override, <font face='Courier' "
+     "<b>candidate.</b> Carries a local override, <font face='Courier' "
      "size='7.5'>tools: []</font>. Upstream omits the field, which grants every "
      "built-in and MCP tool; this agent consumes arbitrary user text, so "
      "all-tools access would let prompt injection reach the repository."),
