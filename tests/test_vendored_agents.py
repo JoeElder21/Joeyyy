@@ -23,6 +23,12 @@ DELEGATION = re.compile(
     r"([a-z0-9]+(?:-[a-z0-9]+)+)`?",
     re.I,
 )
+# Any explicit @handle, wherever it appears - including the sample commands a prompt
+# tells the user to run, which the delegation phrasing above does not cover. The
+# lookahead excludes email addresses and domains (@host.tld) and npm scoped packages
+# (@radix-ui/react-dialog), neither of which is an agent reference.
+AT_REFERENCE = re.compile(r"@(?:agent-)?([a-z0-9]+(?:-[a-z0-9]+)+)(?![./])\b")
+EXPECTED_AGENT_COUNT = 33
 
 
 def agent_files() -> list[Path]:
@@ -84,7 +90,14 @@ class VendoredAgentContractTests(unittest.TestCase):
         if not VENDORED.is_dir():
             self.skipTest("vendored corps not present")
         self.files = agent_files()
-        self.assertTrue(self.files, "vendored corps directory is empty")
+        # An exact count, not merely "some". A partial rollback or an interrupted sync
+        # would otherwise leave every contract test passing over a tree that no longer
+        # matches what the registry and README claim is installed.
+        self.assertEqual(
+            len(self.files),
+            EXPECTED_AGENT_COUNT,
+            f"expected {EXPECTED_AGENT_COUNT} vendored prompts, found {len(self.files)}",
+        )
 
     def test_every_prompt_has_parseable_frontmatter_and_description(self):
         for path in self.files:
@@ -138,9 +151,10 @@ class VendoredAgentContractTests(unittest.TestCase):
         dangling: dict[str, set[str]] = {}
         for path in self.files:
             text = path.read_text(encoding="utf-8")
+            referenced = set(DELEGATION.findall(text)) | set(AT_REFERENCE.findall(text))
             missing = {
                 target
-                for target in DELEGATION.findall(text)
+                for target in referenced
                 if target not in known and target != declared_name(path)
             }
             if missing:

@@ -53,7 +53,7 @@ discovery, never selected.
    - Show detected stack.  
    - List the agents added or updated.  
    - Provide one sample command, e.g.  
-     > Try: “@laravel-api-architect build a Posts endpoint”.
+     > Try: “@laravel-backend-expert build a Posts endpoint”.
 
 ## Delegations
 | Trigger | Delegate | Goal |

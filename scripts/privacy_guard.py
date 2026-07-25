@@ -154,20 +154,29 @@ VENDORED_CREDENTIAL_BARE = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*([^\s#\"']{8,})"
 )
-# Decide which unquoted values are CODE, never which are secrets. Allowlisting "safe"
-# secret characters fails open, because base64 and URL-safe keys carry +, /, = and .
+# Unquoted right-hand sides are classified against a CLOSED allowlist of the exact
+# expressions that appear in the vendored tree, not by a heuristic.
 #
-# Two shapes defeat a purely structural test and are handled explicitly:
-#   - A JWT is header.payload.signature, which reads as an attribute chain. Checked
-#     first, before the expression rule, and always treated as a credential.
-#   - A bare identifier is not evidence of code either: an opaque alphanumeric key is
-#     identifier-shaped too. Only a *dotted* chain counts as an attribute lookup.
-JWT_LIKE = re.compile(r"\A[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}=*\Z")
-IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
-CODE_EXPRESSION = re.compile(
-    rf"\A{IDENT}(?:\.{IDENT})+[,;]?\Z"   # attribute lookup: obj.attr.attr
-    r"|[()\[\]{}]"                  # a call, subscript, literal, or f-string brace
-    r"|::|->|=>"                    # scope / lambda / arrow operators
+# Every structural heuristic tried here leaked, each in the same way: it searched for
+# some marker of "code" inside the value, and a real secret containing that marker was
+# waived. A dot waived every JWT; identifier shape waived every alphanumeric key; a
+# bracket waived any password containing punctuation. The set of things a secret can
+# look like is open, so it cannot be enumerated — but the set of expressions actually
+# present here is small and closed, so that is what gets enumerated instead.
+#
+# A sync that introduces a new unquoted expression fails the guard. That is intended:
+# a human should look at it and add it deliberately rather than have a rule guess.
+VENDORED_BARE_EXPRESSIONS = frozenset(
+    {
+        "Annotated[str",
+        "Password",
+        "encode_token(",
+        "password",
+        "request.META.get(",
+        "self.jwt_manager.create_access_token(user)",
+        "tokens[:access_token]",
+        "var.database_password",
+    }
 )
 # Complete placeholder forms. These must match the WHOLE literal, never a substring:
 # a substring test would waive a live credential that merely happens to contain a
@@ -248,11 +257,9 @@ def vendored_credential_findings(text: str) -> list[str]:
         # Drop a trailing separator left by the surrounding source line, so that e.g.
         # a bare `password,` is classified on the word itself.
         value = match.group(1).rstrip(",;")
-        if JWT_LIKE.match(value):
-            labels.append("credential assignment")
+        if value in VENDORED_BARE_EXPRESSIONS or is_placeholder_value(value):
             continue
-        if not CODE_EXPRESSION.search(value) and not is_placeholder_value(value):
-            labels.append("credential assignment")
+        labels.append("credential assignment")
     return labels
 
 

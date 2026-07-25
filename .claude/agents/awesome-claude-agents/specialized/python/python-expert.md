@@ -282,7 +282,7 @@ class UUIDMixin:
 from typing import Optional, List
 from enum import Enum
 
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, model_validator
 from sqlalchemy import String, Boolean, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -336,8 +336,13 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=100)
     confirm_password: str
     
+    @model_validator(mode="after")
     def validate_passwords_match(self) -> "UserCreate":
-        """Valide que les mots de passe correspondent."""
+        """Valide que les mots de passe correspondent.
+
+        Sans le décorateur, Pydantic ignore cette méthode : la validation passe et le
+        service hache un mot de passe dont la confirmation n'a jamais été vérifiée.
+        """
         if self.password != self.confirm_password:
             raise ValueError("Les mots de passe ne correspondent pas")
         return self
@@ -739,7 +744,7 @@ from passlib.context import CryptContext
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.user import User, UserCreate, UserUpdate
+from ..models.user import User, UserCreate, UserCreateInDB, UserUpdate
 from ..repositories.user_repository import UserRepository
 
 

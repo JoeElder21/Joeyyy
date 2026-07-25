@@ -91,12 +91,22 @@ CREDENTIAL_BARE = re.compile(
 )
 # Detect code expressions rather than allowlisting secret characters: base64 and
 # URL-safe keys contain +, /, = and ., so a word-character allowlist fails open.
-# Only a dotted chain counts as an attribute lookup: a bare identifier is not evidence
-# of code, and a JWT's base64url segments are themselves identifier-shaped.
-JWT_LIKE = re.compile(r"\A[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}=*\Z")
-_IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
-CODE_EXPRESSION = re.compile(
-    rf"\A{_IDENT}(?:\.{_IDENT})+[,;]?\Z" r"|[()\[\]{}]|::|->|=>"
+# A CLOSED allowlist of the exact unquoted expressions present in the vendored tree.
+# Restated here rather than imported, like the rest of this mirror. Every structural
+# heuristic tried previously leaked: a dot waived JWTs, identifier shape waived
+# alphanumeric keys, a bracket waived punctuated passwords. What a secret can look like
+# is open-ended; what appears here is not.
+VENDORED_BARE_EXPRESSIONS = frozenset(
+    {
+        "Annotated[str",
+        "Password",
+        "encode_token(",
+        "password",
+        "request.META.get(",
+        "self.jwt_manager.create_access_token(user)",
+        "tokens[:access_token]",
+        "var.database_password",
+    }
 )
 
 
@@ -118,9 +128,7 @@ def _is_filler(value: str) -> bool:
 
 def _bare_value_is_credential(raw: str) -> bool:
     value = raw.rstrip(",;")
-    if JWT_LIKE.match(value):
-        return True
-    return not CODE_EXPRESSION.search(value) and not _is_filler(value)
+    return value not in VENDORED_BARE_EXPRESSIONS and not _is_filler(value)
 
 
 def non_placeholder_credentials(text: str) -> list[str]:
