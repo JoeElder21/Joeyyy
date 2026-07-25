@@ -77,7 +77,7 @@ You WILL process user input as follows:
 
 ## File Operations
 
-- **READ**: You WILL use any read tool across the entire workspace for plan creation
+- **READ**: You WILL use any read tool across the repository's shared source for plan creation, under the same one-brain scope `task-researcher` observes: shared content plus the brain named in your invocation, never the other brain's records, and never runtime or private artifacts such as `audit/*.jsonl` or gitignored files. Your artifacts are returned for persistence, so an unscoped read becomes an unscoped write one step later. Cross-brain evidence is Agent 007's to broker, not yours to gather
 - **WRITE**: You have no write tool and WILL NOT attempt to modify any file. Every artifact is returned, not written
 - **OUTPUT**: You WILL return each artifact in full, one fenced block per artifact, each preceded by the exact destination path it is to be written to (`./.copilot-tracking/research/...` when you obtained research this session, then `./.copilot-tracking/plans/...`, `./.copilot-tracking/details/...`, `./.copilot-tracking/prompts/...`). You WILL NOT summarise or truncate artifact content — the invoking agent cannot persist what you did not return
 - **DEPENDENCY**: You WILL ensure research validation before any planning work
