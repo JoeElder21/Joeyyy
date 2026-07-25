@@ -584,6 +584,25 @@ Adding two entries would have fixed the instance and left the class intact, whic
 
 That is the fifth distinct failure mode of the same lesson, and the most specific: **a fix that adds a new code path must be reviewed as new code, not as a patch.** The scope checks, the handoff branch, and the operation binding were all *introduced* by earlier fixes in this change set — they were never reviewed as fresh surface, only as remedies.
 
+### Automated review, eleventh pass — eight findings, five fixed, three deferred
+
+**This round is the stop signal, and it was declared in advance.** After round 10 the recommendation to Joe was to freeze, and to treat "a new round finds new P1s in the previous round's code" as the point to stop regardless of severity. Round 11 did exactly that: three of its four P1s are in code round 10 wrote, and one of them broke the gate outright.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Registry leases failed packet admission on `schema_version` | **Correct, and it broke the gate** | Deriving the guard's lease ledger from the registry (round 10) began feeding it genuine `2.1` leases against a schema pinned to `2.0`. Admission rejected **every mutation backed by the real `LeaseRegistry`**, and `_writer_lease`'s tolerance cannot lift an error raised earlier. Fixed by applying the same narrow tolerance at admission. |
+| Read-only handoffs authorized writes | **Correct — two bugs in one line** | The handoff schema names the field `target`; round 10 read `write_target`, so no proposed write was ever found. The mutating path then fell through to `memory_namespace`, which is where a specialist *reads*. A read-only handoff plus a genuine lease authorized a `replace`. Mutating scope now comes only from `proposed_writes[].target`. |
+| Scalar grants raised instead of denying | **Correct** | The packet path was type-checked in round 8 and both grant paths were left alone. Sibling untouched, again. |
+| `CONTRIBUTING.md` / `README.md` mount command permissive | **Correct** | The aggregate `task validate` was made strict and the hand-run commands were not, so "run everything by hand" passed without launching either mount. |
+| Intake attestation not required | **Correct** | Every checkbox was optional, so a candidate could be submitted with the scan, its results, its scope confirmation, and the N/A choice all blank. A structured intake enforcing nothing is a longer version of the prose rule it replaced. |
+| **Delegations have no issuance proof** | **Correct, deferred** | See below. |
+| Locks are scanner inputs, not install inputs | **Correct, deferred** | Nothing verifies the generated locks match their source manifests, so a Dependabot manifest bump could install versions absent from the scanned locks. Needs either install-from-lock or a freshness check in CI. |
+| `packet_validity` needs the active-lease ledger | **Correct, deferred** | Same shape as the delegation fix two rounds earlier; blocked behind dispatch being wired. |
+
+**The deferred P1 is the honest one to name.** A delegation packet is still authority-by-shape: `PacketGuard` proves it is well-formed, and nothing proves Agent 007 issued it. A specialist can manufacture its own bounded assignment. That is the same defect the lease check had in round 3, and closing it properly needs an issuance registry or signature — a genuine architectural addition, in a file that has been rewritten eleven times in one day, where the last two rewrites each introduced a P1 and one produced an outage. Adding a trust anchor under those conditions is how the *next* fail-shut bug gets written. It belongs with the `enforce()` wiring decision, which is already Joe's.
+
+**Two fail-shut defects, both introduced by fixes.** Round 8 found that the addressee check made the only lawful mutation path unreachable. Round 11 found that the lease ledger made every registry-backed mutation unreachable. Adversarial review reliably finds fail-open bugs because that is what it looks for; nothing in this loop was watching for the gate becoming unusable, and it happened twice.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

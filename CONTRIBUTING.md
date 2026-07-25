@@ -17,7 +17,8 @@ To run everything by hand:
 python scripts/privacy_guard.py            # public-repository boundary
 python scripts/validate_specialist_corps.py # roster, isolation, schema, registry
 python scripts/verify_runtime_stack.py     # dependency and contract audit
-python scripts/verify_mcp_mounts.py        # approved MCP mounts
+python -m pip install -r requirements/runtime-contracts.txt  # the verifier's dependency
+python scripts/verify_mcp_mounts.py --strict  # approved MCP mounts, launched not assumed
 ruff check .                               # house Python standard
 python -m unittest discover -s tests -v    # full suite
 ```

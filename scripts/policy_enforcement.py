@@ -662,6 +662,19 @@ class PolicyEnforcementPoint:
                 constraint_packets=list(request.constraint_packets),
                 private_constraint_packets=list(request.private_constraint_packets),
             )
+            # The SAME narrow tolerance `_writer_lease` applies, and it has to be
+            # here too. Deriving this ledger from the registry (previous round)
+            # started feeding the guard genuine `schema_version: "2.1"` leases,
+            # which its schema pins to "2.0" -- so admission rejected every
+            # mutation backed by the real LeaseRegistry, and the later filter in
+            # `_writer_lease` cannot lift an error raised at this stage.
+            #
+            # That made the gate deny all legitimate mutations: the second
+            # fail-shut defect this change set has produced, both of them
+            # introduced by a fix rather than found in the original code. The
+            # underlying 2.1-vs-2.0 mismatch is still a contract decision for
+            # Joe; this keeps the tolerance consistent wherever leases are read.
+            if VERSION_MISMATCH_DEFECT not in error
         ]
         # Scope binding only runs on a packet that survived validation. Running
         # it on a rejected packet reads fields from a structure the guard has
@@ -907,18 +920,33 @@ class PolicyEnforcementPoint:
         return errors
 
     @staticmethod
-    def _handoff_scope(packet: dict[str, Any]) -> list[str] | None:
+    def _handoff_scope(packet: dict[str, Any], *, mutating: bool) -> list[str] | None:
         """What a handoff is bound to, since it carries no allow-lists.
 
-        Its own `memory_namespace`, plus whatever its `proposed_writes` name.
-        Returns None when neither is present, so the caller denies rather than
+        Two corrections to the previous round, which had this wrong in both
+        directions at once:
+
+        * The field is `target`, not `write_target` -- the handoff schema names
+          it `target` and requires it. Reading the wrong key meant no proposed
+          write was ever found, so the mutating path always fell through to
+          `memory_namespace`.
+        * `memory_namespace` is where a specialist *reads*. Including it for
+          mutations let a schema-valid read-only handoff, paired with a genuine
+          matching lease, authorize a `replace`. A handoff that proposes no
+          write authorizes no write, and there is no second-best answer.
+
+        Returns None when nothing binds it, so the caller denies rather than
         treating an unscoped packet as an unscoped grant.
         """
+        targets = [
+            write["target"]
+            for write in (packet.get("proposed_writes") or [])
+            if isinstance(write, dict) and write.get("target")
+        ]
+        if mutating:
+            return targets or None
         scope = [entry for entry in [packet.get("memory_namespace")] if entry]
-        for write in packet.get("proposed_writes") or []:
-            if isinstance(write, dict) and write.get("write_target"):
-                scope.append(write["write_target"])
-        return scope or None
+        return (scope + targets) or None
 
     @staticmethod
     def _packet_operations(packet: dict[str, Any]) -> set[str]:
@@ -986,7 +1014,7 @@ class PolicyEnforcementPoint:
             # "unrestricted scope", which is the fail-open shape this module
             # keeps rediscovering. A handoff is bound to its own
             # memory_namespace, and failing that to nothing at all.
-            fallback = self._handoff_scope(packet)
+            fallback = self._handoff_scope(packet, mutating=request.mutating)
             if fallback is None:
                 return [
                     f"packet declares no scope permitting a {kind} of "
@@ -1070,6 +1098,11 @@ class PolicyEnforcementPoint:
         if action not in HIGH_IMPACT_ACTIONS:
             return []
         grant = request.instruction_grant
+        if grant is not None and not isinstance(grant, dict):
+            # `.get()` on a truthy scalar raises AttributeError. The packet path
+            # was type-checked a round earlier and both grant paths were left
+            # alone -- the sibling-untouched pattern once more.
+            return [f"instruction grant must be an object, got {type(grant).__name__}"]
         if not grant:
             return [
                 f"{action!r} is a high-impact boundary and requires a signed "
@@ -1116,6 +1149,8 @@ class PolicyEnforcementPoint:
         if not (request.mutating and request.resource.startswith("mount:")):
             return []
         grant = request.launch_grant
+        if grant is not None and not isinstance(grant, dict):
+            return [f"launch grant must be an object, got {type(grant).__name__}"]
         if not grant:
             return [
                 f"write-capable mount {request.resource!r} requires a signed one-time "

@@ -113,7 +113,8 @@ Repository validation and the optional AutoGen adapter require Python 3.11 or 3.
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 python scripts/verify_runtime_stack.py
-python scripts/verify_mcp_mounts.py
+python -m pip install -r requirements/runtime-contracts.txt
+python scripts/verify_mcp_mounts.py --strict
 ruff check .
 python -m unittest discover -s tests -v
 ```

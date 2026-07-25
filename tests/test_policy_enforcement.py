@@ -954,7 +954,10 @@ class ScopeTests(unittest.TestCase):
             "agent": SPECIALIST,
             "owner_brain": "APEX",
             "writer_agent": CHIEF,
-            "proposed_writes": [{"write_target": "APEX/Strategy-Campaigns", "operation": "append"}],
+            # `target`, per the handoff schema. This fixture said `write_target`,
+            # so the scope check never saw a proposed write and the test passed
+            # for a different reason than it claimed.
+            "proposed_writes": [{"target": "APEX/Strategy-Campaigns", "operation": "append"}],
         }
         self.assertEqual(
             self.pep._packet_scope_errors(
@@ -982,7 +985,10 @@ class ScopeTests(unittest.TestCase):
             "agent": SPECIALIST,
             "owner_brain": "APEX",
             "writer_agent": CHIEF,
-            "proposed_writes": [{"write_target": "APEX/Strategy-Campaigns", "operation": "append"}],
+            # `target`, per the handoff schema. This fixture said `write_target`,
+            # so the scope check never saw a proposed write and the test passed
+            # for a different reason than it claimed.
+            "proposed_writes": [{"target": "APEX/Strategy-Campaigns", "operation": "append"}],
         }
         reasons = self.pep._packet_scope_errors(
             ToolRequest(
@@ -1107,6 +1113,106 @@ class ScopeTests(unittest.TestCase):
             )
         )
         self.assertTrue(any("cannot be matched" in r for r in reasons), reasons)
+
+    def test_a_genuine_registry_lease_survives_packet_admission(self):
+        # The fail-shut break. Deriving the guard's lease ledger from the
+        # registry started feeding it real `schema_version: "2.1"` leases, whose
+        # schema pins "2.0" -- so admission rejected EVERY mutation backed by
+        # the real LeaseRegistry, and `_writer_lease`'s later tolerance cannot
+        # lift an error raised at admission. A gate that denies all legitimate
+        # work is as broken as one that permits illegitimate work.
+        from scripts.packet_guard import PacketGuard
+
+        raw = PacketGuard(ROOT).validate_lease_ledger([self.lease])
+        self.assertTrue(
+            any("expected const '2.0'" in error for error in raw),
+            "this test assumes the 2.1-vs-2.0 mismatch is still present upstream",
+        )
+        errors = self.pep._packet_admission(
+            ToolRequest(
+                agent=CHIEF,
+                action="read",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+            )
+        )
+        self.assertFalse(
+            any("expected const '2.0'" in error for error in errors),
+            f"the registry's own lease must not fail admission: {errors}",
+        )
+
+    def test_a_read_only_handoff_does_not_authorize_a_write(self):
+        # Two bugs in one line, both mine: the field is `target`, not
+        # `write_target`, so no proposed write was ever found -- and the
+        # mutating path then fell through to `memory_namespace`, which is where
+        # a specialist READS. A read-only handoff plus a genuine lease
+        # authorized a replace.
+        read_only = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "writer_agent": CHIEF,
+            "memory_namespace": "APEX::Strategy-Campaigns::apex_war_architect",
+        }
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                packet=read_only,
+                lease=self.lease,
+                resource_id="campaign-alpha",
+                operation="replace",
+            )
+        )
+        self.assertTrue(any("no scope permitting a write" in r for r in reasons), reasons)
+
+    def test_a_handoff_proposing_a_write_uses_the_schema_field_name(self):
+        # `target` is what the handoff schema requires. Reading `write_target`
+        # meant proposed writes were invisible.
+        proposing = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "writer_agent": CHIEF,
+            "memory_namespace": "APEX::Strategy-Campaigns::apex_war_architect",
+            "proposed_writes": [{"target": "APEX/Strategy-Campaigns", "operation": "replace"}],
+        }
+        self.assertEqual(
+            self.pep._packet_scope_errors(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="write",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                    mutating=True,
+                    packet=proposing,
+                    lease=self.lease,
+                    resource_id="campaign-alpha",
+                    operation="replace",
+                )
+            ),
+            [],
+        )
+
+    def test_a_scalar_grant_denies_rather_than_raising(self):
+        # The packet path was type-checked one round earlier and both grant
+        # paths were left alone. `.get()` on a truthy scalar raises.
+        for field_name in ("instruction_grant", "launch_grant"):
+            with self.subTest(field=field_name):
+                request = ToolRequest(
+                    agent=CHIEF,
+                    action="financial_transaction",
+                    resource="mount:civil3d",
+                    owner_brain="APEX",
+                    mutating=True,
+                    **{field_name: 1},
+                )
+                decision = self.pep.evaluate(request)  # must not raise
+                self.assertFalse(decision.allowed)
+                self.assertTrue(
+                    any("must be an object" in r for r in decision.reasons), decision.reasons
+                )
 
     def test_the_chief_still_reaches_connectors(self):
         # The sole cross-brain agent performs connector work on the corps'

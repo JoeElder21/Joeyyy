@@ -56,7 +56,20 @@ body:
         - label: No prompt injection, tool poisoning, tool shadowing, or toxic flow reported
         - label: No hardcoded secrets or malware payload reported
         - label: Scope confirmed — candidate only; Joe's configured estate was not scanned
-        - label: Not applicable — candidate is not an MCP server, skill, or agent application
+        # Required, because the change record calls this a required section and
+        # every option was optional -- so a candidate could be submitted with the
+        # scan, its results, its scope confirmation, AND the N/A choice all
+        # blank. A structured intake that enforces nothing is a longer version of
+        # the prose rule it replaced.
+        #
+        # This one box carries the decision: either the candidate is out of
+        # scope, or the submitter is asserting the scan happened. It cannot be
+        # left unanswered.
+        - label: >-
+            Decision recorded — either the boxes above are ticked, or this
+            candidate is not an MCP server, skill, or agent application and the
+            pre-install scan does not apply
+          required: true
 
   - type: textarea
     id: gap
