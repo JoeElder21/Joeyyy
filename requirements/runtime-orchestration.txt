@@ -1,0 +1,9 @@
+# Gap 1 — static configs need a runtime.
+# Canonical sources: langchain-ai/langgraph, crewAIInc/crewAI, microsoft/autogen,
+# PrefectHQ/prefect, celery/celery, openai/openai-agents-python.
+langgraph
+crewai
+autogen-agentchat
+prefect
+celery
+openai-agents

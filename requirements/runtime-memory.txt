@@ -1,0 +1,7 @@
+# Gap 2 — conceptual memory needs a store.
+# Canonical sources: mem0ai/mem0, langchain-ai/langchain, run-llama/llama_index,
+# getzep/graphiti (frontier-scan Tier 1 pick).
+mem0ai
+langchain
+llama-index-core
+graphiti-core

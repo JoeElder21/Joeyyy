@@ -42,6 +42,14 @@ When several specialists share a class, assign work to the class through one lea
 
 Track every delegated task through explicit states — enqueued, claimed, running, completed, failed, cancelled — and record the timestamp of each transition. Run a periodic sweep that marks a task failed when it sits claimed-but-unstarted or running past a fixed threshold, and write the failure to the error ledger. Do not leave a delegation in an untracked in-between state; unknown state is a blocker, not a success.
 
+### Typed handoff with validation at the transfer point — from openai/openai-agents-python (absorbed AND implemented 2026-07-24)
+
+Transfer control between agents only through a typed handoff primitive: the payload is a structured delegation packet, not freeform instruction text, and validation runs inside the transfer callback so an invalid packet cannot move control at all — rejection is an exception, not a warning. Trace every transfer, rejection, and return automatically as a side effect of the mechanism rather than a separate logging duty. Unlike the other entries in this record, this pattern is implemented, not only absorbed: `scripts/agent_runtime.py` wires PacketGuard into the SDK's `handoff()` per `docs/AGENT_RUNTIME_BRIDGE.md`.
+
+### Rolling summary memory per specialist — from langchain-ai/langchain (absorbed 2026-07-24, activation-gated)
+
+Give each specialist a rolling compressed memory of its past sessions: recent sessions stay verbatim, older sessions are summarized so context never overflows, and the summary is regenerated as sessions age out. Requires live LLM calls to summarize, so implementation waits for runtime activation; until then this is a binding acceptance criterion on the Phase 2 memory decision. Structured-output parsing and document loading from the same library are deliberately not adopted: typed dispatch already enforces structured artifacts at the transfer point, and document intake routes through the roadmap's single intake decision rather than a second loader stack. See `docs/RUNTIME_NATIVE_LAYERS.md`.
+
 ## 2. Approval gates and human handoff
 
 ### Approval gate before anything leaves the system — from buzz

@@ -121,12 +121,17 @@ class PacketGuard:
         if (
             not historical
             and schema_name
-            in ("delegation_packet.schema.json", "handoff_packet.schema.json")
+            in (
+                "delegation_packet.schema.json",
+                "handoff_packet.schema.json",
+                "brain_private_constraint_packet.schema.json",
+            )
             and packet.get("schema_version") == "2.0"
         ):
             return [
-                "schema_version 2.0 is legacy: new delegation and handoff packets "
-                "require 2.1; pass historical=True only when validating archived packets"
+                "schema_version 2.0 is legacy: new delegation, handoff, and "
+                "brain-private constraint packets require 2.1; pass historical=True "
+                "only when validating archived packets"
             ]
 
         leases = list(active_leases or [])
@@ -140,7 +145,11 @@ class PacketGuard:
         if constraint_packets is not None:
             errors.extend(self.validate_constraint_ledger(constraints))
         if private_constraint_packets is not None:
-            errors.extend(self.validate_private_constraint_ledger(private_constraints))
+            errors.extend(
+                self.validate_private_constraint_ledger(
+                    private_constraints, historical=historical
+                )
+            )
         if errors:
             return errors
 
@@ -165,7 +174,7 @@ class PacketGuard:
                 historical=historical,
             )
         if schema_name == "writer_lease.schema.json":
-            return self._writer_lease_errors(packet)
+            return self._writer_lease_errors(packet, leases)
         if schema_name == "memory_record.schema.json":
             return self._memory_record_errors(
                 packet,
@@ -220,12 +229,15 @@ class PacketGuard:
             packets, "cross_brain_constraint_packet.schema.json", "packet_id", "constraints"
         )
 
-    def validate_private_constraint_ledger(self, packets: Iterable[Any]) -> list[str]:
+    def validate_private_constraint_ledger(
+        self, packets: Iterable[Any], *, historical: bool = False
+    ) -> list[str]:
         return self._validate_id_ledger(
             packets,
             "brain_private_constraint_packet.schema.json",
             "packet_id",
             "private_constraints",
+            historical=historical,
         )
 
     def _validate_id_ledger(
@@ -234,11 +246,13 @@ class PacketGuard:
         schema_name: str,
         id_field: str,
         label: str,
+        *,
+        historical: bool = False,
     ) -> list[str]:
         errors: list[str] = []
         seen: set[str] = set()
         for index, packet in enumerate(packets):
-            item_errors = self.validate(schema_name, packet)
+            item_errors = self.validate(schema_name, packet, historical=historical)
             if item_errors:
                 errors.extend(f"{label}[{index}]: {item}" for item in item_errors)
                 continue
@@ -743,6 +757,10 @@ class PacketGuard:
             if len(criterion_ids) != len(set(criterion_ids)):
                 errors.append("criterion_validation criterion_id values must be unique")
             for item in criterion_items:
+                if item["status"] == "passed" and not item["evidence_record_ids"]:
+                    errors.append(
+                        f"criterion {item['criterion_id']!r} passed without artifact evidence"
+                    )
                 if not set(item["evidence_record_ids"]).issubset(record_ids):
                     errors.append(
                         f"criterion {item['criterion_id']!r} cites an unknown artifact record"
@@ -935,8 +953,34 @@ class PacketGuard:
                 )
         return errors
 
-    def _writer_lease_errors(self, packet: dict[str, Any]) -> list[str]:
+    def _writer_lease_errors(
+        self,
+        packet: dict[str, Any],
+        active_leases: list[dict[str, Any]] | None = None,
+    ) -> list[str]:
         errors = self._registered_target_errors(packet)
+        if packet["status"] == "active":
+            key = (
+                packet["owner_brain"],
+                packet["write_target"],
+                self._canonical_identifier(packet["resource_id"]),
+            )
+            for lease in active_leases or []:
+                if (
+                    isinstance(lease, dict)
+                    and lease.get("status") == "active"
+                    and lease.get("lease_id") != packet["lease_id"]
+                    and (
+                        lease.get("owner_brain"),
+                        lease.get("write_target"),
+                        self._canonical_identifier(str(lease.get("resource_id", ""))),
+                    )
+                    == key
+                ):
+                    errors.append(
+                        f"candidate lease {packet['lease_id']!r} collides with active "
+                        f"lease {lease['lease_id']!r} for canonical resource {key}"
+                    )
         issued = self._parse_timestamp(packet["issued_at"], "issued_at", errors)
         expires = None
         if packet["expires_at"] is not None:

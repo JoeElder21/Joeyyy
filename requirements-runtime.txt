@@ -1,6 +1,6 @@
 # Optional runtime integrations. Install only the adapters enabled in deployment.
 # No credentials, connector identifiers, or private source data belong here.
-pyautogen>=0.2.38,<0.10; python_version < "3.13"  # ConversableAgent / GroupChat API
+-r requirements.txt
 langgraph>=0.2
 crewai>=0.80
 prefect>=3.0

@@ -1,0 +1,3 @@
+# Output validation wrapping LLM calls (pre-flight, complements packet_guard's post-hoc checks).
+# Canonical source: guardrails-ai/guardrails.
+guardrails-ai
