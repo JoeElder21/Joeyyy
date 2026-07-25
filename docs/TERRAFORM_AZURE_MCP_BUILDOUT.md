@@ -113,12 +113,28 @@ successfully. Making a documentation-only allowlist executable without also chec
 lifecycle would have handed mutation-capable connectors to agents
 `docs/AGENT_COMMUNITY_PROTOCOL.md` confines to analysis and proposed writes.
 
-`issue_grant` now also refuses any rostered specialist below lifecycle stage `active`.
-Every specialist is `shadow` (`config/specialist_corps.toml`, `[lifecycle] deployed_stage`),
-so in practice Agent 007 is the only identity that can currently hold a grant — the
-documented arrangement, now enforced rather than described. The allowlists are deliberately
-left intact: they record which specialist takes over each mount on promotion, and an
-unrecognised stage fails closed rather than being read as promotion.
+`issue_grant` now also refuses any rostered specialist whose lifecycle stage is not
+connector-eligible. Eligibility is an explicit set — `active` and `value-proven`
+(`CONNECTOR_STAGES`) — **not** "at or after `active` in the stage list". The ordinal test
+tried first was wrong in the one direction that matters: the declared order runs
+`candidate, shadow, active, value-proven, restricted, deprecated, retired`, so every
+administrative exit sorts *after* `active` and compared as a promotion. A specialist the
+lifecycle graph moved to `restricted` for writing outside its lease would have kept full
+connector eligibility, as would a deprecated or retired one. Naming the eligible stages
+means a stage added later is denied by default instead of inheriting authority from its
+position in a list.
+
+The stage is resolved from the named agent's own `[agents.<id>] status` in its brain
+manifest, falling back to the corps-wide `deployed_stage` only when the agent has no entry.
+Reading the snapshot first was wrong both ways: an individually promoted specialist would
+have been denied, and moving the snapshot to `active` would have made every still-shadow
+allowlisted specialist eligible at once. Where the two disagree the more restrictive wins,
+so a per-agent restriction can never be widened by a permissive global value.
+
+Every specialist is currently `shadow`, so in practice Agent 007 is the only identity that
+can hold a grant — the documented arrangement, now enforced rather than described. The
+allowlists are deliberately left intact: they record which specialist takes over each mount
+on promotion, and an unrecognised stage fails closed rather than being read as promotion.
 
 This applies to **every** agent-scoped mount, including the pre-existing `civil3d`, whose
 grant command now needs `--agent`. Mounts declaring `agents = ["*"]` are unaffected, and a
