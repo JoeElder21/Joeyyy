@@ -19,10 +19,15 @@ description: 'Suggest relevant GitHub Copilot Custom Agents files from the aweso
 >      Redact it upstream or do not vendor it. Never pin a real value; adding it to
 >      `PLACEHOLDER_LITERALS` would make the gate pass while committing the very material
 >      the gate exists to stop.
->    - **Synthetic** — an illustrative placeholder, provably not a real value (it appears in
->      upstream's public documentation, is obviously fabricated, or resolves to nothing).
->      Only then pin the exact snippet in `PLACEHOLDER_LITERALS`, and record why in the
->      manifest.
+>    - **Synthetic** -- an illustrative placeholder, provably not a real value. Proof means a
+>      RESERVED example form (`example.com`/`.invalid`/`.test` per RFC 2606, the RFC 5737
+>      documentation address ranges, an all-zeros or documented sample GUID), a value that is
+>      structurally impossible as a real one, or written confirmation that the value was
+>      revoked. **Publication upstream is not proof.** A leaked live credential appears in
+>      upstream's public documentation exactly as a fabricated one does, and this preamble
+>      has already declared upstream untrusted -- so "it is public" would let the one case
+>      this gate exists for classify itself as safe. Only on real proof, pin the exact
+>      snippet in `PLACEHOLDER_LITERALS`, and record the proof in the manifest.
 >
 >    Uncertain counts as real. Never relax a pattern, and never widen a pin to a whole file
 >    or directory.
