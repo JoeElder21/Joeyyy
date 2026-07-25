@@ -1,7 +1,7 @@
 # External Runtime Register — Category 4–9 Intake
 
 This register reconciles the repositories named in the current mission.  The
-message says "12" but enumerates repository IDs **11 through 24**, which is 14
+message says “12” but enumerates repository IDs **11 through 24**, which is 14
 distinct repositories.  This record keeps all 14 visible without claiming
 deployment, connector access, or specialist activation that has not been
 verified.
