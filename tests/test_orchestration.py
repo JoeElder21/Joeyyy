@@ -477,6 +477,34 @@ class SelectionReportBaselineTests(unittest.TestCase):
         )
         self.assertIn("PRE_INSTALL_BASELINE", body)
 
+    def test_a_failed_file_count_reads_as_unmeasured_not_as_zero(self):
+        """Empty output from a failed command is not a measurement of zero.
+
+        `count_tracked` ignored git's exit code, so an extracted archive with
+        no `.git`, or a corrupt index, produced a confident "the tree carries 0
+        markdown files" — while the sibling `count_tracked_at` and the delta
+        both correctly reported unavailable. This is the report's own rule one
+        level down: never render an unrun check as a clean one."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import report_gates
+        finally:
+            sys.path.pop(0)
+
+        real_run = report_gates.subprocess.run
+
+        def failing(cmd, **kwargs):
+            if cmd[:2] == ["git", "ls-files"]:
+                return type("R", (), {"returncode": 128, "stdout": "",
+                                      "stderr": "fatal: not a git repository"})()
+            return real_run(cmd, **kwargs)
+
+        with mock.patch.object(report_gates.subprocess, "run", failing):
+            self.assertEqual(report_gates.count_tracked("*.md"), -1)
+        # The healthy path must still return a real count, or this asserts
+        # nothing about the failure being distinguishable.
+        self.assertGreater(report_gates.count_tracked("*.md"), 0)
+
     def test_the_delta_excludes_work_that_arrived_from_main(self):
         """The headline figure must measure THIS branch, not the merge.
 

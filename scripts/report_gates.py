@@ -222,6 +222,14 @@ def count_tracked(pattern: str) -> int:
                              capture_output=True, text=True, check=False)
     except OSError:
         return -1
+    # A non-zero exit -- an extracted source archive with no .git, an
+    # unreadable or corrupt index -- produces empty stdout, and counting that
+    # as 0 published "the tree carries 0 markdown files" as a measurement. The
+    # sibling `count_tracked_at` and the delta already report -1 for
+    # unavailable, so this was the one path that turned a failed command into a
+    # confident number. Absence of output is not evidence of absence of files.
+    if out.returncode != 0:
+        return -1
     return len([line for line in out.stdout.splitlines() if line.strip()])
 
 

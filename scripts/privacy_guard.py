@@ -362,7 +362,21 @@ def yaml_reconstructed_values(text: str) -> str:
         if budget[0] <= 0:
             return
         if isinstance(node, (dict, list, tuple)):
-            marker = id(node)
+            # Key the visit on (identity, KEY PATH), not identity alone. An
+            # alias is a shared reference, so a mapping first reached under an
+            # innocuous key and later aliased beneath a credential-forming one
+            # is the SAME object at two different paths -- and suppressing the
+            # second one dropped the only path that would have matched. The
+            # round-21 remedy for the alias bomb silently changed the
+            # reconstruction from context-sensitive to context-free, which is a
+            # bypass anyone can write: anchor the payload somewhere harmless,
+            # alias it where it counts.
+            #
+            # The bound still holds. A cycle repeats a (path, node) pair and is
+            # cut here, and a shared subtree is now walked once per distinct
+            # path rather than once overall -- bounded by MAX_EMITTED_VALUES,
+            # which is charged per emitted line either way.
+            marker = (id(node), key)
             if marker in seen:
                 return
             seen.add(marker)

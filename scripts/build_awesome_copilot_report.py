@@ -438,13 +438,19 @@ for sig, val, why in [
 
 story.append(tbl(prof, [1.35 * inch, 1.0 * inch, 4.35 * inch]))
 story.append(Spacer(1, 5))
-_md_delta = (
-    f"This branch adds {MARKDOWN_ADDED} markdown files, so the tree now carries "
-    f"{MARKDOWN_NOW}."
-    if MARKDOWN_ADDED >= 0 else
-    f"The tree now carries {MARKDOWN_NOW} markdown files; the delta against the "
-    "branch point could not be computed here."
-)
+# -1 means the count could not be taken, not that the tree is empty. Rendering
+# it raw published "the tree now carries -1 markdown files"; rendering it as 0
+# would have been worse -- a failed command presented as a measurement.
+_md_now = f"{MARKDOWN_NOW}" if MARKDOWN_NOW >= 0 else "an unmeasured number of"
+if MARKDOWN_NOW < 0:
+    _md_delta = ("The current markdown total could not be measured here "
+                 "(git ls-files did not succeed), so no delta is reported.")
+elif MARKDOWN_ADDED >= 0:
+    _md_delta = (f"This branch adds {MARKDOWN_ADDED} markdown files, so the "
+                 f"tree now carries {MARKDOWN_NOW}.")
+else:
+    _md_delta = (f"The tree now carries {MARKDOWN_NOW} markdown files; the "
+                 "delta against the branch point could not be computed here.")
 story.append(Paragraph(
     "The markdown row above is the count at the pinned pre-install baseline, "
     "matching every other row in that table — it describes the repository the "

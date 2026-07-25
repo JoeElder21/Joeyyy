@@ -1,3 +1,4 @@
+import os
 import re
 import tempfile
 import unittest
@@ -1052,10 +1053,18 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 ("t2.toml", '[a.b.AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
             "toml nested four deep":
                 ("t3.toml", '[w.x.y.z.AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
-            "yaml nested":
-                ("y0.yaml", "AZURE:\n  CLIENT:\n    SECRET: %s\n" % secret),
-            "yaml nested flow":
-                ("y1.yaml", "a: {b: {AZURE: {CLIENT: {SECRET: %s}}}}\n" % secret),
+            # YAML cases are parser-only, so they carry the same gate every
+            # other parser test carries. Gating four tests and then adding a
+            # fifth with ungated YAML subtests reintroduced the stdlib-only
+            # failure the gate exists to prevent -- in the same round.
+            **({} if _yaml is None else {
+                "yaml nested":
+                    ("y0.yaml",
+                     "AZURE:\n  CLIENT:\n    SECRET: %s\n" % secret),
+                "yaml nested flow":
+                    ("y1.yaml",
+                     "a: {b: {AZURE: {CLIENT: {SECRET: %s}}}}\n" % secret),
+            }),
             "flat control": ("t4.toml", '%s = "%s"\n' % (cred, secret)),
         }
         with tempfile.TemporaryDirectory() as temp:
@@ -1077,6 +1086,108 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 '[mount.governance]\nname = "governance"\n'
                 'purpose = "read only registry"\n', encoding="utf-8")
             self.assertEqual(scan_paths([clean], root=root), [])
+
+    @needs_yaml
+    def test_an_alias_is_reconstructed_under_every_key_that_reaches_it(self):
+        """Deduplicating by object identity made reconstruction context-free.
+
+        An alias is a shared reference, so a mapping first reached under an
+        innocuous key and later aliased beneath a credential-forming one is the
+        SAME object at two paths. The round-21 visited set keyed on identity
+        alone, so the second path was suppressed and only the harmless one was
+        emitted -- a bypass anyone can write: anchor the payload somewhere
+        boring, alias it where it counts. The key is now (identity, path)."""
+        secret = "Xy7Q" + "secretValue0192"
+        cases = {
+            "anchored elsewhere, aliased at the credential key":
+                "payload: &shared\n  SECRET: %s\nAZURE_CLIENT: *shared\n" % secret,
+            "aliased at the credential key only":
+                "AZURE_CLIENT: &s\n  SECRET: %s\n" % secret,
+            "two aliases, one of them credential-forming":
+                "a: &s\n  SECRET: %s\nb: *s\nAZURE_CLIENT: *s\n" % secret,
+            "alias nested under a further key":
+                "payload: &s\n  SECRET: %s\nouter:\n  AZURE_CLIENT: *s\n" % secret,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(cases.items()):
+                probe = root / f"alias{index}.yaml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(case=label):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any("credential assignment" in finding
+                            for finding in findings),
+                        f"{label}: {body!r} produced {findings}")
+
+        # The bound this visited set exists for must survive the change: a wide
+        # alias graph is still walked once per distinct path, not exponentially.
+        bomb = "a: &a [x, x, x, x, x, x, x, x, x, x]\n"
+        for name in "bcdefg":
+            previous = chr(ord(name) - 1)
+            bomb += f"{name}: &{name} [{', '.join(['*' + previous] * 10)}]\n"
+        emitted = yaml_reconstructed_values(bomb)
+        self.assertLess(len(emitted), 100_000)
+        self.assertNotIn(TRUNCATION_MARKER, emitted)
+        # And a self-referential document must still terminate rather than
+        # recurse forever now that the visit key includes the path.
+        self.assertIsInstance(
+            yaml_reconstructed_values("a: &a\n  self: *a\n"), str)
+
+    def test_every_parser_dependent_test_carries_the_dependency_gate(self):
+        """Gating four tests and then adding a fifth is how this recurs.
+
+        The stdlib-only property is a repository-wide claim, and it breaks the
+        moment one new test touches the parser without the gate -- which is
+        exactly what happened one round after the gate was introduced, in a
+        mixed TOML/YAML test whose YAML subtests were ungated."""
+        import ast
+        from unittest import mock
+
+        import scripts.privacy_guard as guard
+
+        source = (ROOT / "tests" / "test_privacy.py").read_text(encoding="utf-8")
+        candidates = []
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if not node.name.startswith("test_") or node.name == self._testMethodName:
+                continue
+            body = ast.get_source_segment(source, node) or ""
+            if ".yaml" not in body and "yaml_reconstructed_values" not in body:
+                continue
+            gated = any(
+                getattr(decorator, "id", getattr(decorator, "attr", ""))
+                == "needs_yaml"
+                for decorator in node.decorator_list)
+            if not gated and "_yaml is None" not in body:
+                candidates.append(node.name)
+
+        self.assertTrue(candidates,
+                        "no ungated YAML-touching tests found; test is vacuous")
+
+        # A source heuristic cannot tell which of these actually NEED the
+        # parser -- most are satisfied by the regex normalisers, which is why a
+        # blanket "gate anything mentioning .yaml" rule would be wrong. So
+        # assert the operational property directly: with reconstruction
+        # disabled, exactly as it is when PyYAML is absent, every ungated test
+        # must still pass. Anything that fails here belongs behind the gate.
+        failures = []
+        with open(os.devnull, "w", encoding="utf-8") as quiet:
+            for name in candidates:
+                with mock.patch.object(guard, "yaml_reconstructed_values",
+                                       lambda text: ""):
+                    result = unittest.TextTestRunner(
+                        stream=quiet, verbosity=0,
+                    ).run(unittest.TestLoader().loadTestsFromName(
+                        name, type(self)))
+                if not result.wasSuccessful():
+                    failures.append(name)
+
+        self.assertEqual(
+            failures, [],
+            "these tests need the YAML parser but carry no PyYAML gate, so a "
+            "stdlib-only run fails instead of skipping")
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.

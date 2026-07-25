@@ -54,8 +54,20 @@ class LaunchDenied(Exception):
 
 
 def _load_mounts() -> dict[str, dict]:
-    with MOUNTS.open("rb") as source:
-        return {mount["name"]: mount for mount in tomllib.load(source)["mounts"]}
+    """The mount registry, or raise ManifestUnavailable.
+
+    The corps loader was given this treatment a round earlier and the mount
+    registry -- a SECOND bare loader on the same authorization path -- was left
+    open, so a missing or half-written `mcp_mounts.toml` still terminated the
+    CLI with a traceback instead of its denial JSON and appended no denial
+    event. Both loaders now fail closed the same way, through the audited path.
+    """
+    try:
+        with MOUNTS.open("rb") as source:
+            return {mount["name"]: mount
+                    for mount in tomllib.load(source)["mounts"]}
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+        raise ManifestUnavailable(f"{MOUNTS.name}: {error}") from error
 
 
 CORPS = ROOT / "config" / "specialist_corps.toml"
@@ -221,7 +233,6 @@ def issue_grant(
     holding a valid grant could set to anything.
     """
     ledger = ledger or AuditLedger(DEFAULT_LEDGER)
-    mounts = _load_mounts()
 
     def refuse(reason: str) -> LaunchDenied:
         # The module promises that every denial is recorded. Grant-time refusals
@@ -232,6 +243,15 @@ def issue_grant(
             detail["agent"] = agent
         ledger.append("grant_denied", detail)
         return LaunchDenied(reason)
+
+    # Loaded AFTER refuse() exists, so an unreadable registry leaves a denial in
+    # the ledger rather than a traceback on stderr.
+    try:
+        mounts = _load_mounts()
+    except ManifestUnavailable as error:
+        raise refuse(
+            f"cannot read the mount registry: {error}. An unreadable registry "
+            "is an authorization failure, not an empty allowlist.")
 
     if mount not in mounts:
         raise refuse(f"unknown mount {mount!r}")
@@ -336,7 +356,6 @@ def authorize(
     on a caller-supplied flag any grant holder could set to anything.
     """
     ledger = ledger or AuditLedger(DEFAULT_LEDGER)
-    mounts = _load_mounts()
     authorized = {} if authorized is None else authorized
 
     # Set once the grant's signature verifies. From that point the signed
@@ -364,6 +383,14 @@ def authorize(
             detail["agent_source"] = "signed-grant"
         ledger.append("launch_denied", detail)
         return LaunchDenied(f"launch of {mount!r} denied: {reason}")
+
+    # Same as the grant path: the registry load must go out through deny().
+    try:
+        mounts = _load_mounts()
+    except ManifestUnavailable as error:
+        raise deny(
+            f"cannot read the mount registry: {error}. An unreadable registry "
+            "is an authorization failure, not an empty allowlist.")
 
     def check_agent(spec: dict, identity: str | None) -> None:
         """Enforce the mount's `agents` allowlist against a *signed* identity.

@@ -460,6 +460,51 @@ class TrustedLauncherTests(unittest.TestCase):
                     with self.assertRaises(ManifestUnavailable):
                         specialist_stage(denied_agent, corps=corps)
 
+    def test_an_unreadable_mount_registry_is_denied_and_audited(self):
+        """The corps loader was fixed and the SECOND bare loader was not.
+
+        `_load_mounts()` sits on the same authorization path and opened the
+        file bare, so a missing or half-written `mcp_mounts.toml` still
+        terminated the CLI with a traceback instead of its denial JSON and
+        appended no denial event — the same loud-but-unauditable failure, one
+        loader over. Both entry points are asserted, and both failure shapes:
+        the file is absent, or present and unparseable."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        broken_registries = {
+            "missing": None,
+            "malformed": "[mounts\nname = ",
+            "no mounts table": "unrelated = 1\n",
+        }
+        for label, contents in broken_registries.items():
+            with tempfile.TemporaryDirectory() as tmp:
+                key, ledger = self._env(tmp)
+                registry = Path(tmp) / "mcp_mounts.toml"
+                if contents is not None:
+                    registry.write_text(contents, encoding="utf-8")
+                with mock.patch.object(launcher, "MOUNTS", registry):
+                    with self.subTest(registry=label, path="issue_grant"):
+                        with self.assertRaises(LaunchDenied) as caught:
+                            issue_grant("filesystem", 30, key_path=key,
+                                        out_dir=Path(tmp) / "grants",
+                                        agent="apex_chief_of_staff",
+                                        ledger=ledger)
+                        self.assertIn("mount registry", str(caught.exception))
+                    with self.subTest(registry=label, path="authorize"):
+                        with self.assertRaises(LaunchDenied):
+                            authorize("governance", None, ledger=ledger)
+
+                events = [
+                    json.loads(line)["event"] for line
+                    in ledger.path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                self.assertEqual(events, ["grant_denied", "launch_denied"],
+                                 f"{label}: {events}")
+                self.assertEqual(ledger.verify(), [])
+
     def test_an_unreadable_corps_registry_is_denied_and_audited(self):
         """A failure the module promises to record must not escape as a
         traceback.
