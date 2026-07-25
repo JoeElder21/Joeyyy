@@ -84,8 +84,16 @@ To activate, on the machine that will run the mount:
 
 ```bash
 python scripts/trusted_launcher.py grant --mount terraform --minutes 30
-python scripts/trusted_launcher.py launch --mount terraform --grant <grant-file>
+python scripts/trusted_launcher.py launch --mount terraform --grant <grant-file> \
+    --agent apex_chief_of_staff
 ```
+
+`--agent` is required and enforced. Review found that `agents` was documentation
+only — `authorize()` never read it, so narrowing this mount to Agent 007 changed no
+runtime decision. The launcher now rejects any identity absent from the allowlist and
+records the rejected identity in the ledger. This applies to **every** agent-scoped
+mount, including the pre-existing `civil3d`, whose activation command now also needs
+`--agent`. Mounts declaring `agents = ["*"]` are unaffected.
 
 Every authorization and denial appends to the hash-chained ledger at
 `audit/launcher.jsonl`. That ledger is machine-local and gitignored — it is
