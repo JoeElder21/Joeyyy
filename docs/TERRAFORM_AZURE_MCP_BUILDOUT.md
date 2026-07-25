@@ -83,17 +83,29 @@ $ python scripts/trusted_launcher.py launch --mount azure --dry-run
 To activate, on the machine that will run the mount:
 
 ```bash
-python scripts/trusted_launcher.py grant --mount terraform --minutes 30
-python scripts/trusted_launcher.py launch --mount terraform --grant <grant-file> \
+python scripts/trusted_launcher.py grant --mount terraform --minutes 30 \
     --agent apex_chief_of_staff
+python scripts/trusted_launcher.py launch --mount terraform --grant <grant-file>
 ```
 
-`--agent` is required and enforced. Review found that `agents` was documentation
-only — `authorize()` never read it, so narrowing this mount to Agent 007 changed no
-runtime decision. The launcher now rejects any identity absent from the allowlist and
-records the rejected identity in the ledger. This applies to **every** agent-scoped
-mount, including the pre-existing `civil3d`, whose activation command now also needs
-`--agent`. Mounts declaring `agents = ["*"]` are unaffected.
+**The authorized identity is signed into the grant**, not passed at launch. Two review
+rounds shaped this:
+
+1. `agents` was inert — `authorize()` never read it, so narrowing this mount to Agent 007
+   changed no runtime decision at all.
+2. The first fix took the identity from a `--agent` flag at launch, which any holder of a
+   valid grant could set to anything. It authenticated nothing.
+
+Now `--agent` is supplied when *minting* the grant, which only Joe's machine can do, and it
+becomes part of the HMAC payload. `issue_grant` refuses an identity that is not on the
+mount's allowlist, so a grant for a shadow specialist cannot be created in the first place;
+editing the field afterwards breaks the signature. Passing `--agent` at launch is an
+optional cross-check and a mismatch is refused.
+
+This applies to **every** agent-scoped mount, including the pre-existing `civil3d`, whose
+grant command now needs `--agent`. Mounts declaring `agents = ["*"]` are unaffected, and a
+test enforces that every agent-scoped mount also requires a grant — otherwise its identity
+would fall back to an unauthenticated value.
 
 Every authorization and denial appends to the hash-chained ledger at
 `audit/launcher.jsonl`. That ledger is machine-local and gitignored — it is
@@ -157,17 +169,37 @@ degrade without it: they lose documentation lookup, not planning.
 
 ## Rollback
 
-Remove the `terraform` and `azure` blocks from `config/mcp_mounts.toml`, drop
-the two `assertIn` lines and the `test_infrastructure_mounts_are_apex_locked_and_grant_gated`
-test from `tests/test_orchestration.py`, delete
-`.github/agents/task-planner.agent.md` and `.github/agents/task-researcher.agent.md`, and
-delete this document.
+Removing the mounts alone leaves a tree that neither builds a coherent manifest nor passes its own
+tests, so do all of it:
 
-**Keep the `audit/*.jsonl` rule in `.gitignore`.** An earlier version of this section said
-to revert it; that was wrong and was caught in review. The pre-existing trusted launcher
-and the `civil3d` mount both write `audit/launcher.jsonl`, so removing Terraform and Azure
-does not remove the ledger producer. Reverting the ignore rule during an unrelated rollback
-would expose machine-local authorization history to Git.
+1. `config/mcp_mounts.toml` — delete the `terraform` and `azure` blocks.
+2. `tests/test_orchestration.py` — drop the two `assertIn` lines and
+   `test_infrastructure_mounts_are_apex_locked_and_grant_gated`. Keep
+   `test_mount_commands_pin_immutable_versions`; it is not specific to these mounts.
+3. `.github/agents/` — delete `task-planner.agent.md` and `task-researcher.agent.md`.
+4. `.github/instructions/task-implementation.instructions.md` — delete it; nothing else loads it.
+5. `.github/AWESOME-COPILOT.md` — remove the planner rows from the agents table, the
+   `task-implementation` row from the instructions table, and the `task-planner` capability-limits
+   section.
+6. `docs/AGENT_REGISTRY.md` — remove the `task-planner` and `task-researcher` rows and their
+   lifecycle note from the vendored-agents section.
+7. `scripts/build_awesome_copilot_report.py` — remove the two planner rows from the agents table
+   and the `task-implementation` row from the instructions table. The inventory counts derive from
+   the tree, so they correct themselves.
+8. `tests/test_agent_contract.py` — remove `test_vendored_agent_file_dependencies_exist`, which
+   asserts both deleted files exist and would otherwise fail.
+9. `tests/test_trusted_launcher.py` — the allowlist and signed-identity tests reference
+   `terraform` and `azure`; repoint them at `civil3d`, which is also agent-scoped and grant-gated,
+   rather than deleting the coverage.
+10. Delete this document.
 
-`test_mount_commands_pin_immutable_versions` is not specific to these two mounts and should
-stay.
+**Keep the `audit/*.jsonl` rule in `.gitignore`,** and keep the launcher's identity enforcement.
+An earlier version of this section said to revert the ignore rule; that was wrong and was caught
+in review. The pre-existing trusted launcher and the `civil3d` mount both write that ledger, so
+removing Terraform and Azure does not remove the producer, and reverting the rule during an
+unrelated rollback would expose machine-local authorization history. The signed-identity change is
+likewise independent of these two mounts and protects `civil3d` as well.
+
+Then run the full gate: `privacy_guard.py`, `validate_specialist_corps.py`,
+`verify_runtime_stack.py`, `verify_mcp_mounts.py`, and
+`python -m unittest discover -s tests`.

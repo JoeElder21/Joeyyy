@@ -1,7 +1,13 @@
 ---
 description: "Task planner for creating actionable implementation plans - Brought to you by microsoft/edge-ai"
 name: "Task Planner Instructions"
-tools: ["changes", "search/codebase", "edit/editFiles", "extensions", "fetch", "findTestFiles", "githubRepo", "new", "openSimpleBrowser", "problems", "runCommands", "runNotebooks", "runTests", "search", "search/searchResults", "runCommands/terminalLastCommand", "runCommands/terminalSelection", "testFailure", "usages", "vscodeAPI", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
+# Local override (not upstream): execution and IDE-control tools removed.
+# This agent never implements -- it writes plans under .copilot-tracking/ --
+# so runCommands, terminal access, runTests, runNotebooks, extensions,
+# vscodeAPI, new and openSimpleBrowser are not needed. Prompt text is not a
+# path restriction: an injection-influenced call could otherwise mutate
+# source or run shell commands. See .github/AWESOME-COPILOT.md.
+tools: ["changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 
 # Task Planner Instructions
