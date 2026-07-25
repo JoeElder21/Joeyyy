@@ -632,14 +632,29 @@ class SelectionReportBaselineTests(unittest.TestCase):
         deadlocked at its mandatory first step."""
         body = (ROOT / ".github" / "agents" / "task-researcher.agent.md").read_text(
             encoding="utf-8")
+        name = "task-researcher"
         self.assertIn("You WILL NOT ask the user questions", body)
         self.assertIn("Decisions for the invoker", body)
-        for stalling in (
-            'You WILL ask "Which approach aligns better with your objectives?"',
-            'You WILL confirm "Should I focus the research on',
-            'You WILL verify "Should I remove the other approaches',
-        ):
-            self.assertNotIn(stalling, body)
+        # Assert the PROPERTY, not the three reported sentences: the first fix
+        # rewrote one dialogue block and left a near-identical second one
+        # untouched a few sections up. Any surviving instruction to question or
+        # wait for the user is the same stall.
+        import re as _re
+
+        stalling = _re.compile(
+            r"(?im)^.*(?:ask (?:the )?user|ask specific questions"
+            r"|help user choose|validate user's selection"
+            r"|wait for (?:the )?user|confirm with (?:the )?user"
+            r"|user doesn't want to iterate).*$"
+        )
+        offending = [
+            line for line in stalling.findall(body)
+            # The override paragraph explains why it must not happen; that is
+            # the fix, not an instance of the defect.
+            if not _re.search(r"MUST NOT|WILL NOT|not to the user|stall"
+                              r"|deadlock|rather than ask", line)
+        ]
+        self.assertEqual(offending, [], f"{name}: residual user dialogue")
 
     def test_gate_rows_come_from_the_importable_helper(self):
         """The report builder runs its gates and writes the PDF at import time,

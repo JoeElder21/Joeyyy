@@ -211,6 +211,39 @@ _BLOCK_SCALAR_HEADER = re.compile(
 )
 
 
+_TOML_MULTILINE = re.compile(
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*"
+    r"(?P<q>\"{3}|'{3})(?P<body>[\s\S]*?)(?P=q)"
+)
+
+
+def fold_toml_multiline(text: str) -> str:
+    """Rewrite TOML multiline strings onto one single-quoted-style line.
+
+    The value branches expect an ordinary quoted or bare token, so a valid
+    TOML basic/literal multiline string --
+
+        AZURE_CLIENT_SECRET = \"\"\"the actual secret\"\"\"
+
+    -- matched neither: the quoted branch stopped at the second delimiter
+    quote, and the bare branch rejects quotes outright. `tomllib` reconstructs
+    the credential from it, so the guard has to see it too. As with YAML block
+    scalars, this is normalised once here instead of complicating every
+    pattern, and appended so line-oriented checks still see the original.
+    """
+    folded = []
+    for match in _TOML_MULTILINE.finditer(text):
+        body = match.group("body").strip()
+        if not body:
+            continue
+        # Collapse to one line and drop inner quotes so the ordinary quoted
+        # branch can bracket the whole value.
+        flat = " ".join(body.replace('"', " ").replace("'", " ").split())
+        if flat:
+            folded.append(f'{match.group("key")} = "{flat}"')
+    return text + "\n" + "\n".join(folded) if folded else text
+
+
 def fold_block_scalars(text: str) -> str:
     """Rewrite YAML block scalars onto their key line before scanning.
 
@@ -363,7 +396,8 @@ def _scan_files(
             continue
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
-        scannable = strip_known_placeholders(relative, fold_block_scalars(text))
+        scannable = strip_known_placeholders(
+            relative, fold_toml_multiline(fold_block_scalars(text)))
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")

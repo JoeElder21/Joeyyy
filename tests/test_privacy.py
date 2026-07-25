@@ -9,6 +9,7 @@ from scripts.privacy_guard import (
     PLACEHOLDER_LITERALS,
     applicable_patterns,
     fold_block_scalars,
+    fold_toml_multiline,
     repository_files,
     scan_repository,
     strip_known_placeholders,
@@ -349,6 +350,74 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             [name for name, pattern in PATTERNS.items() if pattern.search(folded)],
             [],
         )
+
+    def test_toml_multiline_credentials_are_folded_before_scanning(self):
+        """tomllib reconstructs the secret from a multiline string, so the
+        guard must see it too.
+
+        The value branches expect a quoted or bare token: the quoted branch
+        stopped at the second delimiter quote and the bare branch rejects
+        quotes outright, so a valid TOML basic/literal multiline string matched
+        neither."""
+        # Names, delimiters and values are all assembled at runtime. Written
+        # literally, these probes would be real findings in this file -- the
+        # folding this test exercises is exactly what would catch them.
+        secret = "super" + "-secret-value-0192"
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        client_secret = "AZURE" + "_CLIENT_SECRET"
+        token = "TFE" + "_TOKEN"
+        tenant = "AZURE" + "_TENANT_ID"
+        dq, sq = '"' * 3, "'" * 3
+        cases = (
+            ("credential assignment", f"{client_secret} = {dq}{secret}{dq}"),
+            ("credential assignment", f"{client_secret} = {sq}{secret}{sq}"),
+            ("credential assignment",
+             f"{token} = {dq}atlasv1.abcdefghijklmnop{dq}"),
+            ("connector identifier", f"{tenant} = {dq}{guid}{dq}"),
+            # Spanning several lines, as TOML allows.
+            ("credential assignment",
+             f"{client_secret} = {dq}\n  {secret}\n{dq}"),
+        )
+        for label, probe in cases:
+            with self.subTest(label=label, probe=probe):
+                self.assertIsNone(
+                    PATTERNS[label].search(probe),
+                    "probe must be one the raw patterns genuinely miss, "
+                    "otherwise this asserts nothing about folding",
+                )
+                self.assertIsNotNone(
+                    PATTERNS[label].search(fold_toml_multiline(probe)))
+
+        # Ordinary multiline prose -- every mount purpose in the registry could
+        # be written this way -- must not become a finding.
+        prose = f"purpose = {dq}\nOrdinary prose describing a mount.\n{dq}"
+        folded = fold_toml_multiline(prose)
+        self.assertEqual(
+            [name for name, pattern in PATTERNS.items() if pattern.search(folded)],
+            [],
+        )
+
+    def test_the_scan_pipeline_applies_every_normalisation(self):
+        """Folding only helps if the real scan path runs it. Both normalisers
+        are asserted end to end, through scan_paths, not in isolation."""
+        secret = "super" + "-secret-value-0192"
+        name = "AZURE" + "_CLIENT_SECRET"
+        dq = '"' * 3
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            toml_file = root / "connector.toml"
+            toml_file.write_text(
+                f"{name} = {dq}{secret}{dq}\n", encoding="utf-8")
+            yaml_file = root / "connector.yaml"
+            yaml_file.write_text(
+                f"{name}: |2-\n  {secret}\n", encoding="utf-8")
+            for path in (toml_file, yaml_file):
+                with self.subTest(path=path.name):
+                    findings = scan_paths([path], root=root)
+                    self.assertTrue(
+                        any("credential assignment" in f for f in findings),
+                        findings,
+                    )
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
