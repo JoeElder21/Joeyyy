@@ -96,6 +96,10 @@ Two distinct problems, both closed:
 - **17 prompts declared no `tools:` field at all.** An omitted field does not mean "no
   tools" — Claude Code grants the subagent everything the main thread has, `Write` and
   `Bash` included. Each now carries an explicit `tools: LS, Read, Grep, Glob`.
+- **11 prompts instruct the agent to fetch documentation** (Context7 first, `WebFetch`
+  as fallback) but had no fetch tool in their allowlist, so their own mandatory first
+  step was impossible. `WebFetch` is granted to those 11 — it is read-only and does not
+  weaken the constraint.
 
 `tests/test_vendored_agents.py` asserts the presence of the field separately from its
 contents, because a missing field exposes no forbidden tool *names* to match on and

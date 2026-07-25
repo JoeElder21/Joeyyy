@@ -1,7 +1,7 @@
 ---
 name: vue-nuxt-expert
 description: Expert in Nuxt.js framework specializing in SSR, SSG, and full-stack Vue applications. Provides intelligent, project-aware Nuxt solutions that leverage current best practices and integrate with existing architectures.
-tools: LS, Read, Grep, Glob
+tools: LS, Read, Grep, Glob, WebFetch
 ---
 
 # Vue Nuxt Expert

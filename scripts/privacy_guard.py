@@ -85,10 +85,10 @@ HIGH_CONFIDENCE_PATTERNS = frozenset(
 # vendored_contact_findings rather than waived wholesale - a path-wide skip would
 # suppress a real employee address or postal address committed to this public repo.
 CONTACT_HEURISTIC_PATTERNS = frozenset({"email address", "street address"})
-# RFC 2606 / RFC 6761 names reserved so they can never route to a real mailbox.
-# Only names that cannot route to a real mailbox. domain.com, email.com, mail.com,
-# acme.com and yourcompany.com are live registered domains that merely look like
-# filler, so they are deliberately NOT here: exempting them would waive a real address.
+# RFC 2606 / RFC 6761 names, reserved so they can never route to a real mailbox.
+# domain.com, email.com, mail.com, acme.com and yourcompany.com are deliberately NOT
+# here: they look like filler but are live registered domains, so exempting them would
+# waive a real address.
 RESERVED_EMAIL_DOMAINS = frozenset(
     {
         "example.com",
@@ -103,9 +103,13 @@ RESERVED_EMAIL_DOMAINS = frozenset(
     }
 )
 RESERVED_EMAIL_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
-# Street names used as documentation fixtures rather than real locations.
-FIXTURE_STREET_NAMES = frozenset(
-    {"main", "oak", "elm", "test", "example", "sample", "fake", "any", "first", "second"}
+# Complete fixture addresses, matched whole and case-insensitively. A word-level
+# allowlist is unsafe here: a common street word appearing anywhere after the house
+# number would waive a real address that merely happens to contain it.
+FIXTURE_STREET_ADDRESSES = frozenset(
+    f"{number} {name} {suffix}"
+    for number, name in (("123", "main"), ("456", "oak"), ("1", "example"), ("1", "test"))
+    for suffix in ("st", "street", "ave", "avenue")
 )
 EMAIL_MATCH = PATTERNS["email address"]
 STREET_MATCH = PATTERNS["street address"]
@@ -117,8 +121,8 @@ def _email_is_reserved(address: str) -> bool:
 
 
 def _street_is_fixture(address: str) -> bool:
-    words = [word.strip(".,").lower() for word in address.split()]
-    return any(word in FIXTURE_STREET_NAMES for word in words[1:])
+    normalized = " ".join(address.split()).strip(".,").lower()
+    return normalized in FIXTURE_STREET_ADDRESSES
 
 
 def vendored_contact_findings(text: str) -> list[str]:
@@ -150,25 +154,18 @@ VENDORED_CREDENTIAL_BARE = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*([^\s#\"']{8,})"
 )
-# Deciding which unquoted values are code, rather than which are secrets. An allowlist
-# of "safe" secret characters fails open: base64 and URL-safe keys carry +, /, = and .,
-# so requiring word characters alone silently waived them. Detect the expression forms
-# instead - a call, a subscript, an attribute lookup, a trailing separator - and treat
-# everything else as a candidate credential.
-# Anchored on the WHOLE value, not searched inside it. A bare `\.[A-Za-z_]` search
-# matched any dotted token, so every JWT — header.payload.signature — read as an
-# attribute lookup and was waived. A dotted *expression* is identifier.identifier all
-# the way down; a JWT segment is base64url and will not match that shape.
-# Checked BEFORE the expression rule below, because a JWT's base64url segments are
-# themselves valid identifier shapes: header.payload.signature reads as an attribute
-# chain to any structural test. Three long dot-separated segments is a token, not code.
+# Decide which unquoted values are CODE, never which are secrets. Allowlisting "safe"
+# secret characters fails open, because base64 and URL-safe keys carry +, /, = and .
+#
+# Two shapes defeat a purely structural test and are handled explicitly:
+#   - A JWT is header.payload.signature, which reads as an attribute chain. Checked
+#     first, before the expression rule, and always treated as a credential.
+#   - A bare identifier is not evidence of code either: an opaque alphanumeric key is
+#     identifier-shaped too. Only a *dotted* chain counts as an attribute lookup.
 JWT_LIKE = re.compile(r"\A[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}=*\Z")
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
 CODE_EXPRESSION = re.compile(
-    rf"\A(?:"
-    rf"{IDENT}(?:\.{IDENT})+"       # attribute lookup: obj.attr.attr
-    rf"|{IDENT}"                    # bare identifier: a variable or type name
-    rf")[,;]?\Z"
+    rf"\A{IDENT}(?:\.{IDENT})+[,;]?\Z"   # attribute lookup: obj.attr.attr
     r"|[()\[\]{}]"                  # a call, subscript, literal, or f-string brace
     r"|::|->|=>"                    # scope / lambda / arrow operators
 )
@@ -248,7 +245,9 @@ def vendored_credential_findings(text: str) -> list[str]:
         if not is_placeholder_value(match.group(1)):
             labels.append("credential assignment")
     for match in VENDORED_CREDENTIAL_BARE.finditer(text):
-        value = match.group(1)
+        # Drop a trailing separator left by the surrounding source line, so that e.g.
+        # a bare `password,` is classified on the word itself.
+        value = match.group(1).rstrip(",;")
         if JWT_LIKE.match(value):
             labels.append("credential assignment")
             continue

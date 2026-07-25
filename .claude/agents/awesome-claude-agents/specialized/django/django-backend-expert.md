@@ -1,7 +1,7 @@
 ---
 name: django-backend-expert
 description: Expert Django backend developer specializing in models, views, services, and Django-specific implementations. MUST BE USED for Django backend development tasks. Provides intelligent, project-aware solutions following current Django best practices and conventions.
-tools: LS, Read, Grep, Glob
+tools: LS, Read, Grep, Glob, WebFetch
 ---
 
 # Django Backend Expert
@@ -286,61 +286,6 @@ class OrderService:
             raise
     
 
-@shared_task(bind=True, max_retries=5, autoretry_for=(PaymentGatewayUnavailable,),
-             retry_backoff=True, retry_jitter=True)
-def capture_payment_task(self, order_id: int, user_id: int) -> None:
-    """Capture payment for an order that has already committed.
-
-    Deliberately outside the order transaction. Capturing inside it means a later
-    failure rolls back the order while the external charge stands, leaving a charged
-    customer with no order. Moving it out inverts the risk, so every failure path here
-    must reconcile the pending order rather than let the exception escape.
-
-    Idempotent by construction: delivery is at-least-once, so the status guard and the
-    gateway idempotency key must both be honoured or a retry double-charges.
-    """
-    service = OrderService()
-    order = Order.objects.get(id=order_id)
-    
-    if order.status != Order.Status.PENDING:
-        return  # already captured by an earlier delivery
-    
-    try:
-        payment_result = service._process_payment(
-            order, User.objects.get(id=user_id), idempotency_key=str(order.pk)
-        )
-    except PaymentGatewayUnavailable:
-        raise  # transient: autoretry_for re-queues with backoff, order stays PENDING
-    except Exception:
-        # Terminal failure. Reconcile rather than leaving stock held by a dead order.
-        order.status = Order.Status.PAYMENT_FAILED
-        order.save(update_fields=['status'])
-        service._release_inventory(order)
-        logger.exception("Payment capture failed permanently for order %s", order.pk)
-        return
-    
-    if not payment_result.success:
-        order.status = Order.Status.PAYMENT_FAILED
-        order.save(update_fields=['status'])
-        service._release_inventory(order)
-        logger.error("Payment declined for order %s: %s", order.pk, payment_result.error_message)
-        return
-    
-    order.status = Order.Status.PAID
-    order.payment_id = payment_result.transaction_id
-    order.save(update_fields=['status', 'payment_id'])
-    
-    # The money has moved. A later failure must not roll the order back, so log for
-    # reconciliation and let the task retry only the notification side.
-    try:
-        service._send_order_confirmation(order)
-        order_placed.send(sender=OrderService, order=order)
-    except Exception:
-        logger.exception(
-            "Post-payment step failed for PAID order %s; payment %s stands and needs "
-            "reconciliation", order.pk, payment_result.transaction_id
-        )
-    
     def _validate_inventory(self, cart_items: List[Dict]) -> None:
         """Validate product availability"""
         for item in cart_items:
@@ -363,6 +308,72 @@ def capture_payment_task(self, order_id: int, user_id: int) -> None:
         """Calculate tax based on user location"""
         # Simplified tax calculation
         return subtotal * Decimal('0.08')  # 8% tax
+    def _fail_order_and_release_stock(self, order, reason: str) -> None:
+        """Single reconciliation path for every capture failure."""
+        with transaction.atomic():
+            order.status = Order.Status.PAYMENT_FAILED
+            order.save(update_fields=['status'])
+            self._release_inventory(order)
+        logger.warning("Order %s marked failed: %s", order.pk, reason)
+    
+
+@shared_task(bind=True, max_retries=5)
+def capture_payment_task(self, order_id: int, user_id: int) -> None:
+    """Capture payment for an order that has already committed.
+
+    Deliberately outside the order transaction. Capturing inside it means a later
+    failure rolls back the order while the external charge stands, leaving a charged
+    customer with no order. Moving it out inverts the risk, so every failure path here
+    - retry exhaustion included - must reconcile the pending order rather than let the
+    exception escape and strand it with its stock still held.
+
+    Idempotent by construction: delivery is at-least-once, so the status guard and the
+    gateway idempotency key must both be honoured or a retry double-charges.
+    """
+    service = OrderService()
+    order = Order.objects.get(id=order_id)
+
+    if order.status != Order.Status.PENDING:
+        return  # already captured by an earlier delivery
+
+    try:
+        payment_result = service._process_payment(
+            order, User.objects.get(id=user_id), idempotency_key=str(order.pk)
+        )
+    except PaymentGatewayUnavailable as exc:
+        try:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries)
+        except MaxRetriesExceededError:
+            # Without this branch the task simply dies once retries run out and the
+            # order stays PENDING forever, holding stock it will never sell.
+            service._fail_order_and_release_stock(order, "payment gateway unavailable")
+            logger.error("Payment retries exhausted for order %s", order.pk)
+            return
+    except Exception:
+        service._fail_order_and_release_stock(order, "payment error")
+        logger.exception("Payment capture failed permanently for order %s", order.pk)
+        return
+
+    if not payment_result.success:
+        service._fail_order_and_release_stock(order, payment_result.error_message)
+        logger.error("Payment declined for order %s: %s", order.pk, payment_result.error_message)
+        return
+
+    order.status = Order.Status.PAID
+    order.payment_id = payment_result.transaction_id
+    order.save(update_fields=['status', 'payment_id'])
+
+    # The money has moved. A later failure must not roll the order back, so log for
+    # reconciliation rather than raising back into the task.
+    try:
+        service._send_order_confirmation(order)
+        order_placed.send(sender=OrderService, order=order)
+    except Exception:
+        logger.exception(
+            "Post-payment step failed for PAID order %s; payment %s stands and needs "
+            "reconciliation", order.pk, payment_result.transaction_id
+        )
+
 ```
 
 ### Django Admin Customization

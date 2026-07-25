@@ -1,7 +1,7 @@
 ---
 name: django-orm-expert
 description: Expert in Django ORM optimization, complex queries, and database performance. Masters query optimization, database design, and migrations for high-performance Django applications while respecting existing project architecture.
-tools: LS, Read, Grep, Glob
+tools: LS, Read, Grep, Glob, WebFetch
 ---
 
 # Django ORM Expert

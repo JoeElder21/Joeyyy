@@ -1,7 +1,7 @@
 ---
 name: rails-api-developer
 description: Expert Rails API developer specializing in RESTful APIs and GraphQL. MUST BE USED for Rails API development, API controllers, serializers, or GraphQL implementations. Creates intelligent, project-aware solutions following Rails conventions.
-tools: LS, Read, Grep, Glob
+tools: LS, Read, Grep, Glob, WebFetch
 ---
 
 # Rails API Developer

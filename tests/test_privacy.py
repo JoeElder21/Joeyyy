@@ -32,25 +32,17 @@ RESERVED_EMAIL_DOMAINS = {
     "invalid",
     "localhost",
     "local",
-    "domain.com",
-    "email.com",
-    "mail.com",
-    "yourcompany.com",
-    "acme.com",
+    # domain.com / email.com / mail.com / acme.com / yourcompany.com are deliberately
+    # absent: they read as filler but are live registered domains.
 }
 RESERVED_EMAIL_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
-FIXTURE_STREET_NAMES = {
-    "main",
-    "oak",
-    "elm",
-    "test",
-    "example",
-    "sample",
-    "fake",
-    "any",
-    "first",
-    "second",
-}
+# Whole addresses, not words. A word-level allowlist waives any real address that
+# happens to contain a common street word.
+FIXTURE_STREET_ADDRESSES = frozenset(
+    f"{number} {name} {suffix}"
+    for number, name in (("123", "main"), ("456", "oak"), ("1", "example"), ("1", "test"))
+    for suffix in ("st", "street", "ave", "avenue")
+)
 
 
 def unreserved_contacts(text: str, prohibited: dict) -> list[str]:
@@ -63,8 +55,8 @@ def unreserved_contacts(text: str, prohibited: dict) -> list[str]:
         ):
             found.append(match.group(0))
     for match in prohibited["street address"].finditer(text):
-        words = [w.strip(".,").lower() for w in match.group(0).split()]
-        if not any(w in FIXTURE_STREET_NAMES for w in words[1:]):
+        normalized = " ".join(match.group(0).split()).strip(".,").lower()
+        if normalized not in FIXTURE_STREET_ADDRESSES:
             found.append(match.group(0))
     return found
 # Complete placeholder forms, matched against the WHOLE literal. A substring test
@@ -99,7 +91,13 @@ CREDENTIAL_BARE = re.compile(
 )
 # Detect code expressions rather than allowlisting secret characters: base64 and
 # URL-safe keys contain +, /, = and ., so a word-character allowlist fails open.
-CODE_EXPRESSION = re.compile(r"[()\[\]{}]|\.[A-Za-z_]|::|->|=>|[,;]\s*\Z")
+# Only a dotted chain counts as an attribute lookup: a bare identifier is not evidence
+# of code, and a JWT's base64url segments are themselves identifier-shaped.
+JWT_LIKE = re.compile(r"\A[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}=*\Z")
+_IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+CODE_EXPRESSION = re.compile(
+    rf"\A{_IDENT}(?:\.{_IDENT})+[,;]?\Z" r"|[()\[\]{}]|::|->|=>"
+)
 
 
 def is_vendored_documentation(relative: Path) -> bool:
@@ -118,12 +116,19 @@ def _is_filler(value: str) -> bool:
     )
 
 
+def _bare_value_is_credential(raw: str) -> bool:
+    value = raw.rstrip(",;")
+    if JWT_LIKE.match(value):
+        return True
+    return not CODE_EXPRESSION.search(value) and not _is_filler(value)
+
+
 def non_placeholder_credentials(text: str) -> list[str]:
     found = [m.group(1) for m in CREDENTIAL_LITERAL.finditer(text) if not _is_filler(m.group(1))]
     found += [
         m.group(1)
         for m in CREDENTIAL_BARE.finditer(text)
-        if not CODE_EXPRESSION.search(m.group(1)) and not _is_filler(m.group(1))
+        if _bare_value_is_credential(m.group(1))
     ]
     return found
 
