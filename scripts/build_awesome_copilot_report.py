@@ -10,6 +10,9 @@ the tracked source of truth -- run it to reproduce the report.
 Output: docs/reports/AWESOME_COPILOT_SELECTION_REPORT.pdf (gitignored).
 """
 
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -32,6 +35,36 @@ ACCENT = colors.HexColor("#1F4E79")
 BAND = colors.HexColor("#EEF1F6")
 KEEP = colors.HexColor("#1B6B4A")
 DROP = colors.HexColor("#8A5A00")
+
+def measure_test_suite() -> str:
+    """Run the suite and report what it actually did.
+
+    The count was previously hardcoded, so every regenerated report published a
+    stale figure the moment a test was added -- in a document whose whole
+    purpose is to be change evidence. Never fabricate a result here: if the
+    suite cannot run, say so.
+    """
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True, text=True, timeout=900, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"not measured at build time ({type(error).__name__})"
+
+    output = completed.stderr + completed.stdout
+    ran = re.search(r"Ran (\d+) tests?", output)
+    if not ran:
+        return "not measured at build time (unrecognised output)"
+    count = ran.group(1)
+    if completed.returncode != 0:
+        failures = re.search(r"(FAILED \([^)]*\))", output)
+        return f"{count} tests, {failures.group(1) if failures else 'FAILED'}"
+    skipped = re.search(r"skipped=(\d+)", output)
+    tail = f" ({skipped.group(1)} skipped)" if skipped else ""
+    return f"{count} tests, OK{tail}"
+
 
 ss = getSampleStyleSheet()
 
@@ -371,7 +404,7 @@ for g, r in [
     ("scripts/verify_runtime_stack.py", '"valid": true — 18 TOML files checked'),
     ("scripts/verify_mcp_mounts.py", '"valid": true — all mounts registered '
      "or verified"),
-    ("python -m unittest discover -s tests", "243 tests, OK (27 skipped)"),
+    ("python -m unittest discover -s tests", measure_test_suite()),
     ("CI — validate (3.11) / validate (3.12)", "Both green on PR #26"),
 ]:
     ver.append([Paragraph(g, MONO), Paragraph(r, CELL)])

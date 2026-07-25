@@ -11,7 +11,12 @@ not an assumption.
 Usage (Joe, on the machine that will run the mount):
 
     python scripts/trusted_launcher.py grant --mount civil3d --minutes 30
-    python scripts/trusted_launcher.py launch --mount civil3d --grant <file>
+    python scripts/trusted_launcher.py launch --mount civil3d --grant <file> \
+        --agent apex_chief_of_staff
+
+Launch is refused unless --agent appears in that mount's `agents` allowlist in
+config/mcp_mounts.toml (mounts allowing "*" are exempt). Every denial is
+recorded with the rejected identity.
 
 Mounts marked `require_grant = true` in config/mcp_mounts.toml refuse to
 launch without a valid grant. Read-only mounts (e.g. governance) launch
@@ -110,20 +115,57 @@ def authorize(
     key_path: Path = DEFAULT_KEY_PATH,
     ledger: AuditLedger | None = None,
     now: float | None = None,
+    agent: str | None = None,
 ) -> dict:
-    """Fail-closed authorization. Returns the mount spec or raises LaunchDenied."""
+    """Fail-closed authorization. Returns the mount spec or raises LaunchDenied.
+
+    `agent` is the identity the mount is being launched for. It is checked
+    against the mount's `agents` allowlist, which is the executable half of
+    `packet_only_no_direct_connectors`: before this check the allowlist was
+    documentation only, so narrowing it changed no runtime decision.
+    """
     ledger = ledger or AuditLedger(DEFAULT_LEDGER)
     mounts = _load_mounts()
 
     def deny(reason: str) -> LaunchDenied:
-        ledger.append("launch_denied", {"mount": mount, "reason": reason})
+        detail = {"mount": mount, "reason": reason}
+        if agent is not None:
+            detail["agent"] = agent
+        ledger.append("launch_denied", detail)
         return LaunchDenied(f"launch of {mount!r} denied: {reason}")
+
+    def check_agent(spec: dict) -> None:
+        """Enforce the mount's `agents` allowlist.
+
+        Ordered after the grant check on purpose: the Joe-signed grant is the
+        human authority to start anything at all, and the allowlist is the scope
+        within that authority. Reporting a missing grant first keeps the more
+        fundamental refusal the one the caller sees.
+        """
+        allowed = spec.get("agents", [])
+        if "*" in allowed:
+            return
+        if agent is None:
+            raise deny(
+                "mount is agent-scoped; --agent is required so the allowlist "
+                f"can be enforced (allowed: {', '.join(allowed) or 'none'})"
+            )
+        if agent not in allowed:
+            raise deny(
+                f"agent {agent!r} is not on this mount's allowlist "
+                f"({', '.join(allowed) or 'none'})"
+            )
 
     spec = mounts.get(mount)
     if spec is None:
         raise deny("mount is not registered; unlisted mounts are unreachable")
+
     if not spec.get("require_grant"):
-        ledger.append("launch_authorized", {"mount": mount, "grant": "not-required"})
+        check_agent(spec)
+        ledger.append(
+            "launch_authorized",
+            {"mount": mount, "agent": agent, "grant": "not-required"},
+        )
         return spec
     if grant_path is None:
         raise deny("write-capable mount requires a signed one-time grant")
@@ -144,9 +186,10 @@ def authorize(
         raise deny("grant expired")
     if payload["nonce"] in _consumed_nonces(ledger):
         raise deny("grant already consumed (single-use)")
+    check_agent(spec)
     ledger.append(
         "launch_authorized",
-        {"mount": mount, "nonce": payload["nonce"],
+        {"mount": mount, "agent": agent, "nonce": payload["nonce"],
          "expires_at": payload["expires_at"]},
     )
     return spec
@@ -161,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
     l = sub.add_parser("launch", help="Launch a mount under grant control.")
     l.add_argument("--mount", required=True)
     l.add_argument("--grant", type=Path)
+    l.add_argument("--agent",
+                   help="Identity to launch for; must appear in the mount's "
+                        "agents allowlist. Required unless the mount allows '*'.")
     l.add_argument("--dry-run", action="store_true",
                    help="Verify authorization without executing.")
     args = parser.parse_args(argv)
@@ -172,13 +218,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        spec = authorize(args.mount, args.grant)
+        spec = authorize(args.mount, args.grant, agent=args.agent)
     except LaunchDenied as denial:
         print(json.dumps({"authorized": False, "error": str(denial)}))
         return 1
     if args.dry_run:
         print(json.dumps({"authorized": True, "mount": args.mount,
-                          "command": spec["command"], "dry_run": True}))
+                          "agent": args.agent, "command": spec["command"],
+                          "dry_run": True}))
         return 0
     env = dict(**os.environ)
     return subprocess.call(spec["command"], cwd=str(ROOT), env=env)

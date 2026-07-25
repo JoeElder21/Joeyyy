@@ -77,65 +77,59 @@ PATTERNS = {
 
 
 # Vendored third-party Copilot instruction docs (see .github/AWESOME-COPILOT.md).
-# Some are secure-coding guides: they contain illustrative credential handling
-# (an assignment reading a password from a request body, or a key name from an
-# environment variable) and placeholder addresses that the prose-level
-# heuristics below cannot distinguish from real leakage.
+# Some are secure-coding guides holding illustrative credential handling and
+# placeholder addresses that the prose heuristics cannot tell from real leakage.
 #
-# Each relaxation is pinned to one exact file AND the one pattern that file
-# needs. A directory-wide exemption was rejected: it would silently disable
-# those checks for any file later added or hand-authored under
-# .github/instructions/, which is precisely the leak this guard exists to catch.
-# Every other pattern stays enforced in these files, and every pattern stays
-# enforced in every other file.
-VENDORED_DOC_RELAXATIONS: dict[Path, frozenset[str]] = {
-    Path(".github/instructions/security-and-owasp.instructions.md"): frozenset(
-        {"credential assignment"}
-    ),
-    Path(".github/instructions/code-review-generic.instructions.md"): frozenset(
-        {"credential assignment"}
-    ),
-    Path(".github/instructions/self-explanatory-code-commenting.instructions.md"):
-        frozenset({"email address"}),
-}
-
-# Placeholder secrets that do trip a high-confidence pattern are pinned exactly,
-# one literal to one file, so a real credential in the same file still fails.
+# NO PATTERN IS EVER DISABLED FOR ANY FILE. Instead, the exact known
+# false-positive snippets are removed from the text and the complete pattern set
+# then runs on what remains. So a real credential added to one of these files
+# later is still caught, because only these literal strings are invisible.
+#
+# Two earlier designs were rejected in review. A directory-wide exemption let
+# any new file under .github/instructions/ bypass two checks entirely. Scoping
+# that exemption per file was still too coarse: disabling `credential
+# assignment` for a whole file meant a genuine credential appended to it also
+# passed. Exact-literal stripping has neither hole.
+#
 # Literals are assembled at runtime so this source file does not trip PATTERNS.
-_PLACEHOLDER_KEY_NAME = "API" + "_KEY"
-_PLACEHOLDER_KEY_PREFIX = "sk" + "_live_"
+_K = "API" + "_KEY"
+_SK = "sk" + "_live_"
+_PW = "pass" + "word"
 PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
     Path(".github/instructions/security-and-owasp.instructions.md"): (
-        _PLACEHOLDER_KEY_NAME + " = '" + _PLACEHOLDER_KEY_PREFIX + "abc123def456'",
+        _K + " = '" + _SK + "abc123def456'",
+        _K + " = process.env." + _K + ";",
+        _PW + " = String(req.body." + _PW + ");",
+        _PW + ": req.body." + _PW,
     ),
     Path(".github/instructions/code-review-generic.instructions.md"): (
-        _PLACEHOLDER_KEY_NAME + ' = "' + _PLACEHOLDER_KEY_PREFIX + 'abc123xyz789"',
+        _K + ' = "' + _SK + 'abc123xyz789"',
+        _K + " = process.env." + _K + ";",
+    ),
+    Path(".github/instructions/self-explanatory-code-commenting.instructions.md"): (
+        "username" + "@" + "domain.extension",
     ),
 }
 
 
 def strip_known_placeholders(relative: Path, text: str) -> str:
-    """Remove documented third-party doc placeholders before pattern matching."""
+    """Remove the exact documented false-positive snippets for one file.
+
+    Everything else in the file is still scanned by every pattern.
+    """
     for literal in PLACEHOLDER_LITERALS.get(relative, ()):
         text = text.replace(literal, "")
     return text
 
 
 def applicable_patterns(relative: Path) -> dict[str, re.Pattern[str]]:
-    """PATTERNS to enforce for one path.
+    """Every pattern, for every file. No path is ever exempted from a check.
 
-    Only the exact (file, pattern) pairs in VENDORED_DOC_RELAXATIONS are
-    skipped. An unlisted file gets the full pattern set even inside a directory
-    that holds relaxed files.
+    Retained as the single place a future exemption would have to be introduced,
+    so that adding one is a visible change to a reviewed function rather than a
+    quiet condition inside the scan loop.
     """
-    relaxed = VENDORED_DOC_RELAXATIONS.get(relative, frozenset())
-    if not relaxed:
-        return PATTERNS
-    return {
-        label: pattern
-        for label, pattern in PATTERNS.items()
-        if label not in relaxed
-    }
+    return PATTERNS
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:

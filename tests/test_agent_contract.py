@@ -231,6 +231,36 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
             with self.subTest(skill=skill):
                 self.assertIn(skill, text)
 
+    def test_registered_local_overrides_survive_upstream_updates(self):
+        """A discovery skill that marks a vendored file outdated recommends
+        replacing it wholesale, which would silently drop this override and
+        hand a text-rewriting agent every built-in and MCP tool again. The gate
+        fails if that happens, so an update cannot quietly undo it."""
+        text = (ROOT / ".github" / "agents" / "prompt-engineer.agent.md").read_text(
+            encoding="utf-8"
+        )
+        frontmatter = text.split("---")[1]
+        self.assertIn("tools: []", frontmatter)
+        self.assertIn("Local override", frontmatter)
+        # And the manifest must keep explaining why, so the next person to see
+        # the drift report does not "fix" it back to upstream.
+        manifest = MANIFEST_PATH.read_text(encoding="utf-8")
+        self.assertIn("local override", manifest.lower())
+        self.assertIn("tools: []", manifest)
+
+    def test_vendored_agent_file_dependencies_exist(self):
+        """task-planner refuses to plan until task-researcher has run, and every
+        generated plan loads task-implementation. A missing link makes the
+        planner unusable rather than merely degraded."""
+        required = [
+            ROOT / ".github" / "agents" / "task-researcher.agent.md",
+            ROOT / ".github" / "instructions"
+            / "task-implementation.instructions.md",
+        ]
+        for path in required:
+            with self.subTest(path=path.name):
+                self.assertTrue(path.is_file())
+
     def test_session_start_template_holds_its_stable_shape(self):
         text = SESSION_START_PATH.read_text(encoding="utf-8")
         for phrase in [
