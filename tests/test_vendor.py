@@ -105,17 +105,73 @@ class VendorSubmoduleTests(unittest.TestCase):
                     f"{name} is pinned at {sha[:7]} but vendor/README.md records {recorded}",
                 )
 
-    def test_relay_declared_version_matches_its_provenance_row(self) -> None:
-        declared = json.loads(
-            (ROOT / "connectors" / "relay" / "package.json").read_text(encoding="utf-8")
-        )["dependencies"]["agent-relay"]
-        version = declared.lstrip("^~>=< ")
-        readme = (ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
-        row = next(line for line in readme.splitlines() if "`relay`" in line and "|" in line)
+    def test_every_relay_provenance_record_agrees(self) -> None:
+        """All five records that describe the relay pin must move together.
+
+        Upgrading relay touches the gitlink, the manifest, the lockfile, and
+        two provenance tables. Asserting only a subset lets a partial upgrade
+        pass, leaving the documented install resolving one version while the
+        repository claims to audit another.
+        """
+        connector = ROOT / "connectors" / "relay"
+        manifest = json.loads((connector / "package.json").read_text(encoding="utf-8"))
+        spec = manifest["dependencies"]["agent-relay"]
+        version = spec.lstrip("^~>=< ")
+
+        lock = json.loads((connector / "package-lock.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            lock["packages"][""]["dependencies"]["agent-relay"],
+            spec,
+            "lockfile root dependency spec has drifted from package.json",
+        )
+        self.assertEqual(
+            lock["packages"]["node_modules/agent-relay"]["version"],
+            version,
+            f"lockfile resolves a different agent-relay than the declared {version}",
+        )
+
+        vendor_row = next(
+            line
+            for line in (ROOT / "vendor" / "README.md").read_text(encoding="utf-8").splitlines()
+            if "`relay`" in line and "|" in line
+        )
+        self.assertIn(
+            version, vendor_row, f"agent-relay {version} absent from the vendor/README.md row"
+        )
+
+        # The connector's own provenance table must carry both the version and
+        # the pinned commit, tying it to the gitlink the index records.
+        connector_readme = (connector / "README.md").read_text(encoding="utf-8")
         self.assertIn(
             version,
-            row,
-            f"connectors/relay declares agent-relay {version}, absent from its provenance row",
+            connector_readme,
+            f"agent-relay {version} absent from connectors/relay/README.md",
+        )
+        relay_sha = self._index_gitlinks()["vendor/relay"]
+        recorded = re.findall(r"`([0-9a-f]{7,40})`", connector_readme)
+        self.assertTrue(
+            any(relay_sha.startswith(candidate) for candidate in recorded),
+            f"vendor/relay is pinned at {relay_sha[:7]}, "
+            f"but connectors/relay/README.md records {recorded}",
+        )
+
+        # The Node floor must cover the whole locked tree, not just
+        # agent-relay's own declaration — npm downgrades engine mismatches to
+        # warnings, so an understated floor installs and fails at runtime.
+        simple_floors = [
+            entry["engines"]["node"]
+            for entry in lock["packages"].values()
+            if isinstance(entry, dict)
+            and re.fullmatch(r">=\d+\.\d+\.\d+", (entry.get("engines") or {}).get("node") or "")
+        ]
+        highest = max(
+            simple_floors, key=lambda floor: tuple(int(p) for p in floor[2:].split("."))
+        )
+        self.assertEqual(
+            manifest["engines"]["node"],
+            highest,
+            f"locked tree requires Node {highest}, "
+            f"manifest declares {manifest['engines']['node']}",
         )
 
     def test_no_upstream_file_content_is_tracked_in_this_repository(self) -> None:
