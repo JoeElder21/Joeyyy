@@ -190,6 +190,28 @@ Registered on Joe's direct instruction and refined the same day per his decision
 - Charter modes carry no write targets, connectors, or routes of their own; brain locks, writer leases, and specialist stages apply exactly as before.
 - Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the v2.1 specialists themselves; the other three v2.1 JEOS specialists remain rostered unchanged.
 
+## Vendored Copilot custom agents (2026-07-25)
+
+Third-party agents vendored from `github/awesome-copilot` into `.github/agents/`, pinned at upstream `aa280f28`. Manifest and provenance: `.github/AWESOME-COPILOT.md`.
+
+These are **editor-plane** agents: they are invoked by GitHub Copilot inside a session and hold no brain ownership, memory namespace, write target, writer lease, route, or cadence. They are not members of the mirrored corps, they cannot be delegated a typed packet, and they never execute a governed mutation. Agent 007 remains the sole write-capable native agent. They are registered here because `AGENTS.md` requires every new agent to be registered and validated before active use, and so registry-based audit can account for them.
+
+| Agent | Owner plane | Purpose | Tools | Status | Known limits |
+|---|---|---|---|---|---|
+| `prompt-engineer` | editor / cross-brain neutral | Treats every input as a prompt to analyse and rewrite | `tools: []` — **local override**, see below | active | Rewrites text only; no repository or connector effect |
+| `task-planner` | editor / APEX-leaning | Produces implementation plans into `.copilot-tracking/` | Upstream list, incl. `terraform`, `azure_get_schema_for_Bicep`, `Microsoft Docs`, `context7` | candidate | Declared tool names are **not** wired into any Copilot MCP configuration; unrecognized names are silently ignored, so those capabilities are unavailable in a normal collaborator session. Requires `task-researcher`. |
+| `task-researcher` | editor / APEX-leaning | Companion research pass the planner mandates before planning | Same upstream list | candidate | Same unwired-tool limitation |
+
+Lifecycle: `prompt-engineer` is active because it is self-contained and its behaviour is fully determined by its own file. `task-planner` and `task-researcher` stay **candidate** until their declared Terraform/Azure/Docs tool names are actually reachable in the invoking client, since until then the planner runs without the capabilities its instructions assume.
+
+### Local overrides (intentional divergence from upstream)
+
+`prompt-engineer.agent.md` adds `tools: []`, which upstream omits. Per `.github/instructions/agents.instructions.md`, an omitted `tools` field grants every available built-in and MCP tool. That agent consumes arbitrary user-supplied text, so leaving all tools enabled would let prompt injection reach the repository and connected systems. The override is deliberate and will show as drift when the discovery skills compare against upstream — that is expected, not staleness. Do not "fix" it by reverting to upstream.
+
+### Not installed, and why
+
+`meta-agentic-project-scaffold` was vendored and then removed. Its instructions direct the agent to pull upstream files and "do nothing else, just pull the files", copying them "as is". That bypasses the mandatory intake gates in `AGENTS.md` — full-file review, privacy-guard check, test update, rollback evidence — and its function is already covered by the three discovery skills, which route through intake per the `copilot_layer` contract block.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

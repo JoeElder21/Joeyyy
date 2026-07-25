@@ -27,11 +27,42 @@ Applied automatically to matching files via each file's `applyTo` glob.
 
 ## Agents — `.github/agents/`
 
-| File | What it does |
-| --- | --- |
-| `meta-agentic-project-scaffold.agent.md` | Discovery agent: finds and pulls further awesome-copilot assets into the right folders. Pins `model: GPT-4.1` upstream. |
-| `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. |
-| `task-planner.agent.md` | Produces actionable implementation plans into `.copilot-tracking/`. Initially held out because it declares `terraform` and `azure_get_schema_for_Bicep` tools this repo had no home for; both are now registered mounts, so it is installed. See `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`, including the remaining `Microsoft Docs` gap. |
+Registered in `docs/AGENT_REGISTRY.md`, as `AGENTS.md` requires. These are editor-plane
+agents: no brain ownership, no memory namespace, no write target, no writer lease. Agent
+007 remains the sole write-capable native agent.
+
+| File | What it does | Status |
+| --- | --- | --- |
+| `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. Carries a **local override**: `tools: []`. | active |
+| `task-planner.agent.md` | Produces implementation plans into `.copilot-tracking/`. | candidate |
+| `task-researcher.agent.md` | Research pass the planner mandates before planning. | candidate |
+
+**`prompt-engineer` local override.** Upstream omits `tools`, which per
+`.github/instructions/agents.instructions.md` grants *every* built-in and MCP tool. This
+agent processes arbitrary user-supplied text, so all-tools access would let prompt
+injection reach the repository and connected systems. `tools: []` is set deliberately.
+The discovery skills will report this file as drifted from upstream — that is expected,
+not staleness.
+
+**`task-planner` capability limits — read before relying on it.** Its frontmatter declares
+`terraform`, `azure_get_schema_for_Bicep`, `Microsoft Docs`, and `context7`. Those names
+are **not** wired into any Copilot MCP configuration in this repository.
+`config/mcp_mounts.toml` is consumed only by `scripts/trusted_launcher.py` and
+`scripts/verify_mcp_mounts.py` — the native Agent 007 runtime — and authorizes native APEX
+agent IDs, not Copilot custom agents. They are different planes. Per the installed agent
+standard, unrecognized tool names are silently ignored, so in a normal collaborator Copilot
+session the planner runs *without* those capabilities. Registering the Terraform and Azure
+mounts gave Agent 007 that tooling; it did not give this agent it. Wiring Copilot-side MCP
+is an open decision recorded in `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`.
+
+`task-researcher` is vendored because `task-planner` mandatorily invokes it before any
+planning; without it the planner blocks on a missing dependency on every new task.
+
+**Not installed:** `meta-agentic-project-scaffold` was vendored and then removed. It
+instructs the agent to pull upstream files and "do nothing else", copying them "as is",
+which bypasses the intake gates `AGENTS.md` mandates — full-file review, privacy-guard
+check, test update, rollback evidence. The three discovery skills cover the same function
+and route through intake.
 
 ## Skills — `.github/skills/`
 
@@ -96,12 +127,17 @@ agent, not just to one developer's client.
 vendored instruction files are secure-coding guides, so they legitimately contain illustrative
 credential handling and placeholder addresses. Installing them required two narrow adjustments:
 
-1. **Two low-confidence heuristics** — `credential assignment` and `email address` — are skipped for
-   files under `.github/instructions/` only. These fire on any assignment whose left-hand side is a
-   credential-like name, which is unavoidable in OWASP documentation showing the *correct* way to read
-   a secret. Every high-confidence check (real-looking secret tokens, cloud
-   access keys, private key blocks, phone numbers, street addresses, Drive links) remains fully
-   enforced in that directory.
+1. **Per-file, per-pattern relaxations** in `VENDORED_DOC_RELAXATIONS`. Each entry names one exact
+   file and the single pattern that file needs: `credential assignment` for
+   `security-and-owasp` and `code-review-generic`, `email address` for
+   `self-explanatory-code-commenting`. Every other pattern stays enforced in those files, and
+   every pattern stays enforced in every other file.
+
+   An earlier version scoped this to the whole `.github/instructions/` directory. That was wrong
+   and was caught in review: it silently disabled both checks for any file later added or
+   hand-authored there, so a tracked `local.instructions.md` holding a real address and a real
+   credential passed the scan. `tests/test_privacy.py` now carries that exact case as a
+   regression test.
 2. **Two placeholder API keys** that do trip the high-confidence secret-token pattern are pinned as
    exact literals in `PLACEHOLDER_LITERALS`, one literal to one file. A real credential in the same
    file still fails the scan.

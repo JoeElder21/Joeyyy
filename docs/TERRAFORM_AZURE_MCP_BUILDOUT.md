@@ -20,15 +20,21 @@ for it there, and anything unlisted is unreachable.
 | Mount | Server | Transport |
 |---|---|---|
 | `terraform` | `hashicorp/terraform-mcp-server:1.1.0` (official HashiCorp) | stdio via Docker |
-| `azure` | `@azure/mcp@latest server start` (official Microsoft) | stdio via npx |
+| `azure` | `@azure/mcp@2.0.5 server start` (official Microsoft) | stdio via npx |
 
 Commands were taken from each project's own README, not inferred.
 
 ### terraform
 
 ```toml
-command = ["docker", "run", "-i", "--rm", "hashicorp/terraform-mcp-server:1.1.0"]
+command = ["docker", "run", "-i", "--rm", "-e", "TFE_TOKEN", "-e", "TFE_ADDRESS",
+           "hashicorp/terraform-mcp-server:1.1.0"]
 ```
+
+The bare `-e NAME` form forwards a variable from the launcher's environment into the
+container without writing any value into this file. Without it the credentials would sit
+only in the host-side Docker client's environment and the workspace tools could not
+authenticate -- registry lookup would work and TFE calls would fail.
 
 Two tiers of capability in one server:
 
@@ -44,8 +50,16 @@ prevent.
 ### azure
 
 ```toml
-command = ["npx", "-y", "@azure/mcp@latest", "server", "start"]
+command = ["npx", "-y", "@azure/mcp@2.0.5", "server", "start"]
 ```
+
+Pinned to an exact version. `@latest` was rejected in review: `npx` resolves package
+selection as `<pkg>[@<version>]`, so a floating tag lets each activation download
+different code holding cloud-management privileges. At the time of pinning `latest`
+resolved to `3.0.0-beta.29` -- a prerelease -- which made the risk concrete rather than
+theoretical. `2.0.5` was the current stable release.
+`tests/test_orchestration.py::test_mount_commands_pin_immutable_versions` now fails on any
+floating tag in this registry.
 
 Authenticates through the Azure Identity SDK's `DefaultAzureCredential` — `az
 login` interactively on Joe's machine, or `AZURE_TENANT_ID` /
@@ -80,24 +94,25 @@ leak operational activity.
 
 ## Brain locking
 
-Both mounts are APEX-only:
+Both mounts are Agent 007 only:
 
 ```toml
-agents = ["apex_systems_blacksmith", "apex_delivery_commander", "apex_chief_of_staff"]
+agents = ["apex_chief_of_staff"]
 ```
 
-- `apex_systems_blacksmith` — Systems / automation. The IaC owner.
-- `apex_delivery_commander` — Execution / capacity. Deployment execution.
-- `apex_chief_of_staff` — Agent 007, sole write-capable native agent and integrator.
-
-This mirrors the existing `civil3d` assignment, the closest analogue already in
-the registry (infrastructure tooling, workstation-activated).
+An earlier version also listed `apex_systems_blacksmith` and `apex_delivery_commander`,
+mirroring the `civil3d` assignment. Review caught the problem: every APEX specialist is
+still lifecycle stage `shadow`, and the contract makes Agent 007 the sole executor of
+mutations while they are. Listing a shadow specialist on a mutation-capable cloud
+management server hands it authority beyond its read-only / proposed-write remit,
+regardless of the `civil3d` precedent. Widen this only alongside a lifecycle promotion, or
+by exposing a separately constrained read-only surface.
 
 No JEOS specialist gets either mount. Cloud infrastructure is professional
 context, which APEX owns; granting it to the personal brain would breach the
 brain lock. `tests/test_orchestration.py::McpMountRegistryTests::test_infrastructure_mounts_are_apex_locked_and_grant_gated`
-enforces both properties — grant-gated, and no `jeos_*` agent — so a later edit
-cannot quietly widen the surface.
+enforces all three properties — grant-gated, `apex_chief_of_staff` alone, and no `jeos_*`
+agent — so a later edit cannot quietly widen the surface.
 
 ## Verification
 
@@ -112,21 +127,39 @@ $ python scripts/verify_mcp_mounts.py
 daemon, no credentials), so the audit reports them as *registered with an
 activation requirement* and never as working. That is the honest state.
 
-Full suite green: 243 tests.
+Full suite green; see the PR for the current count.
 
-## Known gap
+## Known gaps
 
-`task-planner` also declares a `Microsoft Docs` tool. That is the Microsoft
-Learn MCP server, which is remote-HTTP-only; `scripts/verify_mcp_mounts.py` and
-`scripts/trusted_launcher.py` both speak stdio exclusively. Registering it would
-mean adding an HTTP transport path to the launcher and the audit, which is a
-larger change than this build-out and has not been made. The agent degrades
-without it — it loses documentation lookup, not planning.
+**These mounts serve Agent 007, not Copilot custom agents.** This registry is consumed only
+by `scripts/trusted_launcher.py` and `scripts/verify_mcp_mounts.py`, and it authorizes
+native APEX agent IDs. GitHub Copilot reads a different configuration entirely. So
+registering these mounts does *not* make the `terraform` or `azure_get_schema_for_Bicep`
+tool names declared by `.github/agents/task-planner.agent.md` reachable in a collaborator
+Copilot session — per the installed agent standard, unrecognized tool names are silently
+ignored there. Closing that gap means adding repository-level Copilot MCP wiring with valid
+tool identifiers; it is an open decision, not done here. Both agents are registered as
+`candidate` in `docs/AGENT_REGISTRY.md` for exactly this reason.
+
+**`Microsoft Docs` has no stdio path.** `task-planner` and `task-researcher` both declare
+it. It is the Microsoft Learn MCP server, remote-HTTP-only, and both the launcher and the
+mount verifier speak stdio exclusively. Registering it would mean adding an HTTP transport
+to the launcher and the audit ledger — a larger change than this build-out. The agents
+degrade without it: they lose documentation lookup, not planning.
 
 ## Rollback
 
 Remove the `terraform` and `azure` blocks from `config/mcp_mounts.toml`, drop
 the two `assertIn` lines and the `test_infrastructure_mounts_are_apex_locked_and_grant_gated`
 test from `tests/test_orchestration.py`, delete
-`.github/agents/task-planner.agent.md`, revert the `audit/*.jsonl` rule in
-`.gitignore`, and delete this document.
+`.github/agents/task-planner.agent.md` and `.github/agents/task-researcher.agent.md`, and
+delete this document.
+
+**Keep the `audit/*.jsonl` rule in `.gitignore`.** An earlier version of this section said
+to revert it; that was wrong and was caught in review. The pre-existing trusted launcher
+and the `civil3d` mount both write `audit/launcher.jsonl`, so removing Terraform and Azure
+does not remove the ledger producer. Reverting the ignore rule during an unrelated rollback
+would expose machine-local authorization history to Git.
+
+`test_mount_commands_pin_immutable_versions` is not specific to these two mounts and should
+stay.
