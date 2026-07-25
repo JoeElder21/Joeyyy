@@ -419,6 +419,64 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                         findings,
                     )
 
+    def test_every_key_and_delimiter_combination_is_normalised(self):
+        """Cover the GRID, not the reported cell.
+
+        Each normaliser was fixed for a bare key and then bypassed again by a
+        quoted one -- YAML and TOML both allow the mapping key to be quoted,
+        and both parsers reconstruct the value either way. Fixing the reported
+        example twice in a row is what this asserts against: every combination
+        of key style and value delimiter that a parser accepts must fold.
+
+        All fragments are assembled at runtime; written literally, these are
+        real findings in this file.
+        """
+        secret = "Xy7Q" + "secretValue0192"
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        ident = "AZURE" + "_TENANT_ID"
+        dq, sq = '"' * 3, "'" * 3
+
+        cases = []
+        # key style x YAML block-scalar indicator
+        for key in (cred, f'"{cred}"', f"'{cred}'"):
+            for indicator in ("|", "|-", ">", ">-", "|2-", "|-2", ">2+"):
+                cases.append(
+                    ("credential assignment",
+                     f"{key}: {indicator}\n  {secret}\n"))
+        # key style x TOML multiline delimiter, for both value classes
+        for key_name, label, value in (
+            (cred, "credential assignment", secret),
+            (ident, "connector identifier", guid),
+        ):
+            for key in (key_name, f'"{key_name}"', f"'{key_name}'"):
+                for delim in (dq, sq):
+                    cases.append((label, f"{key} = {delim}{value}{delim}\n"))
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(cases):
+                probe = root / f"probe{index}.conf"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(body=body):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any(label in finding for finding in findings),
+                        f"{body!r} produced {findings}",
+                    )
+
+        # Quoting a key must not turn ordinary prose into a finding either.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, body in enumerate((
+                '"description": |\n  Ordinary prose about a mount.\n',
+                f"'purpose' = {dq}\nOrdinary prose about a mount.\n{dq}\n",
+            )):
+                clean = root / f"clean{index}.conf"
+                clean.write_text(body, encoding="utf-8")
+                with self.subTest(clean=body):
+                    self.assertEqual(scan_paths([clean], root=root), [])
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

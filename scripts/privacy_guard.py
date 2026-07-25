@@ -201,8 +201,15 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
 _TOKEN_CHAR = r"[\w.@:/+-]"
 
 
+# Both normalisers accept a quoted key as well as a bare one. YAML and TOML
+# each allow the mapping key to be quoted -- "AZURE_CLIENT_SECRET": |- and
+# "AZURE_CLIENT_SECRET" = """...""" are valid and both parsers reconstruct the
+# value -- so a key-grammar that only matched bare identifiers reopened the
+# exact bypass each fold was written to close, one quote character later.
+_KEY = r"[\"']?[A-Za-z_][A-Za-z0-9_.-]*[\"']?"
+
 _BLOCK_SCALAR_HEADER = re.compile(
-    r"^(?P<indent>[ \t]*)(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*"
+    r"^(?P<indent>[ \t]*)(?P<key>" + _KEY + r")\s*:\s*"
     # YAML lets the indentation indicator and the chomping indicator appear in
     # either order -- "|2-" and "|-2" are both valid headers, and a parser
     # reconstructs the value from both. Accepting only one order left the other
@@ -212,7 +219,7 @@ _BLOCK_SCALAR_HEADER = re.compile(
 
 
 _TOML_MULTILINE = re.compile(
-    r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*"
+    r"(?P<key>" + _KEY + r")\s*=\s*"
     r"(?P<q>\"{3}|'{3})(?P<body>[\s\S]*?)(?P=q)"
 )
 
