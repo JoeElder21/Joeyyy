@@ -29,7 +29,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install the official AutoGen 0.2 runtime
-        run: python -m pip install -r requirements.txt
+        # From the LOCK, not the floating manifest. The security workflow scans
+        # requirements/lock-runtime-*.txt and calls them "the resolved forms of
+        # the sets CI installs" -- but CI installed the ranged manifests, so pip
+        # was free to select a version the scan had never seen. A clean scan of
+        # a lock that nothing installs proves nothing about what ran.
+        #
+        # One lock serves both matrix legs: the resolved sets for 3.11 and 3.12
+        # were compared and are identical, so a version-specific lock would be
+        # two files that must agree rather than one that already does. If they
+        # ever diverge, the drift check below fails and says so.
+        run: python -m pip install -r requirements/lock-runtime-root.txt
       - name: Install the validators the runtime check depends on
         # `verify_runtime_stack.enforce_schemas()` returns ([], []) when
         # jsonschema is absent -- a silent no-op indistinguishable from "every
@@ -39,7 +49,7 @@ jobs:
         #
         # Same configured-vs-executed failure as the MCP mount job two rounds
         # earlier: the step ran, printed a report, and proved nothing.
-        run: python -m pip install -r requirements/runtime-contracts.txt
+        run: python -m pip install -r requirements/lock-runtime-contracts.txt
       - name: Validate Agent 007 and specialist contracts
         run: |
           python scripts/privacy_guard.py
@@ -73,12 +83,64 @@ jobs:
         # tools, and went green regardless of whether the governance and
         # filesystem servers worked at all. A verifier that cannot verify has to
         # be given what it needs or made to fail, not left reporting success.
-        run: python -m pip install -r requirements/runtime-contracts.txt
+        run: python -m pip install -r requirements/lock-runtime-contracts.txt
       - name: Launch each offline-verifiable mount and list its tools
         # --strict: with the dependency installed above, "unverified" can only
         # mean the probe did not happen, and that is a failure rather than a
         # note in a report nobody reads.
         run: python scripts/verify_mcp_mounts.py --strict
+
+  locks:
+    name: Locks match their manifests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        # From PyPI rather than a marketplace action: adding one would mean
+        # pinning a third-party action to a commit SHA, and the SHA has to be
+        # looked up rather than assumed. `pip install uv` needs no new pin.
+        #
+        # Pinned to the version that generated the committed locks, so the
+        # drift check compares like with like -- a resolver upgrade changing the
+        # resolution is a real signal, but it should arrive as a deliberate bump
+        # rather than as a mystery failure on an unrelated PR.
+        run: python -m pip install uv==0.8.17
+      - name: Re-resolve each manifest and compare against its committed lock
+        # Installing from the locks is only half the property. The other half is
+        # that the lock still represents its manifest: a dependency release can
+        # make `requirements.txt` resolve to something the lock does not carry,
+        # and then CI installs a stale set that the scan reports as clean
+        # forever. This step fails when the two disagree, on BOTH matrix legs --
+        # which is also what proves the single shared lock stays valid for 3.11
+        # and 3.12 rather than being assumed to.
+        run: |
+          set -euo pipefail
+          status=0
+          check() {
+            # uv reads a pre-existing output file, so a stale one from the
+            # previous call can fail the compile rather than the comparison.
+            rm -f /tmp/resolved.txt
+            uv pip compile "$1" -o /tmp/resolved.txt \
+              --python-version "${{ matrix.python-version }}" --no-header -q
+            if ! diff -u \
+              <(grep -v '^#\|^$' "$2") \
+              <(grep -v '^#\|^$' /tmp/resolved.txt); then
+              echo "::error file=$2::$2 no longer matches $1 on Python ${{ matrix.python-version }}"
+              status=1
+            fi
+          }
+          check requirements.txt requirements/lock-runtime-root.txt
+          check requirements/runtime-contracts.txt requirements/lock-runtime-contracts.txt
+          exit "$status"
 
   lint:
     name: Lint (ruff)

@@ -689,6 +689,30 @@ Both directions were verified before the change was committed, per the rule set 
 
 **What the fourth alternation adds to the lesson.** Rounds 12–14 each validated a fix against the failure it targeted. This round shows a fifth state none of them tested: not "does the gate deny what it should" or "does it allow what it should", but **"does the check run at all"**. A short-circuiting validator makes those different questions, and a passing test suite cannot distinguish a check that ran and approved from a check that never executed — which is the same configured-vs-executed error this record opens with, now found inside the enforcement point itself rather than in CI. Two of the tests guarding this area were asserting the bug.
 
+### Automated review, sixteenth pass — seven findings, seven fixed
+
+**Joe marked five of these "Fix" on the PR, which ends the freeze declared after round 14.** That freeze was a self-imposed posture, not a contract; a direct instruction supersedes it. Two further findings — one P1 fail-open and one P2 — were fixed alongside them because they are the same defect classes in the same files.
+
+**A fail-shut I introduced one round earlier.** Deriving the guard's ledger from the registry (fifteenth pass) fed it whatever `LeaseRegistry._active` held — and `_expire()` runs only inside `issue()`, so a lease past its `expires_at` sits there until some unrelated issuance sweeps it. `PacketGuard` then reported `active writer lease is expired` for the *ledger*, and `validate()` returns at the first ledger error, so **one stale lease denied every packet-backed operation in the corps**, including reads with no relationship to any lease.
+
+The ledger is now filtered rather than swept: a policy evaluation must not mutate the registry, the same reasoning that defers instruction-nonce consumption to the execution boundary. The filter uses `<=` to match `PacketGuard`'s own comparison rather than `_lease_expiry_errors`' strict `>`, because a filter looser than the check it protects would re-shut the gate on the boundary instant.
+
+**Reproducing this one required care, and the first attempt was wrong.** `PacketGuard` compares expiry against `datetime.now(UTC)`, not the enforcement point's injected clock, so a fixture that expires relative to the test clock proves nothing. The first repro printed a *scope* error and I nearly read it as confirmation. The regression test issues a lease already lapsed in real wall-clock time, and says why in a comment.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Expired leases injected into every packet ledger | **Correct — fail-shut, mine, one round old** | Ledger filtered by the point's own clock; a lapsed lease still authorizes no mutation, tested both ways. |
+| Delegation `deadline` never enforced | **Correct — fail-open** | The field is declared in the schema and *nothing* parsed it — not `PacketGuard`, not this module. `deadline: "2020-01-01T00:00:00Z"` was admitted, so a time-bounded assignment stayed reusable indefinitely. Null stays valid (the schema declares it nullable); a stated-but-unparseable deadline is refused, because an unreadable bound is not an absent one. |
+| Brain-neutral reads had no lawful path | **Correct — fail-shut** | All three branches denied: no packet → "requires a validated delegation"; a valid delegation → "packet does not authorize"; a delegation naming the path → `PacketGuard` rejects the namespace as outside private memory and roundtable. A specialist could not read `AGENTS.md`, the contract defining its own behaviour. Same shape as the round-8 execution-authority deadlock: a rule whose only lawful path does not exist is not strict, it is broken. Exemption scoped to the declared neutral set, matched after normalization, reads only. |
+| MCP handshake unbounded | **Correct** | `ClientSession` defaults `read_timeout_seconds` to `None`, so a server that starts and never answers blocks until Actions kills the job — one hung mount costing the whole run instead of one failed verification. `asyncio.wait_for` at 120s. `TimeoutError` is named explicitly because it stringifies to nothing, and the generic handler would have reported `probe failed: ` with no diagnostics. |
+| Case thresholds accepted `0.0` | **Correct** | Judge scores are nonnegative, so a case could set its own gate to zero, pass with every forbidden behaviour present, and have `_record_passes()` file the run as acceptance evidence. Validated at **case-load** time so every consumer is covered rather than the one pytest module that reads thresholds. Correctness metrics pinned at 1.0; judged-quality metrics keep a floor, so a case may demand more but never less. |
+| Locks scanned, manifests installed | **Correct** | `security.yml` called the locks "the resolved forms of the sets CI installs" while CI installed the ranged manifests — a clean scan of a file nothing installs. CI now installs the locks. One lock serves both matrix legs because 3.11 and 3.12 were **compared** and resolve identically rather than assumed to. A new `locks` job re-resolves each manifest on both versions and fails on drift, so the lock cannot go stale while the scan keeps reporting it clean. |
+| Secret scan unscoped on push | **Correct** | `BASE_SHA` is empty on **both** push and schedule, so the else branch ran the whole-history scan on every push to main — the exact behaviour the surrounding comment says was moved to the weekly run. Three events now get three ranges, with the all-zero new-ref sentinel and an unreachable force-push `before` both falling through to the full scan. |
+
+**One fix was found rather than reported.** `_packet_namespace_errors` normalized the declared scope entry (`::` → `/`) but not the resource, so a request naming its resource in namespace form could never match a scope that authorized it — and the denial printed two strings that looked identical, because the difference was the separator being compared. The docstring states the intended behaviour ("compare on the shared segments rather than demanding one spelling"); only one side implemented it. Fixed symmetrically, with a test that both spellings resolve and neither widens scope.
+
+**One of my own tests was too weak, and mutation-testing is what found it.** The secret-scan assertion checked for `github.event.before` anywhere in the file and still passed after the env binding was deleted, because the comment above it mentions the same string — a test satisfied by prose *describing* the property rather than by the property. Reading it would not have caught that. It now asserts the binding and the branch that consumes it, and all four mutations are caught.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
@@ -721,3 +745,8 @@ Not a decision backlog — the actual work the harness exposed:
 - **The filesystem mount's npm package has no committed lock** and is outside
   the vulnerability scan. Its top-level version is pinned; its transitive set is
   not.
+- **`scripts/trusted_launcher.py` forwards the whole inherited environment** to
+  every mounted process, so unrelated credentials reach mounts that do not need
+  them. The fix is a per-mount `env` allowlist in `config/mcp_mounts.toml` plus
+  a small baseline — a connector-policy change, which is Joe's decision rather
+  than a mechanical edit.

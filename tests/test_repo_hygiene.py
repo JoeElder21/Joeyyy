@@ -359,6 +359,37 @@ class MountVerifierTests(unittest.TestCase):
         self.assertTrue(governance.get("tools_are_exhaustive"))
         self.assertTrue(governance.get("expected_tools"))
 
+    def test_each_probe_is_bounded_by_a_timeout(self):
+        # `ClientSession` defaults `read_timeout_seconds` to None, so a server
+        # that starts but never answers leaves the await blocked until GitHub
+        # Actions kills the job at its limit. One hung mount then costs the
+        # whole run instead of reporting one failed verification.
+        import asyncio
+        import inspect
+
+        from scripts import verify_mcp_mounts as module
+
+        self.assertIn("asyncio.wait_for", inspect.getsource(module._probe_with_timeout))
+        self.assertGreater(module.PROBE_TIMEOUT_SECONDS, 0)
+        self.assertIn(
+            "_probe_with_timeout",
+            inspect.getsource(module.main),
+            "main() must call the bounded probe, not the unbounded one",
+        )
+
+        # Exercised, not merely asserted about: a command that never responds
+        # must raise rather than hang, or this test proves only that a string
+        # appears in the source.
+        original = module.PROBE_TIMEOUT_SECONDS
+        module.PROBE_TIMEOUT_SECONDS = 1
+        try:
+            with self.assertRaises(TimeoutError):
+                asyncio.run(
+                    module._probe_with_timeout(["python", "-c", "import time; time.sleep(60)"])
+                )
+        finally:
+            module.PROBE_TIMEOUT_SECONDS = original
+
     def test_a_misspelled_flag_is_rejected_rather_than_ignored(self):
         # `"--strict" in argv` meant `--strcit` in a workflow file silently ran
         # the permissive path: mounts unverified, exit 0, CI green -- the exact
@@ -383,6 +414,92 @@ class MountVerifierTests(unittest.TestCase):
         source = inspect.getsource(main)
         self.assertIn('"--strict"', source)
         self.assertIn("argparse", source)
+
+
+class DependencyProvenanceTests(unittest.TestCase):
+    """The scan must cover what is installed, not a file nothing installs."""
+
+    def test_ci_installs_from_the_locks_the_security_scan_audits(self):
+        # security.yml calls requirements/lock-runtime-*.txt "the resolved forms
+        # of the sets CI installs" -- while CI installed the ranged manifests,
+        # so pip could select a version the scan had never seen. A clean scan of
+        # a lock nothing installs proves nothing about what ran.
+        workflow = VALIDATE_WORKFLOW.read_text(encoding="utf-8")
+        security = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        for lock in ("lock-runtime-root.txt", "lock-runtime-contracts.txt"):
+            with self.subTest(lock=lock):
+                self.assertIn(f"requirements/{lock}", security, f"{lock} is not scanned")
+                self.assertIn(
+                    f"pip install -r requirements/{lock}",
+                    workflow,
+                    f"{lock} is scanned but never installed",
+                )
+
+    def test_no_ci_step_installs_the_floating_manifest_it_has_a_lock_for(self):
+        workflow = VALIDATE_WORKFLOW.read_text(encoding="utf-8")
+        for manifest in ("requirements.txt", "requirements/runtime-contracts.txt"):
+            with self.subTest(manifest=manifest):
+                self.assertNotIn(
+                    f"pip install -r {manifest}",
+                    workflow,
+                    f"{manifest} has a committed lock; installing the ranged form "
+                    "reintroduces the gap between what is scanned and what runs",
+                )
+
+    def test_lock_drift_is_checked_on_every_supported_python(self):
+        # Installing from a lock is half the property; the other half is that
+        # the lock still represents its manifest. A dependency release can make
+        # the manifest resolve elsewhere, and CI would keep installing a stale
+        # set the scan reports as clean forever.
+        #
+        # Both legs, because one shared lock is only valid while 3.11 and 3.12
+        # resolve identically -- which is checked rather than assumed.
+        workflow = VALIDATE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("uv pip compile", workflow)
+        job = workflow[workflow.index("  locks:") : workflow.index("  lint:")]
+        for version in ("3.11", "3.12"):
+            with self.subTest(python=version):
+                self.assertIn(version, job)
+        self.assertIn("requirements/lock-runtime-root.txt", job)
+        self.assertIn("requirements/lock-runtime-contracts.txt", job)
+
+
+class SecretScanScopeTests(unittest.TestCase):
+    """Each event gets the range it is responsible for."""
+
+    def test_a_push_scans_its_own_range_not_all_history(self):
+        # BASE_SHA is empty on BOTH push and schedule, so the else branch ran
+        # the unscoped whole-history scan on every push to main -- the exact
+        # behaviour the surrounding comment says was moved to the weekly run.
+        # With fetch-depth: 0 that can fail a push for a secret on an unrelated
+        # unmerged branch, which the pusher cannot remove.
+        # Asserted against the env BINDING and the branch that uses it, not the
+        # bare expression. The first version checked for "github.event.before"
+        # anywhere in the file and still passed when the binding was deleted,
+        # because the surrounding comment mentions the same string -- a test
+        # satisfied by prose describing the property rather than by the
+        # property. Caught by mutation-testing it, not by reading it.
+        text = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("BEFORE_SHA: ${{ github.event.before }}", text)
+        self.assertIn("EVENT_NAME: ${{ github.event_name }}", text)
+        self.assertIn('[ "${EVENT_NAME}" = "push" ]', text)
+        self.assertIn('--log-opts="${BEFORE_SHA}..HEAD"', text)
+
+    def test_the_new_ref_sentinel_is_handled(self):
+        # `github.event.before` is all zeros for a newly created ref, and a
+        # force-push can leave it unreachable. Both must fall through to the
+        # full scan rather than building a broken range.
+        text = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("0000000000000000000000000000000000000000", text)
+        self.assertIn("git cat-file -e", text)
+
+    def test_ref_values_reach_the_script_through_env_only(self):
+        # A ref value interpolated into the script body could be read as shell.
+        text = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        script = text[text.index("GITLEAKS=") :]
+        for expression in ("${{ github.event.before }}", "${{ github.event_name }}"):
+            with self.subTest(expression=expression):
+                self.assertNotIn(expression, script)
 
 
 if __name__ == "__main__":

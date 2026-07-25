@@ -77,6 +77,10 @@ jobs:
           # rather than interpolated into the script, so a branch name can never
           # be read as shell.
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # Quoted through env for the same reason as BASE_SHA: never
+          # interpolated into the script, so no ref value can be read as shell.
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           GITLEAKS="$(go env GOPATH)/bin/gitleaks"
@@ -95,9 +99,30 @@ jobs:
           #
           # Whole-repo history coverage is not lost — it moves to the weekly
           # scheduled run, where a finding anywhere is genuinely actionable.
+          # Three events, three ranges -- not two. `BASE_SHA` is empty on
+          # BOTH push and schedule, so the else branch ran the unscoped
+          # whole-history scan on every push to main: exactly the behaviour the
+          # comment above says was moved to the weekly run, still firing on
+          # pushes. With fetch-depth: 0 that inspects unrelated unmerged branch
+          # history and can fail a main-branch push for a secret the pusher
+          # cannot remove.
+          #
+          # A push carries its own range in `github.event.before`, so it gets
+          # the commits it actually introduced. Only `schedule` -- where a
+          # finding anywhere is genuinely actionable, and there is no author
+          # being blocked -- scans everything.
           if [ -n "${BASE_SHA}" ]; then
             "$GITLEAKS" git . --no-banner --redact --exit-code 1 \
               --log-opts="${BASE_SHA}..HEAD"
+          elif [ "${EVENT_NAME}" = "push" ] && \
+               [ -n "${BEFORE_SHA}" ] && \
+               [ "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ] && \
+               git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            # The all-zero sentinel means a newly created ref with no
+            # predecessor, and a force-push can leave `before` unreachable --
+            # both fall through to the full scan rather than a broken range.
+            "$GITLEAKS" git . --no-banner --redact --exit-code 1 \
+              --log-opts="${BEFORE_SHA}..HEAD"
           else
             "$GITLEAKS" git . --no-banner --redact --exit-code 1
           fi

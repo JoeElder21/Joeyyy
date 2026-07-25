@@ -840,7 +840,12 @@ class ScopeTests(unittest.TestCase):
     def test_a_canonical_read_requires_a_delegation(self):
         # AGENTS.md confines packetless direct invocation to current-message
         # text. Reading another specialist's canonical source is not that.
-        for resource in ("APEX/Strategy-Campaigns", "APEX/Intel-Sources", "docs/README.md"):
+        #
+        # `docs/README.md` used to be in this list and has been moved to
+        # `test_brain_neutral_reads_have_a_lawful_path`: requiring a delegation
+        # for a brain-neutral surface was a deadlock rather than a control,
+        # because no schema-valid packet can name a repository path.
+        for resource in ("APEX/Strategy-Campaigns", "APEX/Intel-Sources"):
             with self.subTest(resource=resource):
                 decision = self.pep.evaluate(
                     ToolRequest(
@@ -852,6 +857,55 @@ class ScopeTests(unittest.TestCase):
                     any("requires a validated delegation" in r for r in decision.reasons),
                     decision.reasons,
                 )
+
+    def test_brain_neutral_reads_have_a_lawful_path(self):
+        # All three branches denied before this: no packet -> "requires a
+        # validated delegation"; a valid delegation -> "packet does not
+        # authorize"; a delegation naming the path -> PacketGuard rejects the
+        # namespace as outside private memory and roundtable. A specialist could
+        # not read AGENTS.md, the contract defining its own behaviour.
+        for resource in ("docs/README.md", "AGENTS.md", "config/mcp_mounts.toml", "schemas/"):
+            with self.subTest(resource=resource):
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=resource, owner_brain="APEX"
+                    )
+                )
+                self.assertTrue(decision.allowed, f"{resource}: {decision.reasons}")
+
+    def test_the_neutral_exemption_does_not_reach_past_the_neutral_set(self):
+        # The exemption is the narrow kind: declared neutral prefixes, matched
+        # after normalization, on reads only. A traversal that resolves into a
+        # brain's material is not neutral however it is spelled, and a connector
+        # handle is not a repository path.
+        for resource in (
+            "scripts/../brains/jeos/agents.toml",
+            "mount:gdrive",
+            "connector:unregistered",
+            "JEOS/Weekly",
+            "../../etc/passwd",
+        ):
+            with self.subTest(resource=resource):
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=resource, owner_brain="APEX"
+                    )
+                )
+                self.assertFalse(decision.allowed, f"{resource} was readable with no delegation")
+
+    def test_a_neutral_write_is_not_exempt(self):
+        # The exemption is for reads. A mutation of a neutral surface still
+        # needs a packet and a lease like any other.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="write",
+                resource="docs/README.md",
+                owner_brain="APEX",
+                mutating=True,
+            )
+        )
+        self.assertFalse(decision.allowed)
 
     def test_the_chief_reads_canonical_resources_without_a_delegation(self):
         # It issues them; requiring one of itself would deadlock the corps.
@@ -1597,6 +1651,176 @@ class TargetlessRequestTests(unittest.TestCase):
             ToolRequest(agent=CHIEF, action="read", resource="docs/README.md")
         )
         self.assertTrue(decision.allowed, decision.reasons)
+
+
+class SixteenthPassRegressionTests(unittest.TestCase):
+    """Findings from the sixteenth pass, each reproduced before it was fixed."""
+
+    def _expired_registry(self):
+        """A registry holding a lease that lapsed in REAL wall-clock time.
+
+        Real time matters: PacketGuard compares against `datetime.now(UTC)`,
+        not this point's injected clock, so a fixture expiring relative to the
+        test clock does not reproduce the defect. The first attempt at this
+        test did exactly that and proved nothing.
+        """
+        registry = LeaseRegistry()
+        past = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=5)
+        lease = registry.issue(
+            mission_id="m-001",
+            owner_brain="APEX",
+            writer_agent=CHIEF,
+            write_target="APEX/Strategy-Campaigns",
+            resource_id="campaign-alpha",
+            expected_state="One campaign row.",
+            rollback="Delete by mission ID.",
+            now=past,
+            hours=1,
+        )
+        return registry, dict(lease)
+
+    def test_a_lapsed_lease_does_not_deny_unrelated_work(self):
+        # LeaseRegistry._expire() runs only inside issue(), so a lapsed lease
+        # sits in _active until some unrelated issuance sweeps it. Feeding that
+        # record to the guard made it report `active writer lease is expired`
+        # for the LEDGER -- and validate() returns at the first ledger error, so
+        # one stale lease denied every packet-backed operation in the corps.
+        from scripts.packet_guard import PacketGuard
+
+        registry, lease = self._expired_registry()
+        self.assertTrue(
+            PacketGuard(ROOT).validate_lease_ledger([dict(lease, schema_version="2.0")]),
+            "this test assumes the lease is genuinely expired in real time",
+        )
+        pep = PolicyEnforcementPoint(ROOT, registry=registry)
+        request = ToolRequest(
+            agent=CHIEF, action="read", resource="docs/README.md", owner_brain="APEX"
+        )
+        self.assertEqual(pep._lease_ledger(request), [])
+        self.assertEqual(PacketGuard(ROOT).validate_lease_ledger(pep._lease_ledger(request)), [])
+
+    def test_a_lapsed_lease_still_authorizes_no_mutation(self):
+        # The other direction. Dropping it from the ledger must not become a way
+        # to write with it: _writer_lease checks expiry independently.
+        registry, lease = self._expired_registry()
+        pep = PolicyEnforcementPoint(ROOT, registry=registry)
+        reasons = pep._writer_lease(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                lease=lease,
+                resource_id="campaign-alpha",
+            )
+        )
+        self.assertTrue(any("expired" in reason for reason in reasons), reasons)
+
+    def test_a_live_lease_is_not_filtered_out(self):
+        registry, live = registry_and_lease()
+        pep = PolicyEnforcementPoint(ROOT, registry=registry, clock=lambda: NOW)
+        ledger = pep._lease_ledger(
+            ToolRequest(agent=CHIEF, action="read", resource="docs/", owner_brain="APEX")
+        )
+        self.assertEqual([entry["lease_id"] for entry in ledger], [live["lease_id"]])
+
+    def test_a_malformed_expiry_is_kept_so_the_guard_rejects_it(self):
+        # Dropping an unparseable expiry would hide a malformed lease; keeping
+        # it lets the schema refuse it, which is the fail-closed outcome.
+        pep = PolicyEnforcementPoint(ROOT, clock=lambda: NOW)
+        self.assertFalse(pep._has_lapsed({"expires_at": "whenever"}))
+        self.assertFalse(pep._has_lapsed({}))
+
+    def _delegation(self, **overrides):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        packet, _ = PacketContractTests().v21_readonly_pair()
+        packet = json.loads(json.dumps(packet))
+        packet.update(overrides)
+        return packet
+
+    def _admit(self, packet, pep=None):
+        return (pep or self.pep)._packet_admission(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="APEX/Strategy-Campaigns/apex_war_architect",
+                owner_brain="APEX",
+                packet=packet,
+                packet_schema="delegation_packet.schema.json",
+            )
+        )
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
+
+    def test_an_expired_delegation_deadline_is_refused(self):
+        # `deadline` is declared in the schema and nothing parsed it -- not
+        # PacketGuard, not this module -- so a time-bounded assignment stayed
+        # reusable indefinitely.
+        errors = self._admit(self._delegation(deadline="2020-01-01T00:00:00Z"))
+        self.assertTrue(any("no longer live" in error for error in errors), errors)
+
+    def test_an_unparseable_deadline_is_refused(self):
+        errors = self._admit(self._delegation(deadline="not-a-date"))
+        self.assertTrue(any("not a parseable timestamp" in error for error in errors), errors)
+
+    def test_a_null_deadline_is_an_unbounded_assignment_not_a_defect(self):
+        # The schema declares the field nullable. Treating absence as expiry
+        # would deny every delegation that does not state a bound.
+        self.assertEqual(self._admit(self._delegation(deadline=None)), [])
+
+    def test_a_future_deadline_is_admitted(self):
+        ahead = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)
+        deadline = ahead.isoformat().replace("+00:00", "Z")
+        self.assertEqual(self._admit(self._delegation(deadline=deadline)), [])
+
+    def test_a_scope_matches_in_either_spelling(self):
+        # Only the DECLARED entry was normalized, so a resource named in
+        # namespace form could never match a scope that authorized it -- and the
+        # denial printed two strings that looked identical, because the
+        # difference was the separator being compared.
+        packet = self._delegation()
+        for resource in (
+            "APEX::Strategy-Campaigns::apex_war_architect",
+            "APEX/Strategy-Campaigns/apex_war_architect",
+        ):
+            with self.subTest(resource=resource):
+                errors = self.pep._packet_admission(
+                    ToolRequest(
+                        agent=SPECIALIST,
+                        action="read",
+                        resource=resource,
+                        owner_brain="APEX",
+                        packet=packet,
+                        packet_schema="delegation_packet.schema.json",
+                    )
+                )
+                self.assertEqual(errors, [], f"{resource}: {errors}")
+
+    def test_spelling_symmetry_does_not_widen_scope(self):
+        # Accepting both spellings must not make a scope cover a namespace it
+        # does not name.
+        packet = self._delegation()
+        for resource in (
+            "APEX::Strategy-Campaigns::apex_intelligence_forge",
+            "APEX/Intel-Sources",
+        ):
+            with self.subTest(resource=resource):
+                errors = self.pep._packet_admission(
+                    ToolRequest(
+                        agent=SPECIALIST,
+                        action="read",
+                        resource=resource,
+                        owner_brain="APEX",
+                        packet=packet,
+                        packet_schema="delegation_packet.schema.json",
+                    )
+                )
+                self.assertTrue(errors, f"{resource} was authorized by a scope not naming it")
 
 
 if __name__ == "__main__":

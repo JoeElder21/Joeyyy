@@ -785,7 +785,34 @@ class PolicyEnforcementPoint:
             # with no delegation authorizing it and no reason recorded.
             #
             # The chief is exempt because it issues the delegations.
-            if request.agent != CHIEF and self._is_canonical_resource(request.resource):
+            #
+            # Brain-neutral surfaces are exempt because requiring a delegation
+            # for them was a DEADLOCK, not a control. `_is_canonical_resource()`
+            # counts `docs/`, `schemas/`, `config/`, `AGENTS.md` and the rest as
+            # canonical, so a specialist reading one was denied without a
+            # packet -- and denied WITH one too: a delegation's
+            # `allowed_read_namespaces` is confined by `PacketGuard` to the
+            # agent's private memory and roundtable, so no schema-valid packet
+            # can name a repository path. All three branches denied, including
+            # a specialist reading AGENTS.md, the contract defining its own
+            # behaviour. Reproduced before fixing.
+            #
+            # Same shape as the earlier execution-authority deadlock: a rule
+            # whose only lawful path does not exist is not strict, it is broken.
+            #
+            # Scoped tightly. This exempts ONLY the declared neutral set, which
+            # is matched after normalization -- so `scripts/../brains/jeos/...`
+            # does not qualify -- and only on a read. Connector handles and
+            # brain-owned namespaces still require a delegation, and a resource
+            # that escapes the tree is not neutral and stays refused.
+            neutral_read = self._is_brain_neutral(request.resource) and not self._escapes_the_tree(
+                request.resource
+            )
+            if (
+                request.agent != CHIEF
+                and not neutral_read
+                and self._is_canonical_resource(request.resource)
+            ):
                 return [
                     f"read of canonical resource {request.resource!r} requires a validated "
                     "delegation; the packetless path is confined to current-message text"
@@ -804,7 +831,41 @@ class PolicyEnforcementPoint:
         # already said it cannot vouch for.
         if errors:
             return errors
+        deadline = self._packet_deadline_errors(request.packet)
+        if deadline:
+            return deadline
         return self._packet_scope_errors(request)
+
+    def _packet_deadline_errors(self, packet: dict[str, Any]) -> list[str]:
+        """A time-bounded assignment must actually be bounded by that time.
+
+        `deadline` is declared in the delegation schema and nothing anywhere
+        parsed it -- not `PacketGuard`, not this module. A delegation with
+        `deadline: "2020-01-01T00:00:00Z"` was admitted, so an assignment stated
+        as time-bounded stayed reusable indefinitely for as long as some lease
+        was available to pair with it. Reproduced before fixing.
+
+        Null is not a defect: the schema declares the field nullable, and a
+        delegation with no deadline is an unbounded assignment by design. Only a
+        STATED deadline is enforced -- and a stated one that cannot be parsed is
+        refused rather than ignored, because an unreadable bound is not an
+        absent bound.
+        """
+        deadline = packet.get("deadline")
+        if deadline is None:
+            return []
+        try:
+            when = datetime.datetime.fromisoformat(str(deadline).replace("Z", "+00:00"))
+        except ValueError:
+            return [
+                f"packet deadline {deadline!r} is not a parseable timestamp; an "
+                "unreadable bound is not an absent one"
+            ]
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=datetime.UTC)
+        if when <= self._clock():
+            return [f"packet deadline {deadline} has passed; the assignment is no longer live"]
+        return []
 
     def _writer_lease(self, request: ToolRequest) -> list[str]:
         """Validate the lease as a lease, not as two matching strings.
@@ -936,18 +997,70 @@ class PolicyEnforcementPoint:
         refuses every mutation.
         """
         if self.registry is None:
-            return [self._reconciled_lease(lease) for lease in request.active_leases]
+            return self._usable_leases(request.active_leases)
         issued = getattr(self.registry, "_active", None)
         if isinstance(issued, dict):
             # Reconciled, so the ledger validates and the guard proceeds to the
             # packet-to-lease relationship checks instead of returning at the
             # first ledger error. Without this the ledger is authoritative but
             # never actually compared against the packet.
-            return [self._reconciled_lease(lease) for lease in issued.values()]
+            return self._usable_leases(issued.values())
         # Unknown registry shape: fall back to the one lease we can look up
         # authoritatively rather than trusting the submitted ledger.
         _, verified = self._registry_membership(request.lease or {})
-        return [self._reconciled_lease(verified)] if verified else []
+        return self._usable_leases([verified] if verified else [])
+
+    def _usable_leases(self, leases: Any) -> list[Any]:
+        """Reconcile the known version defect, and drop leases already lapsed.
+
+        `LeaseRegistry._expire()` runs only inside `issue()`, so a lease that
+        has passed its `expires_at` stays in `_active` until some unrelated
+        issuance happens to sweep it. Handing that record to `PacketGuard` made
+        it report `active writer lease is expired` for the LEDGER -- and
+        `validate()` returns at the first ledger error, so a single lapsed lease
+        denied every packet-backed operation in the corps, including reads that
+        have nothing to do with any lease. Reproduced against a lease expired in
+        real wall-clock time before fixing.
+
+        Filtered rather than swept: this is a policy evaluation, and asking
+        whether an action is permitted must not mutate the registry. The same
+        reasoning defers instruction-nonce consumption to the execution
+        boundary.
+
+        This cannot let a mutation ride a lapsed lease. Dropping it from the
+        ledger means a packet naming it fails `writer lease ... is not uniquely
+        active`, and `_writer_lease` independently checks expiry against this
+        point's own clock. Both directions are tested.
+        """
+        usable = []
+        for lease in leases:
+            reconciled = self._reconciled_lease(lease)
+            if isinstance(reconciled, dict) and self._has_lapsed(reconciled):
+                continue
+            usable.append(reconciled)
+        return usable
+
+    def _has_lapsed(self, lease: dict[str, Any]) -> bool:
+        """True when the lease's own expiry has passed, by this point's clock.
+
+        Deliberately `<=`, matching `PacketGuard`'s own comparison rather than
+        `_lease_expiry_errors`' strict `>`. The filter has to be at least as
+        aggressive as the check it is protecting: a lease this kept but the
+        guard rejected would re-shut the gate on the one boundary instant.
+        """
+        expires = lease.get("expires_at")
+        if not expires:
+            return False
+        try:
+            deadline = datetime.datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+        except ValueError:
+            # Unparseable expiry is not "not expired". Keeping it in the ledger
+            # lets the guard reject it, which is the fail-closed outcome;
+            # dropping it silently would hide a malformed lease instead.
+            return False
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=datetime.UTC)
+        return deadline <= self._clock()
 
     @staticmethod
     def _reconciled_lease(lease: Any) -> Any:
@@ -1174,7 +1287,15 @@ class PolicyEnforcementPoint:
                     f"{request.resource!r}; absent scope is not unrestricted scope"
                 ]
             declared = fallback
-        resource = self._canonical_resource(request.resource)
+        # Both sides, not one. The comment below states the intent -- compare on
+        # the shared segments rather than demanding one spelling -- but only the
+        # DECLARED entry was normalized, so a request naming its resource in
+        # namespace form could never match a scope that authorized it. The
+        # denial then printed two strings that looked identical, because the
+        # difference was the separator being compared. `_canonical_resource`
+        # does not help: it treats anything with a colon in its first segment as
+        # an opaque handle, which a `::` namespace is not.
+        resource = self._canonical_resource(request.resource).replace("::", "/")
         for entry in declared:
             # Namespaces are written `APEX::Strategy-Campaigns::agent` and write
             # targets `APEX/Strategy-Campaigns`; compare on the shared segments

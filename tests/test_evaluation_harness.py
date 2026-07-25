@@ -326,5 +326,64 @@ class HonestyContractTests(unittest.TestCase):
         self.assertTrue((EVALS / "test_specialist_modes.py").exists())
 
 
+class ThresholdIntegrityTests(unittest.TestCase):
+    """A case must not be able to disarm the gates it is measured against."""
+
+    def test_a_zero_threshold_is_refused(self):
+        # Judge scores are nonnegative, so `case_criteria: 0.0` passes that gate
+        # unconditionally -- including for an output exhibiting every forbidden
+        # behaviour the case names -- after which the run is recorded as
+        # acceptance evidence. A case could lower its own bar and still be
+        # counted as proving the mode.
+        for metric in ("case_criteria", "brain_isolation", "packet_validity"):
+            with self.subTest(metric=metric):
+                with self.assertRaises(ValueError) as raised:
+                    harness.validate_thresholds({"thresholds": {metric: 0.0}})
+                self.assertIn("below the minimum", str(raised.exception))
+
+    def test_a_negative_threshold_is_refused(self):
+        with self.assertRaises(ValueError):
+            harness.validate_thresholds({"thresholds": {"role_adherence": -1}})
+
+    def test_a_threshold_no_judge_can_reach_is_refused(self):
+        # The opposite failure: a case that can never pass is not a stricter
+        # gate, it is a broken one, and it would read as an unproven mode
+        # forever without saying why.
+        with self.assertRaises(ValueError):
+            harness.validate_thresholds({"thresholds": {"case_criteria": 1.5}})
+
+    def test_a_threshold_for_an_unmapped_metric_is_refused(self):
+        with self.assertRaises(ValueError):
+            harness.validate_thresholds({"thresholds": {"vibes": 1.0}})
+
+    def test_a_boolean_is_not_a_threshold(self):
+        # `True` is 1.0 under `isinstance(x, int)`, so it would otherwise sail
+        # through as a passing threshold.
+        with self.assertRaises(ValueError):
+            harness.validate_thresholds({"thresholds": {"case_criteria": True}})
+
+    def test_a_case_may_demand_more_than_the_default(self):
+        # The floor is a floor, not a fixed value.
+        harness.validate_thresholds({"thresholds": {"role_adherence": 0.95}})
+        harness.validate_thresholds({"thresholds": {}})
+        harness.validate_thresholds({})
+
+    def test_every_shipped_case_satisfies_the_minima(self):
+        # load_cases() validates on load, so this asserts the seed cases are
+        # loadable at all -- and would fail loudly if one were edited below the
+        # floor rather than silently recording a weakened run as evidence.
+        cases = harness.load_cases()
+        self.assertTrue(cases)
+        for key, case in cases.items():
+            with self.subTest(mode=key):
+                harness.validate_thresholds(case, source=key)
+
+    def test_the_minima_cover_every_metric_in_the_contract(self):
+        # A metric with no floor is a metric a case can set to zero. The
+        # contract and the minima have to be changed as a set.
+        missing = sorted(set(harness.METRIC_CONTRACT) - set(harness.MINIMUM_THRESHOLDS))
+        self.assertEqual(missing, [], f"no minimum threshold declared for {missing}")
+
+
 if __name__ == "__main__":
     unittest.main()

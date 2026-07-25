@@ -19,6 +19,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MOUNTS = ROOT / "config" / "mcp_mounts.toml"
 
+# Ceiling for one mount's launch-and-list handshake. Generous enough that a cold
+# `npx` fetch on a slow runner is not mistaken for a hang, small enough that
+# several stuck mounts still cannot consume a CI job.
+PROBE_TIMEOUT_SECONDS = 120
+
 
 def load_mounts() -> list[dict]:
     with MOUNTS.open("rb") as source:
@@ -79,6 +84,22 @@ async def _probe(command: list[str]) -> list[str]:
         return sorted(tool.name for tool in listed.tools)
 
 
+async def _probe_with_timeout(command: list[str]) -> list[str]:
+    """Bound the handshake, because the SDK does not.
+
+    `ClientSession` defaults `read_timeout_seconds` to `None`, so a server that
+    starts but never answers `initialize` or `list_tools` leaves these awaits
+    blocked forever. Nothing in this script would notice: the job simply stops
+    producing output until GitHub Actions kills it at the job limit. A probe
+    that hangs is a verification that never resolves, and it costs the entire
+    run rather than reporting one failed mount.
+
+    A timeout turns that into an ordinary failed verification, which strict mode
+    already knows how to fail on.
+    """
+    return await asyncio.wait_for(_probe(command), timeout=PROBE_TIMEOUT_SECONDS)
+
+
 def main(argv: list[str] | None = None) -> int:
     # `--strict` treats a degraded verification as a failure. Without it the
     # script reported "unverified (mcp package not installed)" and exited 0,
@@ -122,9 +143,18 @@ def main(argv: list[str] | None = None) -> int:
             entry["status"] = "unverified (mcp package not installed)"
         else:
             try:
-                tools = asyncio.run(_probe(mount["command"]))
+                tools = asyncio.run(_probe_with_timeout(mount["command"]))
                 entry["tools"] = tools
                 entry["status"] = _verdict(mount, tools)
+            except TimeoutError:
+                # Named explicitly: `TimeoutError` stringifies to nothing, so
+                # the generic handler below would report `probe failed: ` and
+                # leave a reader guessing at the one failure mode that produces
+                # no diagnostics of its own.
+                entry["status"] = (
+                    f"probe failed: no response within {PROBE_TIMEOUT_SECONDS}s; "
+                    "the server started but never completed the handshake"
+                )
             except Exception as error:  # report, never crash the audit
                 entry["status"] = f"probe failed: {error}"
         report["mounts"].append(entry)

@@ -64,6 +64,58 @@ METRIC_CONTRACT = {
 # Every mode is judged on these; a mode may add more in its case file.
 BASELINE_METRICS = ("packet_validity", "role_adherence", "brain_isolation", "case_criteria")
 
+# The lowest threshold each metric may be configured with.
+#
+# A case sets its own thresholds, and they were passed to DeepEval unchecked. A
+# judge score is nonnegative, so `"case_criteria": 0.0` makes that gate pass
+# unconditionally -- including for an output exhibiting every forbidden
+# behaviour the case names -- after which `_record_passes()` files the run as
+# acceptance evidence. A case could therefore lower the bar it is measured
+# against and still be recorded as proving the mode.
+#
+# Correctness metrics are pinned at 1.0 because they are pass/fail in substance:
+# a schema-invalid packet, a cross-brain reference, or a stated forbidden
+# behaviour is a failure at any rate of occurrence, and the case files already
+# describe them that way ("any single occurrence is a failure regardless of how
+# good the rest is"). The judged-quality metrics keep a floor rather than a
+# fixed value, so a case may demand MORE than the default but never less.
+MINIMUM_THRESHOLDS = {
+    "packet_validity": 1.0,
+    "case_criteria": 1.0,
+    "brain_isolation": 1.0,
+    "role_adherence": 0.7,
+    "task_completion": 0.7,
+    "tool_correctness": 1.0,
+}
+
+
+def validate_thresholds(case: dict, *, source: str = "case") -> None:
+    """Refuse a case whose thresholds cannot fail.
+
+    Raises rather than warning: a case that has quietly disarmed its own gates
+    is worse than a missing case, because a missing case is visible in the
+    coverage report and a disarmed one is counted as covered.
+    """
+    thresholds = case.get("thresholds") or {}
+    if not isinstance(thresholds, dict):
+        raise ValueError(f"{source}: 'thresholds' must be an object")
+    for name, value in sorted(thresholds.items()):
+        if name not in METRIC_CONTRACT:
+            raise ValueError(f"{source}: threshold for unmapped metric {name!r}")
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            raise ValueError(f"{source}: threshold for {name!r} must be a number, got {value!r}")
+        floor = MINIMUM_THRESHOLDS.get(name)
+        if floor is not None and value < floor:
+            raise ValueError(
+                f"{source}: threshold {name}={value} is below the minimum {floor}. "
+                "A gate that cannot fail is not a gate, and its run would still be "
+                "recorded as acceptance evidence."
+            )
+        if value > 1.0:
+            raise ValueError(
+                f"{source}: threshold {name}={value} exceeds 1.0, which no judge can reach"
+            )
+
 
 # Acceptance gates from docs/SPECIALIST_ACCEPTANCE_TESTS.md that this harness
 # does NOT evaluate and must never be read as attesting. They are longitudinal
@@ -215,6 +267,9 @@ def load_cases(case_dir: Path = CASE_DIR) -> dict[str, dict]:
         if key in cases:
             raise ValueError(f"{path.name}: duplicate case for mode {key}")
         payload["_source"] = str(path.relative_to(case_dir.parent))
+        # Checked at load, so every consumer is covered rather than only the
+        # pytest module that happens to read the thresholds.
+        validate_thresholds(payload, source=path.name)
         cases[key] = payload
     return cases
 
