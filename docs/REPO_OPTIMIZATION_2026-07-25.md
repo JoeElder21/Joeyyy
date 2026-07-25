@@ -634,6 +634,19 @@ What was fixed this round is bounded to: the fail-open the previous round create
 
 **`runtime/writer_lease.py` is no longer unchanged.** Earlier rounds claimed it was. Returning copies from `issue()` and `active_lease()` alters it. No lease semantics changed — the same records, the same statuses, the same expiry — but the claim was standing and is now false.
 
+### Automated review, thirteenth pass — four findings, two fixed, two deferred
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| The `validate` job never installed its validators | **Correct, and it is the configured-vs-executed lesson again** | `verify_runtime_stack.enforce_schemas()` returns `([], [])` when `jsonschema` is absent — indistinguishable from "every schema compiled cleanly". `requirements.txt` supplies pydantic but neither `jsonschema` nor `rtoml`, so JSON Schema and TOML enforcement never ran in CI and an invalid schema could merge with the step green. The `mounts` job installed the right dependency set and never ran this verifier. Fixed by installing `requirements/runtime-contracts.txt` in the job that needs it. |
+| The intake's required box established neither branch | **Correct — the previous fix was a half-measure** | Round 11 made one checkbox required with an "either the boxes above are ticked, or this is out of scope" label. A submitter could tick that box alone and leave the scan and all three safety results blank. Applicability is now its own required dropdown, so the two decisions cannot be conflated. |
+| `expected_version` / `idempotency_key` not carried on the request | **Correct, deferred** | A caller can obtain an allowed decision for the same target and operation while omitting the optimistic-concurrency and retry identity the validated packet required. Needs new request fields — the category deferred in round 12. |
+| `enforce()` still has no live call site | **Correct, deferred — sixth round raising it** | Unchanged blocker: neither execution adapter carries a principal, and `enforce()` fails closed without a `LeaseRegistry` the launcher does not have. |
+
+**Three CI steps have now been found proving nothing, in three separate rounds.** The MCP mount job ran without `mcp` and reported "unverified" while exiting 0 (round 6). osv-scanner resolved nothing during an RPC outage and printed "0 packages, 0 vulnerabilities" (after round 10). `verify_runtime_stack` compiled no schemas because `jsonschema` was absent (this round). Each was added *as* a gate, each looked green, and none of them was executing the check it named.
+
+The generalisation is sharper than the one recorded earlier in this document. It is not only that a configured tool differs from an executed one — it is that **a checker which degrades silently reports success in the same shape as a checker that passed**, so the failure is invisible precisely where verification was supposed to be strongest. A degradation path that returns an empty result set is the dangerous form; one that raises, or exits non-zero, is not.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

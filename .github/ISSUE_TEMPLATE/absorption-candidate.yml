@@ -39,37 +39,39 @@ body:
         - label: No code from this repository has been executed
           required: true
 
-  - type: checkboxes
-    id: agent-scan
+  - type: dropdown
+    id: agent-scan-applies
     attributes:
-      label: Pre-install scan (MCP servers, agent skills, and agent applications only)
+      label: Does the pre-install scan apply to this candidate?
       description: >
         `snyk/agent-scan` is approved for **pre-install candidate scanning only**
         (2026-07-25). Scan the candidate before install; never point it at Joe's
         configured agent estate — it transmits skill content, tool names, and
         descriptions to Snyk's servers, and the estate is his roster.
+      options:
+        - "Yes — MCP server, agent skill, or agent application (complete the attestations below)"
+        - "No — not an MCP server, skill, or agent application"
+    validations:
+      required: true
 
-        Skip this section, marking it not applicable, for a candidate that is not
-        an MCP server, skill, or agent application.
+  - type: checkboxes
+    id: agent-scan
+    attributes:
+      label: Pre-install scan attestations
+      description: >
+        Required when the dropdown above says the scan applies. Leave blank only
+        when it says the scan does not.
+
+        The previous version put the applicability choice and the attestations
+        in one checkbox group with a single required "either ... or" box, which
+        established neither branch: a candidate could tick that one box and
+        leave the scan and every safety result blank. Applicability is now its
+        own required question, so the two decisions cannot be conflated.
       options:
         - label: "`uvx snyk-agent-scan==0.3.0` run against the candidate, pre-install (pinned: `@latest` gives an unreviewed release code execution inside the supply-chain check itself)"
         - label: No prompt injection, tool poisoning, tool shadowing, or toxic flow reported
         - label: No hardcoded secrets or malware payload reported
         - label: Scope confirmed — candidate only; Joe's configured estate was not scanned
-        # Required, because the change record calls this a required section and
-        # every option was optional -- so a candidate could be submitted with the
-        # scan, its results, its scope confirmation, AND the N/A choice all
-        # blank. A structured intake that enforces nothing is a longer version of
-        # the prose rule it replaced.
-        #
-        # This one box carries the decision: either the candidate is out of
-        # scope, or the submitter is asserting the scan happened. It cannot be
-        # left unanswered.
-        - label: >-
-            Decision recorded — either the boxes above are ticked, or this
-            candidate is not an MCP server, skill, or agent application and the
-            pre-install scan does not apply
-          required: true
 
   - type: textarea
     id: gap
