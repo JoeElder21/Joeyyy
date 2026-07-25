@@ -76,7 +76,16 @@ PATTERNS = {
         r"(?!0\.0\.0\.0" + HOST_END + r")"
         # IPv6 loopback and unspecified, in the bracketed URL form.
         r"(?!\[(?:::1|::)\]" + HOST_END + r")"
-        r"(?!<)(?!your[-_.])(?!example\.)(?!\S*\.example\b)"
+        # RESERVED example names only, and each must consume the whole host.
+        # Written as bare prefixes/infixes these excused any real host that
+        # merely began with `example.`/`your-` or carried `.example` before a
+        # later suffix -- so a genuine customer host and a lookalike tenant
+        # domain both passed. RFC 2606 reserves exactly example.com/.net/.org
+        # and the .example/.invalid/.test TLDs; nothing else here is reserved,
+        # and a vendor's fictional company name is not a reservation.
+        r"(?!(?:[A-Za-z0-9-]+\.)*example\.(?:com|net|org)" + HOST_END + r")"
+        r"(?!\S*\.(?:example|invalid|test)" + HOST_END + r")"
+        r"(?!<)"
         # A private installation is just as often an IPv4 literal, a bracketed
         # IPv6 literal, or a single-label intranet name as a dotted FQDN.
         # Requiring a dot and an alphabetic TLD missed all three, which is the
@@ -110,7 +119,8 @@ PATTERNS = {
         # company name is not one of them, and treating it as such would
         # excuse the exact form this pattern exists to catch.
         r"(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-        r"|(?!your[-_.])(?!<)(?!example\.)(?!\S*\.example\b)"
+        r"|(?!(?:[A-Za-z0-9-]+\.)*example\.(?:com|net|org)" + VALUE_END + r")"
+        r"(?!\S*\.(?:example|invalid|test)" + VALUE_END + r")(?!<)"
         r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
         r"|[A-Za-z0-9_-]{16,})[\"']?"
     ),
@@ -348,7 +358,7 @@ def yaml_reconstructed_values(text: str) -> str:
     seen: set[int] = set()
     budget = [MAX_EMITTED_VALUES]
 
-    def walk(node, key=None):
+    def walk(node, key=()):
         if budget[0] <= 0:
             return
         if isinstance(node, (dict, list, tuple)):
@@ -358,13 +368,14 @@ def yaml_reconstructed_values(text: str) -> str:
             seen.add(marker)
         if isinstance(node, dict):
             for child_key, value in node.items():
-                walk(value, child_key)
+                walk(value, (key or ()) + (child_key,))
         elif isinstance(node, (list, tuple)):
             for value in node:
                 walk(value, key)
-        elif node is not None and key is not None:
-            budget[0] -= 1
-            lines.append(_reconstructed(key, ":", node))
+        elif node is not None and key:
+            forms = _key_forms(key)
+            budget[0] -= len(forms)
+            lines.extend(_reconstructed(form, ":", node) for form in forms)
 
     try:
         # An alias bomb expands geometrically; the size cap plus these guards
@@ -377,6 +388,27 @@ def yaml_reconstructed_values(text: str) -> str:
     if budget[0] <= 0:
         lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
+
+
+def _key_forms(path) -> list[str]:
+    """Every trailing sub-path of a nested key, joined the way env vars are.
+
+    A credential name is routinely SPLIT ACROSS TABLES -- `[AZURE.CLIENT]` then
+    `SECRET = ...`, or the inline-table equivalent -- and the parsers hand the
+    walker only the leaf key at each level, so emitting `SECRET` alone matched
+    nothing: the value was reconstructed and then thrown away one step before
+    it would have been caught.
+
+    Joining the whole path is necessary but not sufficient. Under a deeper
+    table the full join reads `a_b_AZURE_CLIENT_SECRET`, and `\b` does not
+    match between `b` and `AZURE` because `_` is a word character -- so the
+    name the patterns look for is there and still unmatchable. Emitting every
+    SUFFIX guarantees one form where the credential name starts at a boundary,
+    whatever it is nested under. Depth is small, and the caller charges the
+    budget per emitted line, so the DoS bound is unchanged.
+    """
+    parts = [str(part) for part in path if str(part)]
+    return ["_".join(parts[index:]) for index in range(len(parts))] or [""]
 
 
 def _reconstructed(key, delimiter: str, value) -> str:
@@ -417,18 +449,19 @@ def toml_reconstructed_values(text: str) -> str:
     lines: list[str] = []
     budget = [MAX_EMITTED_VALUES]
 
-    def walk(node, key=None):
+    def walk(node, key=()):
         if budget[0] <= 0:
             return
         if isinstance(node, dict):
             for child_key, value in node.items():
-                walk(value, child_key)
+                walk(value, (key or ()) + (child_key,))
         elif isinstance(node, (list, tuple)):
             for value in node:
                 walk(value, key)
-        elif node is not None and key is not None:
-            budget[0] -= 1
-            lines.append(_reconstructed(key, "=", node))
+        elif node is not None and key:
+            forms = _key_forms(key)
+            budget[0] -= len(forms)
+            lines.extend(_reconstructed(form, "=", node) for form in forms)
 
     walk(document)
     if budget[0] <= 0:

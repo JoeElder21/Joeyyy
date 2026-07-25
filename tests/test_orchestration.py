@@ -449,13 +449,24 @@ class SelectionReportBaselineTests(unittest.TestCase):
         start = source.index("def _branch_point()")
         end = source.index("MARKDOWN_NOW =")
         body = source[start:end]
-        # Inspect executable code only: the docstring legitimately explains why
-        # the merge-base fallback was removed, and matching prose would make this
-        # test fail on its own rationale.
-        if '"""' in body:
-            opening = body.index('"""')
-            closing = body.index('"""', opening + 3) + 3
-            body = body[:opening] + body[closing:]
+        # Inspect executable code only: the rationale legitimately explains why
+        # the merge-base fallback was removed, and matching prose makes this
+        # test fail on its own reasoning. Stripping "the first docstring" was
+        # not enough -- a second helper landed in this slice and its docstring
+        # tripped the check. Drop every comment and string literal instead, so
+        # the assertion is about what the code CALLS, at any number of helpers.
+        import io
+        import tokenize
+
+        kept = []
+        try:
+            for token in tokenize.generate_tokens(io.StringIO(body).readline):
+                if token.type in (tokenize.COMMENT, tokenize.STRING):
+                    continue
+                kept.append(token.string)
+        except tokenize.TokenError:
+            kept = [body]   # unparseable slice: fall back to the raw text
+        body = " ".join(kept)
         self.assertNotIn(
             "merge-base", body,
             "a merge-base fallback recreates the moving baseline it replaced: "
@@ -463,6 +474,48 @@ class SelectionReportBaselineTests(unittest.TestCase):
             "silently becomes zero",
         )
         self.assertIn("PRE_INSTALL_BASELINE", body)
+
+    def test_the_delta_excludes_work_that_arrived_from_main(self):
+        """The headline figure must measure THIS branch, not the merge.
+
+        Subtracting only the pinned baseline attributed every file that came in
+        from main to this work: the baseline held 46 markdown files, the merged
+        main tip held 58, HEAD held 78 — so the report published "adds 32" for
+        a branch that adds 20, in the one document meant to be installation
+        evidence. A merge's second parent is a permanent record of the upstream
+        tip, so unlike merge-base it survives this work landing."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            source = (ROOT / "scripts"
+                      / "build_awesome_copilot_report.py").read_text(
+                          encoding="utf-8")
+            namespace = {"__file__": str(ROOT / "scripts"
+                                         / "build_awesome_copilot_report.py")}
+            # Execute only the measurement half: importing the module builds
+            # the PDF and reruns every gate.
+            exec(compile(source[:source.index("ss = getSampleStyleSheet()")],
+                         "report_measurements", "exec"), namespace)
+        finally:
+            sys.path.pop(0)
+
+        added = namespace["MARKDOWN_ADDED"]
+        now = namespace["MARKDOWN_NOW"]
+        baseline = namespace["_MD_BEFORE"]
+        tips = namespace["_merged_upstream_tips"]()
+        if baseline < 0:
+            self.skipTest("pre-install baseline unreachable in this clone")
+
+        self.assertGreaterEqual(added, 0)
+        # The naive figure counts everything since the baseline. Whenever a
+        # merge has brought work in, the honest figure must be strictly
+        # smaller -- that difference IS the defect, so assert it rather than a
+        # fixed number that drifts with main.
+        if tips:
+            self.assertLess(
+                added, now - baseline,
+                "with upstream merges present, the delta must exclude the "
+                "files that arrived from main")
+        self.assertLessEqual(added, now - baseline)
 
     def test_a_passing_gate_still_names_what_it_could_not_probe(self):
         """`"valid": true` means the registry is self-consistent, not that every

@@ -301,6 +301,30 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 with self.subTest(agent=name, tool=tool):
                     self.assertNotIn(tool, tools_line)
 
+    def test_session_checklist_covers_every_mandatory_contract_step(self):
+        """A checklist that cannot record a step makes skipping it invisible.
+
+        The template's own rule is that a skipped line with a reason is audit
+        evidence and a missing line is a gap — so a duty AGENTS.md makes
+        mandatory, with no line to carry it, is a gap by the template's own
+        definition. Full-corps staffing was mandated on Joe's direct
+        instruction and had no checkpoint, so a complete-looking session record
+        could not distinguish "staffed the corps" from "never considered it"."""
+        # Collapsed, so a reflow of a wrapped checklist line does not read as
+        # a missing step.
+        checklist = " ".join(
+            (ROOT / "templates" / "session-start.md").read_text(
+                encoding="utf-8").split())
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+        # The duty exists in the contract...
+        self.assertIn("Staff each mission from the full registered corps", agents)
+        # ...so the reusable checklist must be able to record it.
+        self.assertIn("Mission staffed from the full registered corps", checklist)
+        self.assertIn("one designated writer per shared resource", checklist)
+        # And the escape hatch has to be the recorded kind, not omission.
+        self.assertIn("`[-]` with the reason", checklist)
+
     def test_refresh_procedure_forbids_moving_a_collection_wide_pin_per_file(self):
         """The pin at the top of the manifest attributes the WHOLE collection.
 

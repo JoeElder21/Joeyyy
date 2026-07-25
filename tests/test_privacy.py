@@ -24,6 +24,20 @@ from scripts.privacy_guard import (
     yaml_reconstructed_values,
 )
 
+try:
+    import yaml as _yaml
+except ImportError:  # pragma: no cover - environment-dependent
+    _yaml = None
+
+# `scripts/privacy_guard.py` degrades to regex normalisation when PyYAML is
+# absent, and the repository's stated property is that the whole suite runs
+# stdlib-only with dependency-gated tests skipping cleanly. Tests that assert
+# PARSER behaviour must degrade the same way the scanner does, or adding a
+# coverage dependency silently converts a stdlib-only suite into eight
+# failures. CI installs PyYAML, so the parser path is still exercised there --
+# it is gated, not abandoned.
+needs_yaml = unittest.skipIf(_yaml is None, "PyYAML not installed")
+
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / ".github" / "skills"
 
@@ -320,11 +334,22 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                           '{"AZURE_TENANT_ID": "%s"}' % value):
                 with self.subTest(value=value, probe=probe, expect="flagged"):
                     self.assertIsNotNone(pattern.search(probe))
-        # Reserved placeholder domains stay excused; a vendor's fictional
-        # company name is deliberately NOT one of them, because excusing it
-        # would excuse the exact shape this pattern exists to catch.
-        for value in ("example.com", "your-tenant.com", "<your-tenant>",
-                      "tenant.example"):
+        # RESERVED names stay excused -- and only those. `your-tenant.com` was
+        # previously asserted clean, which encoded the defect: the `your-`
+        # lookahead was an unbounded prefix, so it equally excused
+        # `your-corp.internal` and any other real host beginning with it. There
+        # is no lexical way to tell a placeholder `your-…` from a registrable
+        # one, and this repository's own rule is that uncertain counts as real.
+        # The unambiguous placeholder spelling -- angle brackets -- still is.
+        for value in ("your-tenant.com", "your-corp.internal",
+                      "example.customer.com", "corp.example.evil"):
+            with self.subTest(value=value, expect="flagged"):
+                self.assertIsNotNone(
+                    pattern.search(f'AZURE_TENANT_ID = "{value}"'),
+                    "an unreserved host must not be excused by a placeholder "
+                    "prefix or infix")
+        for value in ("example.com", "tenant.example.com", "<your-tenant>",
+                      "tenant.example", "tenant.invalid", "tenant.test"):
             with self.subTest(value=value, expect="clean"):
                 self.assertIsNone(
                     pattern.search(f'AZURE_TENANT_ID = "{value}"'))
@@ -651,6 +676,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # this tag stripping before anchors turned out to be the same defect.
         self.assertIs(strip_yaml_tags, strip_yaml_node_properties)
 
+    @needs_yaml
     def test_a_parser_reconstructs_values_the_patterns_would_miss(self):
         """Six rounds each found a different construct hiding a value from the
         line-oriented patterns. A regex approximates the YAML grammar and the
@@ -693,6 +719,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(scan_paths([clean], root=root), [])
 
+    @needs_yaml
     def test_parser_extraction_degrades_instead_of_failing(self):
         """The parser is authoritative where it works, but it must never take
         the scan down: a non-YAML file, an oversized document or a missing
@@ -808,6 +835,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     "an approved whole-value placeholder must stay clean",
                 )
 
+    @needs_yaml
     def test_alias_expansion_is_bounded_so_the_guard_cannot_be_the_outage(self):
         """A YAML alias is a shared reference, not a copy.
 
@@ -838,6 +866,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             yaml_reconstructed_values(
                 f"defaults: &d {secret}\n{cred}: *d\n"))
 
+    @needs_yaml
     def test_an_exhausted_reconstruction_budget_fails_the_scan(self):
         """A bound that stops quietly converts the outage into a bypass.
 
@@ -927,6 +956,127 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             small = root / "small.yaml"
             small.write_text("name: governance\n", encoding="utf-8")
             self.assertEqual(scan_paths([small], root=root), [])
+
+    def test_the_documented_dependency_contract_matches_requirements(self):
+        """A dependency added without updating its contract makes docs false.
+
+        `requirements.txt` gained PyYAML for the guard's parser path, and
+        `docs/REPOSITORY_OVERVIEW.md` went on saying it holds "exactly one
+        dependency" and that the whole suite runs stdlib-only — which had
+        stopped being true, in eight failing tests. Both halves are asserted:
+        the overview must name every installed requirement, and the parser
+        tests must degrade the way the scanner does so stdlib-only survives."""
+        requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+        overview = (ROOT / "docs" / "REPOSITORY_OVERVIEW.md").read_text(
+            encoding="utf-8")
+
+        declared = [
+            line.split(";")[0].strip()
+            for line in requirements.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertTrue(declared, "requirements.txt parsed as empty")
+        for entry in declared:
+            name = re.split(r"[<>=!~\[]", entry, maxsplit=1)[0].strip()
+            with self.subTest(package=name):
+                self.assertIn(
+                    name, overview,
+                    "the overview's dependency section must name every "
+                    "package CI installs")
+        # The stale count claim in particular.
+        self.assertNotIn("exactly one dependency", overview)
+
+        # And the suite must still be runnable without the optional package,
+        # which is what makes the "stdlib-only" claim true rather than aspirational.
+        self.assertIn("needs_yaml", (ROOT / "tests" / "test_privacy.py").read_text(
+            encoding="utf-8"))
+
+    def test_only_reserved_names_are_excused_as_example_hosts(self):
+        """"Looks like a placeholder" is not a reservation.
+
+        `example.`/`your-`/`.example` were written as unbounded prefixes and
+        infixes, so a real customer host beginning with one, or carrying
+        `.example` before a later suffix, was excused outright. RFC 2606
+        reserves exactly example.com/.net/.org and the .example/.invalid/.test
+        TLDs; everything else is a registrable name, and this repository's own
+        rule is that uncertain counts as real. Asserted as a grid, because the
+        exclusions carry this pattern's entire weight."""
+        addr, tenant, scheme = "TFE" + "_ADDRESS", "AZURE" + "_TENANT_ID", "https"
+        must_flag = {
+            "reserved-looking prefix": f'{addr} = "{scheme}://example.customer.com"',
+            "reserved-looking infix": f'{tenant} = "corp.example.evil"',
+            "your- prefixed host": f'{addr} = "{scheme}://your-corp.internal"',
+            "your- prefixed domain": f'{tenant} = "your-tenant.com"',
+            "example as a label": f'{addr} = "{scheme}://example.company.net"',
+            "plain private host": f'{addr} = "{scheme}://tfe.clientcorp.com"',
+        }
+        must_be_clean = {
+            "example.com": f'{addr} = "{scheme}://example.com"',
+            "subdomain of example.com": f'{tenant} = "tenant.example.com"',
+            ".example TLD": f'{addr} = "{scheme}://tfe.example"',
+            ".invalid TLD": f'{addr} = "{scheme}://tfe.invalid"',
+            ".test TLD": f'{tenant} = "tenant.test"',
+            "public SaaS endpoint": f'{addr} = "{scheme}://app.terraform.io"',
+            "loopback": f'{addr} = "{scheme}://localhost:8080"',
+            "angle-bracket placeholder": f'{tenant} = "<your-tenant-id>"',
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for group, cases, expected in (("flag", must_flag, True),
+                                           ("clean", must_be_clean, False)):
+                for index, (label, body) in enumerate(cases.items()):
+                    probe = root / f"{group}{index}.toml"
+                    probe.write_text(body + "\n", encoding="utf-8")
+                    with self.subTest(case=label, expect=group):
+                        self.assertEqual(
+                            bool(scan_paths([probe], root=root)), expected,
+                            f"{label}: {body}")
+
+    def test_a_nested_credential_name_is_reconstructed_whole(self):
+        """A credential name is routinely split across tables.
+
+        `[AZURE.CLIENT]` then `SECRET = ...` is ordinary, valid, and was
+        emitted as bare `SECRET` -- reconstructed by the parser and then thrown
+        away one step before it would have been matched. Joining the path is
+        necessary but not sufficient: under a deeper table the full join reads
+        `a_b_AZURE_CLIENT_SECRET`, and `\\b` does not match between `b` and
+        `AZURE`, so the name is present and still unmatchable. Every suffix is
+        emitted, and the grid runs to depth so a two-level fix cannot pass."""
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        cases = {
+            "toml table": ("t0.toml", '[AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
+            "toml inline table":
+                ("t1.toml", 'AZURE = { CLIENT = { SECRET = "%s" } }\n' % secret),
+            "toml nested two deep":
+                ("t2.toml", '[a.b.AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
+            "toml nested four deep":
+                ("t3.toml", '[w.x.y.z.AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
+            "yaml nested":
+                ("y0.yaml", "AZURE:\n  CLIENT:\n    SECRET: %s\n" % secret),
+            "yaml nested flow":
+                ("y1.yaml", "a: {b: {AZURE: {CLIENT: {SECRET: %s}}}}\n" % secret),
+            "flat control": ("t4.toml", '%s = "%s"\n' % (cred, secret)),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for label, (name, body) in cases.items():
+                probe = root / name
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(case=label):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any("credential assignment" in finding
+                            for finding in findings),
+                        f"{label}: {body!r} produced {findings}")
+
+            # Nesting must not invent findings: a registry of ordinary nested
+            # tables has to stay silent, or every config file reports.
+            clean = root / "clean.toml"
+            clean.write_text(
+                '[mount.governance]\nname = "governance"\n'
+                'purpose = "read only registry"\n', encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.

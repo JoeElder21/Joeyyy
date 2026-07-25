@@ -274,10 +274,75 @@ def _branch_point() -> str:
     return PRE_INSTALL_BASELINE if known.returncode == 0 else ""
 
 
+def _tracked_set_at(ref: str, suffix: str) -> set[str] | None:
+    """The tracked paths with `suffix` at `ref`, or None if unreadable."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
+                             cwd=root, capture_output=True, text=True,
+                             check=False)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    return {line for line in out.stdout.splitlines() if line.endswith(suffix)}
+
+
+def _merged_upstream_tips() -> list[str]:
+    """The main tips this branch has merged in, from the merges' second parents.
+
+    Subtracting only the pinned baseline attributed every file that arrived
+    from main to this branch: at the time of writing the baseline held 46
+    markdown files, the merged main tip held 58, and HEAD held 78 -- so the
+    report published "adds 32" for a branch that adds 20, in the one document
+    meant to serve as installation evidence.
+
+    A merge's second parent is a permanent record of the upstream tip that was
+    merged, so unlike merge-base it does not collapse once this work lands.
+    """
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(
+            ["git", "rev-list", "--merges", "--parents", "HEAD"],
+            cwd=root, capture_output=True, text=True, check=False)
+    except OSError:
+        return []
+    if out.returncode != 0:
+        return []
+    return [parts[2] for parts in
+            (line.split() for line in out.stdout.splitlines())
+            if len(parts) >= 3]
+
+
 MARKDOWN_NOW = count_tracked("*.md")
 _BASE = _branch_point()
+
+
+def _markdown_added() -> int:
+    """Markdown files this branch itself introduced, or -1 if unmeasurable.
+
+    A file counts only if it was at neither the pre-install baseline nor any
+    upstream tip merged in since. Anything else is somebody else's work being
+    published as evidence for this one.
+    """
+    if not _BASE:
+        return -1
+    here = _tracked_set_at("HEAD", ".md")
+    baseline = _tracked_set_at(_BASE, ".md")
+    if here is None or baseline is None:
+        return -1
+    elsewhere = set(baseline)
+    for tip in _merged_upstream_tips():
+        merged = _tracked_set_at(tip, ".md")
+        if merged is None:
+            # Cannot prove which side a file came from, so do not guess.
+            return -1
+        elsewhere |= merged
+    return len(here - elsewhere)
+
+
 _MD_BEFORE = count_tracked_at(_BASE, "*.md") if _BASE else -1
-MARKDOWN_ADDED = (MARKDOWN_NOW - _MD_BEFORE) if _MD_BEFORE >= 0 else -1
+MARKDOWN_ADDED = _markdown_added()
 
 ADOPTED_TOTAL = (
     count_adopted("instructions", "instructions/*.instructions.md")
