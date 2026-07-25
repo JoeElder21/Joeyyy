@@ -17,8 +17,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: security-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # The event name is part of the group, and a scheduled run is never cancelled.
+  #
+  # A weekly run and a push to main share `refs/heads/main`, so with
+  # cancel-in-progress they landed in one group: a push arriving during the
+  # scheduled whole-history gitleaks sweep cancelled it and replaced it with a
+  # push run scanning only ${BEFORE_SHA}..HEAD. The repository-wide audit this
+  # workflow promises could therefore never complete, and nothing would report
+  # that -- the cancelled run simply disappears while the replacing one goes
+  # green. Superseding a redundant push is worth it; superseding the only
+  # full-history scan there is is not.
+  group: security-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   workflow-audit:

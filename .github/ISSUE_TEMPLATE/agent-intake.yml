@@ -61,14 +61,49 @@ body:
       required: true
 
   - type: checkboxes
-    id: gates
+    id: shadow-gates
     attributes:
-      label: Acceptance gates
-      description: Per `docs/SPECIALIST_ACCEPTANCE_TESTS.md`. Shadow entry needs the static gate.
+      label: Shadow-entry gates
+      description: >
+        Per `docs/SPECIALIST_ACCEPTANCE_TESTS.md`. Required for every intake,
+        whichever stage is requested.
       options:
         - label: Static gate — definition parses; `validate_specialist_corps.py` passes
+          required: true
         - label: Registry entry drafted for `docs/AGENT_REGISTRY.md`
+          required: true
         - label: Brain isolation verified — no cross-brain route or shared namespace
+          required: true
+
+  # Separate, and its own REQUIRED question, because GitHub issue forms have no
+  # conditional validation: a single optional gate list meant an `active` intake
+  # could be submitted with every acceptance gate blank, so the form accepted an
+  # active-agent request carrying none of the validation it says active status
+  # requires. Making the list itself required would instead force a shadow-only
+  # requester to attest to gates that do not apply to them.
+  #
+  # Same shape as `agent-scan-applies` on the absorption form, and for the same
+  # reason recorded there: applicability has to be a separate required answer,
+  # or the attestations under it are unenforceable.
+  - type: dropdown
+    id: active-gates-complete
+    attributes:
+      label: Are the active-stage acceptance gates complete?
+      description: >
+        Answer "Not applicable" when requesting shadow. Answering "Yes" is the
+        attestation; the checkboxes below record which evidence exists.
+      options:
+        - "Yes — every active-stage gate below has passed with evidence"
+        - "Not applicable — requesting shadow entry only"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Active-stage gates
+      description: Evidence for the answer above. Leave blank when requesting shadow.
+      options:
         - label: Shadow gate — controlled real mission completed with evidence
         - label: Connector isolation verified at runtime (`packet_only_no_direct_connectors`)
         - label: Writer-lease compliance verified; readback recorded where a mutation occurred

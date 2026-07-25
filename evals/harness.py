@@ -295,6 +295,41 @@ def metrics_for(case: dict) -> tuple[str, ...]:
     return tuple(ordered)
 
 
+def identity_errors(mode, packet, delegations):
+    """Every packet in the chain must belong to the mode under evaluation.
+
+    Checked as data rather than judged: agent, brain, and mode are exact
+    strings the manifest already declares, so a model has no business being
+    asked whether they match. Returns a list so a caller sees every mismatch
+    at once instead of the first.
+    """
+    errors = []
+    if not isinstance(packet, dict):
+        return [f"emitted packet is {type(packet).__name__}, not an object"]
+    for label, candidate in [("emitted packet", packet)] + [
+        (f"delegation[{index}]", item) for index, item in enumerate(delegations or [])
+    ]:
+        if not isinstance(candidate, dict):
+            errors.append(f"{label} is {type(candidate).__name__}, not an object")
+            continue
+        for name, expected in (
+            ("agent", mode.agent),
+            ("owner_brain", mode.brain),
+            ("mode", mode.mode),
+        ):
+            actual = candidate.get(name)
+            # A packet kind that does not carry the field is not a mismatch;
+            # one that carries a DIFFERENT value is. Treating absence as a
+            # failure would reject lawful packet kinds, and treating a
+            # difference as acceptable is the hole this closes.
+            if actual is not None and actual != expected:
+                errors.append(
+                    f"{label} {name}={actual!r} does not belong to the mode "
+                    f"under evaluation ({expected!r})"
+                )
+    return errors
+
+
 def deepeval_available() -> bool:
     """True when a real evaluation runtime is installed. Never assumed."""
     try:  # degrade cleanly when the evaluation stack is not installed

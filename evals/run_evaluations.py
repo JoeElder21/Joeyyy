@@ -104,6 +104,43 @@ def assert_telemetry_disabled() -> None:
             "CONFIDENT_API_KEY is set, so results would be logged to the Confident AI "
             "cloud. Unset it, or record an explicit decision to disclose before running."
         )
+    # The environment is not the only place a login lives. `deepeval login`
+    # PERSISTS its key to a store on disk, and a later process picks it up
+    # without any variable being set -- so checking `CONFIDENT_API_KEY` alone
+    # cleared a workstation that was, in fact, logged in and would upload the
+    # run. `DEEPEVAL_TELEMETRY_OPT_OUT` does not cover this either: it governs
+    # anonymous telemetry, not authenticated result logging. Two opt-outs that
+    # both sound like the right one, neither of which is.
+    #
+    # Refuse on a persisted session rather than trying to suppress it: logging
+    # out is a deliberate act the operator can take and verify, whereas
+    # unsetting something we guessed at is exactly the kind of "probably
+    # disabled" this record keeps finding.
+    for store in _persisted_login_paths():
+        if store.exists() and store.read_text(encoding="utf-8", errors="ignore").strip():
+            raise UnsafeRun(
+                f"a persisted Confident AI session is present at {store}. "
+                "DeepEval will upload results through it regardless of the environment. "
+                "Run `deepeval logout` (or remove that file) before evaluating real "
+                "mission material."
+            )
+
+
+def _persisted_login_paths() -> list[Path]:
+    """Where DeepEval keeps a login that outlives the shell.
+
+    Enumerated rather than probed through DeepEval's API deliberately: this
+    check has to work when the package is NOT importable, because the refusal
+    must happen before anything loads cases into memory. Both the legacy
+    `.deepeval` dotfile in the working tree and the newer home-directory store
+    are covered; an unknown future location would not be, which is why the
+    accompanying test asserts against the paths rather than the behaviour.
+    """
+    return [
+        Path.cwd() / ".deepeval",
+        Path.home() / ".deepeval" / ".deepeval",
+        Path.home() / ".deepeval",
+    ]
 
 
 def provenance() -> dict:
@@ -209,16 +246,38 @@ def execute(stamp: str | None) -> int:
 
     target = Path(__file__).resolve().parent / "test_specialist_modes.py"
     out_dir = OUTPUT_ROOT / identifier
+    # The containment check resolved BOTH sides, which makes it vacuous when
+    # OUTPUT_ROOT is itself a symlink: `evals/output -> docs/leak` resolves the
+    # root to `docs/leak` and the run directory to `docs/leak/<id>`, which is
+    # duly "inside" it. Evidence containing private mission context would then
+    # land in the public, non-gitignored tree while this check reported
+    # containment. The root has to be a real directory under `evals/` before
+    # resolving anything means anything.
+    if OUTPUT_ROOT.is_symlink() or (OUTPUT_ROOT.exists() and not OUTPUT_ROOT.is_dir()):
+        raise UnsafeRun(
+            f"{OUTPUT_ROOT} is not a real directory. Evaluation evidence is only "
+            "gitignored at its declared location; refusing to follow it elsewhere."
+        )
+    if OUTPUT_ROOT.resolve() != (Path(__file__).resolve().parent / "output"):
+        raise UnsafeRun(f"{OUTPUT_ROOT} resolves outside evals/; refusing to write evidence")
     # Belt and braces: even with the name validated, confirm the resolved path
     # is genuinely inside the gitignored tree before anything is written.
     if not out_dir.resolve().is_relative_to(OUTPUT_ROOT.resolve()):
         raise UnsafeRun(f"{out_dir} resolves outside {OUTPUT_ROOT}; refusing to write evidence")
-    if out_dir.exists() and any(out_dir.iterdir()):
+    # Claimed with exclusive creation, not checked-then-created. The previous
+    # form tested `exists() and any(iterdir())` and then created with
+    # `exist_ok=True`, so two runs sharing a `--run-id` could both observe the
+    # directory as absent and both proceed to write the same coverage.json and
+    # results.xml -- corrupting the very evidence the mandatory run id exists to
+    # preserve. `mkdir(exist_ok=False)` makes the claim the check.
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        out_dir.mkdir(exist_ok=False)
+    except FileExistsError:
         raise UnsafeRun(
-            f"{out_dir} already holds results. Choose a new --run-id rather than "
-            "overwriting recorded evidence."
-        )
-    out_dir.mkdir(parents=True, exist_ok=True)
+            f"{out_dir} already exists. Choose a new --run-id rather than "
+            "overwriting or racing recorded evidence."
+        ) from None
     # Written before the run so a crashed run still leaves its inventory, and
     # rewritten afterwards from the actual results -- see below.
     (out_dir / "coverage.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

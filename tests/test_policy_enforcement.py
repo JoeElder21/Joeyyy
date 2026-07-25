@@ -1965,5 +1965,145 @@ class SeventeenthPassRegressionTests(unittest.TestCase):
         self.assertGreaterEqual(len(with_mount), len(without))
 
 
+class EighteenthPassRegressionTests(unittest.TestCase):
+    """Two P1s in code added by the previous two rounds, plus one scope leak."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _delegation(self, **overrides):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        packet, _ = PacketContractTests().v21_readonly_pair()
+        packet = json.loads(json.dumps(packet))
+        packet.update(overrides)
+        return packet
+
+    def _handoff(self, **overrides):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        _, packet = PacketContractTests().v21_readonly_pair()
+        packet = json.loads(json.dumps(packet))
+        packet.update(overrides)
+        return packet
+
+    RESOURCE = "APEX/Strategy-Campaigns/apex_war_architect"
+
+    def test_a_specialist_may_not_dispatch_through_a_mount(self):
+        # `ToolRequest.mount` was added one round earlier and wired only into
+        # the launch-grant rule, so a packet-only specialist could name its own
+        # memory namespace in `resource`, set `mount="gdrive"`, and be allowed.
+        # Adding a field that names a connector without teaching the connector
+        # rule to read it moved the boundary instead of widening it on purpose.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource=self.RESOURCE,
+                owner_brain="APEX",
+                packet=self._delegation(),
+                mount="gdrive",
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("may not dispatch through" in r for r in decision.reasons))
+
+    def test_an_unregistered_mount_field_is_refused_for_the_chief_too(self):
+        # Registration is checked before the chief exemption, for the declared
+        # mount as well as the resource spelling.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF,
+                action="read",
+                resource="docs/README.md",
+                owner_brain="APEX",
+                mount="shadow_it_server",
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("names no mount registered" in r for r in decision.reasons))
+
+    def test_the_chief_may_still_dispatch_through_a_registered_mount(self):
+        # The other direction: the chief performs connector work on the corps'
+        # behalf, so this must not become a blanket refusal.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF,
+                action="read",
+                resource="docs/README.md",
+                owner_brain="APEX",
+                mount="gdrive",
+            )
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_an_expired_originating_delegation_denies_its_handoff(self):
+        # A handoff carries no `deadline` -- the field lives on the delegation
+        # that commissioned it -- so the previous round's check ran against a
+        # packet that could never fail it. A return cannot outlive its
+        # commission.
+        errors = self.pep._packet_admission(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource=self.RESOURCE,
+                owner_brain="APEX",
+                packet=self._handoff(),
+                packet_schema="handoff_packet.schema.json",
+                delegations=[self._delegation(deadline="2020-01-01T00:00:00Z")],
+            )
+        )
+        self.assertTrue(any("originating delegation" in error for error in errors), errors)
+
+    def test_a_live_originating_delegation_still_admits_its_handoff(self):
+        ahead = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)
+        for deadline in (None, ahead.isoformat().replace("+00:00", "Z")):
+            with self.subTest(deadline=deadline):
+                self.assertEqual(
+                    self.pep._packet_admission(
+                        ToolRequest(
+                            agent=SPECIALIST,
+                            action="read",
+                            resource=self.RESOURCE,
+                            owner_brain="APEX",
+                            packet=self._handoff(),
+                            packet_schema="handoff_packet.schema.json",
+                            delegations=[self._delegation(deadline=deadline)],
+                        )
+                    ),
+                    [],
+                )
+
+    def test_a_direct_read_only_handoff_authorizes_no_canonical_read(self):
+        # That mode is the packetless path written down: no delegation
+        # commissioned it, and the schema confines it to current-message text.
+        # Treating its memory_namespace as a scope let a specialist mint its own
+        # authority through the one packet kind that needs no issuer.
+        self.assertIsNone(
+            self.pep._handoff_scope(
+                {
+                    "invocation_mode": "direct_read_only",
+                    "memory_namespace": "APEX::Strategy-Campaigns::apex_war_architect",
+                },
+                mutating=False,
+            )
+        )
+
+    def test_a_delegated_handoff_is_still_bound_to_its_namespace(self):
+        self.assertEqual(
+            self.pep._handoff_scope(
+                {
+                    "invocation_mode": "delegated",
+                    "memory_namespace": "APEX::Strategy-Campaigns::apex_war_architect",
+                },
+                mutating=False,
+            ),
+            ["APEX::Strategy-Campaigns::apex_war_architect"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

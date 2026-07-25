@@ -735,6 +735,30 @@ That field is caller-supplied, which this module has learned to distrust three t
 
 **The lock-drift omission is the same partial-fix shape as the formatter finding one round earlier**, where the reported instance was one of four. Fixing the reported instance and stopping is now a documented recurring failure here, so this repair derives its coverage from the other workflow instead of restating a list that can fall out of step.
 
+### Automated review, eighteenth pass — eleven findings, nine fixed, two deferred
+
+**Both P1s were holes in code added by the previous two rounds, and one was created by a fix.** `ToolRequest.mount` was introduced in the seventeenth pass so a mount-dispatched mutation could be bound to its launch grant — and it was wired into the launch-grant rule *only*. `_connector_policy` still read `resource` alone, so a packet-only specialist could name its own memory namespace as the resource, set `mount="gdrive"` — or a mount registered nowhere at all — and be allowed. **Adding a field that names a connector without teaching the connector rule to read it moved the boundary rather than widening it on purpose.** Registration and the packet-only policy now both consider either spelling.
+
+**The deadline check ran against a packet that could never fail it.** The sixteenth pass added `deadline` enforcement and applied it to `request.packet`. A *handoff* carries no `deadline` — the field lives on the delegation that commissioned it — so presenting a handoff meant the check evaluated a field that does not exist, and a handoff backed by a delegation dated 2020 authorized a canonical read. The bound belongs to the assignment, and a return cannot outlive its commission.
+
+**A `direct_read_only` handoff was accepted as a canonical read grant.** That mode is the packetless path written down: nothing commissioned it, and the schema confines it to `resource_id="current-message"`. Treating its `memory_namespace` as an authorization scope let a specialist mint a schema-valid direct handoff and read its own canonical namespace with no Agent 007 assignment — self-issued authority arriving through the one packet kind that needs no issuer.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Connector isolation ignored `request.mount` | **Correct — P1, created by the previous round's fix** | Registration and packet-only policy applied to the declared mount as well as the resource. |
+| Originating delegation's deadline unenforced | **Correct — P1, incomplete fix from two rounds earlier** | The whole authorizing chain is checked, not only the packet presented. |
+| `direct_read_only` handoff as canonical scope | **Correct — P2** | That mode binds nothing canonical. |
+| DeepEval persisted login bypassed the refusal | **Correct — P1** | `deepeval login` persists a key to disk, so a later process uploads with no variable set; `DEEPEVAL_TELEMETRY_OPT_OUT` governs anonymous telemetry, not authenticated logging. **Two opt-outs that both sound like the right one, neither of which is.** The runner now refuses on a persisted session and says which file to remove. |
+| Packet identity not bound to the evaluated mode | **Correct — P1** | `score_packet` proves the packet and its delegation agree with *each other*; nothing compared either with the mode under test, so a lawful War Architect pair could record a Delivery Commander mode as proven. Checked as data, not judged — these are exact strings the manifest declares. |
+| Symlinked evaluation output root | **Correct — P2** | The containment check resolved *both* sides, which is vacuous when the root is itself a symlink: `evals/output -> docs/leak` made `docs/leak/<id>` duly "inside" it. The root must now be a real directory at its declared location. |
+| Run directory not reserved atomically | **Correct — P2** | Check-then-create let two runs sharing a `--run-id` both proceed. `mkdir(exist_ok=False)` makes the claim the check. |
+| Scheduled sweep cancelled by pushes | **Correct — P2** | A push to `main` shared the scheduled run's concurrency group, so it cancelled the whole-history gitleaks sweep and replaced it with a `${BEFORE_SHA}..HEAD` scan. The promised weekly audit could never complete, and a cancelled run reports nothing. Event name is now part of the group; scheduled runs are never cancelled. |
+| Active-stage intake gates unenforceable | **Correct — P2** | Split: shadow-entry gates are required for every intake, and active-stage completion is its own required dropdown. Issue forms have no conditional validation, so making the single list required would have forced shadow-only requesters to attest to gates that do not apply — the same reasoning already recorded for `agent-scan-applies`. |
+| Optional-tier manifests not lock-bound | **Correct, deferred** | The dated `lock-2026-07-24.txt` is known not to resolve (`posthog` 7.29.0 vs `chromadb <6.0.0`), which is already an open decision for Joe. Generating locks for the five optional tiers depends on how that conflict is settled; doing it first would lock a set nobody can install. |
+| Platform-specific locks | **Correct, deferred** | The locks are resolved on Linux with no target platform, so Windows-only dependencies (`colorama` under pytest) are outside both drift checking and OSV scanning. Fixing it means either committing per-platform locks or declaring the install paths Linux-only — a scope decision about whether the documented Windows workstation is a supported install target, not a mechanical change. |
+
+**The recurring shape, stated once more because it recurred through a fix rather than around one.** The seventeenth pass closed a hole by adding a field; the eighteenth found that the field opened a different one, because only the rule that motivated it was taught to read it. A new field in a shared request object is not additive — every rule that reasons about the same thing has to be revisited, or the object now describes a request the rules disagree about.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

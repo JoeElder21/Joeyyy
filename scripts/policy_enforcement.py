@@ -764,21 +764,38 @@ class PolicyEnforcementPoint:
         # config/mcp_mounts.toml -- were allowed outright. The mount contract
         # says an unlisted server is unreachable; an enforcement point that
         # accepts any string after `mount:` is not enforcing that.
-        for prefix in CONNECTOR_PREFIXES:
-            if request.resource.startswith(prefix):
-                handle = request.resource[len(prefix) :]
-                if handle not in self._registered_mounts():
-                    return [
-                        f"{request.resource!r} names no mount registered in "
-                        f"config/mcp_mounts.toml; unlisted servers are unreachable"
-                    ]
-                break
+        #
+        # Both spellings of "which server" are checked. `ToolRequest.mount` was
+        # added one round earlier to carry the executing mount independently of
+        # the write target, and it was wired only into the launch-grant rule --
+        # so a packet-only specialist could name its own memory namespace in
+        # `resource`, set `mount="gdrive"` or even an unregistered mount, and be
+        # allowed. Adding a field that names a connector without teaching the
+        # connector rule to read it moved the boundary rather than widening it
+        # on purpose. Reproduced before fixing.
+        touched = [
+            request.resource[len(p) :] for p in CONNECTOR_PREFIXES if request.resource.startswith(p)
+        ]
+        if request.mount:
+            touched.append(request.mount)
+        registered = self._registered_mounts()
+        for handle in touched:
+            if handle not in registered:
+                return [
+                    f"{handle!r} names no mount registered in "
+                    f"config/mcp_mounts.toml; unlisted servers are unreachable"
+                ]
         spec = self._spec(request.agent)
         policy = spec.get("connector_policy")
         if policy is None or request.agent == CHIEF:
             return []
         if policy != PACKET_ONLY:
             return [f"connector policy {policy!r} is not the approved {PACKET_ONLY!r}"]
+        if request.mount:
+            return [
+                f"{request.agent!r} is {PACKET_ONLY!r} and may not dispatch through "
+                f"mount {request.mount!r}; {CHIEF} performs connector work on its behalf"
+            ]
         # `packet_only_no_direct_connectors` is a statement about *reads* as much
         # as writes. Only the mutating path was guarded, so a shadow specialist
         # could read `mount:gdrive` directly and be allowed -- the exact direct
@@ -860,12 +877,58 @@ class PolicyEnforcementPoint:
         # already said it cannot vouch for.
         if errors:
             return errors
-        deadline = self._packet_deadline_errors(request.packet)
+        deadline = self._deadline_errors(request)
         if deadline:
             return deadline
         return self._packet_scope_errors(request)
 
-    def _packet_deadline_errors(self, packet: dict[str, Any]) -> list[str]:
+    def _deadline_errors(self, request: ToolRequest) -> list[str]:
+        """Every packet in the authorizing chain, not just the one presented.
+
+        The previous round added this check and applied it only to
+        `request.packet`. A HANDOFF carries no `deadline` -- the field lives on
+        the delegation that commissioned it -- so presenting a handoff meant the
+        check ran against a packet that could never fail it. A handoff backed by
+        a delegation dated 2020 authorized a canonical read. Reproduced before
+        fixing.
+
+        The bound belongs to the assignment, and a handoff inherits its
+        assignment's bound: a return cannot outlive the commission it answers.
+        """
+        errors = self._packet_deadline_errors(request.packet)
+        if errors:
+            return errors
+        origin = self._originating_delegation(request)
+        if origin is None:
+            return []
+        return [
+            f"originating delegation: {error}" for error in self._packet_deadline_errors(origin)
+        ]
+
+    @staticmethod
+    def _originating_delegation(request: ToolRequest) -> dict[str, Any] | None:
+        """The delegation this packet answers, matched by `delegation_id`.
+
+        Returns None when the packet is itself a delegation, when it names no
+        origin, or when the ledger does not carry exactly one match. Ambiguity
+        is not resolved by guessing -- `PacketGuard` independently requires a
+        uniquely validated originating delegation for a handoff, so a packet
+        with none or several is already refused by the time this runs.
+        """
+        packet = request.packet
+        if not isinstance(packet, dict):
+            return None
+        origin_id = packet.get("delegation_id")
+        if not origin_id or "allowed_read_namespaces" in packet:
+            return None  # a delegation carries its own id; it is not its own origin
+        matches = [
+            item
+            for item in request.delegations
+            if isinstance(item, dict) and item.get("delegation_id") == origin_id
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    def _packet_deadline_errors(self, packet: Any) -> list[str]:
         """A time-bounded assignment must actually be bounded by that time.
 
         `deadline` is declared in the delegation schema and nothing anywhere
@@ -1219,6 +1282,15 @@ class PolicyEnforcementPoint:
 
         Returns None when nothing binds it, so the caller denies rather than
         treating an unscoped packet as an unscoped grant.
+
+        A `direct_read_only` handoff binds NOTHING canonical. That mode is the
+        packetless path written down: no delegation commissioned it, and the
+        schema confines it to `resource_id="current-message"`. Treating its
+        `memory_namespace` as an authorization scope let a specialist mint a
+        schema-valid direct handoff and read its own canonical memory namespace
+        with no Agent 007 assignment behind it -- which is precisely the
+        self-issued authority the packet contract exists to prevent, arriving
+        through the one packet kind that needs no issuer.
         """
         targets = [
             write["target"]
@@ -1227,6 +1299,8 @@ class PolicyEnforcementPoint:
         ]
         if mutating:
             return targets or None
+        if packet.get("invocation_mode") == "direct_read_only":
+            return None
         scope = [entry for entry in [packet.get("memory_namespace")] if entry]
         return (scope + targets) or None
 

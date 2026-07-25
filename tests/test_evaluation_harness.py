@@ -385,5 +385,51 @@ class ThresholdIntegrityTests(unittest.TestCase):
         self.assertEqual(missing, [], f"no minimum threshold declared for {missing}")
 
 
+class PacketIdentityTests(unittest.TestCase):
+    """A packet must belong to the mode the run says it proves."""
+
+    def setUp(self):
+        self.mode = next(
+            m
+            for m in harness.load_modes()
+            if m.key.endswith("apex_war_architect/operating_campaign")
+        )
+        self.good = {
+            "agent": self.mode.agent,
+            "owner_brain": self.mode.brain,
+            "mode": self.mode.mode,
+        }
+
+    def test_a_matching_pair_is_accepted(self):
+        self.assertEqual(harness.identity_errors(self.mode, self.good, [self.good]), [])
+
+    def test_another_specialists_packet_is_refused(self):
+        # score_packet proves the packet and its delegation agree WITH EACH
+        # OTHER; nothing compared either with the mode under evaluation. A
+        # lawful War Architect pair would pass while a Delivery Commander case
+        # was being run, and the wrong specialist's packet would record the
+        # requested mode as proven.
+        wrong = dict(self.good, agent="apex_delivery_commander")
+        self.assertTrue(harness.identity_errors(self.mode, wrong, []))
+
+    def test_the_other_brains_packet_is_refused(self):
+        self.assertTrue(harness.identity_errors(self.mode, dict(self.good, owner_brain="JEOS"), []))
+
+    def test_a_foreign_delegation_is_refused_too(self):
+        # The chain, not only the emitted packet.
+        self.assertTrue(
+            harness.identity_errors(self.mode, self.good, [dict(self.good, mode="other_mode")])
+        )
+
+    def test_an_absent_field_is_not_a_mismatch(self):
+        # Packet kinds differ in which identity fields they carry. Treating
+        # absence as failure would reject lawful packets; treating a DIFFERENCE
+        # as acceptable is the hole being closed.
+        self.assertEqual(harness.identity_errors(self.mode, {"agent": self.mode.agent}, []), [])
+
+    def test_a_non_object_packet_is_refused(self):
+        self.assertTrue(harness.identity_errors(self.mode, "not a packet", []))
+
+
 if __name__ == "__main__":
     unittest.main()

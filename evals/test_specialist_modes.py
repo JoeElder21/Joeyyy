@@ -19,7 +19,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from harness import build_coverage, deepeval_available, load_cases, metrics_for  # noqa: E402
+from harness import (  # noqa: E402
+    build_coverage,
+    deepeval_available,
+    identity_errors,
+    load_cases,
+    metrics_for,
+)
 from packet_validity import build_metric as build_packet_metric  # noqa: E402
 from packet_validity import score_packet  # noqa: E402
 
@@ -195,6 +201,16 @@ def test_mode_meets_acceptance_criteria(mode_key):
         # Structural failure. Judging prose attached to a packet the runtime
         # would refuse spends judge calls to produce a misleading score.
         pytest.fail(f"{mode_key}: {verdict.reason()}")
+
+    # Internal consistency is not identity. `score_packet` proves the packet and
+    # its delegation agree WITH EACH OTHER; nothing compared either of them with
+    # the mode this parametrization is evaluating. A lawful War Architect pair
+    # would therefore pass while a Delivery Commander or JEOS case was under
+    # test, and since the judges read separately supplied prose and
+    # `mode_key` was carried in metadata that no metric consumes, the wrong
+    # specialist's packet could record the requested mode as proven.
+    for mismatch in identity_errors(mode, emitted_packet, delegations):
+        pytest.fail(f"{mode_key}: {mismatch}")
 
     test_case = LLMTestCase(
         input=case["mission"],
