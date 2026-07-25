@@ -41,8 +41,21 @@ engine mismatches as warnings rather than refusing to install, so a lower
 declared floor would let the CLI install on Node 20 and fail at runtime.
 
 ```bash
-npm --prefix connectors/relay install
+npm --prefix connectors/relay install --ignore-scripts
 ```
+
+`--ignore-scripts` is not optional here. npm defaults to `ignore-scripts=false`,
+and five packages in the locked tree carry `hasInstallScript` — `cpu-features`,
+`ssh2`, `fsevents`, and the bundled `@google/genai` and `protobufjs`. A plain
+`npm install` therefore executes upstream lifecycle code on the machine running
+it, which contradicts the isolation rule in `vendor/README.md`: upstream code is
+untrusted input and must not be executed outside an isolated environment.
+
+Installing script-free is sufficient for what this connector is — a
+*declaration*. The dependency resolves and the CLI entry points are present;
+nothing here runs the relay. Actually executing the CLI is gated behind the
+promotion condition below, and belongs in an isolated environment where those
+install scripts can be reviewed and run deliberately.
 
 ## Promotion condition
 

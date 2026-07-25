@@ -9,12 +9,20 @@ repository's own files.
 """
 
 import configparser
+import json
+import re
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.privacy_guard import is_vendored, repository_files, scan_repository, submodule_paths
+from scripts.privacy_guard import (
+    gitlink_paths,
+    is_vendored,
+    repository_files,
+    scan_repository,
+    submodule_paths,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SUBMODULES = {
@@ -57,6 +65,59 @@ class VendorSubmoduleTests(unittest.TestCase):
             with self.subTest(submodule=path):
                 self.assertRegex(sha, r"^[0-9a-f]{40}$")
 
+    def _index_gitlinks(self) -> dict[str, str]:
+        listing = subprocess.run(
+            ["git", "ls-files", "-s", "--", "vendor"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        gitlinks = {}
+        for line in listing:
+            metadata, path = line.split("\t", 1)
+            mode, sha, _stage = metadata.split()
+            if mode == "160000":
+                gitlinks[path] = sha
+        return gitlinks
+
+    def test_recorded_pins_match_the_index(self) -> None:
+        """A bare gitlink advance must fail rather than desync the provenance table.
+
+        vendor/README.md records a short SHA per submodule. Advancing the
+        gitlink without updating that row — and the declared dependency and
+        lockfile alongside it — would otherwise leave the repository auditing
+        one commit while documenting, and installing, another.
+        """
+        readme = (ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
+        for path, sha in self._index_gitlinks().items():
+            name = path.split("/")[-1]
+            row = next(
+                (line for line in readme.splitlines() if f"`{name}`" in line and "|" in line),
+                None,
+            )
+            with self.subTest(submodule=path):
+                self.assertIsNotNone(row, f"{name} has no provenance row in vendor/README.md")
+                recorded = re.findall(r"`([0-9a-f]{7,40})`", row or "")
+                self.assertTrue(recorded, f"{name} row records no pin SHA: {row}")
+                self.assertTrue(
+                    any(sha.startswith(candidate) for candidate in recorded),
+                    f"{name} is pinned at {sha[:7]} but vendor/README.md records {recorded}",
+                )
+
+    def test_relay_declared_version_matches_its_provenance_row(self) -> None:
+        declared = json.loads(
+            (ROOT / "connectors" / "relay" / "package.json").read_text(encoding="utf-8")
+        )["dependencies"]["agent-relay"]
+        version = declared.lstrip("^~>=< ")
+        readme = (ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
+        row = next(line for line in readme.splitlines() if "`relay`" in line and "|" in line)
+        self.assertIn(
+            version,
+            row,
+            f"connectors/relay declares agent-relay {version}, absent from its provenance row",
+        )
+
     def test_no_upstream_file_content_is_tracked_in_this_repository(self) -> None:
         tracked = subprocess.run(
             ["git", "ls-files", "--", "vendor"],
@@ -72,6 +133,38 @@ class VendorSubmoduleTests(unittest.TestCase):
 class VendorScannerExclusionTests(unittest.TestCase):
     def test_submodule_paths_are_read_from_gitmodules(self) -> None:
         self.assertEqual(submodule_paths(ROOT), frozenset(EXPECTED_SUBMODULES))
+
+    def test_declared_and_index_proven_submodules_agree(self) -> None:
+        """`.gitmodules` declares; the index proves. Drift between them is a bug.
+
+        Scans gate on the index-proven set, so a `.gitmodules` entry with no
+        matching gitlink would be inert rather than loud. This makes it loud.
+        """
+        self.assertEqual(submodule_paths(ROOT), gitlink_paths(ROOT))
+
+    def test_scans_gate_on_index_proven_gitlinks_not_declarations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def run(*args: str) -> None:
+                subprocess.run(args, cwd=root, check=True, capture_output=True)
+
+            run("git", "init", "-q", ".")
+            run("git", "config", "user.email", "privacy-guard-fixture")
+            run("git", "config", "user.name", "privacy-guard-fixture")
+            (root / ".gitmodules").write_text(
+                '[submodule "config"]\n\tpath = config\n\turl = https://example.invalid/x.git\n',
+                encoding="utf-8",
+            )
+            (root / "config").mkdir()
+            (root / "config" / "settings.toml").write_text("k = 'v'\n", encoding="utf-8")
+            run("git", "add", "-A")
+            run("git", "commit", "-qm", "fixture")
+
+            # Declared but not proven: no gitlink exists, so nothing is excluded.
+            self.assertEqual(submodule_paths(root), frozenset({"config"}))
+            self.assertEqual(gitlink_paths(root), frozenset())
+            self.assertFalse(is_vendored(root / "config" / "settings.toml", root))
 
     def test_upstream_files_are_excluded_from_the_privacy_contract(self) -> None:
         for submodule in EXPECTED_SUBMODULES:

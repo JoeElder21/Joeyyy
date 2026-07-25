@@ -78,10 +78,12 @@ PATTERNS = {
 
 
 def submodule_paths(root: Path = ROOT) -> frozenset[str]:
-    """Return the repository-relative paths declared in ``.gitmodules``.
+    """Return the repository-relative paths *declared* in ``.gitmodules``.
 
-    Parsed from the file rather than assumed from a directory name so the set
-    tracks whatever is actually declared. Missing file means no submodules.
+    This reports a declaration, not a fact, and must never gate a scan — see
+    ``gitlink_paths`` for the index-proven set. Its purpose is drift
+    detection: comparing the two sets surfaces a ``.gitmodules`` entry that no
+    longer matches a real gitlink.
     """
     gitmodules = root / ".gitmodules"
     if not gitmodules.exists():
@@ -96,6 +98,39 @@ def submodule_paths(root: Path = ROOT) -> frozenset[str]:
     )
 
 
+def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
+    """Return the repository-relative paths the git index proves are submodules.
+
+    Derived from the ``160000`` index mode, never from ``.gitmodules`` text: a
+    stale or malformed ``path =`` entry naming a tracked regular directory
+    would otherwise exclude first-party files from every scan that consults
+    this. Returns empty outside a git work tree, where no gitlink is provable.
+    """
+    probe = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        return frozenset()
+    listing = subprocess.run(
+        ["git", "ls-files", "-s", "-z"],
+        cwd=root,
+        capture_output=True,
+        check=True,
+    ).stdout.split(b"\0")
+    names = []
+    for entry in listing:
+        if not entry:
+            continue
+        metadata, _, name = entry.decode("utf-8").partition("\t")
+        if metadata.split()[0] == GITLINK_MODE:
+            names.append(name)
+    return frozenset(names)
+
+
 def is_vendored(path: Path, root: Path = ROOT) -> bool:
     """Report whether ``path`` lies inside a vendored third-party submodule.
 
@@ -104,16 +139,19 @@ def is_vendored(path: Path, root: Path = ROOT) -> bool:
     privacy contract this scanner enforces — upstream placeholder addresses
     and maintainer contacts are the upstream project's to police.
 
-    Scoped to the declared submodule paths themselves, so this repository's
-    own files under ``vendor/`` (its README) stay covered by the contract.
+    Scoped to index-proven gitlinks, so this repository's own files under
+    ``vendor/`` (its README) stay covered by the contract, and so a drifted
+    ``.gitmodules`` cannot exclude anything.
+
+    This is for filesystem walks, which do descend into a checked-out
+    submodule's working tree. Scans driven by ``git ls-files`` do not need it:
+    that listing never recurses into a submodule's own index.
     """
     try:
         relative = path.relative_to(root)
     except ValueError:
         return False
-    return any(
-        relative.is_relative_to(submodule) for submodule in submodule_paths(root)
-    )
+    return any(relative.is_relative_to(gitlink) for gitlink in gitlink_paths(root))
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:

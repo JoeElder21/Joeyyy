@@ -27,8 +27,24 @@ Update one to a newer upstream commit deliberately, never incidentally:
 ```bash
 git -C vendor/<name> fetch origin
 git -C vendor/<name> checkout <commit-or-tag>
-git add vendor/<name> && git commit
+git add vendor/<name>
 ```
+
+**Advancing the gitlink is not the whole update.** A submodule's pin is one of
+several records that must move together, and the other three are easy to
+forget:
+
+1. The pin row in the table above — its short SHA is asserted by
+   `tests/test_vendor.py`, so a bare gitlink advance fails the suite rather
+   than passing silently.
+2. Any declared dependency for that repo — for `relay`, the `agent-relay`
+   version in `connectors/relay/package.json`. Leaving it behind means
+   auditing newer source while installing the older published CLI.
+3. That dependency's lockfile, regenerated with
+   `npm install --package-lock-only --ignore-scripts`, plus the Node floor if
+   the new tree demands a higher one.
+
+Then commit the whole set together.
 
 ## Declared dependencies
 
