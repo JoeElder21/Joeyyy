@@ -121,6 +121,11 @@ Repository validation and the optional AutoGen adapter require Python 3.11 or 3.
 # jsonschema and rtoml, reports zero schemas and zero TOML files checked, and
 # exits 0 -- so running it beforehand passes the audit while validating nothing.
 python -m pip install -r requirements/runtime-contracts.txt
+# Ruff too: runtime-contracts.txt does not carry it, and installing
+# pre-commit builds Ruff an isolated hook environment whose executable is
+# not on PATH -- so this sequence reached `ruff check .` with no `ruff`
+# command and stopped there. Pinned to the version CI and the hook use.
+python -m pip install ruff==0.14.6
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 python scripts/verify_runtime_stack.py

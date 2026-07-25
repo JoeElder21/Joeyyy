@@ -4,7 +4,7 @@
   "metrics": ["task_completion", "tool_correctness"],
   "thresholds": {
     "packet_validity": 1.0,
-    "role_adherence": 0.8,
+    "role_adherence": 1.0,
     "brain_isolation": 1.0,
     "task_completion": 0.7,
     "tool_correctness": 1.0

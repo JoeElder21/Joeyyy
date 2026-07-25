@@ -19,6 +19,11 @@ To run everything by hand:
 # 0, so the audit passes while validating nothing. The install has to precede
 # the verifier, not follow it.
 python -m pip install -r requirements/runtime-contracts.txt  # jsonschema, rtoml, mcp
+# Ruff too: runtime-contracts.txt does not carry it, and installing
+# pre-commit builds Ruff an isolated hook environment whose executable is
+# not on PATH -- so this sequence reached `ruff check .` with no `ruff`
+# command and stopped there. Pinned to the version CI and the hook use.
+python -m pip install ruff==0.14.6
 python scripts/privacy_guard.py            # public-repository boundary
 python scripts/validate_specialist_corps.py # roster, isolation, schema, registry
 python scripts/verify_runtime_stack.py     # dependency and contract audit

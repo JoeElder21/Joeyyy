@@ -953,6 +953,17 @@ class PolicyEnforcementPoint:
         # schema let a caller satisfy admission with a schema-valid object that
         # grants nothing -- a writer lease, a memory record -- so the check
         # proved wellformedness where it was supposed to prove permission.
+        #
+        # Type-checked before the membership test. A frozenset lookup on an
+        # unhashable value raises `TypeError`, so a caller supplying a list or
+        # dict for `packet_schema` unwound the enforcement call instead of
+        # receiving a denial -- and a gate that raises on caller-controlled
+        # input is a denial of service on every other caller sharing the
+        # process, not a fail-closed decision. Same reasoning as the non-dict
+        # packet check below; that one was fixed and this one was left, which is
+        # the sibling-untouched pattern again.
+        if not isinstance(request.packet_schema, str):
+            return [f"packet schema must be a string, got {type(request.packet_schema).__name__}"]
         if request.packet_schema not in AUTHORIZATION_SCHEMAS:
             return [
                 f"packet schema {request.packet_schema!r} does not authorize a tool "
@@ -1394,7 +1405,18 @@ class PolicyEnforcementPoint:
                 f"packet owner_brain {brain!r} does not match the request's {request.owner_brain!r}"
             )
         resource = packet.get("resource_id")
-        if resource and request.resource_id and resource != request.resource_id:
+        if resource and not request.resource_id and self._is_canonical_resource(request.resource):
+            # An optional identifier honoured only when supplied is an opt-out.
+            # A delegation for `resource-1` denied a request naming
+            # `resource-2` and ALLOWED one that named nothing, so any record
+            # under the authorized namespace was reachable by omitting the
+            # field. `_writer_lease` already required it for mutations -- the
+            # read path was the untouched sibling.
+            errors.append(
+                f"packet is issued for record {resource!r} but the request names none; "
+                "a read with no record identity cannot be matched to the packet"
+            )
+        elif resource and request.resource_id and resource != request.resource_id:
             errors.append(
                 f"packet resource {resource!r} does not match the requested {request.resource_id!r}"
             )
@@ -1521,13 +1543,36 @@ class PolicyEnforcementPoint:
             # "unrestricted scope", which is the fail-open shape this module
             # keeps rediscovering. A handoff is bound to its own
             # memory_namespace, and failing that to nothing at all.
-            fallback = self._handoff_scope(packet, mutating=request.mutating)
-            if fallback is None:
-                return [
-                    f"packet declares no scope permitting a {kind} of "
-                    f"{request.resource!r}; absent scope is not unrestricted scope"
-                ]
-            declared = fallback
+            #
+            # But its own namespace is not a grant. The COMMISSION is the grant:
+            # a handoff whose originating delegation permits only
+            # `APEX::Roundtable` was reading
+            # `APEX/Strategy-Campaigns/apex_war_architect`, because the fallback
+            # read the handoff's mandatory `memory_namespace` field and never
+            # consulted the delegation that authorized the work. A return packet
+            # cannot widen the assignment it answers.
+            #
+            # So the delegation bounds it where one is matched, and the handoff's
+            # own namespace applies only when no delegation is available -- in
+            # which case `PacketGuard` has independently refused the handoff for
+            # having no uniquely validated origin, so this path is not a way in.
+            origin = self._originating_delegation(request)
+            if origin and not request.mutating:
+                declared = list(origin.get("allowed_read_namespaces") or [])
+                if not declared:
+                    return [
+                        f"the originating delegation permits no read of "
+                        f"{request.resource!r}; a handoff cannot grant what its "
+                        "commission withheld"
+                    ]
+            else:
+                fallback = self._handoff_scope(packet, mutating=request.mutating)
+                if fallback is None:
+                    return [
+                        f"packet declares no scope permitting a {kind} of "
+                        f"{request.resource!r}; absent scope is not unrestricted scope"
+                    ]
+                declared = fallback
         # Both sides, not one. The comment below states the intent -- compare on
         # the shared segments rather than demanding one spelling -- but only the
         # DECLARED entry was normalized, so a request naming its resource in

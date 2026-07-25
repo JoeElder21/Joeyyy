@@ -1752,6 +1752,10 @@ class SixteenthPassRegressionTests(unittest.TestCase):
         return packet
 
     def _admit(self, packet, pep=None):
+        # `resource_id` supplied: a packet-backed canonical read must name the
+        # record it reads, or the packet's own `resource_id` cannot be matched
+        # against anything. These fixtures omitted it and passed, which is what
+        # made the omission an opt-out rather than an oversight.
         return (pep or self.pep)._packet_admission(
             ToolRequest(
                 agent=SPECIALIST,
@@ -1760,6 +1764,7 @@ class SixteenthPassRegressionTests(unittest.TestCase):
                 owner_brain="APEX",
                 packet=packet,
                 packet_schema="delegation_packet.schema.json",
+                resource_id=packet.get("resource_id"),
             )
         )
 
@@ -1807,6 +1812,7 @@ class SixteenthPassRegressionTests(unittest.TestCase):
                         owner_brain="APEX",
                         packet=packet,
                         packet_schema="delegation_packet.schema.json",
+                        resource_id=packet.get("resource_id"),
                     )
                 )
                 self.assertEqual(errors, [], f"{resource}: {errors}")
@@ -2073,6 +2079,7 @@ class EighteenthPassRegressionTests(unittest.TestCase):
                             packet=self._handoff(),
                             packet_schema="handoff_packet.schema.json",
                             delegations=[self._delegation(deadline=deadline)],
+                            resource_id=self._handoff().get("resource_id"),
                         )
                     ),
                     [],
@@ -2428,6 +2435,122 @@ class TwentySecondPassRegressionTests(unittest.TestCase):
             with self.subTest(resource=resource):
                 self.assertEqual(self.pep._canonical_resource(resource), resource)
                 self.assertFalse(self.pep._escapes_the_tree(resource))
+
+
+class TwentyFourthPassRegressionTests(unittest.TestCase):
+    """Two scope fail-opens and a crash where a denial belonged."""
+
+    RESOURCE = "APEX/Strategy-Campaigns/apex_war_architect"
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _pair(self):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        delegation, handoff = PacketContractTests().v21_readonly_pair()
+        return json.loads(json.dumps(delegation)), json.loads(json.dumps(handoff))
+
+    def test_a_non_string_packet_schema_denies_rather_than_raises(self):
+        # A frozenset lookup on an unhashable value raises TypeError, so a
+        # caller supplying a list unwound the enforcement call instead of
+        # receiving a denial. A gate that raises on caller-controlled input is a
+        # denial of service on every other caller in the process. The non-dict
+        # packet check two rules down was fixed for this exact reason and this
+        # one was left -- the untouched sibling again.
+        for schema in ([], {}, 42, None, ["delegation_packet.schema.json"]):
+            with self.subTest(schema=type(schema).__name__):
+                errors = self.pep._packet_admission(
+                    ToolRequest(
+                        agent=SPECIALIST,
+                        action="read",
+                        resource="docs/README.md",
+                        owner_brain="APEX",
+                        packet={},
+                        packet_schema=schema,
+                    )
+                )
+                self.assertTrue(errors)
+
+    def test_a_packet_backed_read_must_name_its_record(self):
+        # An optional identifier honoured only when supplied is an opt-out: a
+        # delegation for `resource-1` denied a request naming `resource-2` and
+        # ALLOWED one that named nothing, so any record under the authorized
+        # namespace was reachable by leaving the field out. `_writer_lease`
+        # already required it for mutations; reads were the untouched sibling.
+        delegation, _ = self._pair()
+        errors = self.pep._packet_admission(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource=self.RESOURCE,
+                owner_brain="APEX",
+                packet=delegation,
+                packet_schema="delegation_packet.schema.json",
+            )
+        )
+        self.assertTrue(any("names none" in error for error in errors), errors)
+
+    def test_a_matching_record_identity_is_still_admitted(self):
+        delegation, _ = self._pair()
+        self.assertEqual(
+            self.pep._packet_admission(
+                ToolRequest(
+                    agent=SPECIALIST,
+                    action="read",
+                    resource=self.RESOURCE,
+                    owner_brain="APEX",
+                    packet=delegation,
+                    packet_schema="delegation_packet.schema.json",
+                    resource_id=delegation["resource_id"],
+                )
+            ),
+            [],
+        )
+
+    def test_a_handoff_cannot_read_past_its_commission(self):
+        # The fallback read the handoff's own mandatory `memory_namespace` and
+        # never consulted the delegation that authorized the work, so a handoff
+        # commissioned only for `APEX::Roundtable` could read a specialist's
+        # canonical namespace. A return packet cannot widen the assignment it
+        # answers.
+        delegation, handoff = self._pair()
+        delegation["allowed_read_namespaces"] = ["APEX::Roundtable"]
+        errors = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource=self.RESOURCE,
+                owner_brain="APEX",
+                packet=handoff,
+                packet_schema="handoff_packet.schema.json",
+                delegations=[delegation],
+                resource_id=handoff["resource_id"],
+            )
+        )
+        self.assertTrue(errors, "a handoff read beyond its commission was allowed")
+
+    def test_a_handoff_may_read_what_its_commission_granted(self):
+        # The other direction: bounding by the delegation must not deny the
+        # namespace the commission actually names.
+        delegation, handoff = self._pair()
+        self.assertEqual(
+            self.pep._packet_scope_errors(
+                ToolRequest(
+                    agent=SPECIALIST,
+                    action="read",
+                    resource=self.RESOURCE,
+                    owner_brain="APEX",
+                    packet=handoff,
+                    packet_schema="handoff_packet.schema.json",
+                    delegations=[delegation],
+                    resource_id=handoff["resource_id"],
+                )
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":

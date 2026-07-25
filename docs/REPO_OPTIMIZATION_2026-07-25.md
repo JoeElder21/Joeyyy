@@ -861,6 +861,31 @@ Corrected to say it is built, tested, and unwired. The accompanying test derives
 
 **Why a checklist entry did not catch the second one.** "Fixing the reported instance and missing the class" was on the list and was applied — the eighteenth pass deliberately swept for the formatter across documents and found four. The sweep covered *documents*, and `task validate` is a command definition. **The class was scoped to the file type where the instance was found, not to the property being fixed.** The property is "anything a contributor is told to run"; that set includes taskipy tasks, pre-commit hooks, and CI jobs as well as prose. The test added here is derived from the manual sequence rather than enumerating a list of places, which is the shape that does not need a sweep to stay complete.
 
+### Automated review, twenty-fourth pass — nine findings, six fixed, three deferred
+
+The three deferrals are already on Joe's decision list and were re-raised rather than newly found: **instruction-nonce consumption**, **binding `operation` to the dispatched action**, and **carrying active leases into evaluation packet scoring** (blocked behind eval dispatch). Each needs a side effect or an adapter that policy evaluation deliberately does not have.
+
+**Two scope fail-opens, both the same shape as fixes already applied elsewhere.**
+
+`resource_id` was honoured only when supplied. A delegation issued for `resource-1` **denied** a request naming `resource-2` and **allowed** one naming nothing — so any record under the authorized namespace was reachable by leaving the field out. `_writer_lease` had required it for mutations since the eighth pass; the read path was the untouched sibling. An optional identifier the checks honour only when present is an opt-out, which is the wording already in this record for the mutation case.
+
+A handoff could read past its commission. The scope fallback read the handoff's own mandatory `memory_namespace` and never consulted the delegation that authorized the work, so a handoff commissioned only for `APEX::Roundtable` read `APEX/Strategy-Campaigns/apex_war_architect`. **A return packet cannot widen the assignment it answers**; the commission now bounds it, and the handoff's own namespace applies only where no originating delegation exists — a case `PacketGuard` independently refuses.
+
+**A gate that raises is not a gate.** `packet_schema` is caller-supplied and was membership-tested against a frozenset, so a list or dict raised `TypeError` and unwound the enforcement call instead of denying. The non-dict *packet* check two rules below exists for exactly this reason and was written three rounds earlier; the selector beside it was left. Sibling untouched, again.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Omitted `resource_id` skipped record matching on reads | **Correct — P1 fail-open** | Required for canonical packet-backed reads, matching the mutation path. |
+| Handoff read scope not bounded by its commission | **Correct — P1 fail-open** | Derived from the matched originating delegation. |
+| Non-string `packet_schema` raised instead of denying | **Correct — P2** | Type-checked before the membership test. |
+| `role_adherence` floor allowed a boundary breach to average out | **Correct — P2** | Pinned at 1.0. That metric carries "refuses any high-impact boundary action", and a breach is not averageable — two seed cases sat at 0.8 and were raised. |
+| Dirty-tree runs recorded modes as proven | **Correct — P2** | The artifact preserves the commit but not the diff, so "which code passed?" had no answer while the acceptance gate treated the record as rollback evidence. The run still executes and writes results; only the *proven* claim is withheld. |
+| Documented gate invoked `ruff` without installing it | **Correct — P2** | `runtime-contracts.txt` carries no Ruff, and pre-commit's isolated hook environment is not on `PATH`, so the sequence stopped at `command not found`. Pinned install added to both documents, with a test that the documented version matches the CI pin. |
+
+**Mutation testing produced two corrections to my own work this round.** The Ruff fix came back MISSED — no test covered it — and the test written in response then failed on its own explanatory comment, because it searched the whole file and the comment mentions `ruff check` while describing the defect. That is the same prose-versus-property weakness corrected in the metric-table test two rounds ago, reappearing in a test written by the process that recorded it. Scoped to command lines inside the fenced block now.
+
+**A procedural note worth keeping.** Restoring files after a mutation run left stale `__pycache__` for modules imported through the `evals/` path shim, and the suite reported four failures against correct source. The bytecode, not the restore, was wrong. Mutation runs on path-shimmed modules need a cache clear before the result is believable — a wrong conclusion here would have been "my fix broke something" when nothing was broken.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

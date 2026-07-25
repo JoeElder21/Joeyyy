@@ -388,6 +388,59 @@ class ContributorSurfaceTests(unittest.TestCase):
                     f"{relative}: documents `ruff check` without the formatter CI also requires",
                 )
 
+    def test_every_documented_gate_installs_the_tools_it_invokes(self):
+        # `ruff` is in no requirements manifest, and installing pre-commit builds
+        # it an isolated hook environment whose executable is not on PATH -- so
+        # the documented "run everything by hand" sequence reached `ruff check .`
+        # with no `ruff` command and stopped there.
+        #
+        # Stated as the general property rather than the reported instance: a
+        # sequence that invokes a tool must install it. Found by mutation-testing
+        # the fix and getting MISSED, which is the third time chasing an uncaught
+        # mutation has produced coverage that was simply absent.
+        # Compared over COMMAND lines only. The first version searched the
+        # whole file and failed on its own explanatory comment, which mentions
+        # `ruff check` while describing the defect and sits above the install --
+        # a test measuring prose rather than the sequence, which is the exact
+        # weakness corrected in the metric-table test two rounds ago.
+        for relative in ("CONTRIBUTING.md", "README.md"):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            commands = [
+                line.strip()
+                for block in text.split("```bash")[1:]
+                for line in block.split("```")[0].splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            ]
+            for tool, install in (("ruff check", "pip install ruff=="),):
+                invocations = [i for i, line in enumerate(commands) if line.startswith(tool)]
+                if not invocations:
+                    continue
+                installs = [i for i, line in enumerate(commands) if install in line]
+                with self.subTest(path=relative, tool=tool):
+                    self.assertTrue(
+                        installs,
+                        f"{relative}: invokes `{tool}` without installing it, so the "
+                        "documented sequence stops with command not found",
+                    )
+                    self.assertLess(
+                        min(installs),
+                        min(invocations),
+                        f"{relative}: installs the tool after invoking it",
+                    )
+
+    def test_the_documented_ruff_matches_the_enforced_pin(self):
+        # A different version documented from the one CI pins is the divergence
+        # the pin exists to prevent, arriving through the install line.
+        workflow = VALIDATE_WORKFLOW.read_text(encoding="utf-8")
+        pinned = re.search(r"pip install ruff==([\d.]+)", workflow)
+        self.assertIsNotNone(pinned, "CI does not pin ruff")
+        for relative in ("CONTRIBUTING.md", "README.md"):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            if "pip install ruff==" not in text:
+                continue
+            with self.subTest(path=relative):
+                self.assertIn(f"pip install ruff=={pinned.group(1)}", text)
+
     def test_every_documented_gate_installs_validators_first(self):
         # Generalized from the CONTRIBUTING-only version below, which is how
         # README.md kept the defect after CONTRIBUTING.md was fixed: it ran

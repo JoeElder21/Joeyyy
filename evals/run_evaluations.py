@@ -365,6 +365,30 @@ def _record_passes(report: dict, results: Path, identifier: str) -> dict:
     a pass would let an uninstalled dependency attest the corps.
     """
     coverage = build_coverage()
+    # A dirty tree cannot produce acceptance evidence.
+    #
+    # `provenance()` recorded `tree_dirty: true` and the run went on to mark
+    # modes as proven anyway. But the artifact preserves the commit, not the
+    # diff -- so the exact implementation that passed cannot be reproduced from
+    # what was written down, and the acceptance gate treats these records as
+    # rollback evidence. "Which code passed?" has no answer, and an unanswerable
+    # provenance question is the same defect as an unrun check reporting green.
+    #
+    # Refused rather than annotated: a warning in a file nobody re-reads is how
+    # the earlier `promotion_ready` flag overstated what it measured. The run
+    # still executes and still writes its results -- only the PROVEN claim is
+    # withheld, so a dirty-tree run remains useful for iteration and simply
+    # cannot be cited for promotion.
+    dirty = report.get("provenance", {}).get("tree_dirty")
+    if dirty is not False:
+        report["modes_proven"] = 0
+        report["behavioral_modes_proven"] = []
+        report["evidence_withheld"] = (
+            f"tree_dirty={dirty!r}: results were produced from a working tree that does "
+            "not match its commit, so no mode can be recorded as proven. Commit or "
+            "stash, then re-run."
+        )
+        return report
     if results.exists():
         for case in ElementTree.parse(results).getroot().iter("testcase"):
             key = _mode_key_from(case.get("name") or "")
