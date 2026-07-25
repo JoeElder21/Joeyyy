@@ -2223,5 +2223,120 @@ class NineteenthPassRegressionTests(unittest.TestCase):
                 self.assertFalse(_is_ledger_artifact(finding))
 
 
+class TwentiethPassRegressionTests(unittest.TestCase):
+    """Three gaps in the previous round's fixes, all reached the same way."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _boundary(self, action):
+        return self.pep._high_impact_boundary(
+            ToolRequest(
+                agent=CHIEF,
+                action=action,
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+            )
+        )
+
+    def test_compound_boundary_actions_require_an_instruction(self):
+        # The previous round replaced exact matching against abstract category
+        # names with a verb map, then looked the WHOLE action up in it -- and
+        # the comment introducing that map named `delete_all` as its own example
+        # of a real invocation, which the map did not cover. The fix contained
+        # the class it was fixing.
+        for action in (
+            "delete_all",
+            "bulk_delete",
+            "delete_everything",
+            "mass_erase",
+            "publish_report",
+            "send_email",
+            "rotate_credentials",
+        ):
+            with self.subTest(action=action):
+                self.assertTrue(self._boundary(action), f"{action} escaped the boundary")
+
+    def test_compound_ordinary_actions_still_do_not(self):
+        # Token EQUALITY, not substring: `design` does not contain the token
+        # `sign`, `publications` is not `publish`, and a single-record
+        # `delete_row` is an ordinary mutation the writer lease governs.
+        for action in (
+            "delete_row",
+            "design_review",
+            "list_transfers",
+            "read_publications",
+            "assign_owner",
+            "validate_packet",
+            "append_record",
+        ):
+            with self.subTest(action=action):
+                self.assertEqual(self._boundary(action), [], f"{action} was over-classified")
+
+    def test_a_destructive_verb_alone_is_not_a_bulk_deletion(self):
+        # `delete` is governed by the lease; `delete_all` is one of the six
+        # actions AGENTS.md reserves for Joe. Neither token means that alone.
+        self.assertEqual(self._boundary("delete"), [])
+        self.assertTrue(self._boundary("delete_all"))
+
+    def test_windows_drive_paths_are_escapes(self):
+        # `_canonical_resource` treated anything with a colon before the first
+        # slash as an opaque handle. `C:\Users\Joe\secret.txt` has no slash at
+        # all, so the whole string was its own first segment: normalization
+        # never ran and the escape check added the round before was never
+        # reached. The chief could read it with no denial reasons -- on the one
+        # platform the workstation actually runs.
+        for resource in (
+            r"C:\Users\Joe\secret.txt",
+            "D:/private/keys.txt",
+            r"\\server\share\secret",
+            "//server/share/secret",
+        ):
+            with self.subTest(resource=resource):
+                self.assertTrue(self.pep._escapes_the_tree(resource))
+                decision = self.pep.evaluate(
+                    ToolRequest(agent=CHIEF, action="read", resource=resource, owner_brain="APEX")
+                )
+                self.assertFalse(decision.allowed, f"{resource}: {decision.reasons}")
+
+    def test_a_colon_does_not_hide_a_traversal(self):
+        # Found by mutation-testing the fix rather than by the review: reverting
+        # the opacity rule alone still passed every test, because the
+        # drive-letter regex catches `C:\...` even unnormalized. That meant the
+        # narrowing looked unmotivated -- and the thing it actually protects was
+        # untested.
+        #
+        # The old rule made ANY resource opaque whose first segment contained a
+        # colon, so `docs:notes/../../etc/passwd` was never normalized and read
+        # as safe. Normalized it is `../etc/passwd`. Opacity has to be reserved
+        # for real handle syntax, or it becomes a way to smuggle traversal past
+        # every prefix comparison downstream.
+        for resource in ("docs:notes/../../etc/passwd", "a:b/../../../secret"):
+            with self.subTest(resource=resource):
+                self.assertTrue(
+                    self.pep._escapes_the_tree(resource),
+                    f"{resource} normalizes outside the tree but was treated as opaque",
+                )
+
+    def test_handles_and_namespaces_are_still_opaque(self):
+        # The other direction: narrowing opacity must not start normalizing the
+        # things it exists to protect.
+        self.assertEqual(self.pep._canonical_resource("mount:filesystem"), "mount:filesystem")
+        self.assertEqual(
+            self.pep._canonical_resource("APEX::Strategy-Campaigns::apex_war_architect"),
+            "APEX::Strategy-Campaigns::apex_war_architect",
+        )
+        for resource in ("mount:filesystem", "connector:gdrive", "APEX::Strategy-Campaigns::a"):
+            with self.subTest(resource=resource):
+                self.assertFalse(self.pep._escapes_the_tree(resource))
+
+    def test_ordinary_repository_paths_are_not_escapes(self):
+        for resource in ("docs/README.md", "scripts/policy_enforcement.py", "docs/"):
+            with self.subTest(resource=resource):
+                self.assertFalse(self.pep._escapes_the_tree(resource))
+
+
 if __name__ == "__main__":
     unittest.main()

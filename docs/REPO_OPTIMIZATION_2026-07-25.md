@@ -785,6 +785,24 @@ That is the second time an exemption placed before a check has produced a fail-o
 
 **On the absorption-form finding specifically.** Two rounds ago I wrote a test asserting those attestations must not carry `required: true`, reasoning that requiring them would force a non-applicable submitter to attest to a scan that never happened. That reasoning was correct and the conclusion was still wrong: leaving them optional meant the *applicable* branch asserted nothing either. The resolution was not to pick a side but to move the attestation into the required field itself. A test can encode a real constraint and still pin the wrong property.
 
+### Automated review, twentieth pass — three findings, three fixed
+
+**All three were gaps in the previous round's fixes, and each was reached the same way: the fix handled the reported instance and stopped at the boundary of the class.** That failure now has five entries in this record. This round it happened three times in one commit.
+
+**`delete_all` was named in the comment introducing the map that does not cover it.** The nineteenth pass replaced exact matching against abstract category names (`public_publication`) with a verb map, then looked the *whole* action up in it — so `delete_all`, `bulk_delete`, `publish_report`, and `send_email` all passed the boundary untouched. The comment I wrote alongside that map cites `delete_all` as an example of a real invocation. **The fix contained a written statement of the case it failed to handle.** Actions are now tokenized on the same boundary `_is_mutating` uses and matched by *token equality*, with a separate rule for a destructive verb qualified as wholesale — `delete` is an ordinary mutation the lease governs, `delete_all` is one of the six actions `AGENTS.md` reserves for Joe, and neither token means that alone.
+
+**A Windows drive path walked through the escape check added one round earlier.** `_canonical_resource` treated anything with a colon before the first slash as an opaque handle. `C:\Users\Joe\secret.txt` contains no slash at all, so the whole string was its own first segment: normalization never ran, and the escape check saw a string starting with neither `../` nor `/`. The chief could read it with no denial reasons — on the one platform the workstation actually runs. The check was correct and simply never reached.
+
+**Mutation testing found a second fail-open the review had not reported.** Reverting the opacity rule alone still passed every test, because the new drive-letter regex catches `C:\…` even unnormalized — so the narrowing looked unmotivated and the thing it actually protects was untested. What it protects: the old rule made *any* resource opaque whose first segment held a colon, so `docs:notes/../../etc/passwd` was never normalized and read as safe. Normalized it is `../etc/passwd`. **A missed mutation is not a redundant fix; it is a missing test, and here it was concealing a second hole.**
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Compound high-impact actions unmapped | **Correct — P1 fail-open, mine, one round old** | Token-equality matching plus a bulk-qualifier rule; ordinary compounds (`delete_row`, `design_review`, `read_publications`) verified not over-classified. |
+| Windows drive paths bypassed the escape check | **Correct — P1 fail-open, mine, one round old** | Opacity reserved for `mount:`/`connector:`/`::`; drive-absolute and UNC classified as escapes. |
+| Intake stage and its attestation could contradict | **Correct — P2, mine, one round old** | Merged into one required dropdown. Issue forms do not cross-validate, so a submission could request `active` *and* answer "not applicable — requesting shadow". **Two enforceable answers about one decision enforce nothing, because they can disagree.** |
+
+**The intake finding completes an arc worth stating.** Three consecutive rounds touched that form: first the gates were optional and unenforceable; then applicability became its own required question, which was the pattern the absorption form already used; then that very split turned out to be the defect, because the two answers could contradict. The correct shape was neither optional nor split — it was *one* required answer that carries the attestation. Both forms now satisfy a shared test asserting that every required dropdown option states an outcome rather than deferring to boxes elsewhere.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

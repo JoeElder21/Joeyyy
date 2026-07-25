@@ -101,6 +101,13 @@ HIGH_IMPACT_VERBS = {
     "authorize": "credential_or_access_change",
 }
 
+# A destructive verb plus a wholesale qualifier is a bulk deletion, even though
+# neither token carries that meaning alone. `delete` is an ordinary mutation the
+# writer lease governs; `delete_all` is one of the six actions AGENTS.md
+# reserves for Joe.
+DESTRUCTIVE_VERBS = frozenset({"delete", "remove", "destroy", "erase", "clear", "prune"})
+BULK_QUALIFIERS = frozenset({"all", "everything", "bulk", "mass", "entire", "batch"})
+
 # The only connector posture the deployed roster declares. Anything else is a
 # configuration the runtime has never been shown to be safe under.
 PACKET_ONLY = "packet_only_no_direct_connectors"
@@ -158,6 +165,11 @@ CHIEF = "apex_chief_of_staff"
 # lawful route at all: the third deadlock of this shape in this change set,
 # after the execution-authority and brain-neutral-read ones.
 CURRENT_MESSAGE = "current-message"
+
+# `C:/…`, `c:\…`, and the UNC form. A single letter before the colon is what
+# distinguishes a drive from a `mount:`/`connector:` handle, and it is the whole
+# reason a Windows path was being treated as an opaque handle rather than a path.
+_DRIVE_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 
 # Lease statuses under which a mutation may proceed. Anything else -- released,
 # verified, expired -- is a closed lease and authorizes nothing further.
@@ -711,14 +723,29 @@ class PolicyEnforcementPoint:
         `--run-id` output escape and its Windows-separator sibling. Comparing
         unnormalised paths is apparently a reflex worth distrusting.
         """
-        if ":" in resource.split("/", 1)[0]:
-            return resource  # mount:/connector: handles are opaque, not paths
+        # Opacity is reserved for real handle syntax, not for "contains a colon
+        # before the first slash". That test also matched a WINDOWS DRIVE PATH:
+        # `C:\Users\Joe\secret.txt` has no `/` at all, so the whole string was
+        # its own first segment, the colon made it opaque, normalization never
+        # ran, and `_escapes_the_tree` saw a string starting with neither `../`
+        # nor `/`. The chief could read it with no denial reasons -- on the one
+        # platform the workstation actually runs. The escape check added the
+        # round before was correct and simply never reached.
+        if resource.startswith(CONNECTOR_PREFIXES) or "::" in resource:
+            return resource  # mount:/connector: handles and namespaces are not paths
         return posixpath.normpath(resource.replace("\\", "/"))
 
     @staticmethod
     def _escapes_the_tree(resource: str) -> bool:
-        """A resource that climbs out of the repository cannot be classified."""
+        """A resource that climbs out of the repository cannot be classified.
+
+        Drive-absolute and UNC paths are escapes in their own right: they name
+        an absolute location that no amount of normalization brings inside the
+        tree, and `posixpath` has no concept of either.
+        """
         canonical = PolicyEnforcementPoint._canonical_resource(resource)
+        if _DRIVE_ABSOLUTE.match(canonical) or canonical.startswith("//"):
+            return True
         return canonical.startswith(("../", "/")) or canonical == ".."
 
     @staticmethod
@@ -1537,6 +1564,45 @@ class PolicyEnforcementPoint:
             return [f"lease expired at {expiry}"]
         return []
 
+    @staticmethod
+    def _boundary_category(action: str) -> str:
+        """Map a real tool action to its high-impact category, compounds included.
+
+        The previous round replaced exact matching against the abstract category
+        names with a verb map, and then looked the WHOLE action up in it. Real
+        dispatchers emit compounds -- and the comment introducing that map named
+        `delete_all` as its own example of a real invocation, which the map did
+        not cover. Fixing the instance and leaving the class is the failure this
+        record has now logged four times; here it happened inside the fix.
+
+        Tokenized on the same boundary `_is_mutating` uses, and matched by TOKEN
+        EQUALITY rather than substring, because substring matching is what made
+        `delete_thread` read as a read three rounds after the allowlist landed.
+        `design` does not contain the token `sign`; `publications` is not
+        `publish`.
+
+        Over-classification costs a signature request on work that did not need
+        one. Under-classification forfeits the boundary Joe reserves for
+        himself. The directions are not symmetric, so ambiguity resolves toward
+        classifying.
+        """
+        if action in HIGH_IMPACT_ACTIONS:
+            return action
+        if action in HIGH_IMPACT_VERBS:
+            return HIGH_IMPACT_VERBS[action]
+        tokens = [token for token in re.split(r"[^a-z]+", action) if token]
+        # A destructive verb qualified as wholesale is a bulk deletion even when
+        # neither token means that alone: `delete` is an ordinary mutation the
+        # lease governs, `all` is nothing, `delete_all` is irreversible.
+        if any(token in DESTRUCTIVE_VERBS for token in tokens) and any(
+            token in BULK_QUALIFIERS for token in tokens
+        ):
+            return "irreversible_bulk_deletion"
+        for token in tokens:
+            if token in HIGH_IMPACT_VERBS:
+                return HIGH_IMPACT_VERBS[token]
+        return action
+
     def _lifecycle_stage(self, request: ToolRequest) -> list[str]:
         if not request.mutating or request.agent == CHIEF:
             return []
@@ -1578,7 +1644,7 @@ class PolicyEnforcementPoint:
         # the same "controls that ask the caller to incriminate itself" shape as
         # the three caller-set booleans removed earlier: nobody publishing
         # something they should not would spell the action `public_publication`.
-        action = HIGH_IMPACT_VERBS.get(action, action)
+        action = self._boundary_category(action)
         if action not in HIGH_IMPACT_ACTIONS:
             return []
         grant = request.instruction_grant

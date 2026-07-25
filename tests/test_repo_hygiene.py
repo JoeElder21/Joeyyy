@@ -194,6 +194,59 @@ class AutomationClaimTests(unittest.TestCase):
         )
 
 
+class IssueFormEnforceabilityTests(unittest.TestCase):
+    """Issue forms cannot cross-validate, so each required answer must stand alone."""
+
+    FORMS = ("agent-intake.yml", "absorption-candidate.yml")
+
+    def _blocks(self, name):
+        text = (ROOT / ".github" / "ISSUE_TEMPLATE" / name).read_text(encoding="utf-8")
+        blocks = {}
+        for chunk in text.split("\n  - type: "):
+            for line in chunk.splitlines():
+                if line.strip().startswith("id: "):
+                    blocks[line.split("id: ", 1)[1].strip()] = chunk
+                    break
+        return blocks
+
+    def test_no_form_splits_one_decision_across_two_required_answers(self):
+        # GitHub issue forms do not cross-validate fields. The intake form had a
+        # `stage` dropdown AND a separate "are the active gates complete?"
+        # dropdown, so a submission could request `active` and simultaneously
+        # answer "not applicable -- requesting shadow", recording an active
+        # intake with no evidence. Two enforceable answers about one decision
+        # enforce nothing, because they can disagree.
+        blocks = self._blocks("agent-intake.yml")
+        self.assertIn("stage", blocks)
+        self.assertNotIn(
+            "active-gates-complete",
+            blocks,
+            "the stage and its attestation are one decision and must be one field",
+        )
+        stage = blocks["stage"]
+        self.assertIn("required: true", stage)
+        self.assertIn("active", stage)
+        self.assertIn("shadow", stage)
+
+    def test_every_required_dropdown_option_states_an_outcome(self):
+        # An option that only points at boxes elsewhere decides nothing, which
+        # is how both forms ended up accepting a submission with every
+        # attestation blank.
+        for form, field, markers in (
+            ("agent-intake.yml", "stage", ("verified", "not claimed")),
+            ("absorption-candidate.yml", "agent-scan-applies", ("scanned", "not applicable")),
+        ):
+            with self.subTest(form=form, field=field):
+                block = self._blocks(form)[field]
+                options = [line for line in block.splitlines() if line.strip().startswith('- "')]
+                self.assertGreaterEqual(len(options), 2)
+                for option in options:
+                    self.assertTrue(
+                        any(marker in option.lower() for marker in markers),
+                        f"{form}:{field} option decides nothing: {option.strip()}",
+                    )
+
+
 class ContributorSurfaceTests(unittest.TestCase):
     """A public repository needs a stated boundary, not an implied one."""
 
