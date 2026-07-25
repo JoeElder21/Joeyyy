@@ -37,6 +37,6 @@ List completed changes, tests or checks, readback evidence, rollback evidence, f
 
 Include only when Joe still has an action to take.
 
-1.
-2.
-3.
+1. 
+2. 
+3. 

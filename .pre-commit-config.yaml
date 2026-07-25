@@ -42,7 +42,20 @@ repos:
       - id: end-of-file-fixer
         exclude: ^connectors/aps/testdata/
       - id: trailing-whitespace
-        exclude: ^connectors/aps/testdata/
+        # `--markdown-linebreak-ext=md` preserves the two trailing spaces that
+        # encode a hard line break in Markdown. Without it this hook silently
+        # collapsed the Date/Governor/verified-parent block in
+        # docs/ROSTER_MIGRATION_2026-07-23.md into one rendered paragraph and
+        # flattened the templates' empty numbered slots -- a formatting hook
+        # rewriting the meaning of dated records, which .editorconfig already
+        # said to leave alone.
+        args: [--markdown-linebreak-ext=md]
+        # templates/ is excluded because its empty numbered slots (`1. `) are
+        # the fill-in structure. `--markdown-linebreak-ext` only preserves the
+        # DOUBLE trailing space of a hard break, so a single trailing space on
+        # an empty slot was still stripped, turning `1. ` into `1.` -- which
+        # renders as literal text rather than an empty list item.
+        exclude: ^(connectors/aps/testdata/|templates/)
       - id: mixed-line-ending
         args: [--fix=lf]
         exclude: ^connectors/aps/testdata/

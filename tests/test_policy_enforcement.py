@@ -213,17 +213,17 @@ class DenialTests(unittest.TestCase):
             key_path.write_bytes(b"test-signing-key")
             for action in sorted(HIGH_IMPACT_ACTIONS):
                 with self.subTest(action=action):
+                    pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path)
                     without = ToolRequest(agent=CHIEF, action=action, resource="target")
-                    self.assertTrue(self.pep._high_impact_boundary(without))
+                    self.assertTrue(pep._high_impact_boundary(without))
                     signed = ToolRequest(
                         agent=CHIEF,
                         action=action,
                         resource="target",
                         instruction_grant=instruction_grant(action, "target", key_path),
-                        launch_key_path=key_path,
                         now=NOW,
                     )
-                    self.assertEqual(self.pep._high_impact_boundary(signed), [])
+                    self.assertEqual(pep._high_impact_boundary(signed), [])
 
     def test_asserting_an_instruction_without_signing_it_authorizes_nothing(self):
         # The defect: `explicit_instruction=True` was a caller-set boolean, so
@@ -250,25 +250,24 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path)
             grant = instruction_grant("public_publication", "APEX/Post", key_path)
-            wrong_action = self.pep._high_impact_boundary(
+            wrong_action = pep._high_impact_boundary(
                 ToolRequest(
                     agent=CHIEF,
                     action="financial_transaction",
                     resource="APEX/Post",
                     instruction_grant=grant,
-                    launch_key_path=key_path,
                     now=NOW,
                 )
             )
             self.assertTrue(any("authorizes" in reason for reason in wrong_action))
-            wrong_target = self.pep._high_impact_boundary(
+            wrong_target = pep._high_impact_boundary(
                 ToolRequest(
                     agent=CHIEF,
                     action="public_publication",
                     resource="APEX/Other",
                     instruction_grant=grant,
-                    launch_key_path=key_path,
                     now=NOW,
                 )
             )
@@ -278,15 +277,15 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path)
             grant = instruction_grant("public_publication", "APEX/Post", key_path)
             grant["sig"] = "0" * 64
-            reasons = self.pep._high_impact_boundary(
+            reasons = pep._high_impact_boundary(
                 ToolRequest(
                     agent=CHIEF,
                     action="public_publication",
                     resource="APEX/Post",
                     instruction_grant=grant,
-                    launch_key_path=key_path,
                     now=NOW,
                 )
             )
@@ -833,6 +832,155 @@ class ScopeTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_a_read_word_inside_a_mutating_action_does_not_make_it_a_read(self):
+        # The round-7 fix inverted the list and kept substring matching, which
+        # fails open just as badly in the other direction. `delete_thread`
+        # contains "read". So does `spreadsheet_update`. `update_status`
+        # contains "status"; `remove_from_list` contains "list". All four
+        # classified as reads and skipped every mutation control.
+        for action in (
+            "delete_thread",
+            "spreadsheet_update",
+            "update_status",
+            "remove_from_list",
+            "list_purge",
+        ):
+            with self.subTest(action=action):
+                self.assertTrue(
+                    self.pep._is_mutating(
+                        ToolRequest(agent=CHIEF, action=action, resource="mount:filesystem")
+                    ),
+                    f"{action!r} classified as a read",
+                )
+
+    def test_a_self_signed_instruction_is_not_an_instruction(self):
+        # `launch_key_path` was caller-controlled, so a caller could write its
+        # own key, sign a financial_transaction with it, point the request at
+        # it, and be believed. Verifying a signature against a key the signer
+        # chose proves only that the signer can sign.
+        with tempfile.TemporaryDirectory() as tmp:
+            attacker_key = Path(tmp) / "attacker_key"
+            attacker_key.write_bytes(b"attacker-controlled")
+            forged = instruction_grant("financial_transaction", "account", attacker_key)
+            self.assertFalse(
+                hasattr(
+                    ToolRequest(agent=CHIEF, action="x", resource="y"),
+                    "launch_key_path",
+                ),
+                "the trust anchor must not be settable from the request",
+            )
+            # A PEP anchored to a *different* key must refuse it.
+            trusted_key = Path(tmp) / "trusted_key"
+            trusted_key.write_bytes(b"the-real-key")
+            pep = PolicyEnforcementPoint(ROOT, launch_key_path=trusted_key)
+            reasons = pep._high_impact_boundary(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="financial_transaction",
+                    resource="account",
+                    instruction_grant=forged,
+                    now=NOW,
+                )
+            )
+            self.assertTrue(any("signature is invalid" in r for r in reasons), reasons)
+
+    def test_a_mutation_without_a_resource_id_is_denied(self):
+        # A lease and packet issued for record A authorized writing record B
+        # under the same write target, because omitting the identifier skipped
+        # record-level matching in both places. An optional field the checks
+        # only honour when supplied is an opt-out.
+        reasons = self.pep._writer_lease(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+                lease=self.lease,
+                resource_id=None,
+                now=NOW,
+            )
+        )
+        self.assertTrue(any("declares no resource_id" in r for r in reasons), reasons)
+
+    def test_a_delegation_does_not_authorize_a_resource_it_does_not_name(self):
+        # Requiring a packet for canonical reads stopped packetless access but
+        # accepted any valid same-brain packet, so a delegation scoped to
+        # Strategy-Campaigns authorized reading another specialist's
+        # Intel-Sources. Holding any delegation would be holding all of them.
+        scoped = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "allowed_read_namespaces": ["APEX::Strategy-Campaigns::apex_war_architect"],
+        }
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource="APEX/Intel-Sources",
+                owner_brain="APEX",
+                packet=scoped,
+            )
+        )
+        self.assertTrue(any("does not authorize" in r for r in reasons), reasons)
+
+    def test_a_delegation_authorizes_the_resource_it_does_name(self):
+        # The accept path: scope binding must not deny the assignment itself.
+        scoped = {
+            "agent": SPECIALIST,
+            "owner_brain": "APEX",
+            "allowed_read_namespaces": ["APEX::Strategy-Campaigns::apex_war_architect"],
+        }
+        self.assertEqual(
+            self.pep._packet_scope_errors(
+                ToolRequest(
+                    agent=SPECIALIST,
+                    action="read",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                    packet=scoped,
+                )
+            ),
+            [],
+        )
+
+    def test_the_chief_may_execute_a_specialist_packet_while_holding_the_lease(self):
+        # The deadlock: every valid packet names the specialist, the specialist
+        # is blocked by _lifecycle_stage, and requiring the chief to be the
+        # addressee blocked the only actor permitted to execute. Authority comes
+        # from the lease, which the registry verifies.
+        packet = {"agent": SPECIALIST, "owner_brain": "APEX", "writer_agent": CHIEF}
+        self.assertEqual(
+            self.pep._packet_scope_errors(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="write",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                    mutating=True,
+                    packet=packet,
+                    lease=self.lease,
+                    resource_id="campaign-alpha",
+                )
+            ),
+            [],
+        )
+
+    def test_the_chief_may_not_execute_a_packet_it_holds_no_lease_for(self):
+        # The exemption is the lease, not the identity. Without one, the
+        # addressee check applies to the chief like anyone else.
+        packet = {"agent": SPECIALIST, "owner_brain": "APEX", "writer_agent": SPECIALIST}
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent=CHIEF,
+                action="read",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                packet=packet,
+            )
+        )
+        self.assertTrue(any("addresses" in r for r in reasons), reasons)
 
     def test_the_chief_still_reaches_connectors(self):
         # The sole cross-brain agent performs connector work on the corps'

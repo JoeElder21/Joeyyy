@@ -119,19 +119,29 @@ jobs:
         run: |
           set -euo pipefail
           node --check src/gate.mjs
+          # The exact symbols src/gate.mjs constructs, not merely "the module
+          # has some exports". An SDK release can rename or drop one of these
+          # while keeping the namespace nonempty, which left this job green and
+          # failed first on the credentialed workstation gate -- the same
+          # false-confidence this step was added to remove, one level in.
           node --input-type=module -e "
-            const mods = [
-              '@aps_sdk/authentication',
-              '@aps_sdk/autodesk-sdkmanager',
-              '@aps_sdk/data-management',
-              '@aps_sdk/model-derivative',
-              '@aps_sdk/oss',
-            ];
-            for (const name of mods) {
+            // Verified against src/gate.mjs by grep, not assumed:
+            // '@aps_sdk/autodesk-sdkmanager' is a declared dependency the gate
+            // never destructures, so it is resolved but no symbol is asserted.
+            // Requiring one would invent a contract the harness does not have.
+            const required = {
+              '@aps_sdk/authentication': ['Scopes', 'AuthenticationClient'],
+              '@aps_sdk/autodesk-sdkmanager': [],
+              '@aps_sdk/data-management': ['DataManagementClient'],
+              '@aps_sdk/model-derivative': ['ModelDerivativeClient'],
+              '@aps_sdk/oss': ['OssClient'],
+            };
+            for (const [name, symbols] of Object.entries(required)) {
               const mod = await import(name);
-              if (!mod || Object.keys(mod).length === 0) {
-                throw new Error(\`\${name} resolved with no exports\`);
+              const missing = symbols.filter((s) => mod[s] === undefined);
+              if (missing.length) {
+                throw new Error(\`\${name} is missing: \${missing.join(', ')}\`);
               }
-              console.log(\`ok \${name}\`);
+              console.log(\`ok \${name} -> \${symbols.join(', ')}\`);
             }
           "

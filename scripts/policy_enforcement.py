@@ -37,6 +37,7 @@ from __future__ import annotations
 import datetime
 import hmac
 import posixpath
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field, replace
@@ -140,24 +141,26 @@ VERSION_MISMATCH_DEFECT = "$.schema_version: expected const '2.0'"
 # That is the correct direction of error: over-classifying a read is an
 # inconvenience, under-classifying a write forfeits every mutation control at
 # once.
-READ_ONLY_ACTION_VERBS = (
-    "read",
-    "list",
-    "get",
-    "search",
-    "find",
-    "view",
-    "query",
-    "inspect",
-    "describe",
-    "show",
-    "count",
-    "diff",
-    "status",
-    "info",
-    "tree",
-    "fetch",
-    "peek",
+READ_ONLY_ACTION_VERBS = frozenset(
+    {
+        "read",
+        "list",
+        "get",
+        "search",
+        "find",
+        "view",
+        "query",
+        "inspect",
+        "describe",
+        "show",
+        "count",
+        "diff",
+        "status",
+        "info",
+        "tree",
+        "fetch",
+        "peek",
+    }
 )
 
 # Retained for documentation and tests: these must classify as mutating under
@@ -176,13 +179,18 @@ MUTATING_ACTION_VERBS = (
     "push",
     "append",
     "modify",
-    "set_",
+    "set",
     "put",
     "post",
     "edit",
     "move",
     "rename",
     "copy",
+    "purge",
+    "drop",
+    "truncate",
+    "revoke",
+    "grant",
 )
 
 
@@ -242,7 +250,6 @@ class ToolRequest:
     # a plain bool the caller set, which is the same "trust the caller" defect as
     # the mutating flag: any caller could claim a grant it never held.
     launch_grant: dict[str, Any] | None = None
-    launch_key_path: Path | None = None
     # The third instance of that same defect, and the one that took longest to
     # find. `explicit_instruction: bool = False` let any caller authorize a
     # financial transaction, an access change, or a public publication by
@@ -308,8 +315,16 @@ class PolicyEnforcementPoint:
         root: Path = ROOT,
         guard: PacketGuard | None = None,
         registry: Any | None = None,
+        launch_key_path: Path | None = None,
     ) -> None:
         self.root = root
+        # The trust anchor belongs to the enforcement point, not to the request.
+        # `ToolRequest.launch_key_path` let a caller write its own key file,
+        # sign a `financial_transaction` instruction with it, point the request
+        # at it, and be believed -- so the signature checks proved only that the
+        # caller could sign, which every caller can. Verifying a signature
+        # against a key the signer chose is not verification.
+        self.launch_key_path = Path(launch_key_path or DEFAULT_LAUNCH_KEY)
         self.guard = guard or PacketGuard(root)
         # Authoritative source of issued leases. Without it, a mutation cannot
         # be authorized at all -- see _registry_membership_errors.
@@ -350,9 +365,28 @@ class PolicyEnforcementPoint:
         action = (request.action or "").strip().lower()
         if action in HIGH_IMPACT_ACTIONS:
             return True
-        # Allowlist, not denylist. An action that does not identifiably read is
-        # treated as a mutation, so a verb nobody enumerated fails closed.
-        return not any(verb in action for verb in READ_ONLY_ACTION_VERBS)
+        # Allowlist, matched as a LEADING TOKEN -- not as a substring.
+        #
+        # The previous round replaced a mutating denylist with this allowlist
+        # and kept substring matching, which fails open just as badly in the
+        # other direction: `delete_thread` contains "read", `update_status`
+        # contains "status", `remove_from_list` contains "list", and
+        # `spreadsheet_update` contains "read". All four classified as reads and
+        # skipped the lease, lifecycle, packet, and launch-grant controls.
+        #
+        # Inverting the list was the right move and the matching was still
+        # wrong, which is worth stating plainly: the fix to a fail-open check
+        # was itself fail-open. Only the verb position carries the intent, so
+        # only the verb position is consulted.
+        tokens = [token for token in re.split(r"[^a-z]+", action) if token]
+        if not tokens or tokens[0] not in READ_ONLY_ACTION_VERBS:
+            return True
+        # Backstop: a read-leading compound whose tail names a mutation
+        # (`list_purge`) is still a mutation. This is a denylist, but it can
+        # only ever ADD strictness -- the allowlist above already defaults to
+        # mutating -- so it going stale cannot open a hole the way the original
+        # denylist did.
+        return any(token in MUTATING_ACTION_VERBS for token in tokens[1:])
 
     @staticmethod
     def normalize(request: ToolRequest) -> tuple[ToolRequest, list[str]]:
@@ -720,7 +754,19 @@ class PolicyEnforcementPoint:
         # relationship rather than reading one.
         if target and request.resource and request.resource != target:
             errors.append(f"lease covers {target!r}, which does not cover {request.resource!r}")
-        if request.resource_id and lease.get("resource_id") != request.resource_id:
+        # Required, not merely compared-when-present. Omitting `resource_id`
+        # skipped record-level matching here AND in `_packet_scope_errors`, so a
+        # lease and packet issued for record A authorized an executor request
+        # that writes record B under the same write target -- the caller simply
+        # left the record identity out. An optional identifier that the checks
+        # only honour when supplied is an opt-out, and this is the one field
+        # that distinguishes which row actually changes.
+        if not request.resource_id:
+            errors.append(
+                "mutation declares no resource_id; the lease and packet are issued per "
+                "record, so a write with no record identity cannot be matched to either"
+            )
+        elif lease.get("resource_id") != request.resource_id:
             errors.append(
                 f"lease is for resource {lease.get('resource_id')!r}, request targets "
                 f"{request.resource_id!r}"
@@ -775,9 +821,26 @@ class PolicyEnforcementPoint:
         errors = []
         addressee = packet.get("agent")
         if addressee and addressee != request.agent:
-            errors.append(
-                f"packet addresses {addressee!r}, not the requesting agent {request.agent!r}"
+            # The chief executes what shadow specialists propose, so a packet it
+            # acts on names the specialist, not itself. Requiring the chief to
+            # be the addressee deadlocked the only lawful mutation path in the
+            # system: the specialist is blocked by `_lifecycle_stage`, the chief
+            # was blocked here, and addressing the packet to the chief is not an
+            # option because PacketGuard expects a registered specialist.
+            #
+            # Execution authority comes from the lease, not the addressee. The
+            # chief may act on a specialist's packet only while holding the
+            # writer lease for it -- which `_writer_lease` verifies against the
+            # registry, so this is not a second trust decision, it is the same
+            # one read from the authoritative place.
+            chief_executing = request.agent == CHIEF and (
+                packet.get("writer_agent") == CHIEF
+                or (request.lease or {}).get("writer_agent") == CHIEF
             )
+            if not chief_executing:
+                errors.append(
+                    f"packet addresses {addressee!r}, not the requesting agent {request.agent!r}"
+                )
         brain = packet.get("owner_brain")
         if brain and request.owner_brain and brain != request.owner_brain:
             errors.append(
@@ -788,7 +851,42 @@ class PolicyEnforcementPoint:
             errors.append(
                 f"packet resource {resource!r} does not match the requested {request.resource_id!r}"
             )
+        errors.extend(self._packet_namespace_errors(request, packet))
         return errors
+
+    def _packet_namespace_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
+        """The packet must authorize *this* resource, not merely exist.
+
+        Requiring a delegation for canonical reads (previous round) stopped
+        packetless access but accepted any valid same-brain packet: a War
+        Architect delegation scoped to `APEX::Strategy-Campaigns` authorized a
+        read of `APEX/Intel-Sources`, another specialist's source. A delegation
+        that does not name the resource does not authorize it -- otherwise
+        holding any delegation is holding all of them, and the bounded
+        assignment the packet exists to express means nothing.
+        """
+        declared = [
+            *packet.get("allowed_read_namespaces", []),
+            *packet.get("allowed_write_targets", []),
+        ]
+        if not declared:
+            # A packet declaring no scope cannot widen one. Handoffs carry no
+            # allow-lists, so this is the normal path for them.
+            return []
+        resource = self._canonical_resource(request.resource)
+        for entry in declared:
+            # Namespaces are written `APEX::Strategy-Campaigns::agent` and write
+            # targets `APEX/Strategy-Campaigns`; compare on the shared segments
+            # rather than demanding one spelling.
+            normalized = str(entry).replace("::", "/")
+            if resource == normalized or resource.startswith(f"{normalized}/"):
+                return []
+            if normalized.startswith(f"{resource}/"):
+                return []
+        return [
+            f"packet does not authorize {request.resource!r}; it is scoped to "
+            f"{sorted(str(entry) for entry in declared)}"
+        ]
 
     @staticmethod
     def _clock(request: ToolRequest) -> datetime.datetime:
@@ -869,7 +967,7 @@ class PolicyEnforcementPoint:
             return [f"instruction authorizes {payload['action']!r}, not {action!r}"]
         if payload["resource"] != request.resource:
             return [f"instruction is scoped to {payload['resource']!r}, not {request.resource!r}"]
-        key_path = Path(request.launch_key_path or DEFAULT_LAUNCH_KEY)
+        key_path = self.launch_key_path
         if not key_path.exists():
             return ["no signing key is present, so the instruction cannot be verified"]
         expected = _sign_grant(key_path.read_bytes(), payload)
@@ -908,7 +1006,7 @@ class PolicyEnforcementPoint:
         payload = {key: grant.get(key) for key in ("mount", "issued_at", "expires_at", "nonce")}
         if payload["mount"] != mount:
             return [f"grant is for mount {payload['mount']!r}, not {mount!r}"]
-        key_path = Path(request.launch_key_path or DEFAULT_LAUNCH_KEY)
+        key_path = self.launch_key_path
         if not key_path.exists():
             return ["no launch signing key is present, so the grant cannot be verified"]
         expected = _sign_grant(key_path.read_bytes(), payload)

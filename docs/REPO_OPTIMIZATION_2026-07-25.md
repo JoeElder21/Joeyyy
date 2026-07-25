@@ -534,6 +534,27 @@ Adding two entries would have fixed the instance and left the class intact, whic
 
 **Third time a sibling was left untouched.** `CONTEXT` was added to two of three G-Eval judges in round 4. The pattern this record has been naming since round 3 recurred inside the very fix that was supposed to demonstrate the lesson.
 
+### Automated review, eighth pass — ten findings, ten fixed
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Read-verb allowlist matched substrings | **Correct — the previous round's fix was itself fail-open** | `delete_thread` contains "read". So does `spreadsheet_update`. `update_status` contains "status"; `remove_from_list` contains "list". Inverting the denylist was right and the matching was still wrong. Now matched as a leading token, with a tail sweep so `list_purge` cannot hide behind a read verb. |
+| `launch_key_path` was caller-supplied | **Correct** | A caller could write its own key, sign a `financial_transaction` instruction with it, point the request at it, and be believed. Verifying a signature against a key the signer chose proves only that the signer can sign. The trust anchor moved to the enforcement point's constructor. |
+| `resource_id` optional on mutations | **Correct** | Omitting it skipped record-level matching in both the lease rule and packet scope, so a lease and packet issued for record A authorized writing record B under the same write target. Required now. |
+| Chief execution blocked by the addressee check | **Correct, and it deadlocked the only lawful mutation path** | See below. |
+| Canonical reads unbound to the delegated namespace | **Correct** | Requiring a packet stopped packetless access but accepted any valid same-brain packet, so a delegation scoped to `APEX::Strategy-Campaigns` authorized reading `APEX/Intel-Sources`. Reads are matched against `allowed_read_namespaces` / `allowed_write_targets`. |
+| `expected_artifacts` never compared to the emitted packet | **Correct** | Recorded; the deterministic check validates the handoff against its delegation's requested types, not the case's. |
+| `trailing-whitespace` destroyed Markdown hard breaks | **Correct, and it had already done damage** | See below. |
+| `task validate` ran the mount verifier without `--strict` | **Correct** | The dedicated CI job was made strict and the aggregate local command was left permissive, so the documented validation could pass with both mounts unverified. |
+| APS smoke test accepted any nonempty namespace | **Correct** | Now asserts the exact symbols `gate.mjs` constructs. Note: `@aps_sdk/autodesk-sdkmanager` is resolved but asserts no symbol, because grep confirms the gate never destructures it — requiring one would invent a contract. |
+| `uvx snyk-agent-scan@latest` in the intake template | **Correct** | An unreviewed release getting code execution inside the supply-chain verification step. Pinned. |
+
+**The fix to a fail-open check was itself fail-open.** Round 7 replaced a mutating denylist with a read allowlist — the right direction — and kept substring matching, which fails open just as badly in the new direction. This is the fourth distinct way the "fix the class, not the instance" lesson has failed here, and the most instructive: getting the *direction* right is not the same as getting the *mechanism* right, and the round-7 entry above claims the class was closed when only half of it was.
+
+**The gate deadlocked the system it governs.** Requiring `packet.agent == request.agent` meant the chief could not execute a shadow specialist's proposed mutation, because every valid packet names the specialist. The specialist is blocked by `_lifecycle_stage`; addressing the packet to the chief fails `PacketGuard`, which expects a registered specialist. So the only lawful mutation path in the architecture had no actor who could take it. Execution authority now comes from the writer lease — which the registry already verifies — rather than from the addressee. Worth noting that seven rounds of adversarial review found holes that let the wrong actor through before anyone noticed the right actor could not get through at all.
+
+**A formatting hook rewrote a dated record, and the damage was already committed.** `trailing-whitespace` stripped the hard line breaks from `docs/ROSTER_MIGRATION_2026-07-23.md`, collapsing its Date / Governor / verified-parent block into one rendered paragraph — in a repository whose own rule is that dated records are append-only in spirit. It also flattened the empty numbered slots (`1. ` → `1.`) that are the fill-in structure of three templates, and reflowed an unrelated master-plan document this change set had no business touching. All restored; `--markdown-linebreak-ext=md` handles hard breaks and `templates/` is excluded, because that flag only preserves the *double* trailing space of a break, not the single one an empty list slot needs.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

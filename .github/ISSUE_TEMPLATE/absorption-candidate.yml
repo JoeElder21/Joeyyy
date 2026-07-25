@@ -52,7 +52,7 @@ body:
         Skip this section, marking it not applicable, for a candidate that is not
         an MCP server, skill, or agent application.
       options:
-        - label: "`uvx snyk-agent-scan@latest` run against the candidate, pre-install"
+        - label: "`uvx snyk-agent-scan==0.3.0` run against the candidate, pre-install (pinned: `@latest` gives an unreviewed release code execution inside the supply-chain check itself)"
         - label: No prompt injection, tool poisoning, tool shadowing, or toxic flow reported
         - label: No hardcoded secrets or malware payload reported
         - label: Scope confirmed — candidate only; Joe's configured estate was not scanned

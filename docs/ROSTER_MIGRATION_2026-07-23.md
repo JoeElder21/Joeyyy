@@ -1,7 +1,7 @@
 # Mirrored Specialist Corps v2 Migration
 
-Date: 2026-07-23
-Governor: Agent 007
+Date: 2026-07-23  
+Governor: Agent 007  
 Verified v1 parent: `4465ee9dd728f9ab0a8a9d13791f1f65523a4b3c`
 
 ## Decision
