@@ -189,8 +189,12 @@ tests, so do all of it:
 7. `scripts/build_awesome_copilot_report.py` — remove the two planner rows from the agents table
    and the `task-implementation` row from the instructions table. The inventory counts derive from
    the tree, so they correct themselves.
-8. `tests/test_agent_contract.py` — remove `test_vendored_agent_file_dependencies_exist`, which
-   asserts both deleted files exist and would otherwise fail.
+8. `tests/test_agent_contract.py` — remove **all three** planner-dependent tests, each of which
+   opens a deleted file and errors with `FileNotFoundError` otherwise, so the mandated full gate
+   could not pass: `test_vendored_agent_file_dependencies_exist`,
+   `test_planner_can_actually_invoke_its_researcher`, and
+   `test_planner_instructions_invoke_rather_than_load_the_researcher`. An earlier version of this
+   list named only the first.
 9. `tests/test_trusted_launcher.py` — the allowlist and signed-identity tests reference
    `terraform` and `azure`; repoint them at `civil3d`, which is also agent-scoped and grant-gated,
    rather than deleting the coverage.

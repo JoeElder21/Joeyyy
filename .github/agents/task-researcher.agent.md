@@ -12,7 +12,7 @@ name: "Task Researcher Instructions"
 # path restriction: an injection-influenced call could otherwise mutate
 # source or run shell commands. See .github/AWESOME-COPILOT.md.
 user-invocable: false
-tools: ["changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
+tools: ["read", "changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 
 # Task Researcher Instructions
@@ -85,7 +85,6 @@ You WILL provide brief, focused updates without overwhelming details. You WILL p
 
 You MUST reference existing project conventions from:
 
-- `copilot/` - Technical standards and language-specific conventions
 - `.github/instructions/` - Project instructions, conventions, and standards
 - Workspace configuration files - Linting rules and build configurations
 
@@ -187,7 +186,7 @@ You WILL conduct thorough internal project research by:
 - Using `#search` to find specific implementations, configurations, and coding conventions
 - Using `#usages` to understand how patterns are applied across the codebase
 - Executing read operations to analyze complete files for standards and conventions
-- Referencing `.github/instructions/` and `copilot/` for established guidelines
+- Referencing `.github/instructions/` for established guidelines
 
 You WILL conduct comprehensive external research by:
 

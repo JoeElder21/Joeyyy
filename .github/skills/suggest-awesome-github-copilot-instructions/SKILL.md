@@ -92,7 +92,7 @@ Display analysis results in structured table comparing awesome-copilot instructi
 
 ## Local Instructions Discovery Process
 
-1. List all `*.instructions.md` files in the `instructions/` directory
+1. List all `*.instructions.md` files in the `.github/instructions/` directory <!-- local override: upstream said `instructions/`, which does not exist in this repository; the empty inventory made every already-vendored instruction look absent and recommended duplicates -->
 2. For each discovered file, read front matter to extract `description` and `applyTo` patterns
 3. Build comprehensive inventory of existing instructions with their applicable file patterns
 4. Use this inventory to avoid suggesting duplicates
@@ -102,7 +102,7 @@ Display analysis results in structured table comparing awesome-copilot instructi
 1. For each local instruction file, construct the raw GitHub URL to fetch the remote version:
    - Pattern: `https://raw.githubusercontent.com/github/awesome-copilot/main/instructions/<filename>`
 2. Fetch the remote version using the `#fetch` tool
-3. Compare entire file content (including front matter and body)
+3. Compare file content (front matter and body), **first removing any recorded local-override block** — the fenced intake preamble at the top of this file and any comment marked `local override` in a vendored file. Those are deliberate and recorded in `.github/AWESOME-COPILOT.md`; comparing them byte-for-byte classifies every installed file as outdated forever and recommends replacing a file that already matches the selected pin. Compare every other upstream and bundled-asset byte exactly.
 4. Identify specific differences:
    - **Front matter changes** (description, applyTo patterns)
    - **Content updates** (guidelines, examples, best practices)

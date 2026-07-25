@@ -103,7 +103,7 @@ Display analysis results in structured table comparing awesome-copilot custom ag
 1. For each local agent file, construct the raw GitHub URL to fetch the remote version:
    - Pattern: `https://raw.githubusercontent.com/github/awesome-copilot/main/agents/<filename>`
 2. Fetch the remote version using the `fetch` tool
-3. Compare entire file content (including front matter, tools array, and body)
+3. Compare file content (front matter, tools array, and body), **first removing any recorded local-override block** — comment lines marked `local override` and the fields they cover. `prompt-engineer` carries `tools: []` and both planner agents carry narrowed tool arrays and `user-invocable: false`, all deliberate and recorded in `.github/AWESOME-COPILOT.md`. Comparing them byte-for-byte classifies every installed agent as outdated forever and recommends restoring the very tool access that was removed for safety. Compare every other upstream byte exactly.
 4. Identify specific differences:
    - **Front matter changes** (description, tools)
    - **Tools array modifications** (added, removed, or renamed tools)

@@ -198,11 +198,21 @@ These are **editor-plane** agents: they are invoked by GitHub Copilot inside a s
 
 | Agent | Owner plane | Purpose | Tools | Status | Known limits |
 |---|---|---|---|---|---|
-| `prompt-engineer` | editor / cross-brain neutral | Treats every input as a prompt to analyse and rewrite | `tools: []` — **local override**, see below | active | Rewrites text only; no repository or connector effect |
+| `prompt-engineer` | editor / cross-brain neutral | Treats every input as a prompt to analyse and rewrite | `tools: []` — **local override**, see below | candidate | Rewrites text only; no repository or connector effect |
 | `task-planner` | editor / APEX-leaning | Produces implementation plans into `.copilot-tracking/` | Upstream list, incl. `terraform`, `azure_get_schema_for_Bicep`, `Microsoft Docs`, `context7` | candidate | Declared tool names are **not** wired into any Copilot MCP configuration; unrecognized names are silently ignored, so those capabilities are unavailable in a normal collaborator session. Requires `task-researcher`. |
 | `task-researcher` | editor / APEX-leaning | Companion research pass the planner mandates before planning | Same upstream list | candidate | Same unwired-tool limitation |
 
-Lifecycle: `prompt-engineer` is active because it is self-contained and its behaviour is fully determined by its own file. `task-planner` and `task-researcher` stay **candidate** until their declared Terraform/Azure/Docs tool names are actually reachable in the invoking client, since until then the planner runs without the capabilities its instructions assume.
+Lifecycle: **all three are `candidate`.** An earlier version of this entry marked
+`prompt-engineer` active on the reasoning that it is self-contained. Review rejected that,
+correctly: `docs/AGENT_COMMUNITY_PROTOCOL.md` gates `active` on controlled real-mission
+evidence, realistic behaviour tests, boundary and accuracy evidence, and a runtime-isolation
+record. Being self-contained is not one of those gates, and the only tests naming this agent
+inspect its static `tools: []` override. Asserting a status the repository has not earned is
+exactly the unsupported-capability claim the contract forbids.
+
+`task-planner` and `task-researcher` additionally cannot leave candidate until their declared
+Terraform/Azure/Docs tool names are reachable in the invoking client, since until then the
+planner runs without the capabilities its instructions assume.
 
 ### Local overrides (intentional divergence from upstream)
 

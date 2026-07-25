@@ -19,7 +19,7 @@ name: "Task Planner Instructions"
 # loading a spec instead of running it.
 # See .github/AWESOME-COPILOT.md.
 user-invocable: false
-tools: ["agent", "changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
+tools: ["agent", "read", "changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 
 # Task Planner Instructions
