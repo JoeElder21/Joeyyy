@@ -39,7 +39,10 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `config/specialist_corps.toml` — Agent 007's mirrored-class routing, lifecycle, and migration lineage.
 - `brains/apex/` — APEX-owned roster, namespace, target, route, and memory policy.
 - `brains/jeos/` — JEOS-owned roster, namespace, target, route, and memory policy.
-- `AGENTS.md` — durable activation and repository guidance.
+- `AGENTS.md` — the JOEYYY Global Agent Engineering Constitution: canonical cross-runtime repository policy, activation, and repository operating annex.
+- `CLAUDE.md` — thin Claude Code runtime adapter pointing to `AGENTS.md`.
+- `.github/copilot-instructions.md` — thin GitHub Copilot runtime adapter pointing to `AGENTS.md`.
+- `docs/CONSTITUTION_ADOPTION_2026-07-25.md` — constitution adoption record, staffing-rule supersession, and rollback point.
 - `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
 - `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status.
