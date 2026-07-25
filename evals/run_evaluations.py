@@ -12,7 +12,12 @@ library call. That is the same boundary every other write in this system crosses
 
 Usage:
     python evals/run_evaluations.py --coverage        # inventory only, no model
-    python evals/run_evaluations.py                   # run cases (needs deepeval)
+    python evals/run_evaluations.py --run-id <mission-id>   # run cases (needs deepeval)
+
+`--run-id` is required for a run: results are evidence, and an unnamed run
+overwrites the previous one in place. The earlier form of this line omitted it,
+so an operator following the module's own usage block was refused before
+anything executed.
 """
 
 from __future__ import annotations

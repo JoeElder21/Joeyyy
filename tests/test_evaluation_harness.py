@@ -5,6 +5,7 @@ that degradation is itself part of the contract, so it is asserted here.
 """
 
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -382,6 +383,56 @@ class ThresholdIntegrityTests(unittest.TestCase):
             with self.subTest(mode=key):
                 harness.validate_thresholds(case, source=key)
 
+    def test_an_omitted_threshold_cannot_fall_below_the_floor(self):
+        # `validate_thresholds` governs what a case DECLARES. Nothing governed
+        # what it OMITS: the judges carried their own default literals, and
+        # when `MINIMUM_THRESHOLDS["role_adherence"]` was raised to 1.0 the
+        # judge kept defaulting an omitted entry to 0.8. A case that simply did
+        # not mention the metric got partial credit on the gate carrying the
+        # high-impact refusal -- the floor and the default were two numbers for
+        # one decision, and they drifted apart the moment one moved.
+        for metric, floor in harness.MINIMUM_THRESHOLDS.items():
+            with self.subTest(metric=metric):
+                self.assertEqual(harness.threshold_for({}, metric), floor)
+                self.assertEqual(harness.threshold_for({"thresholds": {}}, metric), floor)
+
+    def test_a_malformed_declared_threshold_falls_back_to_the_floor(self):
+        # Same reasoning one level down: a non-numeric or boolean entry must
+        # not become the threshold, and must not crash the judge construction
+        # either. `True` is 1.0 under `isinstance(x, int)`.
+        for declared in ("0.9", None, True, [1.0]):
+            with self.subTest(declared=declared):
+                self.assertEqual(
+                    harness.threshold_for(
+                        {"thresholds": {"case_criteria": declared}}, "case_criteria"
+                    ),
+                    harness.MINIMUM_THRESHOLDS["case_criteria"],
+                )
+
+    def test_an_unvalidated_case_is_still_clamped_to_the_floor(self):
+        # `validate_thresholds` refuses a sub-floor declaration at LOAD time,
+        # so within `load_cases()` this clamp never fires -- which is precisely
+        # why it needs its own test. `threshold_for` is a public accessor that
+        # takes any dict, and the two guarantees live in different layers. The
+        # finding this round came from a default and a floor drifting apart
+        # because one decision was written as two numbers; leaving the clamp
+        # untested would re-create that shape with the layers instead.
+        self.assertEqual(
+            harness.threshold_for({"thresholds": {"role_adherence": 0.5}}, "role_adherence"),
+            harness.MINIMUM_THRESHOLDS["role_adherence"],
+        )
+        self.assertEqual(
+            harness.threshold_for({"thresholds": {"case_criteria": 0.0}}, "case_criteria"),
+            harness.MINIMUM_THRESHOLDS["case_criteria"],
+        )
+
+    def test_a_case_may_still_demand_more_than_the_floor(self):
+        # The accessor must not flatten a stricter case back to the minimum.
+        self.assertEqual(
+            harness.threshold_for({"thresholds": {"task_completion": 0.95}}, "task_completion"),
+            0.95,
+        )
+
     def test_the_minima_cover_every_metric_in_the_contract(self):
         # A metric with no floor is a metric a case can set to zero. The
         # contract and the minima have to be changed as a set.
@@ -508,6 +559,94 @@ class CaseArtifactTests(unittest.TestCase):
                 )
 
 
+class DocumentedProcedureTests(unittest.TestCase):
+    """The claims the docs make about this harness, checked as properties.
+
+    Written after mutation-testing four documentation corrections and finding
+    that not one of them was caught by anything. The temptation is to assert
+    the sentence -- and this record has already logged twice that a test
+    matching PROSE rather than the property passes while the property rots.
+    Each of these asserts what the sentence is *about*, derived from the source
+    or the CI configuration, so the doc and the thing it describes cannot drift
+    apart without a failure.
+    """
+
+    RECORD = ROOT / "docs" / "EVALUATION_HARNESS.md"
+
+    def test_the_rollback_names_every_file_that_wires_the_harness_in(self):
+        # The finding: the rollback said "delete the directory", which was true
+        # when written and stopped being true when the harness grew CI
+        # dependencies elsewhere. Enumerating them in prose fixes today and
+        # rots the same way, so the enumeration is checked against the tree.
+        text = self.RECORD.read_text(encoding="utf-8")
+        section = text[text.index("## Rollback") :]
+        section = section[: section.index("\n## ", 1)] if "\n## " in section[1:] else section
+        candidates = [
+            ROOT / ".gitignore",
+            ROOT / "README.md",
+            ROOT / "docs" / "README.md",
+            *sorted((ROOT / ".github" / "workflows").glob("*.yml")),
+        ]
+        for path in candidates:
+            body = path.read_text(encoding="utf-8")
+            if "evals" not in body and "runtime-evaluation" not in body:
+                continue
+            with self.subTest(wiring=path.name):
+                self.assertIn(
+                    path.name,
+                    section,
+                    f"{path.relative_to(ROOT)} references the harness but the rollback "
+                    "does not name it; deleting evals/ would leave it behind",
+                )
+
+    def test_the_usage_block_shows_every_option_the_parser_accepts(self):
+        # An operator following the module's own usage block was refused before
+        # anything executed, because the block omitted the one option a run
+        # cannot proceed without. Derived from the parser rather than restated:
+        # adding an option and forgetting the docstring is the same defect.
+        source = (EVALS / "run_evaluations.py").read_text(encoding="utf-8")
+        options = set(re.findall(r'parser\.add_argument\(\s*"(--[a-z-]+)"', source))
+        self.assertTrue(options, "no options parsed; this test would pass vacuously")
+        docstring = source[source.index('"""') + 3 : source.index('"""', 3)]
+        # The COMMAND LINES, not the whole Usage section. Scoped to the whole
+        # section, this passed with the option missing from every invocation,
+        # because the prose underneath happens to name it -- the same
+        # paragraph-instead-of-the-thing failure logged against the metric
+        # table. An operator copies the command, not the paragraph.
+        invocations = [
+            line.strip()
+            for line in docstring[docstring.index("Usage:") :].splitlines()
+            if line.strip().startswith("python ")
+        ]
+        self.assertTrue(invocations, "no invocations in the usage block")
+        for option in options:
+            with self.subTest(option=option):
+                self.assertTrue(
+                    any(option in line for line in invocations),
+                    f"{option} appears in no usage invocation: {invocations}",
+                )
+
+    def test_the_readme_claim_tracks_whether_dispatch_is_actually_wired(self):
+        # Both directions. The README calls the harness built-but-unwired; that
+        # is true only while `_invoke_specialist` refuses to dispatch. Tied to
+        # the exception the source actually raises, so wiring it up forces the
+        # claim to be rewritten -- and, equally, nobody can quietly downgrade
+        # the caveat while the dispatch is still a stub.
+        suite = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
+        unwired = "raise NotImplementedError" in suite
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        bullet = next(line for line in readme.splitlines() if line.startswith("- `evals/` +"))
+        if unwired:
+            self.assertIn("NotImplementedError", bullet)
+            self.assertIn("not yet wired", bullet)
+        else:
+            self.assertNotIn(
+                "not yet wired",
+                bullet,
+                "dispatch is wired but the README still calls the harness unwired",
+            )
+
+
 class RecordAgreesWithImplementationTests(unittest.TestCase):
     """The metric record is tested, because an operator budgets from it."""
 
@@ -532,13 +671,24 @@ class RecordAgreesWithImplementationTests(unittest.TestCase):
                     metric, documented, f"{metric} is implemented but has no row in the table"
                 )
 
-    def test_every_baseline_metric_is_documented_as_baseline(self):
+    def test_the_documented_baseline_set_is_exactly_the_implemented_one(self):
+        # Both directions, because the one-directional version -- every
+        # implemented baseline metric appears in the paragraph -- passed while
+        # the paragraph named a metric the code no longer treats as baseline.
+        # An operator budgeting judge calls from a record that overstates the
+        # set is misled in exactly the direction the previous fix was written
+        # to prevent. Mutation-testing the fix is what surfaced it.
+        #
+        # Parsed from the enumeration between the em dashes rather than from
+        # the whole paragraph: the prose beneath it names metrics for other
+        # reasons, so matching the paragraph would be satisfied by the
+        # explanation rather than by the list.
         text = self.RECORD.read_text(encoding="utf-8")
         marker = text.index("Baseline metrics")
         paragraph = text[marker : text.index("\n\n", marker)]
-        for metric in harness.BASELINE_METRICS:
-            with self.subTest(metric=metric):
-                self.assertIn(f"`{metric}`", paragraph)
+        enumeration = paragraph.split("—")[1]
+        documented = set(re.findall(r"`([a-z_]+)`", enumeration))
+        self.assertEqual(documented, set(harness.BASELINE_METRICS))
 
 
 class RunIdentifierTests(unittest.TestCase):

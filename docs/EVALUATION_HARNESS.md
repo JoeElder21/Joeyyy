@@ -44,12 +44,20 @@ and `harness.metrics_for` rejects any metric name outside this table.
 | `task_completion` | DeepEval | Produced its declared `artifact_types`. |
 | `tool_correctness` | DeepEval | Right tools, right arguments — enforces `packet_only_no_direct_connectors`. |
 
-Baseline metrics — `packet_validity`, `role_adherence`, `brain_isolation`, and
-`case_criteria` — apply to every case without being declared. **That is three
-model-backed judges per case, not two**: `case_criteria` is constructed
-unconditionally alongside the other two, so an operator budgeting judge calls
-from this record needs the right count. This list was previously missing it,
-which understated both what a passing run proves and what it costs.
+Baseline metrics — `packet_validity`, `role_adherence`, `brain_isolation`,
+`case_criteria`, and `tool_correctness` — apply to every case without being
+declared. **That is three model-backed judges per case, not two**:
+`brain_isolation`, `role_adherence`, and `case_criteria` are all constructed
+unconditionally, so an operator budgeting judge calls from this record needs the
+right count. The other two baseline metrics cost nothing to run —
+`packet_validity` and DeepEval's `ToolCorrectnessMetric` both compare observed
+values against declared ones with no model in the loop.
+
+`tool_correctness` is baseline rather than case-declared because it is the only
+metric that scores the *observed* invocation trace against `expected_tools`, and
+`packet_only_no_direct_connectors` is a property of every mode, not of the cases
+that happened to list it. Left declarable, a case could omit it and be recorded
+as proving a mode whose specialist reached a connector directly.
 
 `brain_isolation`, `role_adherence`, and `case_criteria` are expressed as semantic
 criteria rather than string checks because the failure mode is semantic: a
@@ -145,8 +153,26 @@ imports deepeval.
 
 ## Rollback
 
-Additive. Rolling back is deleting `evals/`,
-`requirements/runtime-evaluation.txt`, `tests/test_evaluation_harness.py`, the
-`evals/output/` line in `.gitignore`, and this file. No governance rule, packet
-contract, schema, roster entry, or lifecycle stage was modified, so a rollback
-cannot strand a specialist mid-promotion.
+Additive, but **not confined to `evals/`** — the harness acquired CI wiring after
+this section was first written, and deleting only the directory leaves a
+repository that fails validation on every subsequent run. A complete rollback
+removes, as one change:
+
+- `evals/`, `tests/test_evaluation_harness.py`, and this file;
+- `requirements/runtime-evaluation.txt` **and** `requirements/lock-runtime-evaluation.txt`;
+- the `runtime-evaluation` manifest/lock pair from the `locks` job in
+  `.github/workflows/validate-agent.yml` — that job runs `uv pip compile` against
+  the manifest, so removing the file alone makes the job fail on a missing path;
+- the `lock-runtime-evaluation.txt` entry from the dependency-audit step in
+  `.github/workflows/security.yml`;
+- the `evals/output/` line in `.gitignore`;
+- the `evals/` and `docs/EVALUATION_HARNESS.md` entries in `README.md` and
+  `docs/README.md`.
+
+Stated as a list rather than "delete the directory" because the earlier wording
+was accurate when written and silently stopped being so. **A rollback procedure
+is only true of the change it was written against**, and this one had grown CI
+dependencies in three files since.
+
+No governance rule, packet contract, schema, roster entry, or lifecycle stage was
+modified, so a rollback still cannot strand a specialist mid-promotion.

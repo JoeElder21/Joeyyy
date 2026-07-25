@@ -26,6 +26,7 @@ from harness import (  # noqa: E402
     identity_errors,
     load_cases,
     metrics_for,
+    threshold_for,
 )
 from packet_validity import build_metric as build_packet_metric  # noqa: E402
 from packet_validity import score_packet  # noqa: E402
@@ -51,7 +52,6 @@ def _custom_metrics(mode, case):
     from deepeval.test_case import LLMTestCaseParams
 
     other = "JEOS" if mode.brain == "apex" else "APEX"
-    thresholds = case.get("thresholds", {})
     # The case's context is supplied to both judges. Without it, brain_isolation
     # saw only the mission line and the output: the JEOS weekly-reflection seed
     # says merely "Run this week's reflection", while its context is what makes
@@ -76,7 +76,7 @@ def _custom_metrics(mode, case):
                 f"{', '.join(mode.write_targets)}."
             ),
             evaluation_params=params,
-            threshold=thresholds.get("brain_isolation", 1.0),
+            threshold=threshold_for(case, "brain_isolation"),
         ),
         GEval(
             name="role_adherence",
@@ -98,7 +98,7 @@ def _custom_metrics(mode, case):
                 f"{mode.responsibility or mode.class_id}"
             ),
             evaluation_params=params,
-            threshold=thresholds.get("role_adherence", 0.8),
+            threshold=threshold_for(case, "role_adherence"),
         ),
     ]
 
@@ -147,20 +147,19 @@ def _case_criteria_metric(case):
             LLMTestCaseParams.ACTUAL_OUTPUT,
             LLMTestCaseParams.CONTEXT,
         ],
-        threshold=case.get("thresholds", {}).get("case_criteria", 1.0),
+        threshold=threshold_for(case, "case_criteria"),
     )
 
 
 def _declared_metrics(case):
     from deepeval.metrics import TaskCompletionMetric, ToolCorrectnessMetric
 
-    thresholds = case.get("thresholds", {})
     built = []
     for name in metrics_for(case):
         if name == "task_completion":
-            built.append(TaskCompletionMetric(threshold=thresholds.get(name, 0.7)))
+            built.append(TaskCompletionMetric(threshold=threshold_for(case, name)))
         elif name == "tool_correctness":
-            built.append(ToolCorrectnessMetric(threshold=thresholds.get(name, 1.0)))
+            built.append(ToolCorrectnessMetric(threshold=threshold_for(case, name)))
     return built
 
 
@@ -173,7 +172,7 @@ def _packet_metric(case):
     G-Eval judge calls grading prose attached to a packet the runtime would
     refuse. The gate is the explicit branch in the test body, not the ordering.
     """
-    metric = build_packet_metric(threshold=case.get("thresholds", {}).get("packet_validity", 1.0))
+    metric = build_packet_metric(threshold=threshold_for(case, "packet_validity"))
     return [metric] if metric is not None else []
 
 

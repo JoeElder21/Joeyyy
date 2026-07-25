@@ -886,6 +886,95 @@ A handoff could read past its commission. The scope fallback read the handoff's 
 
 **A procedural note worth keeping.** Restoring files after a mutation run left stale `__pycache__` for modules imported through the `evals/` path shim, and the suite reported four failures against correct source. The bytecode, not the restore, was wrong. Mutation runs on path-shimmed modules need a cache clear before the result is believable — a wrong conclusion here would have been "my fix broke something" when nothing was broken.
 
+### Automated review, twenty-fifth pass — eight findings, eight fixed
+
+No deferrals this round. Two P1 fail-opens in `scripts/policy_enforcement.py`, one
+threshold accessor in the harness, and four documentation claims that had stopped
+being true of the thing they describe.
+
+**A naming convention walked straight through the high-impact boundary.** The
+action tokenizer folded case *before* splitting, so `deleteAll` became the single
+token `deleteall` — matching no verb, qualified by nothing, and passing the
+boundary with no instruction required. The same held for `publishReport`,
+`sendEmail`, `rotateCredentials`, and `bulkDelete`. The snake_case forms have been
+covered since the twentieth pass; camelCase, which is what most dispatchers
+actually emit, was outside the control the whole time.
+
+Fixing it through a *shared* tokenizer — one function serving both `_is_mutating`
+and `_boundary_category`, rather than a second regex at the second site —
+uncovered **a second fail-open nobody reported**. The old expression split on
+`[^a-z]+`, which consumed the capital starting each camel segment: `listPurge`
+tokenized to `['list', 'urge']` and classified as a **read**, skipping every
+mutation control. That is the opposite of what the action is. It is recorded here
+because it was found by the *shape* of the fix, not by the finding — writing the
+shared helper is what made the divergence visible, and a narrower fix at the one
+reported call site would have left it in place. `GetInfo` was over-classified by
+the same expression, in the harmless direction.
+
+**A delegation could authorize exactly what it forbids.** `prohibited_scope` is a
+*required* field of the delegation schema and nothing in the enforcement point
+ever read it. A schema-valid packet whose `prohibited_scope` named its own
+`memory_namespace` granted access to that namespace: the packet contradicted
+itself and the contradiction resolved toward access. The check is applied
+**before** the allowlist, because a prohibition that only bites where the
+allowlist already denies is not a prohibition. Only machine-resolvable entries are
+enforced; `prohibited_scope` also carries prose ("binding commitments") that no
+comparison here can adjudicate, and guessing at it would deny lawful work on a
+string match.
+
+**One decision written as two numbers, again.** `validate_thresholds` governs what
+a case *declares*; nothing governed what it *omits*. When
+`MINIMUM_THRESHOLDS["role_adherence"]` was raised to 1.0 last round, the judge
+kept its own `0.8` default literal, so a case that simply did not mention the
+metric got partial credit on the gate carrying the high-impact refusal. Both now
+route through one accessor. `tool_correctness` also became a baseline metric: it
+is the only metric scoring the *observed* invocation trace, and
+`packet_only_no_direct_connectors` is a property of every mode rather than of the
+cases that happened to list it.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| camelCase actions bypassed the high-impact boundary | **Correct — P1 fail-open** | Shared camelCase-aware tokenizer used by both classification sites. |
+| `prohibited_scope` was never consulted | **Correct — P1 fail-open** | Applied ahead of the allowlist; prose entries left to the role judge. |
+| An omitted threshold fell below its floor | **Correct — P2** | One accessor clamps declared and omitted alike. |
+| `tool_correctness` was case-declarable | **Correct — P2** | Promoted to baseline; a case can no longer omit the connector-isolation gate. |
+| `CONTRIBUTING.md` implied pre-commit ran every CI gate | **Correct** | Described as a subset, naming what stays manual. |
+| The runner's own usage block omitted the required `--run-id` | **Correct** | An operator following it was refused before anything executed. |
+| The rollback said "delete the directory" after growing CI wiring | **Correct** | Enumerated across five files. |
+| `README.md` did not mark the harness unwired | **Correct** | Marked, tied to the exception the source raises. |
+
+**Mutation testing found the real defect of this round: I fixed eight things and
+tested none of them.** All eight came back MISSED on the first run. The code was
+correct and the repository could not tell — every one of these fixes would have
+survived being reverted by a later change. Nine regression tests were written in
+response and the mutations re-run until all eleven were caught.
+
+Three second-order corrections came out of that, each worth more than the finding
+that produced it:
+
+- The baseline-metric documentation test was **one-directional** — it proved every
+  implemented baseline metric appeared in the record, and passed happily when the
+  record named a metric the code no longer treated as baseline. It now asserts set
+  equality against the enumeration between the em dashes.
+- The usage-block test, scoped to the whole `Usage:` section, passed with the
+  option missing from **every invocation**, because the prose underneath happens
+  to name it. That is the paragraph-instead-of-the-thing failure this record has
+  now logged three times, in a test written by the process that recorded it twice.
+  Scoped to the command lines.
+- An ordering test hand-built an allowlist to force the situation and tripped the
+  private-memory rule instead. **Proving an ordering property with a request that
+  was never lawful proves nothing.** Rewritten to assert the property that
+  actually distinguishes it: the same request without the prohibition is
+  admitted, which is what makes the denial attributable to the prohibition.
+
+**Four of the eight findings were siblings left behind by earlier rounds.** The
+README's pre-commit claim was fixed and `CONTRIBUTING.md` — the document a
+contributor actually follows before a first commit — was not. `resource_id` was
+required on mutations for sixteen rounds before reads. `role_adherence`'s floor
+moved and its default did not. Under-testing is what let all four persist: the
+sweep for a class is only as good as the test that keeps it swept, and none of
+these had one.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

@@ -108,6 +108,29 @@ HIGH_IMPACT_VERBS = {
 DESTRUCTIVE_VERBS = frozenset({"delete", "remove", "destroy", "erase", "clear", "prune"})
 BULK_QUALIFIERS = frozenset({"all", "everything", "bulk", "mass", "entire", "batch"})
 
+# Word boundaries inside an action name, camelCase included.
+#
+# Both places that tokenize an action lowercased it FIRST and then split on
+# non-alpha, which erases every camelCase boundary: `deleteAll` became the
+# single token `deleteall`, so the high-impact map -- which matches by token
+# equality -- saw nothing it recognised. `deleteAll`, `publishReport`,
+# `sendEmail`, and `rotateCredentials` all walked past the boundary Joe
+# reserves for himself, while their underscore spellings were classified
+# correctly. A dispatcher's naming convention should not decide whether a
+# control fires.
+#
+# Written once and used by both call sites deliberately. The last three rounds
+# each produced a defect from fixing one site and leaving its sibling, and this
+# is the same tokenizer serving `_is_mutating` and `_boundary_category`.
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def _action_tokens(action: str) -> list[str]:
+    """Lower-case word tokens of an action, splitting camelCase before folding."""
+    spaced = _CAMEL_BOUNDARY.sub(" ", action or "")
+    return [token for token in re.split(r"[^a-z0-9]+", spaced.lower()) if token]
+
+
 # The only connector posture the deployed roster declares. Anything else is a
 # configuration the runtime has never been shown to be safe under.
 PACKET_ONLY = "packet_only_no_direct_connectors"
@@ -529,7 +552,7 @@ class PolicyEnforcementPoint:
         # wrong, which is worth stating plainly: the fix to a fail-open check
         # was itself fail-open. Only the verb position carries the intent, so
         # only the verb position is consulted.
-        tokens = [token for token in re.split(r"[^a-z]+", action) if token]
+        tokens = _action_tokens(action)
         if not tokens or tokens[0] not in READ_ONLY_ACTION_VERBS:
             return True
         # Backstop: a read-leading compound whose tail names a mutation
@@ -1420,8 +1443,49 @@ class PolicyEnforcementPoint:
             errors.append(
                 f"packet resource {resource!r} does not match the requested {request.resource_id!r}"
             )
+        errors.extend(self._prohibited_scope_errors(request, packet))
         errors.extend(self._packet_namespace_errors(request, packet))
         errors.extend(self._packet_operation_errors(request, packet))
+        return errors
+
+    def _prohibited_scope_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
+        """A bounded assignment cannot authorize what it explicitly forbids.
+
+        `prohibited_scope` is a required field of the delegation schema and
+        nothing consulted it. A schema-valid delegation whose `prohibited_scope`
+        named its own `memory_namespace` authorized a read of exactly that
+        namespace -- the packet contradicted itself and the contradiction
+        resolved in favour of access. Reproduced before fixing.
+
+        Applied BEFORE the allowlist, because a prohibition that only takes
+        effect where the allowlist already denies is not a prohibition.
+
+        Only machine-resolvable entries are enforced. `prohibited_scope` also
+        carries prose ("binding commitments"), which no comparison here can
+        adjudicate -- those remain a matter for the role-adherence judge and are
+        deliberately not guessed at. An entry is treated as a scope when it
+        looks like a namespace or a path, which is the same normalization the
+        allowlist comparison uses, so the two cannot disagree about what a
+        given string denotes.
+        """
+        prohibited = packet.get("prohibited_scope") or []
+        if not isinstance(prohibited, list):
+            return ["packet prohibited_scope must be a list"]
+        resource = self._canonical_resource(request.resource).replace("::", "/")
+        errors = []
+        for entry in prohibited:
+            if not isinstance(entry, str) or not entry.strip():
+                continue
+            normalized = self._canonical_resource(entry.strip()).replace("::", "/")
+            # Prose entries name no resource. `/` or `::` in the original is
+            # what distinguishes "APEX::Roundtable" from "binding commitments".
+            if "/" not in normalized and "::" not in entry:
+                continue
+            if resource == normalized or resource.startswith(f"{normalized}/"):
+                errors.append(
+                    f"packet prohibits {entry!r}, which covers the requested "
+                    f"{request.resource!r}; a delegation cannot authorize what it forbids"
+                )
         return errors
 
     @staticmethod
@@ -1654,11 +1718,12 @@ class PolicyEnforcementPoint:
         himself. The directions are not symmetric, so ambiguity resolves toward
         classifying.
         """
-        if action in HIGH_IMPACT_ACTIONS:
-            return action
-        if action in HIGH_IMPACT_VERBS:
-            return HIGH_IMPACT_VERBS[action]
-        tokens = [token for token in re.split(r"[^a-z]+", action) if token]
+        folded = (action or "").strip().lower()
+        if folded in HIGH_IMPACT_ACTIONS:
+            return folded
+        if folded in HIGH_IMPACT_VERBS:
+            return HIGH_IMPACT_VERBS[folded]
+        tokens = _action_tokens(action)
         # A destructive verb qualified as wholesale is a bulk deletion even when
         # neither token means that alone: `delete` is an ordinary mutation the
         # lease governs, `all` is nothing, `delete_all` is irreversible.
@@ -1669,7 +1734,7 @@ class PolicyEnforcementPoint:
         for token in tokens:
             if token in HIGH_IMPACT_VERBS:
                 return HIGH_IMPACT_VERBS[token]
-        return action
+        return folded
 
     def _lifecycle_stage(self, request: ToolRequest) -> list[str]:
         if not request.mutating or request.agent == CHIEF:
@@ -1700,7 +1765,13 @@ class PolicyEnforcementPoint:
         # Compare the normalized action. `evaluate()` normalizes before any rule
         # runs; lowercasing again here keeps a directly-invoked rule honest
         # rather than making the boundary depend on the caller's entry point.
-        action = (request.action or "").strip().lower()
+        # NOT lowercased before classification. `evaluate()` normalizes the
+        # action to lowercase for every other rule, and doing the same here
+        # destroyed the camelCase boundaries the classifier needs -- `deleteAll`
+        # collapsed to one unrecognisable token. `_boundary_category` folds case
+        # itself, after splitting.
+        raw_action = (request.action or "").strip()
+        action = raw_action.lower()
         # Concrete verbs map to their category, not just the category label.
         #
         # The comparison was exact against `HIGH_IMPACT_ACTIONS`, whose members
@@ -1712,7 +1783,7 @@ class PolicyEnforcementPoint:
         # the same "controls that ask the caller to incriminate itself" shape as
         # the three caller-set booleans removed earlier: nobody publishing
         # something they should not would spell the action `public_publication`.
-        action = self._boundary_category(action)
+        action = self._boundary_category(raw_action)
         if action not in HIGH_IMPACT_ACTIONS:
             return []
         grant = request.instruction_grant

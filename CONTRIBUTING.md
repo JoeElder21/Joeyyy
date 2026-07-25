@@ -9,7 +9,13 @@ operating contract — this document covers only the mechanics of getting a chan
 python -m pip install pre-commit && pre-commit install   # once
 ```
 
-That installs the same gates CI runs, so failures surface before a push rather than after.
+That installs **most** of the gates CI runs — the privacy guard, corps validation, the
+unit suite, gitleaks, `ruff check`, and `ruff format --check` — so those failures surface
+before a push rather than after. It does **not** install `verify_runtime_stack.py` or the
+strict MCP mount probe, and the unit suite lets its JSON Schema check skip when
+`jsonschema` is absent. A contributor relying on the hooks alone can therefore pass
+locally and still fail CI on an invalid schema or a broken mount, so run the full manual
+sequence below before pushing.
 
 To run everything by hand:
 

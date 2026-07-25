@@ -34,6 +34,7 @@ from scripts.policy_enforcement import (
     PolicyDenied,
     PolicyEnforcementPoint,
     ToolRequest,
+    _action_tokens,
     enforce,
 )
 from scripts.trusted_launcher import _sign
@@ -2551,6 +2552,170 @@ class TwentyFourthPassRegressionTests(unittest.TestCase):
             ),
             [],
         )
+
+
+class TwentyFifthPassRegressionTests(unittest.TestCase):
+    """A camelCase bypass of the boundary, and a prohibition nothing consulted."""
+
+    RESOURCE = "APEX/Strategy-Campaigns/apex_war_architect"
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _pair(self):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        delegation, handoff = PacketContractTests().v21_readonly_pair()
+        return json.loads(json.dumps(delegation)), json.loads(json.dumps(handoff))
+
+    def _boundary(self, action):
+        return self.pep._high_impact_boundary(
+            ToolRequest(
+                agent=CHIEF,
+                action=action,
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+                mutating=True,
+            )
+        )
+
+    def test_camel_case_actions_reach_the_boundary(self):
+        # The tokenizer folded case BEFORE splitting, so `deleteAll` became one
+        # token `deleteall` -- matching no verb, qualified by nothing, and
+        # passing the boundary without an instruction. Every dispatcher that
+        # names actions in camelCase, which is most of them, was outside the
+        # control. The snake_case sibling was fixed five rounds ago; this is the
+        # same class reached by a different naming convention.
+        for action in (
+            "deleteAll",
+            "DeleteAll",
+            "bulkDelete",
+            "publishReport",
+            "sendEmail",
+            "rotateCredentials",
+        ):
+            with self.subTest(action=action):
+                self.assertTrue(
+                    self._boundary(action),
+                    f"{action} passed the high-impact boundary with no instruction",
+                )
+
+    def test_ordinary_camel_case_actions_are_not_over_classified(self):
+        # The other direction. Over-classification costs a signature request on
+        # work that never needed one, and a boundary that fires on every write
+        # is one Joe learns to wave through.
+        for action in (
+            "readRow",
+            "listTransfers",
+            "designReview",
+            "appendRecord",
+            "validatePacket",
+            "assignOwner",
+        ):
+            with self.subTest(action=action):
+                self.assertEqual(self._boundary(action), [])
+
+    def test_the_tokenizer_keeps_the_first_letter_of_each_segment(self):
+        # An unreported fail-open the shared tokenizer closed. The old regex
+        # split on `[^a-z]+`, which CONSUMED the capital starting each camel
+        # segment: `listPurge` tokenized to ['list', 'urge'], so it read as a
+        # list operation and skipped every mutation control -- classified as the
+        # opposite of what it is. Asserted on the tokens rather than on a
+        # verdict, because the defect is in the tokenizer and the verdict is
+        # only where it surfaced.
+        self.assertEqual(_action_tokens("listPurge"), ["list", "purge"])
+        self.assertEqual(_action_tokens("GetInfo"), ["get", "info"])
+        self.assertEqual(_action_tokens("rotateAPIKey"), ["rotate", "api", "key"])
+        self.assertEqual(_action_tokens("delete_all"), ["delete", "all"])
+
+    def test_a_delegation_cannot_authorize_what_it_prohibits(self):
+        # `prohibited_scope` is a required field of the delegation schema and
+        # nothing read it. A packet whose prohibition named its own authorized
+        # namespace granted access to exactly that namespace: the packet
+        # contradicted itself and the contradiction resolved toward access.
+        delegation, _ = self._pair()
+        for entry in (self.RESOURCE, "APEX/Strategy-Campaigns"):
+            with self.subTest(entry=entry):
+                prohibiting = json.loads(json.dumps(delegation))
+                prohibiting["prohibited_scope"] = [entry]
+                errors = self.pep._packet_admission(
+                    ToolRequest(
+                        agent=SPECIALIST,
+                        action="read",
+                        resource=self.RESOURCE,
+                        owner_brain="APEX",
+                        packet=prohibiting,
+                        packet_schema="delegation_packet.schema.json",
+                        resource_id=prohibiting["resource_id"],
+                    )
+                )
+                self.assertTrue(
+                    any("prohibits" in error for error in errors),
+                    f"prohibited_scope {entry!r} did not deny the resource it covers",
+                )
+
+    def test_prose_prohibitions_do_not_deny_unrelated_work(self):
+        # `prohibited_scope` also carries prose no comparison here can
+        # adjudicate. Guessing at it would deny lawful work on a string match,
+        # so entries naming no resource are left to the role-adherence judge --
+        # and a prohibition on a DIFFERENT namespace must not bite either.
+        delegation, _ = self._pair()
+        for entries in (["JEOS", "binding commitments"], ["APEX::Roundtable"]):
+            with self.subTest(entries=entries):
+                permitting = json.loads(json.dumps(delegation))
+                permitting["prohibited_scope"] = entries
+                self.assertEqual(
+                    self.pep._packet_admission(
+                        ToolRequest(
+                            agent=SPECIALIST,
+                            action="read",
+                            resource=self.RESOURCE,
+                            owner_brain="APEX",
+                            packet=permitting,
+                            packet_schema="delegation_packet.schema.json",
+                            resource_id=permitting["resource_id"],
+                        )
+                    ),
+                    [],
+                )
+
+    def test_the_prohibition_denies_what_the_allowlist_admits(self):
+        # A prohibition that only takes effect where the allowlist already
+        # denies is not a prohibition, so the ordering is the substance of the
+        # fix. Asserted as the property rather than by reading the call order:
+        # the SAME request without the prohibition is admitted, which is what
+        # makes the denial attributable to the prohibition and nothing else.
+        # An earlier version of this test hand-built an allowlist to force the
+        # situation and tripped the private-memory rule instead -- proving the
+        # ordering with a request that was never lawful proves nothing.
+        delegation, _ = self._pair()
+        request = ToolRequest(
+            agent=SPECIALIST,
+            action="read",
+            resource=self.RESOURCE,
+            owner_brain="APEX",
+            packet=delegation,
+            packet_schema="delegation_packet.schema.json",
+            resource_id=delegation["resource_id"],
+        )
+        self.assertEqual(self.pep._packet_admission(request), [])
+
+        prohibiting = json.loads(json.dumps(delegation))
+        prohibiting["prohibited_scope"] = [self.RESOURCE]
+        errors = self.pep._packet_admission(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource=self.RESOURCE,
+                owner_brain="APEX",
+                packet=prohibiting,
+                packet_schema="delegation_packet.schema.json",
+                resource_id=prohibiting["resource_id"],
+            )
+        )
+        self.assertTrue(any("prohibits" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

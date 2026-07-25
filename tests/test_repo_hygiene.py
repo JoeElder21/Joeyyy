@@ -193,6 +193,40 @@ class AutomationClaimTests(unittest.TestCase):
             "the unqualified claim is false while two listed gates have no hook",
         )
 
+    def test_contributing_does_not_overstate_what_pre_commit_runs(self):
+        # The same claim, in the document a contributor actually follows before
+        # a first commit, and it was left untouched when the README was fixed.
+        # Fixing the reported instance and leaving the sibling is the shape this
+        # record has now logged more times than any other; here the sibling was
+        # the higher-traffic surface of the two.
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        hooks = PRE_COMMIT.read_text(encoding="utf-8")
+        manual = [
+            checker
+            for checker in ("scripts/verify_runtime_stack.py", "scripts/verify_mcp_mounts.py")
+            if checker not in hooks
+        ]
+        if not manual:
+            return  # every gate is hooked; the caveat is no longer required
+        for checker in manual:
+            with self.subTest(checker=checker):
+                self.assertIn(
+                    Path(checker).name,
+                    contributing,
+                    f"{checker} has no hook, so CONTRIBUTING must name it as manual",
+                )
+        for overstatement in (
+            "installs **all** of the gates",
+            "installs **every** gate",
+            "installs all of the gates",
+        ):
+            with self.subTest(claim=overstatement):
+                self.assertNotIn(
+                    overstatement,
+                    contributing,
+                    "a contributor trusting full parity passes locally and fails CI",
+                )
+
 
 class IssueFormEnforceabilityTests(unittest.TestCase):
     """Issue forms cannot cross-validate, so each required answer must stand alone."""
