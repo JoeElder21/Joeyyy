@@ -5,7 +5,8 @@ import unittest
 
 from scripts.privacy_guard import (
     PLACEHOLDER_LITERALS,
-    VENDORED_DOC_DIR,
+    VENDORED_DOC_RELAXATIONS,
+    applicable_patterns,
     repository_files,
     scan_repository,
     strip_known_placeholders,
@@ -14,11 +15,12 @@ from scripts.privacy_guard import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Labels in this module's `prohibited` map that are relaxed inside
-# VENDORED_DOC_DIR, mirroring privacy_guard.VENDORED_DOC_RELAXED_PATTERNS.
-RELAXED_IN_VENDORED_DOCS = frozenset(
-    {"generic credential assignment", "email address"}
-)
+# This module's `prohibited` labels differ from privacy_guard.PATTERNS labels;
+# map ours onto theirs so the two relaxation sets cannot drift apart.
+LABEL_ALIASES = {
+    "generic credential assignment": "credential assignment",
+    "email address": "email address",
+}
 
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
@@ -51,12 +53,42 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             text = strip_known_placeholders(
                 relative_path, path.read_text(encoding="utf-8")
             )
-            vendored = VENDORED_DOC_DIR in relative_path.parents
+            relaxed = VENDORED_DOC_RELAXATIONS.get(relative_path, frozenset())
             for label, pattern in prohibited.items():
-                if vendored and label in RELAXED_IN_VENDORED_DOCS:
+                if LABEL_ALIASES.get(label) in relaxed:
                     continue
                 with self.subTest(path=relative_path, check=label):
                     self.assertIsNone(pattern.search(text))
+
+    def test_unlisted_instruction_file_gets_the_full_pattern_set(self):
+        """Regression: a directory-wide exemption once let any file under
+        .github/instructions/ bypass the email and credential heuristics, so a
+        hand-authored or newly discovered file could publish real data
+        silently. Relaxations are pinned per file; an unlisted one is scanned
+        in full."""
+        unlisted = Path(".github/instructions/local.instructions.md")
+        self.assertNotIn(unlisted, VENDORED_DOC_RELAXATIONS)
+        self.assertEqual(
+            set(applicable_patterns(unlisted)),
+            set(applicable_patterns(Path("scripts/anything.py"))),
+        )
+
+    def test_relaxations_are_narrow_and_per_pattern(self):
+        """Each relaxed file gives up only the one pattern it needs, and only
+        low-confidence prose heuristics are ever relaxed."""
+        allowed_to_relax = {"credential assignment", "email address"}
+        for path, relaxed in VENDORED_DOC_RELAXATIONS.items():
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file())
+                self.assertTrue(relaxed)
+                self.assertLessEqual(len(relaxed), 1)
+                self.assertTrue(relaxed <= allowed_to_relax)
+                remaining = set(applicable_patterns(path))
+                for high_confidence in (
+                    "secret token", "cloud access key", "private key",
+                    "phone number", "street address", "raw Drive or Docs link",
+                ):
+                    self.assertIn(high_confidence, remaining)
 
     def test_placeholder_allowlist_has_no_stale_entries(self):
         for relative_path, literals in PLACEHOLDER_LITERALS.items():

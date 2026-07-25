@@ -243,7 +243,14 @@ class McpMountRegistryTests(unittest.TestCase):
 
     def test_infrastructure_mounts_are_apex_locked_and_grant_gated(self):
         """Terraform and Azure touch professional infrastructure, so they must
-        never be reachable from a JEOS specialist and never launch ungranted."""
+        never be reachable from a JEOS specialist and never launch ungranted.
+
+        They are also restricted to apex_chief_of_staff alone: every APEX
+        specialist is still lifecycle stage `shadow`, where the contract makes
+        Agent 007 the sole executor of mutations. Listing a shadow specialist on
+        a mutation-capable cloud mount would exceed its authority, so widen this
+        only alongside a lifecycle promotion.
+        """
         with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
             mounts = {m["name"]: m for m in tomllib.load(source)["mounts"]}
         for name in ("terraform", "azure"):
@@ -251,10 +258,32 @@ class McpMountRegistryTests(unittest.TestCase):
             with self.subTest(mount=name):
                 self.assertTrue(mount.get("require_grant"))
                 self.assertNotIn("*", mount["agents"])
+                self.assertEqual(mount["agents"], ["apex_chief_of_staff"])
                 for agent in mount["agents"]:
                     self.assertFalse(
                         agent.startswith("jeos_"),
                         f"{name} must stay out of the JEOS brain, got {agent}",
+                    )
+
+    def test_mount_commands_pin_immutable_versions(self):
+        """A mutable tag lets a mount's tool surface change with no commit,
+        which defeats the point of the approved-mounts registry. Reference
+        servers fetched by bare package name are exempt; anything carrying an
+        explicit version must not use a floating one.
+        """
+        floating = {"latest", "main", "master", "edge", "next", "canary"}
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        for mount in mounts:
+            for token in mount["command"]:
+                if "@" not in token and ":" not in token:
+                    continue
+                separator = "@" if token.rsplit("@", 1)[-1] and "@" in token[1:] else ":"
+                tag = token.rsplit(separator, 1)[-1]
+                with self.subTest(mount=mount["name"], token=token):
+                    self.assertNotIn(
+                        tag.lower(), floating,
+                        f"{mount['name']} pins a mutable tag in {token!r}",
                     )
 
 

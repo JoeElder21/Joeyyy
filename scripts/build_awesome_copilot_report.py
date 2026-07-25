@@ -229,20 +229,40 @@ for f, glob, why in [
 story.append(tbl(ins, [2.2 * inch, 1.78 * inch, 2.72 * inch]))
 
 story.append(Paragraph("4. Agents adopted (3 of 221)", H1))
-ag = [hdr("File", "Role", "Note")]
+story.append(Paragraph(
+    "All three are registered in "
+    "<font face='Courier' size='8'>docs/AGENT_REGISTRY.md</font>. They are "
+    "editor-plane agents: no brain ownership, memory namespace, write target, "
+    "or writer lease. Agent 007 remains the sole write-capable native agent.",
+    BODY))
+ag = [hdr("File", "Role", "Status and limits")]
 for f, role, note in [
-    ("meta-agentic-project-scaffold", "Discovery / scaffold",
-     "Pulls further upstream assets into the correct folders. Pins "
-     "<font face='Courier' size='7.5'>model: GPT-4.1</font> upstream."),
     ("prompt-engineer", "Prompt rewriting",
-     "Self-contained; declares no external tools."),
+     "<b>active.</b> Carries a local override, <font face='Courier' "
+     "size='7.5'>tools: []</font>. Upstream omits the field, which grants every "
+     "built-in and MCP tool; this agent consumes arbitrary user text, so "
+     "all-tools access would let prompt injection reach the repository."),
     ("task-planner", "Implementation planning",
-     "Initially excluded for declaring Terraform and Azure tools with no home "
-     "in this repo. Both are now registered mounts, so it was adopted."),
+     "<b>candidate.</b> Its declared Terraform / Azure / Docs tool names are "
+     "not wired into any Copilot MCP configuration, and unrecognized names are "
+     "silently ignored, so those capabilities are unavailable in a normal "
+     "session. Registering the mounts served Agent 007, not this agent."),
+    ("task-researcher", "Research pass",
+     "<b>candidate.</b> Vendored because the planner mandatorily invokes it "
+     "before any planning; without it the planner blocks on a missing "
+     "dependency on every new task. Same unwired-tool limitation."),
 ]:
     ag.append([Paragraph(f, MONO), Paragraph(role, CELL),
                Paragraph(note, CELL)])
-story.append(tbl(ag, [1.95 * inch, 1.15 * inch, 3.6 * inch]))
+story.append(tbl(ag, [1.55 * inch, 1.0 * inch, 4.15 * inch]))
+story.append(Spacer(1, 5))
+story.append(Paragraph(
+    "<b>Removed after review:</b> "
+    "<font face='Courier' size='8'>meta-agentic-project-scaffold</font> was "
+    "vendored, then removed. It instructs the agent to pull upstream files and "
+    "“do nothing else”, copying them as is — bypassing the intake gates the "
+    "repository contract mandates. The three discovery skills cover the same "
+    "function and route through intake.", NOTE))
 
 story.append(PageBreak())
 story.append(Paragraph("5. Skills adopted (3 of 391)", H1))
@@ -358,9 +378,16 @@ for g, r in [
 story.append(tbl(ver, [2.6 * inch, 4.1 * inch]))
 story.append(Spacer(1, 6))
 story.append(Paragraph(
-    "No runtime, brain, or agent-contract behaviour was changed. The adopted "
-    "files are editor and agent-side authoring aids; the only change to "
-    "existing behaviour is the privacy-guard adjustment in section 7.", NOTE))
+    "Scope of change: the adopted instruction, agent, and skill files are "
+    "editor-side authoring aids and alter no runtime or brain behaviour. Three "
+    "changes to existing behaviour did occur and are not covered by that "
+    "statement \u2014 the privacy-guard scoping in section 7; the Agent 007 "
+    "contract, which now activates on either name, emits a changed activation "
+    "line, requires the discovery skills to be run rather than listed, and "
+    "imposes the five-line ops brief, front-loaded validation, and "
+    "policy/behavioral commit split; and two new grant-gated MCP mounts, "
+    "registered but not activated. Read this report alongside the commit "
+    "history, not in place of it.", NOTE))
 
 # -------------------------------------------------------------------- closing
 story.append(Paragraph("9. Standing recommendation", H1))

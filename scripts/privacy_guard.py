@@ -77,16 +77,27 @@ PATTERNS = {
 
 
 # Vendored third-party Copilot instruction docs (see .github/AWESOME-COPILOT.md).
-# These are secure-coding guides: they are full of illustrative credential
-# handling (assignments reading a password from a request body, or a key name
-# from an environment variable) and placeholder addresses that the prose-level
-# heuristics below cannot distinguish from real leakage. Only those two
-# low-confidence heuristics are relaxed, and only under this directory. Every
-# high-confidence check -- real-looking secret
-# tokens, cloud access keys, private key blocks, phone numbers, street
-# addresses, Drive links -- stays fully enforced here as everywhere else.
-VENDORED_DOC_DIR = Path(".github/instructions")
-VENDORED_DOC_RELAXED_PATTERNS = frozenset({"credential assignment", "email address"})
+# Some are secure-coding guides: they contain illustrative credential handling
+# (an assignment reading a password from a request body, or a key name from an
+# environment variable) and placeholder addresses that the prose-level
+# heuristics below cannot distinguish from real leakage.
+#
+# Each relaxation is pinned to one exact file AND the one pattern that file
+# needs. A directory-wide exemption was rejected: it would silently disable
+# those checks for any file later added or hand-authored under
+# .github/instructions/, which is precisely the leak this guard exists to catch.
+# Every other pattern stays enforced in these files, and every pattern stays
+# enforced in every other file.
+VENDORED_DOC_RELAXATIONS: dict[Path, frozenset[str]] = {
+    Path(".github/instructions/security-and-owasp.instructions.md"): frozenset(
+        {"credential assignment"}
+    ),
+    Path(".github/instructions/code-review-generic.instructions.md"): frozenset(
+        {"credential assignment"}
+    ),
+    Path(".github/instructions/self-explanatory-code-commenting.instructions.md"):
+        frozenset({"email address"}),
+}
 
 # Placeholder secrets that do trip a high-confidence pattern are pinned exactly,
 # one literal to one file, so a real credential in the same file still fails.
@@ -111,14 +122,20 @@ def strip_known_placeholders(relative: Path, text: str) -> str:
 
 
 def applicable_patterns(relative: Path) -> dict[str, re.Pattern[str]]:
-    """PATTERNS to enforce for one path, relaxing prose heuristics in vendored docs."""
-    if VENDORED_DOC_DIR in relative.parents:
-        return {
-            label: pattern
-            for label, pattern in PATTERNS.items()
-            if label not in VENDORED_DOC_RELAXED_PATTERNS
-        }
-    return PATTERNS
+    """PATTERNS to enforce for one path.
+
+    Only the exact (file, pattern) pairs in VENDORED_DOC_RELAXATIONS are
+    skipped. An unlisted file gets the full pattern set even inside a directory
+    that holds relaxed files.
+    """
+    relaxed = VENDORED_DOC_RELAXATIONS.get(relative, frozenset())
+    if not relaxed:
+        return PATTERNS
+    return {
+        label: pattern
+        for label, pattern in PATTERNS.items()
+        if label not in relaxed
+    }
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:
