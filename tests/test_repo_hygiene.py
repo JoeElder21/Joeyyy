@@ -109,6 +109,19 @@ class ValidationCoverageTests(unittest.TestCase):
             with self.subTest(ecosystem=ecosystem):
                 self.assertIn(f"package-ecosystem: {ecosystem}", text)
 
+    def test_every_dependabot_ecosystem_has_a_cooldown(self):
+        # A compromised release is usually caught and yanked within days, so
+        # adopting a brand-new version immediately is the one way an automated
+        # update bot makes supply-chain risk worse instead of better.
+        text = DEPENDABOT.read_text(encoding="utf-8")
+        ecosystems = text.count("package-ecosystem:")
+        self.assertEqual(
+            text.count("cooldown:"),
+            ecosystems,
+            "every package-ecosystem entry needs its own cooldown block",
+        )
+        self.assertEqual(text.count("default-days:"), ecosystems)
+
 
 class LocalGateTests(unittest.TestCase):
     """The house gates must be runnable before a commit exists, not only after a push."""

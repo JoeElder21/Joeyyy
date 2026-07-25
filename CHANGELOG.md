@@ -13,7 +13,9 @@ schema, or agent definition changed.
 - Supply-chain and workflow security: `.github/workflows/security.yml` runs zizmor static
   analysis over the workflows on push, PR, and weekly.
 - `.github/dependabot.yml` — grouped weekly updates for pip, npm (`connectors/aps`), and
-  GitHub Actions.
+  GitHub Actions, each with a cooldown (7 days; 14 for majors) so a compromised release has
+  time to be caught and yanked before the bot proposes it. Added in response to zizmor's
+  `dependabot-cooldown` finding on this file's first CI run.
 - `.pre-commit-config.yaml` — gitleaks, ruff, hygiene hooks, plus `privacy_guard.py` and
   `validate_specialist_corps.py` as local hooks.
 - Contributor surface: `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `.editorconfig`,
@@ -23,7 +25,7 @@ schema, or agent definition changed.
   form makes the FakeGit provenance check a required field.
 - `docs/README.md` — index of all 31 documentation records.
 - `CLAUDE.md` — repository guidance for Claude-based runtimes, pointing at `AGENTS.md`.
-- `tests/test_repo_hygiene.py` — 14 tests asserting the substrate cannot silently regress,
+- `tests/test_repo_hygiene.py` — 15 tests asserting the substrate cannot silently regress,
   including that no GitHub Action is referenced by a floating tag.
 
 ### Changed

@@ -3,6 +3,13 @@ version: 2
 # Grouped weekly updates. Grouping keeps PR volume low enough that each one is
 # actually reviewed rather than rubber-stamped, which matters more here than
 # update latency: every dependency in this repository is an absorption surface.
+#
+# Every ecosystem carries a cooldown, flagged by zizmor's dependabot-cooldown
+# audit on the first run of this file. A compromised release is usually caught
+# and yanked within days, so waiting before adopting a brand-new version is the
+# cheapest defense against the supply-chain class this repository is built to
+# resist (docs/FRONTIER_REPO_SCAN_2026-07-24.md). Majors wait longer: they carry
+# the largest diff and the least review time upstream.
 updates:
   - package-ecosystem: pip
     directory: /
@@ -10,6 +17,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       python-runtime:
         patterns: ["*"]
@@ -22,6 +32,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       aps-sdk:
         patterns: ["@aps_sdk/*"]
@@ -39,6 +52,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       github-actions:
         patterns: ["*"]

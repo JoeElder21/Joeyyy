@@ -248,7 +248,19 @@ schema, or agent definition was modified.
 - `.github/workflows/security.yml` — new: zizmor static analysis of the workflows
   themselves, on push, PR, and a weekly schedule.
 - `.github/dependabot.yml` — new: weekly updates for pip, npm (`connectors/aps`), and
-  GitHub Actions, grouped to keep PR volume low and keep the new SHA pins current.
+  GitHub Actions, grouped to keep PR volume low and keep the new SHA pins current. Each
+  ecosystem carries a cooldown (7 days, 14 for majors) before a brand-new version is
+  adopted — see the note below.
+
+**zizmor earned its place on its first run.** The initial CI run reported zero findings
+against the hardened workflows and three against the brand-new `dependabot.yml`:
+`dependabot-cooldown`, high confidence, all three fixed here. The audit's point is
+specific and correct for this threat model — a compromised package release is typically
+detected and yanked within days, so an update bot that adopts new versions the moment they
+publish is the one way automation makes supply-chain risk *worse*. A cooldown converts
+Dependabot from an exposure into a defense. This is the finding class that would have
+mattered in the March 2026 `trivy-action` → PyPI incident, and it was caught by a tool
+adopted in the same change.
 
 **Closing Finding 3 (supply chain):**
 - `.pre-commit-config.yaml` — new: gitleaks, ruff, generic hygiene hooks, plus
@@ -271,7 +283,7 @@ schema, or agent definition was modified.
 **Quality baseline:**
 - `[tool.ruff]` config in `pyproject.toml`; the 4 pre-existing lint errors fixed
   (3 unused imports, 1 ambiguous variable name). No behavior changed.
-- `tests/test_repo_hygiene.py` — new: 14 tests asserting the substrate cannot silently
+- `tests/test_repo_hygiene.py` — new: 15 tests asserting the substrate cannot silently
   regress. Notably, one test fails if any GitHub Action is referenced by floating tag
   instead of a SHA pin — the SHA-pinning rule is now enforced, not just applied once.
 
