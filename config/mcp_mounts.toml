@@ -65,7 +65,7 @@ activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session schedu
 [[mounts]]
 name = "terraform"
 require_grant = true
-command = ["docker", "run", "-i", "--rm", "-e", "TFE_TOKEN", "-e", "TFE_ADDRESS", "hashicorp/terraform-mcp-server:1.1.0"]
+command = ["docker", "run", "-i", "--rm", "-e", "TFE_TOKEN", "-e", "TFE_ADDRESS", "hashicorp/terraform-mcp-server:1.1.0@sha256:312d63756b5474df384b1844af55b58ca48cbe0996871e1d6c4239bfcd6fcd29"]
 agents = ["apex_chief_of_staff"]
 purpose = "Infrastructure-as-code surface: provider/module registry lookup and Terraform Enterprise / HCP workspace operations. Agent 007 only while the APEX specialists remain in shadow; see docs/TERRAFORM_AZURE_MCP_BUILDOUT.md."
 verify_offline = false

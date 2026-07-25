@@ -66,6 +66,15 @@ session the planner runs *without* those capabilities. Registering the Terraform
 mounts gave Agent 007 that tooling; it did not give this agent it. Wiring Copilot-side MCP
 is an open decision recorded in `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`.
 
+A second limitation compounds it: the planner writes generated prompts to
+`.copilot-tracking/prompts/`, but VS Code discovers prompt files in `.github/prompts/` or
+wherever `chat.promptFilesLocations` points, and this repository sets neither. The generated
+`*.prompt.md` files are therefore written but not runnable as prompts. Fixing it means either
+a tracked `.vscode/settings.json` location entry or moving the output directory — and it is
+entangled with the still-open question of whether `.copilot-tracking/` should be tracked or
+gitignored at all, so both are left as one decision rather than half-answered here. This is
+part of why both planner agents are `candidate` rather than active.
+
 **Planner local overrides.** Both planner agents shipped with `runCommands`, terminal
 access, `runTests`, `runNotebooks`, `extensions`, `vscodeAPI`, `new` and
 `openSimpleBrowser`. Neither implements anything — they write plans under
@@ -136,14 +145,36 @@ non-UTF-8 files in this public tree. The generator is the source of truth.
 
 ## Updating
 
-Re-run the discovery skills, or refresh a single file directly:
+**Refreshing a file is an intake action, not a download.** Prefer the discovery skills:
+they carry the gate checklist. If you refresh by hand, follow the same steps.
+
+Fetch from a *pinned commit*, never from `main`. `main` moves, so a `curl` from it can
+write bytes that do not correspond to the SHA you then record — the pin would be a claim
+about content you never fetched.
 
 ```bash
-curl -fsSL -o .github/instructions/markdown.instructions.md \
-  https://raw.githubusercontent.com/github/awesome-copilot/main/instructions/markdown.instructions.md
+PIN=aa280f28b1b73f9b6e6917b607eb92127b67b419      # or the commit you are moving to
+F=markdown.instructions.md
+
+curl -fsSL -o "/tmp/$F" \
+  "https://raw.githubusercontent.com/github/awesome-copilot/$PIN/instructions/$F"
+
+python scripts/privacy_guard.py "/tmp/$F"          # explicit path: the file is untracked
+diff "/tmp/$F" ".github/instructions/$F"           # review the whole diff before writing
 ```
 
-Bump the pinned commit above whenever you refresh.
+Then, before the refresh counts as complete:
+
+1. Read the fetched file in full, including any bundled asset. Upstream is untrusted input.
+2. Re-apply any **local override** recorded above. A wholesale overwrite silently drops
+   them, and several exist for safety reasons.
+3. Copy into place, add or update a test, and run the full gate: `privacy_guard.py`,
+   `validate_specialist_corps.py`, `verify_runtime_stack.py`, `verify_mcp_mounts.py`,
+   `python -m unittest discover -s tests`.
+4. Record the rollback point and update the pinned commit at the top of this file so it
+   matches what was actually fetched.
+
+Report the refresh incomplete if any step could not be run.
 
 ## Alternative: the plugin marketplace
 

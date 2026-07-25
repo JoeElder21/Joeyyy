@@ -29,7 +29,8 @@ Worked example:
 2. Constraints:          No JEOS access; no mount activated; tool surface pinned.
 3. Authority boundaries: Registration delegated. Activation needs Joe's grant.
 4. Validation commands:  verify_mcp_mounts.py; privacy_guard.py; unittest discover
-5. Rollback point:       7e2f524 (pre-change), plus rollback section in build-out doc
+5. Rollback point:       <pre-change commit, e.g. `git rev-parse HEAD` before editing>
+                         plus the rollback section in the build-out doc
 ```
 
 ---

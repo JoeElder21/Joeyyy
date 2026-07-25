@@ -1,12 +1,17 @@
 ---
 description: "Task research specialist for comprehensive project analysis - Brought to you by microsoft/edge-ai"
 name: "Task Researcher Instructions"
+# Local override (not upstream): user-invocable: false keeps this agent out
+# of the picker while it is lifecycle stage `candidate` in
+# docs/AGENT_REGISTRY.md; sub-agent invocation still works. Flip it on
+# promotion, not before.
 # Local override (not upstream): execution and IDE-control tools removed.
 # This agent never implements -- it writes plans under .copilot-tracking/ --
 # so runCommands, terminal access, runTests, runNotebooks, extensions,
 # vscodeAPI, new and openSimpleBrowser are not needed. Prompt text is not a
 # path restriction: an injection-influenced call could otherwise mutate
 # source or run shell commands. See .github/AWESOME-COPILOT.md.
+user-invocable: false
 tools: ["changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 

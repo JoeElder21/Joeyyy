@@ -1,6 +1,10 @@
 ---
 description: "Task planner for creating actionable implementation plans - Brought to you by microsoft/edge-ai"
 name: "Task Planner Instructions"
+# Local override (not upstream): user-invocable: false keeps this agent out
+# of the picker while it is lifecycle stage `candidate` in
+# docs/AGENT_REGISTRY.md; sub-agent invocation still works. Flip it on
+# promotion, not before.
 # Local override (not upstream): execution and IDE-control tools removed.
 # This agent never implements -- it writes plans under .copilot-tracking/ --
 # so runCommands, terminal access, runTests, runNotebooks, extensions,
@@ -14,6 +18,7 @@ name: "Task Planner Instructions"
 # enabling the tool without changing the instructions still left the planner
 # loading a spec instead of running it.
 # See .github/AWESOME-COPILOT.md.
+user-invocable: false
 tools: ["agent", "changes", "search/codebase", "edit/editFiles", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
 
