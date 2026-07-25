@@ -517,6 +517,23 @@ It is worth being precise about why it survived. After round 4 this record claim
 
 **`config/mcp_mounts.toml` is no longer untouched.** Earlier rounds stated this change set modified no file under `config/`. Pinning the filesystem server's version changes it. This is not a connector-policy decision — no mount was added, no agent's access changed, no policy string moved — it makes an existing approved mount reproducible. Recorded here rather than left as a silent contradiction of the earlier claim.
 
+### Automated review, seventh pass — four findings, four fixed
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| `MUTATING_ACTION_VERBS` missed `edit` and `move` | **Correct, and the list was the wrong shape** | See below. |
+| Ownership classified before path normalization | **Correct** | `scripts/../brains/jeos/agents.toml` matched the `scripts/` neutral prefix while a filesystem executor resolving the same string opens the JEOS manifest. Resources are normalized before either prefix check, and one that escapes the tree is refused rather than classified. |
+| Canonical reads required no delegation | **Correct** | `apex_war_architect` could read `APEX/Intel-Sources` — another specialist's canonical source — with no packet and no recorded reason. `AGENTS.md` confines packetless direct invocation to current-message text; a memory namespace, write target, mount, or repository path is none of those. Reads of canonical resources now require a validated delegation. The chief is exempt, because it issues them. |
+| `case_criteria` judge never got `CONTEXT` | **Correct** | Round 4 added `CONTEXT` to `brain_isolation` and `role_adherence` and left the third judge reading only mission and output. It matters most here: `technical_qa` requires naming the two disagreeing sources, and their identities live only in `case["context"]`, so the judge would have accepted an output naming any two sources at all. |
+
+**The denylist was the defect, not its contents.** `MUTATING_ACTION_VERBS` enumerated mutating verbs and treated everything else as a read — fail-open by construction, protecting against the verbs someone thought of and waving through every verb they did not. The configured filesystem mount exposes `edit_file` and `move_file`; neither `edit` nor `move` was listed, so both skipped the lease, lifecycle, and launch-grant rules entirely.
+
+Adding two entries would have fixed the instance and left the class intact, which is the mistake this record has now documented four separate times. The classification is inverted instead: `READ_ONLY_ACTION_VERBS` is an allowlist, and an action nobody anticipated is a mutation. That costs a lease on an unrecognised read — the correct direction of error, and the one the original comment claimed to be taking while implementing its opposite.
+
+**Third traversal defect in one change set.** The `--run-id` output escape (round 2), its Windows-separator sibling (round 2), and now unnormalised resource paths in the brain lock. Comparing a caller-supplied path against a prefix without canonicalising it first is evidently a reflex worth distrusting on sight.
+
+**Third time a sibling was left untouched.** `CONTEXT` was added to two of three G-Eval judges in round 4. The pattern this record has been naming since round 3 recurred inside the very fix that was supposed to demonstrate the lesson.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

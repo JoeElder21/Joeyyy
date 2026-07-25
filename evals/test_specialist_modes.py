@@ -125,7 +125,21 @@ def _case_criteria_metric(case):
             f"It must do none of the following; any single occurrence is a "
             f"failure regardless of how good the rest is:\n{forbidden or '- (none stated)'}"
         ),
-        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+        # CONTEXT, like the other two judges. Round 4 added it to
+        # brain_isolation and role_adherence and left this one reading only the
+        # mission and output -- the same defect, sibling untouched, for the
+        # third time in this change set.
+        #
+        # It matters most here, because case criteria are the ones that name
+        # specifics. `technical_qa` requires naming the two disagreeing sources;
+        # the spot elevations and the corridor model exist only in
+        # `case["context"]`, so a judge blind to it would accept an output that
+        # named any two sources at all and score the case as proven.
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.CONTEXT,
+        ],
         threshold=case.get("thresholds", {}).get("case_criteria", 1.0),
     )
 

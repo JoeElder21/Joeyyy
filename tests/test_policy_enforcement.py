@@ -26,6 +26,7 @@ from scripts.policy_enforcement import (
     BRAIN_NEUTRAL_PREFIXES,
     CHIEF,
     HIGH_IMPACT_ACTIONS,
+    MUTATING_ACTION_VERBS,
     NON_EXECUTING_STAGES,
     PACKET_ONLY,
     Decision,
@@ -489,12 +490,13 @@ class EnforceTests(unittest.TestCase):
             enforce(ToolRequest(agent="rogue", action="read", resource="x"))
 
     def test_enforce_returns_decision_on_allow(self):
+        # The chief, because a specialist reading a canonical resource now needs
+        # a delegation behind it -- the packetless path is confined to
+        # current-message text.
         decision = enforce(
-            ToolRequest(
-                agent=SPECIALIST, action="read", resource="docs/README.md", owner_brain="APEX"
-            )
+            ToolRequest(agent=CHIEF, action="read", resource="docs/README.md", owner_brain="APEX")
         )
-        self.assertTrue(decision.allowed)
+        self.assertTrue(decision.allowed, decision.reasons)
 
     def test_denial_carries_the_request_and_reasons(self):
         try:
@@ -736,6 +738,101 @@ class ScopeTests(unittest.TestCase):
                     ),
                     [],
                 )
+
+    def test_mutation_classification_is_an_allowlist_not_a_denylist(self):
+        # The defect's shape: MUTATING_ACTION_VERBS was a denylist, so any verb
+        # nobody enumerated read as a read. `edit_file` and `move_file` are
+        # tools the configured filesystem mount actually exposes, and neither
+        # `edit` nor `move` was listed -- so they skipped every mutation
+        # control. Extending the list by two would fix the instance and leave
+        # the class, so the classification is inverted instead.
+        for action in ("edit_file", "move_file", "rename_thing", "frobnicate", "chmod", "exec"):
+            with self.subTest(action=action):
+                self.assertTrue(
+                    self.pep._is_mutating(
+                        ToolRequest(agent=CHIEF, action=action, resource="APEX/Strategy-Campaigns")
+                    ),
+                    f"{action!r} was classified as a read",
+                )
+
+    def test_every_documented_mutating_verb_still_classifies_as_mutating(self):
+        for verb in MUTATING_ACTION_VERBS:
+            with self.subTest(verb=verb):
+                self.assertTrue(
+                    self.pep._is_mutating(
+                        ToolRequest(agent=CHIEF, action=f"{verb}_thing", resource="x")
+                    )
+                )
+
+    def test_genuine_reads_are_still_reads(self):
+        # The inversion must not classify everything as a mutation; a rule that
+        # denies every request is an outage, not enforcement.
+        for action in ("read_text_file", "list_directory", "get_file_info", "search_files"):
+            with self.subTest(action=action):
+                self.assertFalse(
+                    self.pep._is_mutating(
+                        ToolRequest(agent=CHIEF, action=action, resource="docs/README.md")
+                    )
+                )
+
+    def test_path_traversal_cannot_launder_a_brain_owned_resource(self):
+        # `scripts/../brains/jeos/agents.toml` matched the `scripts/` neutral
+        # prefix while a filesystem executor resolving it opens the JEOS
+        # manifest. The policy and the executor disagreed about what the
+        # resource was, which makes every prefix comparison meaningless.
+        laundered = "scripts/../brains/jeos/agents.toml"
+        self.assertEqual(self.pep._resource_owner(laundered), "JEOS")
+        self.assertFalse(self.pep._is_brain_neutral(laundered))
+        decision = self.pep.evaluate(
+            ToolRequest(agent=SPECIALIST, action="read", resource=laundered, owner_brain="APEX")
+        )
+        self.assertFalse(decision.allowed)
+
+    def test_a_resource_escaping_the_repository_is_refused(self):
+        for resource in ("../../etc/passwd", "docs/../../outside", "/etc/passwd"):
+            with self.subTest(resource=resource):
+                self.assertTrue(self.pep._escapes_the_tree(resource))
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=resource, owner_brain="APEX"
+                    )
+                )
+                self.assertFalse(decision.allowed)
+
+    def test_connector_handles_are_not_treated_as_paths(self):
+        # `mount:filesystem` must not be normpath'd into something else.
+        self.assertEqual(self.pep._canonical_resource("mount:filesystem"), "mount:filesystem")
+        self.assertFalse(self.pep._escapes_the_tree("mount:filesystem"))
+
+    def test_a_canonical_read_requires_a_delegation(self):
+        # AGENTS.md confines packetless direct invocation to current-message
+        # text. Reading another specialist's canonical source is not that.
+        for resource in ("APEX/Strategy-Campaigns", "APEX/Intel-Sources", "docs/README.md"):
+            with self.subTest(resource=resource):
+                decision = self.pep.evaluate(
+                    ToolRequest(
+                        agent=SPECIALIST, action="read", resource=resource, owner_brain="APEX"
+                    )
+                )
+                self.assertFalse(decision.allowed, f"{resource} was readable with no delegation")
+                self.assertTrue(
+                    any("requires a validated delegation" in r for r in decision.reasons),
+                    decision.reasons,
+                )
+
+    def test_the_chief_reads_canonical_resources_without_a_delegation(self):
+        # It issues them; requiring one of itself would deadlock the corps.
+        self.assertEqual(
+            self.pep._packet_admission(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="read",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                )
+            ),
+            [],
+        )
 
     def test_the_chief_still_reaches_connectors(self):
         # The sole cross-brain agent performs connector work on the corps'

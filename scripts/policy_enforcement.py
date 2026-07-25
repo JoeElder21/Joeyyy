@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import datetime
 import hmac
+import posixpath
 import sys
 import tomllib
 from dataclasses import dataclass, field, replace
@@ -123,9 +124,45 @@ ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
 # See the comment in PolicyEnforcementPoint._writer_lease for why.
 VERSION_MISMATCH_DEFECT = "$.schema_version: expected const '2.0'"
 
-# Action fragments that imply a mutation regardless of what the caller declares.
-# Deliberately generous: over-classifying a read as a mutation costs a lease,
-# while under-classifying a write costs every mutation control at once.
+# Action fragments that read without changing anything. THIS IS AN ALLOWLIST,
+# and the direction is the whole point.
+#
+# The first version was the inverse: a list of mutating verbs, with anything
+# unlisted treated as a read. That is fail-open by construction -- it protects
+# against the verbs someone thought of and silently waves through every verb
+# they did not. The configured filesystem mount exposes `edit_file` and
+# `move_file`; neither `edit` nor `move` was on the mutating list, so
+# `action="edit_file"` on `mount:filesystem` was classified as a read and
+# skipped the lease, lifecycle, and launch-grant rules entirely. Extending the
+# denylist by two entries would have fixed the instance and left the class.
+#
+# Inverted, an action nobody anticipated is a mutation, which costs a lease.
+# That is the correct direction of error: over-classifying a read is an
+# inconvenience, under-classifying a write forfeits every mutation control at
+# once.
+READ_ONLY_ACTION_VERBS = (
+    "read",
+    "list",
+    "get",
+    "search",
+    "find",
+    "view",
+    "query",
+    "inspect",
+    "describe",
+    "show",
+    "count",
+    "diff",
+    "status",
+    "info",
+    "tree",
+    "fetch",
+    "peek",
+)
+
+# Retained for documentation and tests: these must classify as mutating under
+# any implementation. They are no longer the mechanism -- the allowlist above
+# is -- so this list going stale can no longer open a hole.
 MUTATING_ACTION_VERBS = (
     "write",
     "create",
@@ -142,6 +179,10 @@ MUTATING_ACTION_VERBS = (
     "set_",
     "put",
     "post",
+    "edit",
+    "move",
+    "rename",
+    "copy",
 )
 
 
@@ -306,10 +347,12 @@ class PolicyEnforcementPoint:
         """
         if request.mutating:
             return True
-        action = (request.action or "").lower()
-        if any(verb in action for verb in MUTATING_ACTION_VERBS):
+        action = (request.action or "").strip().lower()
+        if action in HIGH_IMPACT_ACTIONS:
             return True
-        return action in HIGH_IMPACT_ACTIONS
+        # Allowlist, not denylist. An action that does not identifiably read is
+        # treated as a mutation, so a verb nobody enumerated fails closed.
+        return not any(verb in action for verb in READ_ONLY_ACTION_VERBS)
 
     @staticmethod
     def normalize(request: ToolRequest) -> tuple[ToolRequest, list[str]]:
@@ -404,6 +447,14 @@ class PolicyEnforcementPoint:
             ]
         agent_brain = spec.get("brain")
         errors = []
+        # Refused before any prefix comparison. A resource that climbs out of
+        # the tree cannot be classified as owned or neutral, and guessing is
+        # how `scripts/../brains/jeos/agents.toml` read as neutral.
+        if self._escapes_the_tree(request.resource):
+            errors.append(
+                f"brain lock: resource {request.resource!r} escapes the repository once "
+                "normalized, so its owning brain cannot be established"
+            )
         if agent_brain != request.owner_brain:
             errors.append(
                 f"brain lock: {request.agent!r} belongs to {agent_brain!r}, "
@@ -438,23 +489,71 @@ class PolicyEnforcementPoint:
         return errors
 
     @staticmethod
+    def _canonical_resource(resource: str) -> str:
+        """Collapse a resource to the path an executor would actually open.
+
+        Both prefix checks compared the caller's raw string, so
+        `scripts/../brains/jeos/agents.toml` matched the `scripts/` neutral
+        prefix and was waved through — while a filesystem executor resolving
+        that same string opens the JEOS manifest. The policy and the executor
+        disagreed about what the resource *was*, which makes every prefix
+        comparison downstream meaningless.
+
+        This is the third traversal defect in this change set, after the
+        `--run-id` output escape and its Windows-separator sibling. Comparing
+        unnormalised paths is apparently a reflex worth distrusting.
+        """
+        if ":" in resource.split("/", 1)[0]:
+            return resource  # mount:/connector: handles are opaque, not paths
+        return posixpath.normpath(resource.replace("\\", "/"))
+
+    @staticmethod
+    def _escapes_the_tree(resource: str) -> bool:
+        """A resource that climbs out of the repository cannot be classified."""
+        canonical = PolicyEnforcementPoint._canonical_resource(resource)
+        return canonical.startswith(("../", "/")) or canonical == ".."
+
+    @staticmethod
     def _is_brain_neutral(resource: str) -> bool:
-        """Shared repository surfaces that belong to neither brain."""
-        return any(resource.startswith(prefix) for prefix in BRAIN_NEUTRAL_PREFIXES)
+        """Shared repository surfaces that belong to neither brain.
+
+        Compared after normalization, and tolerant of the directory itself:
+        `normpath("docs/")` is `"docs"`, which does not start with `"docs/"`.
+        """
+        canonical = PolicyEnforcementPoint._canonical_resource(resource)
+        return any(
+            canonical == prefix.rstrip("/") or canonical.startswith(prefix)
+            for prefix in BRAIN_NEUTRAL_PREFIXES
+        )
 
     def _resource_owner(self, resource: str) -> str | None:
         """Which brain owns this resource, by manifest-declared prefix or path."""
+        canonical = self._canonical_resource(resource)
         for prefix, owner in self.brain_prefixes.items():
-            if resource.startswith(prefix):
+            if canonical.startswith(prefix):
                 return owner
         # Repository paths under `brains/<brain>/` are that brain's material as
         # plainly as its namespace is, but carry none of the declared prefixes,
         # so ownership resolution missed them entirely.
-        lowered = resource.lower().lstrip("./")
+        lowered = canonical.lower()
         for brain in ("apex", "jeos"):
             if lowered.startswith(f"brains/{brain}/"):
                 return brain.upper()
         return None
+
+    def _is_canonical_resource(self, resource: str) -> bool:
+        """A durable resource, as opposed to text carried in the message itself.
+
+        Canonical means the request reaches past the conversation: a brain's
+        memory namespace or write target, a connector mount, or a path in this
+        repository. Reading any of those is governed work and needs a
+        delegation behind it.
+        """
+        if any(resource.startswith(prefix) for prefix in CONNECTOR_PREFIXES):
+            return True
+        if self._resource_owner(resource) is not None:
+            return True
+        return self._is_brain_neutral(resource) or self._escapes_the_tree(resource)
 
     def _connector_policy(self, request: ToolRequest) -> list[str]:
         spec = self._spec(request.agent)
@@ -490,6 +589,19 @@ class PolicyEnforcementPoint:
         if request.packet is None:
             if request.mutating:
                 return ["mutating request carries no packet; packet-only policy admits nothing"]
+            # Reads needed a packet too, and did not require one. AGENTS.md
+            # confines packetless direct invocation to current-message text;
+            # a canonical memory namespace, write target, or repository path is
+            # none of those. Without this, `apex_war_architect` could read
+            # `APEX/Intel-Sources` -- another specialist's canonical source --
+            # with no delegation authorizing it and no reason recorded.
+            #
+            # The chief is exempt because it issues the delegations.
+            if request.agent != CHIEF and self._is_canonical_resource(request.resource):
+                return [
+                    f"read of canonical resource {request.resource!r} requires a validated "
+                    "delegation; the packetless path is confined to current-message text"
+                ]
             return []
         # A packet that is not an object cannot be scope-checked. `.get()` on a
         # scalar raises AttributeError, so hostile input crashed the evaluation
