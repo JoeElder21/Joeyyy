@@ -49,10 +49,31 @@ def count_tracked(pattern: str) -> int:
 
 
 def count_installed(pattern: str) -> int:
-    """Count what is actually vendored, so the inventory cannot drift from the
-    tree. These figures were hardcoded and went stale the moment a file was
-    added or removed."""
-    return len(list((Path(__file__).resolve().parents[1] / ".github").glob(pattern)))
+    """Count vendored assets that are actually TRACKED.
+
+    A filesystem glob counted an untracked discovery download as adopted, while
+    the report's privacy row runs privacy_guard.py with no arguments -- which
+    scans `git ls-files` only. The report could therefore raise its adoption
+    total and publish a passing privacy result that never inspected the asset it
+    had just counted. Counting and gating now share one scope.
+    """
+    return count_tracked(f".github/{pattern}")
+
+
+def manifest_pin() -> str:
+    """Read the upstream pin from .github/AWESOME-COPILOT.md.
+
+    Hardcoding it here meant every regenerated report kept attributing the
+    installed files to the original commit after an approved refresh moved the
+    manifest on, making the generator's own provenance stale.
+    """
+    manifest = Path(__file__).resolve().parents[1] / ".github" / "AWESOME-COPILOT.md"
+    try:
+        text = manifest.read_text(encoding="utf-8")
+    except OSError:
+        return "unknown (manifest unreadable)"
+    found = re.search(r"Pinned at commit:\*{0,2}\s*`([0-9a-f]{7,40})`", text)
+    return found.group(1)[:8] if found else "unknown (no pin in manifest)"
 
 
 def run_gate(script: str) -> str:
@@ -136,19 +157,34 @@ def count_tracked_at(ref: str, pattern: str) -> int:
     return len([l for l in out.stdout.splitlines() if l.endswith(suffix)])
 
 
+# The tip of main immediately before this work began. Pinned deliberately: a
+# merge-base against a moving main collapses to the merged tip once this lands,
+# which would silently rewrite the report's headline delta to zero and destroy
+# the change evidence it exists to carry.
+PRE_INSTALL_BASELINE = "89a2c1531765355843a1f3ed64ced85cf5d8aed6"
+
+
 def _branch_point() -> str:
-    """The commit this branch left main at, so 'added' is a real delta rather
-    than a hand-maintained glob list -- which is the drift this report keeps
-    being corrected for."""
+    """The pre-install commit, so 'added' stays a fixed, reproducible delta.
+
+    Falls back to merge-base only when the pinned commit is not reachable (a
+    shallow clone, say), and the caller reports the figure as unavailable rather
+    than guessing when neither resolves.
+    """
     root = Path(__file__).resolve().parents[1]
-    for base in ("origin/main", "main"):
-        try:
+    try:
+        known = subprocess.run(
+            ["git", "cat-file", "-e", f"{PRE_INSTALL_BASELINE}^{{commit}}"],
+            cwd=root, capture_output=True, text=True, check=False)
+        if known.returncode == 0:
+            return PRE_INSTALL_BASELINE
+        for base in ("origin/main", "main"):
             out = subprocess.run(["git", "merge-base", "HEAD", base], cwd=root,
                                  capture_output=True, text=True, check=False)
-        except OSError:
-            return ""
-        if out.returncode == 0 and out.stdout.strip():
-            return out.stdout.strip()
+            if out.returncode == 0 and out.stdout.strip():
+                return out.stdout.strip()
+    except OSError:
+        return ""
     return ""
 
 
@@ -238,7 +274,7 @@ meta = [
     [Paragraph("Prepared by", CELL), Paragraph("Agent 007 / APEX Chief of Staff", CELLB),
      Paragraph("Pull request", CELL), Paragraph("#26", CELLB)],
     [Paragraph("Upstream source", CELL), Paragraph("github/awesome-copilot", CELLB),
-     Paragraph("Pinned commit", CELL), Paragraph("aa280f28", MONO)],
+     Paragraph("Pinned commit", CELL), Paragraph(manifest_pin(), MONO)],
 ]
 story.append(tbl(meta, [0.95 * inch, 2.35 * inch, 0.85 * inch, 1.55 * inch],
                  header=False, zebra=False))

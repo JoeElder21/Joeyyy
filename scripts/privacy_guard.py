@@ -51,9 +51,18 @@ PATTERNS = {
     ),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "cloud access key": re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
+    # Credential-bearing names. A Terraform or GitHub token carries no
+    # distinguishing prefix, so for those the name is the only signal there is
+    # and "secret token" above cannot help. Every credential env var named in a
+    # config/mcp_mounts.toml activation must appear here;
+    # tests/test_privacy.py::test_every_mount_credential_name_is_detectable
+    # fails when a new mount introduces one that is not covered.
     "credential assignment": re.compile(
         r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
-        r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
+        r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token"
+        r"|tfe?[_-]?token|terraform[_-]?token"
+        r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
+        r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
         r"\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"']{8,})"
     ),
     "bearer credential": re.compile(
@@ -160,13 +169,26 @@ def scan_repository(root: Path = ROOT) -> list[str]:
     return _scan_files(repository_files(root), root)
 
 
-def _scan_files(paths: list[Path], root: Path = ROOT) -> list[str]:
+def _scan_files(
+    paths: list[Path], root: Path = ROOT,
+    destinations: dict[Path, Path] | None = None,
+) -> list[str]:
+    """Scan `paths`. `destinations` maps a scanned path to the repo-relative
+    path it is destined for, so a candidate sitting in a temp directory is
+    matched against the allowlists under its intended name rather than its
+    current one.
+    """
+    destinations = destinations or {}
     findings: list[str] = []
     for path in paths:
-        try:
-            relative = path.relative_to(root)
-        except ValueError:
-            relative = path
+        destination = destinations.get(path)
+        if destination is not None:
+            relative = destination
+        else:
+            try:
+                relative = path.relative_to(root)
+            except ValueError:
+                relative = path
         if path.name.lower() in PROHIBITED_FILENAMES:
             findings.append(f"{relative}: prohibited private filename")
         if path.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES:
@@ -195,7 +217,10 @@ def _scan_files(paths: list[Path], root: Path = ROOT) -> list[str]:
     return findings
 
 
-def scan_paths(paths: list[Path], root: Path = ROOT) -> list[str]:
+def scan_paths(
+    paths: list[Path], root: Path = ROOT,
+    destinations: dict[Path, Path] | None = None,
+) -> list[str]:
     """Scan exactly these paths, tracked or not, recursing into directories.
 
     `scan_repository()` enumerates via `git ls-files`, so a freshly downloaded
@@ -218,23 +243,44 @@ def scan_paths(paths: list[Path], root: Path = ROOT) -> list[str]:
             targets.append(candidate)
         else:
             targets.append(candidate)  # reported as unreadable below
-    return _scan_files(targets, root)
+    resolved = {
+        (given if given.is_absolute() else (root / given)): dest
+        for given, dest in (destinations or {}).items()
+    }
+    return _scan_files(targets, root, resolved)
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("-h", "--help"):
         print(
-            "usage: privacy_guard.py [PATH ...]\n\n"
+            "usage: privacy_guard.py [PATH ...] [--as DEST]\n\n"
             "  no arguments  scan every git-tracked text file\n"
             "  PATH ...      scan exactly these files/directories, tracked or\n"
             "                not. Use this on newly downloaded content before\n"
-            "                adding it, since tracked-only scanning cannot see it."
+            "                adding it, since tracked-only scanning cannot see it.\n"
+            "  --as DEST     treat the single given PATH as though it already sat\n"
+            "                at repo-relative DEST. Needed to scan a candidate in\n"
+            "                a temp directory against the per-file allowlists, so\n"
+            "                intake can run before the file is installed."
         )
         return 0
 
+    destinations: dict[Path, Path] = {}
+    if "--as" in argv:
+        marker = argv.index("--as")
+        if marker + 1 >= len(argv):
+            print("--as requires a repo-relative destination path")
+            return 2
+        destination = Path(argv[marker + 1])
+        argv = argv[:marker] + argv[marker + 2:]
+        if len(argv) != 1:
+            print("--as applies to exactly one PATH")
+            return 2
+        destinations[Path(argv[0])] = destination
+
     if argv:
-        findings = scan_paths([Path(arg) for arg in argv])
+        findings = scan_paths([Path(arg) for arg in argv], destinations=destinations)
         label = f"Privacy guard passed for {len(argv)} given path(s)."
     else:
         findings = scan_repository()

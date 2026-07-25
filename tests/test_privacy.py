@@ -121,6 +121,44 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             clean.write_text("ordinary prose\n", encoding="utf-8")
             self.assertEqual(scan_paths([clean], root=root), [])
 
+    def test_every_mount_credential_name_is_detectable(self):
+        """A mount's activation text names the env vars that unlock it. If the
+        guard cannot recognise one of those names in an assignment, a maintainer
+        pasting a real value into a tracked file passes the scan. Terraform and
+        GitHub tokens carry no distinguishing prefix, so the name is the only
+        signal available and this is the whole defence.
+        """
+        import tomllib
+
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        pattern = re.compile(
+            r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
+            r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token"
+            r"|tfe?[_-]?token|terraform[_-]?token"
+            r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
+            r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
+            r"\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"']{8,})"
+        )
+        # Env-var-shaped names that denote a credential, not an endpoint or id.
+        credential_suffixes = ("TOKEN", "SECRET", "KEY", "PASSWORD", "CREDENTIAL")
+        benign = {"GDRIVE_CREDENTIALS_PATH"}  # a path to a file, not a secret
+        seen = 0
+        for mount in mounts:
+            text = mount.get("activation", "") + " " + " ".join(mount["command"])
+            for name in re.findall(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b", text):
+                if name in benign or not name.endswith(credential_suffixes):
+                    continue
+                seen += 1
+                with self.subTest(mount=mount["name"], env=name):
+                    probe = f'{name} = "aRealLookingSecretValue"'
+                    self.assertIsNotNone(
+                        pattern.search(probe),
+                        f"{mount['name']} activation names {name}, but the "
+                        f"credential-assignment pattern cannot detect it",
+                    )
+        self.assertGreater(seen, 0, "no mount credential names were checked")
+
     def test_placeholder_allowlist_has_no_stale_entries(self):
         for relative_path, literals in PLACEHOLDER_LITERALS.items():
             path = ROOT / relative_path

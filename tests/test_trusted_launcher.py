@@ -4,6 +4,7 @@ before any activation path is trusted. Stdlib-only — always runs in CI."""
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 import tempfile
 import unittest
@@ -24,22 +25,22 @@ class TrustedLauncherTests(unittest.TestCase):
         """The identity lives in the signed grant, so it must be supplied when
         the grant is minted -- which only Joe's machine can do."""
         with tempfile.TemporaryDirectory() as tmp:
-            key, _ = self._env(tmp)
+            key, ledger = self._env(tmp)
             with self.assertRaises(LaunchDenied) as caught:
                 issue_grant("terraform", 30, key_path=key,
-                            out_dir=Path(tmp) / "grants")
+                            out_dir=Path(tmp) / "grants", ledger=ledger)
             self.assertIn("--agent is required", str(caught.exception))
 
     def test_grant_cannot_be_minted_for_a_non_allowlisted_agent(self):
         with tempfile.TemporaryDirectory() as tmp:
-            key, _ = self._env(tmp)
+            key, ledger = self._env(tmp)
             for identity in ("jeos_life_architect", "apex_systems_blacksmith",
                              "not_an_agent"):
                 with self.subTest(agent=identity):
                     with self.assertRaises(LaunchDenied) as caught:
                         issue_grant("terraform", 30, key_path=key,
                                     out_dir=Path(tmp) / "grants",
-                                    agent=identity)
+                                    agent=identity, ledger=ledger)
                     self.assertIn("is not on", str(caught.exception))
 
     def test_grant_time_denials_reach_the_ledger(self):
@@ -204,6 +205,68 @@ class TrustedLauncherTests(unittest.TestCase):
             key, ledger = self._env(tmp)
             spec = authorize("governance", None, key, ledger)
             self.assertEqual(spec["name"], "governance")
+
+
+    def test_post_signature_denials_name_the_signed_identity(self):
+        """--agent is optional at launch. Once the signature verifies, the
+        signed identity is known, so an expired or already-consumed grant must
+        be attributed to it -- otherwise the audit cannot say which authorized
+        identity presented a stale grant."""
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            grant = issue_grant("terraform", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_chief_of_staff", ledger=ledger)
+
+            # Expired: launched without --agent, so only the signature knows.
+            with self.assertRaises(LaunchDenied):
+                authorize("terraform", grant, key_path=key, ledger=ledger,
+                          now=time.time() + 10_000)
+            # Consumed: authorize once, then replay, again without --agent.
+            authorize("terraform", grant, key_path=key, ledger=ledger)
+            with self.assertRaises(LaunchDenied):
+                authorize("terraform", grant, key_path=key, ledger=ledger)
+
+            denials = [
+                json.loads(line)
+                for line in ledger.path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and json.loads(line)["event"] == "launch_denied"
+            ]
+            reasons = {d["detail"]["reason"] for d in denials}
+            self.assertTrue(any("expired" in r for r in reasons), reasons)
+            self.assertTrue(any("consumed" in r for r in reasons), reasons)
+            for denial in denials:
+                with self.subTest(reason=denial["detail"]["reason"]):
+                    self.assertEqual(
+                        denial["detail"].get("agent"), "apex_chief_of_staff")
+                    self.assertEqual(
+                        denial["detail"].get("agent_source"), "signed-grant")
+
+    def test_denials_never_touch_the_machine_local_ledger(self):
+        """Synthetic denials must not contaminate the evidence they validate.
+        Exercises the denial paths with an explicit temporary ledger and asserts
+        the real audit/launcher.jsonl is byte-for-byte unchanged -- a missing
+        `ledger` argument silently falls back to it."""
+        from scripts.trusted_launcher import DEFAULT_LEDGER
+
+        before = (DEFAULT_LEDGER.read_bytes()
+                  if DEFAULT_LEDGER.exists() else None)
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            with self.assertRaises(LaunchDenied):
+                issue_grant("terraform", 30, key_path=key,
+                            out_dir=Path(tmp) / "grants", ledger=ledger)
+            with self.assertRaises(LaunchDenied):
+                issue_grant("terraform", 30, key_path=key,
+                            out_dir=Path(tmp) / "grants",
+                            agent="jeos_life_architect", ledger=ledger)
+            with self.assertRaises(LaunchDenied):
+                authorize("terraform", None, key_path=key, ledger=ledger)
+            self.assertTrue(ledger.path.exists(), "temp ledger took the writes")
+        after = (DEFAULT_LEDGER.read_bytes()
+                 if DEFAULT_LEDGER.exists() else None)
+        self.assertEqual(before, after,
+                         "a denial path wrote to the machine-local ledger")
 
 
 if __name__ == "__main__":

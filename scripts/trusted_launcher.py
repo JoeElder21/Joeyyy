@@ -164,10 +164,29 @@ def authorize(
     ledger = ledger or AuditLedger(DEFAULT_LEDGER)
     mounts = _load_mounts()
 
+    # Set once the grant's signature verifies. From that point the signed
+    # identity is authoritative and is what the ledger must attribute a denial
+    # to: --agent is optional, so without this an expired or reused grant from a
+    # correctly signed identity would be recorded with no agent at all, and the
+    # audit could not tell which authorized identity presented it.
+    verified_identity: dict[str, str | None] = {"agent": None}
+
     def deny(reason: str) -> LaunchDenied:
         detail = {"mount": mount, "reason": reason}
+        signed = verified_identity["agent"]
+        # A caller-supplied --agent is recorded as-is: a mismatched claim is
+        # itself the forensically interesting fact. The signed identity only
+        # fills in when the caller supplied none, which is the documented launch
+        # command -- without it, an expired or reused grant from a correctly
+        # signed identity would reach the ledger attributed to nobody.
         if agent is not None:
             detail["agent"] = agent
+            detail["agent_source"] = "caller-supplied"
+            if signed is not None and signed != agent:
+                detail["agent_signed"] = signed
+        elif signed is not None:
+            detail["agent"] = signed
+            detail["agent_source"] = "signed-grant"
         ledger.append("launch_denied", detail)
         return LaunchDenied(f"launch of {mount!r} denied: {reason}")
 
@@ -222,6 +241,8 @@ def authorize(
     expected = _sign(key_path.read_bytes(), payload)
     if not hmac.compare_digest(expected, str(grant.get("sig", ""))):
         raise deny("grant signature invalid")
+    # Signature holds: every denial from here on can name the signed identity.
+    verified_identity["agent"] = payload["agent"]
     if payload["mount"] != mount:
         raise deny(f"grant is for {payload['mount']!r}, not {mount!r}")
     now = now if now is not None else time.time()
