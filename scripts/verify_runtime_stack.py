@@ -150,10 +150,14 @@ def enforce_toml() -> tuple[list[str], list[str]]:
         # genuinely repository-owned TOML and report valid.
         if ".git" in relative.parts:
             continue
+        # as_posix(), not str(): git ls-files emits forward slashes on every
+        # platform, while str() uses the native separator. On Windows the two
+        # never match, so every path looks untracked and the exclusion skips
+        # repository-owned TOML that happens to sit under node_modules.
         if (
             tracked is not None
             and "node_modules" in relative.parts
-            and str(relative) not in tracked
+            and relative.as_posix() not in tracked
         ):
             continue
         # Vendored submodules under vendor/ carry the upstream project's TOML

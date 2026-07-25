@@ -78,25 +78,31 @@ either state alone. The complete reversible set:
 | `civil-innovation-agent` additionally | nothing — it declares no dependencies |
 
 Withdrawing **all four** additionally reverts the scanner scoping in
-`scripts/privacy_guard.py` (`gitlink_paths`, `submodule_paths`, `is_vendored`,
-and the symlink handling in `scan_repository`) and in
-`scripts/verify_runtime_stack.py`, plus `tests/test_vendor.py`, the
-`is_vendored` call sites in `tests/test_privacy.py`, and the `vendor/` and
-`requirements/` lines in the root `README.md`.
+`scripts/privacy_guard.py` (`gitlink_paths`, `tracked_paths`,
+`index_is_authoritative`, `submodule_paths`, `is_vendored`, and the symlink
+handling in `scan_repository`) and in `scripts/verify_runtime_stack.py`, plus
+`tests/test_vendor.py`, the `is_vendored` call sites in
+`tests/test_privacy.py`, and the `vendor/` and `requirements/` lines in the
+root `README.md`.
 
-Two of the changes here fix defects that predate this work: the symlink
-handling in `scan_repository`, and the `node_modules` exclusion in
-`enforce_toml`. **Prefer keeping both even in a full withdrawal** — reverting
-them reopens a hole in the public-source privacy contract rather than
-restoring a clean prior state.
+Three of the changes here fix defects that predate this work: the symlink
+handling in `scan_repository`, the `node_modules` exclusion in
+`enforce_toml`, and `index_is_authoritative`, which stops either scanner
+trusting an ancestor repository's index. **Prefer keeping all three even in a
+full withdrawal** — reverting them reopens a hole in the public-source privacy
+contract rather than restoring a clean prior state. The third is the widest of
+them: without it, a copy of this repository extracted anywhere beneath an
+unrelated checkout scans zero files and reports a pass.
 
 If they *are* reverted anyway, they do not travel alone. Reverting
 `scripts/verify_runtime_stack.py` also requires removing
 `test_toml_exclusions_match_relative_paths_not_absolute_ones` from
-`tests/test_runtime_stack.py`: that test asserts the exclusion behaviour, so
-against the restored verifier it fails, and the unittest run this section
-requires at the end of a rollback cannot pass. A rollback that leaves the tree
-failing its own gate is worse than none, because it looks finished.
+`tests/test_runtime_stack.py`, and reverting `index_is_authoritative` requires
+removing `ForeignIndexScanTests` from `tests/test_vendor.py`. Those tests
+assert the behaviour the revert removes, so against the restored code they
+fail, and the unittest run this section requires at the end of a rollback
+cannot pass. A rollback that leaves the tree failing its own gate is worse
+than none, because it looks finished.
 
 Run the full validate chain after any rollback:
 `privacy_guard`, `validate_specialist_corps`, `verify_runtime_stack`, and the

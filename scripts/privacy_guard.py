@@ -60,9 +60,15 @@ PATTERNS = {
     "bearer credential": re.compile(
         r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._~+/-]{12,}={0,2}"
     ),
-    "email address": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
-    "phone number": re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"),
-    "raw Drive or Docs link": re.compile(r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE),
+    "email address": re.compile(
+        r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE
+    ),
+    "phone number": re.compile(
+        r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"
+    ),
+    "raw Drive or Docs link": re.compile(
+        r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE
+    ),
     "street address": re.compile(
         r"\b[1-9]\d{1,5}\s+(?:[A-Za-z0-9.'-]+\s+){1,6}"
         r"(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
@@ -107,6 +113,34 @@ def run_git(args: list[str], root: Path = ROOT) -> subprocess.CompletedProcess |
         return None
 
 
+def index_is_authoritative(root: Path = ROOT) -> bool:
+    """Report whether git's index describes ``root`` itself, not an ancestor.
+
+    ``git rev-parse --is-inside-work-tree`` answers "is there a repository
+    somewhere above me", which is a weaker question than the one every caller
+    here means. An extracted source archive dropped anywhere beneath an
+    unrelated checkout answers ``true`` and then reports on the *ancestor's*
+    index, under which none of the archive's files are tracked.
+
+    That fails in the worst direction. ``tracked_paths`` returns an empty set
+    rather than ``None``, so the caller believes it has a readable index that
+    tracks nothing, and every exclusion built on it fires on every path:
+    ``repository_files`` yields nothing and the privacy scan passes a tree it
+    never opened. Comparing ``--show-toplevel`` to ``root`` keeps the archive
+    on the no-index path, where nothing is excluded and everything is scanned.
+    """
+    probe = run_git(["git", "rev-parse", "--show-toplevel"], root)
+    if probe is None or probe.returncode != 0:
+        return False
+    toplevel = probe.stdout.decode("utf-8", errors="surrogateescape").strip()
+    if not toplevel:
+        return False
+    try:
+        return Path(toplevel).resolve() == root.resolve()
+    except OSError:
+        return False
+
+
 def _parse_ls_files(stdout: bytes) -> list[tuple[str, str]]:
     """Parse ``git ls-files -s -z`` output into (mode, path) pairs.
 
@@ -137,13 +171,14 @@ def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     this. Returns empty where no gitlink is provable — outside a git work
     tree, or where git is not installed.
     """
-    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
-    if probe is None or probe.returncode != 0 or probe.stdout.decode().strip() != "true":
+    if not index_is_authoritative(root):
         return frozenset()
     listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is None or listing.returncode != 0:
         return frozenset()
-    return frozenset(name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE)
+    return frozenset(
+        name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE
+    )
 
 
 def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
@@ -153,14 +188,14 @@ def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
     content that merely shares a directory name.
 
     ``None`` means the index could not be read at all — an extracted archive,
-    or no git binary — and is deliberately distinct from an empty set. The two
+    no git binary, or an index belonging to some ancestor repository rather
+    than to ``root`` — and is deliberately distinct from an empty set. The two
     demand opposite fallbacks: an unreadable index means nothing can be ruled
     *out*, while an empty index means nothing is tracked. Collapsing them into
     one empty set makes every path look untracked, which silently disables any
     exclusion built on this.
     """
-    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
-    if probe is None or probe.returncode != 0 or probe.stdout.decode().strip() != "true":
+    if not index_is_authoritative(root):
         return None
     listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is None or listing.returncode != 0:
@@ -168,7 +203,9 @@ def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
     return frozenset(name for _mode, name in _parse_ls_files(listing.stdout))
 
 
-def is_vendored(path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None) -> bool:
+def is_vendored(
+    path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None
+) -> bool:
     """Report whether ``path`` lies inside a vendored third-party submodule.
 
     Submodules record only a gitlink commit here, so their file contents are
@@ -199,12 +236,16 @@ def is_vendored(path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None =
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:
+    # index_is_authoritative rather than a bare work-tree probe: an archive
+    # extracted beneath an unrelated checkout would otherwise list that
+    # repository's index, find none of these files tracked, and return an
+    # empty file list — a scan of nothing, reported as a pass.
+    #
     # run_git rather than subprocess.run: with no git binary installed the
     # latter raises FileNotFoundError regardless of check=False, taking down a
     # scan that should instead fall back to walking the filesystem.
-    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
     listing = None
-    if probe is not None and probe.returncode == 0 and probe.stdout.decode().strip() == "true":
+    if index_is_authoritative(root):
         # -s exposes the index mode so gitlinks can be dropped by mode. Testing
         # the filesystem instead (``is_file()``) would also silently drop a
         # tracked dangling symlink — e.g. ``token.json -> /home/joe/secret`` —
@@ -218,7 +259,9 @@ def repository_files(root: Path = ROOT) -> list[Path]:
         # contents never reach this list anyway — `git ls-files` does not
         # recurse into a submodule's own index.
         return [
-            root / name for mode, name in _parse_ls_files(listing.stdout) if mode != GITLINK_MODE
+            root / name
+            for mode, name in _parse_ls_files(listing.stdout)
+            if mode != GITLINK_MODE
         ]
     gitlinks = gitlink_paths(root)
     return [
@@ -272,12 +315,16 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             findings.append(f"{relative}: unreadable ({exc})")
             continue
         if b"\0" in raw:
-            findings.append(f"{relative}: binary file is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: binary file is not allowed in this public source tree"
+            )
             continue
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
-            findings.append(f"{relative}: non-UTF-8 file is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: non-UTF-8 file is not allowed in this public source tree"
+            )
             continue
         if text.startswith(LFS_POINTER_PREFIX):
             findings.append(

@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,6 +26,7 @@ from scripts.privacy_guard import (
     run_git,
     scan_repository,
     submodule_paths,
+    tracked_paths,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,7 +64,9 @@ EXPECTED_SUBMODULES = {
     "vendor/awesome-civil-engineering": (
         "https://github.com/QuantumNovice/awesome-civil-engineering.git"
     ),
-    "vendor/civil-innovation-agent": ("https://github.com/Sun3hine7/civil-innovation-agent.git"),
+    "vendor/civil-innovation-agent": (
+        "https://github.com/Sun3hine7/civil-innovation-agent.git"
+    ),
     "vendor/relay": "https://github.com/AgentWorkforce/relay.git",
 }
 
@@ -85,7 +89,11 @@ def _inside_git_worktree(root: Path = ROOT) -> bool:
     ``run_git`` so a missing binary reports False instead of raising.
     """
     probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
-    return probe is not None and probe.returncode == 0 and probe.stdout.decode().strip() == "true"
+    return (
+        probe is not None
+        and probe.returncode == 0
+        and probe.stdout.decode().strip() == "true"
+    )
 
 
 class VendorSubmoduleTests(unittest.TestCase):
@@ -110,7 +118,8 @@ class VendorSubmoduleTests(unittest.TestCase):
         parser = configparser.ConfigParser()
         parser.read(ROOT / ".gitmodules", encoding="utf-8")
         declared = {
-            parser.get(section, "path"): parser.get(section, "url") for section in parser.sections()
+            parser.get(section, "path"): parser.get(section, "url")
+            for section in parser.sections()
         }
         self.assertEqual(declared, EXPECTED_SUBMODULES)
 
@@ -163,11 +172,17 @@ class VendorSubmoduleTests(unittest.TestCase):
         for path, sha in self._index_gitlinks().items():
             name = path.split("/")[-1]
             row = next(
-                (line for line in readme.splitlines() if f"`{name}`" in line and "|" in line),
+                (
+                    line
+                    for line in readme.splitlines()
+                    if f"`{name}`" in line and "|" in line
+                ),
                 None,
             )
             with self.subTest(submodule=path):
-                self.assertIsNotNone(row, f"{name} has no provenance row in vendor/README.md")
+                self.assertIsNotNone(
+                    row, f"{name} has no provenance row in vendor/README.md"
+                )
                 recorded = re.findall(r"`([0-9a-f]{7,40})`", row or "")
                 self.assertTrue(recorded, f"{name} row records no pin SHA: {row}")
                 self.assertTrue(
@@ -211,7 +226,9 @@ class VendorSubmoduleTests(unittest.TestCase):
             source = ROOT / submodule / relative
             with self.subTest(submodule=submodule):
                 if not source.exists():
-                    self.skipTest(f"{submodule} not checked out; run git submodule update --init")
+                    self.skipTest(
+                        f"{submodule} not checked out; run git submodule update --init"
+                    )
                 digest = hashlib.sha256(source.read_bytes()).hexdigest()
                 self.assertEqual(
                     digest,
@@ -253,17 +270,23 @@ class VendorSubmoduleTests(unittest.TestCase):
         vendor_row = next(
             (
                 line
-                for line in (ROOT / "vendor" / "README.md").read_text(encoding="utf-8").splitlines()
+                for line in (ROOT / "vendor" / "README.md")
+                .read_text(encoding="utf-8")
+                .splitlines()
                 if "`relay`" in line and "agent-relay@" in line
             ),
             None,
         )
         self.assertIsNotNone(
-            vendor_row, "vendor/README.md has no relay row declaring an agent-relay dependency"
+            vendor_row,
+            "vendor/README.md has no relay row declaring an agent-relay dependency",
         )
-        declared_in_vendor_row = re.search(r"agent-relay@\S*?([0-9][^\s`|]*)", vendor_row or "")
+        declared_in_vendor_row = re.search(
+            r"agent-relay@\S*?([0-9][^\s`|]*)", vendor_row or ""
+        )
         self.assertIsNotNone(
-            declared_in_vendor_row, f"no agent-relay version in the vendor row: {vendor_row}"
+            declared_in_vendor_row,
+            f"no agent-relay version in the vendor row: {vendor_row}",
         )
         self.assertEqual(
             declared_in_vendor_row.group(1),
@@ -287,11 +310,17 @@ class VendorSubmoduleTests(unittest.TestCase):
             if len(cells) == 2:
                 rows[cells[0]] = cells[1]
 
-        self.assertIn("Declared version", rows, "connector README has no Declared version row")
         self.assertIn(
-            version,
-            rows["Declared version"],
-            f"Declared version row reads {rows['Declared version']!r}, expected {version}",
+            "Declared version", rows, "connector README has no Declared version row"
+        )
+        # Exact comparison against the manifest spec, not a substring search:
+        # `version` is the bare number, so `in` also accepts `^111.2.0` and
+        # `^11.2.0 || ^12.0.0` — ranges that install something the pinned
+        # source does not correspond to.
+        self.assertEqual(
+            rows["Declared version"].strip("`"),
+            spec,
+            f"Declared version row reads {rows['Declared version']!r}, expected {spec!r}",
         )
 
         self.assertIn("Vendored at", rows, "connector README has no Vendored at row")
@@ -329,10 +358,14 @@ class VendorSubmoduleTests(unittest.TestCase):
             declared_range = (entry.get("engines") or {}).get("node")
             if not declared_range:
                 continue
-            for match in re.finditer(r">=\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?", declared_range):
+            for match in re.finditer(
+                r">=\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?", declared_range
+            ):
                 major = int(match.group(1))
                 if major >= 22:
-                    bounds.add((major, int(match.group(2) or 0), int(match.group(3) or 0)))
+                    bounds.add(
+                        (major, int(match.group(2) or 0), int(match.group(3) or 0))
+                    )
 
         self.assertTrue(bounds, "no Node 22+ bound found in the locked tree")
         major, minor, patch = max(bounds)
@@ -371,7 +404,9 @@ class VendorScannerExclusionTests(unittest.TestCase):
         matching gitlink would be inert rather than loud. This makes it loud.
         """
         if not self.has_git_index:
-            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
+            self.skipTest(
+                "no Git index here (source archive); CI checkout validates this gate"
+            )
         self.assertEqual(submodule_paths(ROOT), gitlink_paths(ROOT))
 
     def test_scans_gate_on_index_proven_gitlinks_not_declarations(self) -> None:
@@ -391,7 +426,9 @@ class VendorScannerExclusionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "config").mkdir()
-            (root / "config" / "settings.toml").write_text("k = 'v'\n", encoding="utf-8")
+            (root / "config" / "settings.toml").write_text(
+                "k = 'v'\n", encoding="utf-8"
+            )
             run("git", "add", "-A")
             run("git", "commit", "-qm", "fixture")
 
@@ -402,7 +439,9 @@ class VendorScannerExclusionTests(unittest.TestCase):
 
     def test_upstream_files_are_excluded_from_the_privacy_contract(self) -> None:
         if not self.has_git_index:
-            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
+            self.skipTest(
+                "no Git index here (source archive); CI checkout validates this gate"
+            )
         for submodule in EXPECTED_SUBMODULES:
             with self.subTest(submodule=submodule):
                 self.assertTrue(is_vendored(ROOT / submodule / "README.md", ROOT))
@@ -452,7 +491,9 @@ class VendorScannerExclusionTests(unittest.TestCase):
             guard.subprocess.run = original
 
 
-@unittest.skipUnless(_git_available(), "no git binary; these fixtures build real repositories")
+@unittest.skipUnless(
+    _git_available(), "no git binary; these fixtures build real repositories"
+)
 class TrackedSymlinkScanTests(unittest.TestCase):
     """Gitlinks are dropped by index mode, never by probing the filesystem.
 
@@ -515,7 +556,9 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             run("git", "add", "-A")
             run("git", "commit", "-qm", "fixture")
 
-            self.assertTrue((root / "reference.md").exists(), "fixture link should resolve")
+            self.assertTrue(
+                (root / "reference.md").exists(), "fixture link should resolve"
+            )
             findings = scan_repository(root)
             self.assertTrue(
                 any("email address" in finding for finding in findings),
@@ -532,7 +575,9 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             )
 
 
-@unittest.skipUnless(_git_available(), "no git binary; these fixtures build real repositories")
+@unittest.skipUnless(
+    _git_available(), "no git binary; these fixtures build real repositories"
+)
 class StaleGitmodulesScanTests(unittest.TestCase):
     """The tracked-file scan trusts the index mode, never `.gitmodules` text.
 
@@ -574,6 +619,91 @@ class StaleGitmodulesScanTests(unittest.TestCase):
                 any("prohibited private filename" in finding for finding in findings),
                 f"stale .gitmodules path hid a tracked file: {findings}",
             )
+
+
+@unittest.skipUnless(_git_available(), "no git binary")
+class ForeignIndexScanTests(unittest.TestCase):
+    """An ancestor repository's index must never be treated as ours.
+
+    `git rev-parse --is-inside-work-tree` answers "is there a repository
+    above me", so a source archive extracted anywhere beneath an unrelated
+    checkout answers yes and then reports on that checkout's index — under
+    which none of the archive's files are tracked. Every exclusion built on
+    the index then fires on every path: the privacy scan opens nothing and
+    passes, and the TOML verifier checks nothing and reports valid.
+    """
+
+    def _archive_under_foreign_repo(self, directory: str) -> Path:
+        outer = Path(directory) / "outer"
+        outer.mkdir()
+
+        def run(*args: str, cwd: Path) -> None:
+            subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+        run("git", "init", "-q", ".", cwd=outer)
+        run("git", "config", "user.email", "foreign-index-fixture", cwd=outer)
+        run("git", "config", "user.name", "foreign-index-fixture", cwd=outer)
+        (outer / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
+        run("git", "add", "unrelated.txt", cwd=outer)
+        run("git", "commit", "-qm", "outer", cwd=outer)
+
+        # The extracted tree is a plain directory: no .git of its own, and
+        # untracked as far as the outer repository is concerned.
+        extracted = outer / "extracted"
+        extracted.mkdir()
+        return extracted
+
+    def test_privacy_scan_does_not_trust_an_ancestor_repositorys_index(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            extracted = self._archive_under_foreign_repo(directory)
+            # Assembled at runtime: written as a literal, this fixture would
+            # trip the very scanner it exercises when the guard walks this
+            # file, failing the repository's own privacy gate.
+            planted = "contact: someone@" + "example" + ".invalid\n"
+            (extracted / "leaked.md").write_text(planted, encoding="utf-8")
+
+            self.assertIsNone(
+                tracked_paths(extracted),
+                "an ancestor repository's index was reported as this tree's",
+            )
+            scanned = {
+                str(path.relative_to(extracted)) for path in repository_files(extracted)
+            }
+            self.assertIn(
+                "leaked.md",
+                scanned,
+                "the scan walked nothing: the outer index tracks none of these files",
+            )
+            findings = scan_repository(extracted)
+            self.assertTrue(
+                any("possible email address" in finding for finding in findings),
+                f"privacy scan passed a tree it never opened: {findings}",
+            )
+
+    def test_toml_verifier_does_not_trust_an_ancestor_repositorys_index(self) -> None:
+        sys.path.insert(0, str(ROOT))
+        try:
+            from scripts import verify_runtime_stack
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as directory:
+            extracted = self._archive_under_foreign_repo(directory)
+            broken = extracted / "node_modules" / "broken.toml"
+            broken.parent.mkdir()
+            broken.write_text("this is not valid toml\n", encoding="utf-8")
+
+            original = verify_runtime_stack.ROOT
+            verify_runtime_stack.ROOT = extracted
+            try:
+                _checked, errors = verify_runtime_stack.enforce_toml()
+            finally:
+                verify_runtime_stack.ROOT = original
+
+        self.assertTrue(
+            any("broken.toml" in error for error in errors),
+            f"archive-owned TOML was skipped as installed content: {errors}",
+        )
 
 
 if __name__ == "__main__":
