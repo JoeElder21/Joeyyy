@@ -95,7 +95,9 @@ class VendorSubmoduleTests(unittest.TestCase):
 
     def setUp(self) -> None:
         if not self.has_git_index:
-            self.skipTest("no Git index here (archive or no git binary); CI checkout validates this")
+            self.skipTest(
+                "no Git index here (archive or no git binary); CI checkout validates this"
+            )
 
     def test_gitmodules_declares_the_expected_upstreams(self) -> None:
         parser = configparser.ConfigParser()
@@ -301,12 +303,12 @@ class VendorSubmoduleTests(unittest.TestCase):
                     bounds.add((major, int(match.group(2) or 0), int(match.group(3) or 0)))
 
         self.assertTrue(bounds, "no Node 22+ bound found in the locked tree")
-        highest = ">=%d.%d.%d" % max(bounds)
+        major, minor, patch = max(bounds)
+        highest = f">={major}.{minor}.{patch}"
         self.assertEqual(
             manifest["engines"]["node"],
             highest,
-            f"locked tree requires Node {highest}, "
-            f"manifest declares {manifest['engines']['node']}",
+            f"locked tree requires Node {highest}, manifest declares {manifest['engines']['node']}",
         )
 
     def test_no_upstream_file_content_is_tracked_in_this_repository(self) -> None:

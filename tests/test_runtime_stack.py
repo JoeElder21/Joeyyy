@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -75,7 +75,9 @@ class RuntimeStackTests(unittest.TestCase):
             nested.mkdir(parents=True)
             (nested / "pyproject.toml").write_text('[tool.x]\nk = "v"\n', encoding="utf-8")
             (nested / "node_modules").mkdir()
-            (nested / "node_modules" / "dep.toml").write_text("this is not valid toml\n", encoding="utf-8")
+            (nested / "node_modules" / "dep.toml").write_text(
+                "this is not valid toml\n", encoding="utf-8"
+            )
 
             original = verify_runtime_stack.ROOT
             verify_runtime_stack.ROOT = nested

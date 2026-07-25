@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GITLINK_MODE = "160000"
@@ -45,7 +44,7 @@ PROHIBITED_ARTIFACT_SUFFIXES = {
     ".xlsx",
     ".zip",
 }
-LFS_POINTER_PREFIX = "version https://git-lfs.github.com/" "spec/v1"
+LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1"
 PATTERNS = {
     "secret token": re.compile(
         r"\b(?:(?:sk|gh[opusr]|github_pat|xox[baprs]|npm)[-_][A-Za-z0-9_-]{12,}"
@@ -61,15 +60,9 @@ PATTERNS = {
     "bearer credential": re.compile(
         r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._~+/-]{12,}={0,2}"
     ),
-    "email address": re.compile(
-        r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE
-    ),
-    "phone number": re.compile(
-        r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"
-    ),
-    "raw Drive or Docs link": re.compile(
-        r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE
-    ),
+    "email address": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+    "phone number": re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"),
+    "raw Drive or Docs link": re.compile(r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE),
     "street address": re.compile(
         r"\b[1-9]\d{1,5}\s+(?:[A-Za-z0-9.'-]+\s+){1,6}"
         r"(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
@@ -139,9 +132,7 @@ def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     return frozenset(names)
 
 
-def is_vendored(
-    path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None
-) -> bool:
+def is_vendored(path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None) -> bool:
     """Report whether ``path`` lies inside a vendored third-party submodule.
 
     Submodules record only a gitlink commit here, so their file contents are
@@ -260,7 +251,9 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             findings.append(f"{relative}: non-UTF-8 file is not allowed in this public source tree")
             continue
         if text.startswith(LFS_POINTER_PREFIX):
-            findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: Git LFS pointer is not allowed in this public source tree"
+            )
         for label, pattern in PATTERNS.items():
             if pattern.search(text):
                 findings.append(f"{relative}: possible {label}")
