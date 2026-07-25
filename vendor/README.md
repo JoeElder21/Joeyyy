@@ -72,7 +72,7 @@ either state alone. The complete reversible set:
 | Withdrawing | Files to revert |
 | --- | --- |
 | Any repo | its `vendor/<name>` gitlink; its `[submodule]` block in `.gitmodules`; its row in the contents and provenance tables here; its entry in `EXPECTED_SUBMODULES` and `UPSTREAM_DEPENDENCY_SOURCES` in `tests/test_vendor.py` |
-| `relay` additionally | `connectors/relay/` entirely (manifest, lockfile, README); `RELAY_TAG_COMMIT` and `test_every_relay_provenance_record_agrees` in `tests/test_vendor.py`; the `connectors/relay/` line in the root `README.md` |
+| `relay` additionally | `connectors/relay/` entirely (manifest, lockfile, README); **both** relay constants (`RELAY_TAG`, `RELAY_TAG_COMMIT`) and **both** relay-only tests (`test_every_relay_provenance_record_agrees`, `test_relay_gitlink_is_the_documented_release_tag`) in `tests/test_vendor.py`; the `connectors/relay/` line in the root `README.md` |
 | `awesome-civil-engineering` additionally | `requirements/vendor-civil-domain.txt` |
 | `multi-agent-ai-in-civil-engineering` additionally | `requirements/vendor-multi-agent-kg.txt` |
 | `civil-innovation-agent` additionally | nothing — it declares no dependencies |

@@ -12,6 +12,7 @@ import configparser
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ from scripts.privacy_guard import (
     gitlink_paths,
     is_vendored,
     repository_files,
+    run_git,
     scan_repository,
     submodule_paths,
 )
@@ -65,31 +67,35 @@ EXPECTED_SUBMODULES = {
 }
 
 
+def _git_available() -> bool:
+    """Whether a git executable exists at all.
+
+    Minimal containers ship without one. The probe below must not be the thing
+    that crashes when the code under test explicitly supports git's absence.
+    """
+    return shutil.which("git") is not None
+
+
 def _inside_git_worktree(root: Path = ROOT) -> bool:
     """Whether ``root`` has a git worktree backing it.
 
     A source archive (``git archive``) carries the tracked files but no index,
     so every index-derived assertion here is unverifiable rather than failing.
-    Mirrors the probe in ``tests/test_rollback.py``.
+    Mirrors the probe in ``tests/test_rollback.py``, but routed through
+    ``run_git`` so a missing binary reports False instead of raising.
     """
-    probe = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return probe.returncode == 0 and probe.stdout.strip() == "true"
+    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
+    return probe is not None and probe.returncode == 0 and probe.stdout.decode().strip() == "true"
 
 
 class VendorSubmoduleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.has_git_index = _inside_git_worktree()
+        cls.has_git_index = _git_available() and _inside_git_worktree()
 
     def setUp(self) -> None:
         if not self.has_git_index:
-            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
+            self.skipTest("no Git index here (archive or no git binary); CI checkout validates this")
 
     def test_gitmodules_declares_the_expected_upstreams(self) -> None:
         parser = configparser.ConfigParser()
@@ -238,18 +244,38 @@ class VendorSubmoduleTests(unittest.TestCase):
 
         # The connector's own provenance table must carry both the version and
         # the pinned commit, tying it to the gitlink the index records.
+        #
+        # Parsed per row, not searched document-wide. A whole-document search
+        # passes as soon as the new version appears anywhere — so bumping the
+        # "Vendored at" row to tag v12.0.0 would satisfy it while
+        # "Declared version" still read ^11.2.0, which is exactly the desync
+        # this test exists to catch.
         connector_readme = (connector / "README.md").read_text(encoding="utf-8")
+        rows = {}
+        for line in connector_readme.splitlines():
+            cells = [cell.strip() for cell in line.split("|") if cell.strip()]
+            if len(cells) == 2:
+                rows[cells[0]] = cells[1]
+
+        self.assertIn("Declared version", rows, "connector README has no Declared version row")
         self.assertIn(
             version,
-            connector_readme,
-            f"agent-relay {version} absent from connectors/relay/README.md",
+            rows["Declared version"],
+            f"Declared version row reads {rows['Declared version']!r}, expected {version}",
         )
+
+        self.assertIn("Vendored at", rows, "connector README has no Vendored at row")
         relay_sha = self._index_gitlinks()["vendor/relay"]
-        recorded = re.findall(r"`([0-9a-f]{7,40})`", connector_readme)
+        recorded = re.findall(r"`([0-9a-f]{7,40})`", rows["Vendored at"])
         self.assertTrue(
             any(relay_sha.startswith(candidate) for candidate in recorded),
             f"vendor/relay is pinned at {relay_sha[:7]}, "
-            f"but connectors/relay/README.md records {recorded}",
+            f"but the Vendored at row records {recorded}",
+        )
+        self.assertIn(
+            RELAY_TAG,
+            rows["Vendored at"],
+            f"Vendored at row does not name {RELAY_TAG}",
         )
 
         # The Node floor must cover the whole locked tree, not just
@@ -298,7 +324,7 @@ class VendorSubmoduleTests(unittest.TestCase):
 class VendorScannerExclusionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.has_git_index = _inside_git_worktree()
+        cls.has_git_index = _git_available() and _inside_git_worktree()
 
     def test_submodule_paths_are_read_from_gitmodules(self) -> None:
         self.assertEqual(submodule_paths(ROOT), frozenset(EXPECTED_SUBMODULES))
@@ -314,6 +340,8 @@ class VendorScannerExclusionTests(unittest.TestCase):
         self.assertEqual(submodule_paths(ROOT), gitlink_paths(ROOT))
 
     def test_scans_gate_on_index_proven_gitlinks_not_declarations(self) -> None:
+        if not _git_available():
+            self.skipTest("no git binary; this fixture builds a real repository")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
@@ -389,6 +417,7 @@ class VendorScannerExclusionTests(unittest.TestCase):
             guard.subprocess.run = original
 
 
+@unittest.skipUnless(_git_available(), "no git binary; these fixtures build real repositories")
 class TrackedSymlinkScanTests(unittest.TestCase):
     """Gitlinks are dropped by index mode, never by probing the filesystem.
 
@@ -468,6 +497,7 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             )
 
 
+@unittest.skipUnless(_git_available(), "no git binary; these fixtures build real repositories")
 class StaleGitmodulesScanTests(unittest.TestCase):
     """The tracked-file scan trusts the index mode, never `.gitmodules` text.
 

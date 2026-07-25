@@ -213,6 +213,20 @@ def repository_files(root: Path = ROOT) -> list[Path]:
 
 def scan_repository(root: Path = ROOT) -> list[str]:
     findings: list[str] = []
+    # A submodule's *path* is tracked by this repository even though its
+    # contents are not, so the name itself is published and stays subject to
+    # the filename and artifact-type rules. Excluding gitlinks from the
+    # content scan must not exclude them from these: a submodule added as
+    # `token.json` would otherwise pass a scan that exists to forbid exactly
+    # that name.
+    for name in sorted(gitlink_paths(root)):
+        relative = Path(name)
+        if relative.name.lower() in PROHIBITED_FILENAMES:
+            findings.append(f"{relative}: prohibited private filename (submodule path)")
+        if relative.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES:
+            findings.append(
+                f"{relative}: non-source artifact type is not allowed in this public repository"
+            )
     for path in repository_files(root):
         relative = path.relative_to(root)
         if path.name.lower() in PROHIBITED_FILENAMES:
