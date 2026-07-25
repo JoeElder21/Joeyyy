@@ -444,7 +444,9 @@ class SelectionReportBaselineTests(unittest.TestCase):
     read as unavailable rather than as a confident zero."""
 
     def test_branch_point_has_no_moving_fallback(self):
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+        # The measurement logic lives in report_gates.py, not in the PDF
+        # builder: that module imports reportlab, which CI does not install.
+        source = (ROOT / "scripts" / "report_gates.py").read_text(
             encoding="utf-8")
         start = source.index("def _branch_point()")
         end = source.index("MARKDOWN_NOW =")
@@ -486,17 +488,10 @@ class SelectionReportBaselineTests(unittest.TestCase):
         tip, so unlike merge-base it survives this work landing."""
         sys.path.insert(0, str(ROOT / "scripts"))
         try:
-            source = (ROOT / "scripts"
-                      / "build_awesome_copilot_report.py").read_text(
-                          encoding="utf-8")
-            namespace = {"__file__": str(ROOT / "scripts"
-                                         / "build_awesome_copilot_report.py")}
-            # Execute only the measurement half: importing the module builds
-            # the PDF and reruns every gate.
-            exec(compile(source[:source.index("ss = getSampleStyleSheet()")],
-                         "report_measurements", "exec"), namespace)
+            import report_gates
         finally:
             sys.path.pop(0)
+        namespace = vars(report_gates)
 
         added = namespace["MARKDOWN_ADDED"]
         now = namespace["MARKDOWN_NOW"]

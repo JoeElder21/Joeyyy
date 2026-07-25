@@ -17,7 +17,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from report_gates import measure_test_suite, run_gate  # noqa: E402
+from report_gates import (  # noqa: E402
+    MARKDOWN_ADDED, MARKDOWN_NOW, MARKDOWN_PRE_INSTALL, PRE_INSTALL_BASELINE,
+    count_tracked, count_tracked_at, measure_test_suite, run_gate,
+)
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -49,15 +52,6 @@ _today = _dt.date.today()
 BUILD_DATE = f"{_today.day} {_today.strftime('%B %Y')}"
 
 
-def count_tracked(pattern: str) -> int:
-    """Count tracked files matching a git pathspec, at build time."""
-    root = Path(__file__).resolve().parents[1]
-    try:
-        out = subprocess.run(["git", "ls-files", pattern], cwd=root,
-                             capture_output=True, text=True, check=False)
-    except OSError:
-        return -1
-    return len([line for line in out.stdout.splitlines() if line.strip()])
 
 
 def count_adopted(kind: str, pattern: str) -> int:
@@ -234,115 +228,9 @@ def manifest_pin() -> str:
     return found.group(1)[:8] if found else "unknown (no pin in manifest)"
 
 
-def count_tracked_at(ref: str, pattern: str) -> int:
-    """Count matching tracked files at a git ref, for honest before/after deltas."""
-    root = Path(__file__).resolve().parents[1]
-    try:
-        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
-                             cwd=root, capture_output=True, text=True, check=False)
-    except OSError:
-        return -1
-    if out.returncode != 0:
-        return -1
-    suffix = pattern.lstrip("*")
-    return len([l for l in out.stdout.splitlines() if l.endswith(suffix)])
 
 
-# The tip of main immediately before this work began. Pinned deliberately: a
-# merge-base against a moving main collapses to the merged tip once this lands,
-# which would silently rewrite the report's headline delta to zero and destroy
-# the change evidence it exists to carry.
-PRE_INSTALL_BASELINE = "89a2c1531765355843a1f3ed64ced85cf5d8aed6"
 
-
-def _branch_point() -> str:
-    """The pinned pre-install commit, or "" when it is not reachable.
-
-    There is deliberately no merge-base fallback. Falling back to
-    merge-base(HEAD, main) reproduced the very defect the pin was added to fix:
-    once this work merges, that resolves to the merged tip and the delta silently
-    becomes zero. In a shallow clone the honest answer is that the figure cannot
-    be computed, and the report says so rather than printing a confident zero.
-    """
-    root = Path(__file__).resolve().parents[1]
-    try:
-        known = subprocess.run(
-            ["git", "cat-file", "-e", f"{PRE_INSTALL_BASELINE}^{{commit}}"],
-            cwd=root, capture_output=True, text=True, check=False)
-    except OSError:
-        return ""
-    return PRE_INSTALL_BASELINE if known.returncode == 0 else ""
-
-
-def _tracked_set_at(ref: str, suffix: str) -> set[str] | None:
-    """The tracked paths with `suffix` at `ref`, or None if unreadable."""
-    root = Path(__file__).resolve().parents[1]
-    try:
-        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
-                             cwd=root, capture_output=True, text=True,
-                             check=False)
-    except OSError:
-        return None
-    if out.returncode != 0:
-        return None
-    return {line for line in out.stdout.splitlines() if line.endswith(suffix)}
-
-
-def _merged_upstream_tips() -> list[str]:
-    """The main tips this branch has merged in, from the merges' second parents.
-
-    Subtracting only the pinned baseline attributed every file that arrived
-    from main to this branch: at the time of writing the baseline held 46
-    markdown files, the merged main tip held 58, and HEAD held 78 -- so the
-    report published "adds 32" for a branch that adds 20, in the one document
-    meant to serve as installation evidence.
-
-    A merge's second parent is a permanent record of the upstream tip that was
-    merged, so unlike merge-base it does not collapse once this work lands.
-    """
-    root = Path(__file__).resolve().parents[1]
-    try:
-        out = subprocess.run(
-            ["git", "rev-list", "--merges", "--parents", "HEAD"],
-            cwd=root, capture_output=True, text=True, check=False)
-    except OSError:
-        return []
-    if out.returncode != 0:
-        return []
-    return [parts[2] for parts in
-            (line.split() for line in out.stdout.splitlines())
-            if len(parts) >= 3]
-
-
-MARKDOWN_NOW = count_tracked("*.md")
-_BASE = _branch_point()
-
-
-def _markdown_added() -> int:
-    """Markdown files this branch itself introduced, or -1 if unmeasurable.
-
-    A file counts only if it was at neither the pre-install baseline nor any
-    upstream tip merged in since. Anything else is somebody else's work being
-    published as evidence for this one.
-    """
-    if not _BASE:
-        return -1
-    here = _tracked_set_at("HEAD", ".md")
-    baseline = _tracked_set_at(_BASE, ".md")
-    if here is None or baseline is None:
-        return -1
-    elsewhere = set(baseline)
-    for tip in _merged_upstream_tips():
-        merged = _tracked_set_at(tip, ".md")
-        if merged is None:
-            # Cannot prove which side a file came from, so do not guess.
-            return -1
-        elsewhere |= merged
-    return len(here - elsewhere)
-
-
-_MD_BEFORE = count_tracked_at(_BASE, "*.md") if _BASE else -1
-MARKDOWN_ADDED = _markdown_added()
 
 ADOPTED_TOTAL = (
     count_adopted("instructions", "instructions/*.instructions.md")
@@ -527,7 +415,7 @@ for sig, val, why in [
     # the "selection basis" appeared to have been made against files that did
     # not exist when the selection was made. The current figure belongs to the
     # delta note below, which says so explicitly.
-    ("Markdown", f"{_MD_BEFORE} files" if _MD_BEFORE >= 0
+    ("Markdown", f"{MARKDOWN_PRE_INSTALL} files" if MARKDOWN_PRE_INSTALL >= 0
      else "not measured (baseline commit unreachable)",
      "Contracts, plans, registries, runbooks. Markdown discipline matters "
      "more here than in a typical code repo."),

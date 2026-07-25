@@ -2,8 +2,10 @@
 
 These live apart from scripts/build_awesome_copilot_report.py because that
 module builds the PDF at import time: importing it to test a helper would run
-every gate and rewrite the document. Keeping the measurement logic here makes
-the honesty rules below directly testable.
+every gate and rewrite the document, and it imports reportlab, which CI does
+not install -- so a test that reached into it errored in CI while passing on
+any machine that happens to have the package. Keeping the measurement logic
+here makes the honesty rules below directly testable, on stdlib alone.
 
 The rule these enforce: never render an unrun check as a clean one.
 """
@@ -210,3 +212,126 @@ def measure_test_suite() -> str:
     skipped = re.search(r"skipped=(\d+)", output)
     tail = f" ({skipped.group(1)} skipped)" if skipped else ""
     return f"{count} tests, OK{tail}"
+
+
+def count_tracked(pattern: str) -> int:
+    """Count tracked files matching a git pathspec, at build time."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-files", pattern], cwd=root,
+                             capture_output=True, text=True, check=False)
+    except OSError:
+        return -1
+    return len([line for line in out.stdout.splitlines() if line.strip()])
+
+
+def count_tracked_at(ref: str, pattern: str) -> int:
+    """Count matching tracked files at a git ref, for honest before/after deltas."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
+                             cwd=root, capture_output=True, text=True, check=False)
+    except OSError:
+        return -1
+    if out.returncode != 0:
+        return -1
+    suffix = pattern.lstrip("*")
+    return len([l for l in out.stdout.splitlines() if l.endswith(suffix)])
+
+
+# The tip of main immediately before this work began. Pinned deliberately: a
+# merge-base against a moving main collapses to the merged tip once this lands,
+# which would silently rewrite the report's headline delta to zero and destroy
+# the change evidence it exists to carry.
+PRE_INSTALL_BASELINE = "89a2c1531765355843a1f3ed64ced85cf5d8aed6"
+
+
+def _branch_point() -> str:
+    """The pinned pre-install commit, or "" when it is not reachable.
+
+    There is deliberately no merge-base fallback. Falling back to
+    merge-base(HEAD, main) reproduced the very defect the pin was added to fix:
+    once this work merges, that resolves to the merged tip and the delta silently
+    becomes zero. In a shallow clone the honest answer is that the figure cannot
+    be computed, and the report says so rather than printing a confident zero.
+    """
+    root = Path(__file__).resolve().parents[1]
+    try:
+        known = subprocess.run(
+            ["git", "cat-file", "-e", f"{PRE_INSTALL_BASELINE}^{{commit}}"],
+            cwd=root, capture_output=True, text=True, check=False)
+    except OSError:
+        return ""
+    return PRE_INSTALL_BASELINE if known.returncode == 0 else ""
+
+
+def _tracked_set_at(ref: str, suffix: str) -> set[str] | None:
+    """The tracked paths with `suffix` at `ref`, or None if unreadable."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
+                             cwd=root, capture_output=True, text=True,
+                             check=False)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    return {line for line in out.stdout.splitlines() if line.endswith(suffix)}
+
+
+def _merged_upstream_tips() -> list[str]:
+    """The main tips this branch has merged in, from the merges' second parents.
+
+    Subtracting only the pinned baseline attributed every file that arrived
+    from main to this branch: at the time of writing the baseline held 46
+    markdown files, the merged main tip held 58, and HEAD held 78 -- so the
+    report published "adds 32" for a branch that adds 20, in the one document
+    meant to serve as installation evidence.
+
+    A merge's second parent is a permanent record of the upstream tip that was
+    merged, so unlike merge-base it does not collapse once this work lands.
+    """
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(
+            ["git", "rev-list", "--merges", "--parents", "HEAD"],
+            cwd=root, capture_output=True, text=True, check=False)
+    except OSError:
+        return []
+    if out.returncode != 0:
+        return []
+    return [parts[2] for parts in
+            (line.split() for line in out.stdout.splitlines())
+            if len(parts) >= 3]
+
+
+MARKDOWN_NOW = count_tracked("*.md")
+_BASE = _branch_point()
+
+
+def _markdown_added() -> int:
+    """Markdown files this branch itself introduced, or -1 if unmeasurable.
+
+    A file counts only if it was at neither the pre-install baseline nor any
+    upstream tip merged in since. Anything else is somebody else's work being
+    published as evidence for this one.
+    """
+    if not _BASE:
+        return -1
+    here = _tracked_set_at("HEAD", ".md")
+    baseline = _tracked_set_at(_BASE, ".md")
+    if here is None or baseline is None:
+        return -1
+    elsewhere = set(baseline)
+    for tip in _merged_upstream_tips():
+        merged = _tracked_set_at(tip, ".md")
+        if merged is None:
+            # Cannot prove which side a file came from, so do not guess.
+            return -1
+        elsewhere |= merged
+    return len(here - elsewhere)
+
+
+MARKDOWN_PRE_INSTALL = count_tracked_at(_BASE, "*.md") if _BASE else -1
+_MD_BEFORE = MARKDOWN_PRE_INSTALL
+MARKDOWN_ADDED = _markdown_added()
