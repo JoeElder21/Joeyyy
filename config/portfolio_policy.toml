@@ -1,0 +1,73 @@
+# Portfolio policy for the Market Operator agent.
+#
+# This file is the agent's rulebook. Everything the daily brief calls a
+# "signal" is derived from these numbers, so a disagreement with the agent
+# is settled by editing this file, not by arguing with a model.
+#
+# Nothing here places a trade. Verdicts are recommendations for a human.
+
+version = "1.0.0"
+owner = "market_operator"
+
+[risk]
+# Hard guardrails. A breach overrides the momentum score outright.
+max_position_weight = 0.15          # share of invested capital in one name
+max_sector_weight = 0.35            # reserved for when sector data is supplied
+stop_loss_pct = -0.15               # unrealized return on cost that forces a review
+trailing_stop_from_high_pct = -0.25 # decline from the 52-week high
+max_annualized_volatility = 0.65    # 30-session realized volatility ceiling
+min_cash_weight = 0.02              # dry powder floor, as a share of equity
+max_effective_concentration = 0.25  # Herfindahl ceiling for the whole book
+
+[lookback]
+# Sessions per horizon. Five sessions is the "weekly gain" the brief reports.
+week = 5
+month = 21
+quarter = 63
+half_year = 126
+
+[indicators]
+rsi_window = 14
+rsi_overbought = 70.0
+rsi_oversold = 30.0
+atr_window = 14
+volatility_window = 30
+volume_short_window = 5
+volume_long_window = 60
+fast_ma = 20
+medium_ma = 50
+slow_ma = 200
+
+[scoring]
+# Points contributed by each satisfied condition. The composite score is the
+# sum, clamped to -100..100. Raising a weight makes that factor louder.
+above_slow_ma = 18.0
+above_medium_ma = 12.0
+above_fast_ma = 6.0
+medium_ma_rising = 12.0
+macd_positive = 10.0
+rsi_constructive = 8.0        # 45-70: strong but not stretched
+rsi_overbought_penalty = -8.0
+rsi_oversold_penalty = -6.0
+month_return_positive = 10.0
+quarter_return_positive = 12.0
+week_return_positive = 4.0
+volume_confirmation = 8.0     # recent volume above its 60-session baseline
+near_52w_high = 10.0          # in the top quintile of the 52-week range
+near_52w_low = -12.0          # in the bottom quintile
+high_volatility_penalty = -10.0
+deep_drawdown_penalty = -12.0
+
+[thresholds]
+# Composite-score cut points for the verdict ladder.
+add = 55.0
+hold = 20.0
+trim = -10.0
+exit_watch = -35.0
+
+[research]
+# The agent must corroborate a mechanical verdict with current reporting
+# before it is presented as a recommendation.
+require_corroboration_above_abs_score = 40.0
+max_headline_age_days = 7
+min_independent_sources = 2
