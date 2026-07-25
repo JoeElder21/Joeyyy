@@ -93,6 +93,77 @@ class CaseIntegrityTests(unittest.TestCase):
                 self.assertIsInstance(payload, dict)
 
 
+class PacketValidityMetricTests(unittest.TestCase):
+    """The one metric that needs no model must actually work, in both directions.
+
+    A metric that only ever returns 0 would fail every evaluation and look
+    rigorous; one that only ever returns 1 would pass everything and look clean.
+    Both directions are asserted against real packets built by the contract
+    suite, so this metric is judged by the same fixtures the runtime is.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        cls.contracts = PacketContractTests
+        instance = PacketContractTests(
+            "test_valid_delegation_and_handoff_are_bound_to_lease_and_origin"
+        )
+        cls.delegation, cls.handoff = instance.v21_readonly_pair()
+
+    def test_valid_packet_scores_one(self):
+        from packet_validity import score_packet
+
+        verdict = score_packet(self.handoff, delegations=[self.delegation])
+        self.assertEqual(verdict.score, 1.0)
+        self.assertTrue(verdict.passed)
+        self.assertEqual(verdict.errors, ())
+
+    def test_malformed_packet_scores_zero_with_reasons(self):
+        from packet_validity import score_packet
+
+        verdict = score_packet({"schema_version": "2.1"})
+        self.assertEqual(verdict.score, 0.0)
+        self.assertFalse(verdict.passed)
+        self.assertTrue(verdict.errors)
+        self.assertIn("PacketGuard", verdict.reason())
+
+    def test_absent_packet_is_a_failure_not_an_error(self):
+        # A specialist that emits nothing must score zero, not crash the run.
+        from packet_validity import score_packet
+
+        verdict = score_packet(None)
+        self.assertEqual(verdict.score, 0.0)
+        self.assertIn("no packet", verdict.reason())
+
+    def test_legacy_schema_version_is_rejected(self):
+        # v2.0 packets are refused by the runtime; the metric must agree with it
+        # rather than keep its own opinion.
+        from packet_validity import score_packet
+
+        verdict = score_packet(self.contracts.handoff, active_leases=[self.contracts.lease])
+        self.assertEqual(verdict.score, 0.0)
+
+    def test_score_is_binary(self):
+        # Validity is not a matter of degree: partial credit would let a
+        # specialist average past a boundary the runtime enforces absolutely.
+        from packet_validity import score_packet
+
+        for packet in (None, {}, {"schema_version": "2.1"}, self.handoff):
+            with self.subTest(packet=type(packet).__name__):
+                score = score_packet(packet, delegations=[self.delegation]).score
+                self.assertIn(score, (0.0, 1.0))
+
+    def test_metric_builder_degrades_without_a_runtime(self):
+        import packet_validity
+
+        built = packet_validity.build_metric()
+        if not harness.deepeval_available():
+            self.assertIsNone(built)
+
+
 class HonestyContractTests(unittest.TestCase):
     """The harness must refuse to produce evidence it does not have."""
 

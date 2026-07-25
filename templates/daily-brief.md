@@ -41,6 +41,6 @@ List gaps that materially affect the plan and the fastest way to resolve each.
 
 Include only when Joe still has an action to take.
 
-1. 
-2. 
-3. 
+1.
+2.
+3.

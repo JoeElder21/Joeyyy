@@ -34,10 +34,18 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: detect-private-key
+      # Generated fixtures are excluded from the whitespace hooks. The DXF is
+      # produced by connectors/aps/testdata/make_test_model.py via ezdxf, which
+      # emits trailing spaces inside LTYPE description fields; letting the hook
+      # strip them means the hook and the generator overwrite each other on every
+      # regeneration. Whitespace in a generated file is the generator's business.
       - id: end-of-file-fixer
+        exclude: ^connectors/aps/testdata/
       - id: trailing-whitespace
+        exclude: ^connectors/aps/testdata/
       - id: mixed-line-ending
         args: [--fix=lf]
+        exclude: ^connectors/aps/testdata/
 
   - repo: local
     hooks:

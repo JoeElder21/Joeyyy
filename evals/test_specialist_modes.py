@@ -20,6 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from harness import build_coverage, deepeval_available, load_cases, metrics_for  # noqa: E402
+from packet_validity import build_metric as build_packet_metric  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     not deepeval_available(),
@@ -88,6 +89,17 @@ def _declared_metrics(case):
     return built
 
 
+def _packet_metric(case):
+    """Deterministic, model-free, and first in the list.
+
+    Grading prose attached to a packet the runtime would refuse is wasted money
+    and a misleading score, so this gates the judged metrics rather than sitting
+    alongside them.
+    """
+    metric = build_packet_metric(threshold=case.get("thresholds", {}).get("packet_validity", 1.0))
+    return [metric] if metric is not None else []
+
+
 @pytest.mark.parametrize("mode_key", sorted(CASES), ids=sorted(CASES))
 def test_mode_meets_acceptance_criteria(mode_key):
     """One controlled mission per material mode, per the active gate."""
@@ -105,7 +117,7 @@ def test_mode_meets_acceptance_criteria(mode_key):
         context=case.get("context", []),
         expected_tools=case.get("expected_tools", []),
     )
-    metrics = _custom_metrics(mode, case) + _declared_metrics(case)
+    metrics = _packet_metric(case) + _custom_metrics(mode, case) + _declared_metrics(case)
     assert_test(test_case, metrics)
 
 

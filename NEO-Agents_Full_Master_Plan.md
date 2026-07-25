@@ -857,25 +857,25 @@ This labor force is designed to actually **produce work** like strong senior dep
 # 8. HIGHEST-ROI DAILY KILLER STACK
 ## First APEX Labor-Force Agents to Build for Maximum Immediate Time Savings
 
-1. Site Intake Triage Officer  
-2. Submittal Package Assembler  
-3. Comment Response Engineer  
-4. Technical Redline Commander  
-5. Scope Decomposer  
-6. Deadline Orchestrator  
-7. Client Update Writer  
-8. Proposal Builder  
-9. Redline Consolidation Officer  
-10. Project Memory Curator  
-11. Existing Conditions Synthesizer  
-12. Constraint Mapper  
-13. Permit Path Architect  
-14. Meeting Brief Builder  
-15. Action Item Sheriff  
-16. Consultant Symphony Coordinator  
-17. RFI Responder  
-18. Submittal Shepherd  
-19. Fee Logic Analyst  
+1. Site Intake Triage Officer
+2. Submittal Package Assembler
+3. Comment Response Engineer
+4. Technical Redline Commander
+5. Scope Decomposer
+6. Deadline Orchestrator
+7. Client Update Writer
+8. Proposal Builder
+9. Redline Consolidation Officer
+10. Project Memory Curator
+11. Existing Conditions Synthesizer
+12. Constraint Mapper
+13. Permit Path Architect
+14. Meeting Brief Builder
+15. Action Item Sheriff
+16. Consultant Symphony Coordinator
+17. RFI Responder
+18. Submittal Shepherd
+19. Fee Logic Analyst
 20. Workflow Automation Designer
 
 These 20 should create the biggest immediate drop in Joe-hours while increasing real deliverable output.
