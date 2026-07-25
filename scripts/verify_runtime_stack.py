@@ -28,7 +28,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.privacy_guard import is_vendored  # noqa: E402
+from scripts.privacy_guard import gitlink_paths, is_vendored  # noqa: E402
 
 RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
     "contracts": [
@@ -127,6 +127,8 @@ def enforce_toml() -> tuple[list[str], list[str]]:
 
     checked: list[str] = []
     errors: list[str] = []
+    # Resolved once: is_vendored() otherwise spawns two git processes per path.
+    gitlinks = gitlink_paths(ROOT)
     for toml_path in sorted(ROOT.rglob("*.toml")):
         # Match against the repository-relative path: an absolute-path test
         # would skip every file when the checkout itself happens to sit under
@@ -139,7 +141,7 @@ def enforce_toml() -> tuple[list[str], list[str]]:
         # the gitlink commit. Installed npm trees are excluded for the same
         # reason: an upstream package shipping malformed TOML must not fail
         # this repository's contract check.
-        if is_vendored(toml_path, ROOT):
+        if is_vendored(toml_path, ROOT, gitlinks):
             continue
         try:
             parse(toml_path.read_text(encoding="utf-8"))

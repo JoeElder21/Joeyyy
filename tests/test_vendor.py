@@ -158,15 +158,27 @@ class VendorSubmoduleTests(unittest.TestCase):
         # The Node floor must cover the whole locked tree, not just
         # agent-relay's own declaration — npm downgrades engine mismatches to
         # warnings, so an understated floor installs and fails at runtime.
-        simple_floors = [
-            entry["engines"]["node"]
-            for entry in lock["packages"].values()
-            if isinstance(entry, dict)
-            and re.fullmatch(r">=\d+\.\d+\.\d+", (entry.get("engines") or {}).get("node") or "")
-        ]
-        highest = max(
-            simple_floors, key=lambda floor: tuple(int(p) for p in floor[2:].split("."))
-        )
+        #
+        # Every `>=` bound is scanned, including those inside compound ranges
+        # such as posthog-node's `^20.20.0 || >=22.22.0`. An earlier version of
+        # this test matched only bare `>=x.y.z` strings and silently ignored
+        # those, which is exactly how the floor came to be understated.
+        # agent-relay itself requires Node 22+, so the 22.x branch of every
+        # compound range is the one that binds here.
+        bounds = set()
+        for entry in lock["packages"].values():
+            if not isinstance(entry, dict):
+                continue
+            declared_range = (entry.get("engines") or {}).get("node")
+            if not declared_range:
+                continue
+            for match in re.finditer(r">=\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?", declared_range):
+                major = int(match.group(1))
+                if major >= 22:
+                    bounds.add((major, int(match.group(2) or 0), int(match.group(3) or 0)))
+
+        self.assertTrue(bounds, "no Node 22+ bound found in the locked tree")
+        highest = ">=%d.%d.%d" % max(bounds)
         self.assertEqual(
             manifest["engines"]["node"],
             highest,

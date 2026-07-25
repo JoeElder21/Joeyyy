@@ -33,12 +33,17 @@ this manifest supplies the installable artifact.
 
 ## Install
 
-Requires **Node >= 22.19.0**. `agent-relay@11.2.0` itself declares `>=22.0.0`,
-and five non-optional packages in its locked tree
-(`@earendil-works/pi-coding-agent` and its bundled dependencies) require
-`>=22.19.0`. The manifest declares the higher floor deliberately: npm reports
-engine mismatches as warnings rather than refusing to install, so a lower
-declared floor would let the CLI install on Node 20 and fail at runtime.
+Requires **Node >= 22.22.0**, the highest bound anywhere in the locked tree.
+`agent-relay@11.2.0` itself declares only `>=22.0.0`; five bundled packages
+under `@earendil-works/pi-coding-agent` require `>=22.19.0`; and
+`posthog-node@5.46.1` requires `^20.20.0 || >=22.22.0`, whose 22.x branch is
+the binding one here since `agent-relay` already rules out Node 20.
+
+The manifest declares that ceiling deliberately. npm reports engine mismatches
+as warnings rather than refusing to install, so an understated floor lets the
+CLI install and then fail at runtime. Note that the constraint hid inside a
+compound range — a floor derived only from simple `>=x.y.z` declarations comes
+out at `22.19.0` and is wrong.
 
 ```bash
 npm --prefix connectors/relay install --ignore-scripts

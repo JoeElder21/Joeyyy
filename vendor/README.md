@@ -41,8 +41,12 @@ forget:
    version in `connectors/relay/package.json`. Leaving it behind means
    auditing newer source while installing the older published CLI.
 3. That dependency's lockfile, regenerated with
-   `npm install --package-lock-only --ignore-scripts`, plus the Node floor if
-   the new tree demands a higher one.
+   `npm --prefix connectors/relay install --package-lock-only --ignore-scripts`,
+   plus the Node floor if the new tree demands a higher one. The `--prefix` is
+   required: without it, npm operates on the current working directory, so
+   running this from the repository root exits successfully while creating an
+   empty root `package-lock.json` and leaving the connector's lockfile
+   untouched.
 
 Then commit the whole set together.
 
@@ -70,11 +74,41 @@ authorization.
 
 Upstream code is untrusted input. Per the FakeGit intake rule in
 `docs/FRONTIER_REPO_SCAN_2026-07-24.md`, do not execute any of it outside an
-isolated environment. Provenance at intake: all four remotes were resolved and
-cloned directly from their canonical URLs; `relay`'s identity is additionally
-corroborated by npm registry linkage (`agent-relay` declares
-`repository.url = AgentWorkforce/relay`) and by its published `latest` version
-matching the pinned tag.
+isolated environment.
+
+## Provenance at intake
+
+The FakeGit rule asks for canonical-source confirmation, registry or release
+corroboration, and age plus contributor history. Recorded per repository,
+including what could **not** be established:
+
+| Repo | Registry / release corroboration | History | Assessment |
+| --- | --- | --- | --- |
+| `relay` | **Strong.** npm `agent-relay` declares `repository.url = AgentWorkforce/relay`; its published `latest` (`11.2.0`) matches the pinned `v11.2.0` tag. Two independent records agree. | Tagged releases | Corroborated |
+| `awesome-civil-engineering` | **None available** — publishes no package and cuts no releases | 73 commits, 8+ distinct contributors, 2023-02 → 2026-07 | Sustained multi-contributor history over 3.5 years is meaningful corroboration on its own |
+| `multi-agent-ai-in-civil-engineering` | **None available** | 15 commits, 1 author, **all within 47 minutes on 2025-05-09**; untouched since | Single-author code drop. Consistent with a paper artifact, but no independent corroboration exists |
+| `civil-innovation-agent` | **None available** | **1 commit, 1 author, 2026-05-30**; no history at all | **Weakest.** A single-commit, months-old, single-author repository is the profile the FakeGit finding warns about. Nothing here corroborates it beyond the URL |
+
+No author-site cross-link was verified for any of the three non-`relay`
+repositories, and the GitHub API is out of scope for this session, so stars,
+forks, and fork-network position are unverified. Identity therefore rests on
+the URL plus the history above — weaker than the `relay` case.
+
+**What this means in practice.** None of the three is executed by this
+repository, and none has credentials. The declared dependencies for them are
+ordinary PyPI packages (Jinja2, pydantic, the llama-index stack), not upstream
+code, so installing those declarations does not execute anything from these
+repos. `civil-innovation-agent` declares nothing at all.
+
+One exception to record: `awesome-civil-engineering`'s `generate.py` **was**
+executed once during verification, in a throwaway virtualenv, to confirm the
+declared dependencies were sufficient. That was upstream code running outside a
+sandbox and is the kind of step the isolation rule exists to govern.
+
+Before any of these three is executed again, promoted, or given credentials,
+complete the outstanding checks — author-site cross-link, fork-network
+position, and a read of the code being run. `civil-innovation-agent` in
+particular should not be run at all on its current evidence.
 
 ## Scanner exclusion
 

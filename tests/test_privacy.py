@@ -3,7 +3,7 @@ import re
 import tempfile
 import unittest
 
-from scripts.privacy_guard import is_vendored, repository_files, scan_repository
+from scripts.privacy_guard import gitlink_paths, is_vendored, repository_files, scan_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,12 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 class PublicRepositoryPrivacyTests(unittest.TestCase):
     def test_tracked_text_has_no_obvious_private_or_secret_material(self):
         excluded_parts = {"__pycache__", ".git", "node_modules"}
+        gitlinks = gitlink_paths(ROOT)
         text_paths = [
             path
             for path in ROOT.rglob("*")
             if path.is_file()
             and not any(part in excluded_parts for part in path.parts)
-            and not is_vendored(path, ROOT)
+            and not is_vendored(path, ROOT, gitlinks)
             and path.suffix.lower() in {".md", ".toml", ".json", ".py", ".yml", ".yaml"}
         ]
         prohibited = {
@@ -119,11 +120,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "memory.sqlite",
             "memory.sqlite3",
         }
+        gitlinks = gitlink_paths(ROOT)
         for path in ROOT.rglob("*"):
             if (
                 path.is_file()
                 and not {".git", "node_modules"} & set(path.parts)
-                and not is_vendored(path, ROOT)
+                and not is_vendored(path, ROOT, gitlinks)
             ):
                 with self.subTest(path=path.relative_to(ROOT)):
                     self.assertNotIn(path.name.lower(), prohibited_names)
