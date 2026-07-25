@@ -4,8 +4,18 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+# A second push while a review is still running would otherwise race the first,
+# and both runs write the same sticky comment — the slower one can land last and
+# overwrite the newer findings with a review of superseded code.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
+    # Fork PRs receive neither ANTHROPIC_API_KEY nor a writable token, so the
+    # job can only fail. Skip them rather than red-X every external PR.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read

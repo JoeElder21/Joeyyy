@@ -37,5 +37,10 @@ jobs:
         uses: anthropics/claude-code-action@12310e4417c3473095c957cb311b3cf59a38d659 # v1.0.99
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: |
-            --allowedTools "Bash(python -m pip install -r requirements.txt),Bash(python scripts/privacy_guard.py),Bash(python scripts/validate_specialist_corps.py),Bash(python -m unittest discover -s tests -v)"
+          # Deliberately no --allowedTools here. This job is reachable from
+          # issue_comment on a fork PR, which runs in the base-repository
+          # context with ANTHROPIC_API_KEY and a write-scoped token while Claude
+          # operates on contributor-controlled code. Pre-authorizing
+          # requirements.txt installs, scripts/*.py, or test discovery would let
+          # a contributor run arbitrary code against those credentials by
+          # editing the very files being allowed.
