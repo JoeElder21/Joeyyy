@@ -33,6 +33,13 @@ this manifest supplies the installable artifact.
 
 ## Install
 
+Requires **Node >= 22.19.0**. `agent-relay@11.2.0` itself declares `>=22.0.0`,
+and five non-optional packages in its locked tree
+(`@earendil-works/pi-coding-agent` and its bundled dependencies) require
+`>=22.19.0`. The manifest declares the higher floor deliberately: npm reports
+engine mismatches as warnings rather than refusing to install, so a lower
+declared floor would let the CLI install on Node 20 and fail at runtime.
+
 ```bash
 npm --prefix connectors/relay install
 ```

@@ -9,6 +9,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+GITLINK_MODE = "160000"
 PROHIBITED_FILENAMES = {
     ".env",
     "credentials.json",
@@ -124,21 +125,31 @@ def repository_files(root: Path = ROOT) -> list[Path]:
         check=False,
     )
     if probe.returncode == 0 and probe.stdout.strip() == "true":
+        # -s exposes the index mode so gitlinks can be dropped by mode. Testing
+        # the filesystem instead (``is_file()``) would also silently drop a
+        # tracked dangling symlink — e.g. ``token.json -> /home/joe/secret`` —
+        # which is exactly the kind of entry this scanner exists to catch.
         tracked = subprocess.run(
-            ["git", "ls-files", "-z"],
+            ["git", "ls-files", "-s", "-z"],
             cwd=root,
             capture_output=True,
             check=True,
         ).stdout.split(b"\0")
-        return [
-            path
-            for path in (root / item.decode("utf-8") for item in tracked if item)
-            if path.is_file() and not is_vendored(path, root)
-        ]
+        paths: list[Path] = []
+        for entry in tracked:
+            if not entry:
+                continue
+            metadata, _, name = entry.decode("utf-8").partition("\t")
+            if metadata.split()[0] == GITLINK_MODE:
+                continue
+            path = root / name
+            if not is_vendored(path, root):
+                paths.append(path)
+        return paths
     return [
         path
         for path in root.rglob("*")
-        if path.is_file()
+        if (path.is_file() or path.is_symlink())
         and ".git" not in path.parts
         and "__pycache__" not in path.parts
         and not is_vendored(path, root)

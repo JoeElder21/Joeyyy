@@ -10,10 +10,11 @@ repository's own files.
 
 import configparser
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.privacy_guard import is_vendored, submodule_paths
+from scripts.privacy_guard import is_vendored, repository_files, scan_repository, submodule_paths
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SUBMODULES = {
@@ -90,6 +91,48 @@ class VendorScannerExclusionTests(unittest.TestCase):
 
     def test_paths_outside_the_repository_are_not_vendored(self) -> None:
         self.assertFalse(is_vendored(Path("/etc/hosts"), ROOT))
+
+
+class TrackedSymlinkScanTests(unittest.TestCase):
+    """Gitlinks are dropped by index mode, never by probing the filesystem.
+
+    Filtering with ``Path.is_file()`` would also drop a tracked *dangling*
+    symlink, letting a prohibited filename pointing at a private path pass the
+    scan as clean. Excluding submodules must not open that hole.
+    """
+
+    def _repo_with_dangling_symlink(self, directory: str) -> Path:
+        root = Path(directory)
+
+        def run(*args: str) -> None:
+            subprocess.run(args, cwd=root, check=True, capture_output=True)
+
+        run("git", "init", "-q", ".")
+        # Deliberately not an address-shaped string: this repository's own
+        # privacy guard scans this file, and a literal address here would be a
+        # finding. Git accepts any non-empty identity.
+        run("git", "config", "user.email", "privacy-guard-fixture")
+        run("git", "config", "user.name", "privacy-guard-fixture")
+        (root / "token.json").symlink_to("/nonexistent/private/token.json")
+        (root / "normal.md").write_text("nothing private here\n", encoding="utf-8")
+        run("git", "add", "-A")
+        run("git", "commit", "-qm", "fixture")
+        return root
+
+    def test_tracked_dangling_symlink_is_still_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._repo_with_dangling_symlink(directory)
+            names = {path.name for path in repository_files(root)}
+            self.assertIn("token.json", names)
+
+    def test_prohibited_filename_behind_a_dangling_symlink_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._repo_with_dangling_symlink(directory)
+            findings = scan_repository(root)
+            self.assertTrue(
+                any("prohibited private filename" in finding for finding in findings),
+                f"dangling symlink escaped the scan: {findings}",
+            )
 
 
 if __name__ == "__main__":
