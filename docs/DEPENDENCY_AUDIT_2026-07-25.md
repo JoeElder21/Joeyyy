@@ -118,6 +118,36 @@ The expiry is the load-bearing part. These entries come back on their own, so a
 triage decision cannot become permanent by being forgotten, which is the usual
 fate of a suppression list.
 
+## Addendum — the lock was not the set CI installs (found in review)
+
+The scan above pointed only at `requirements/lock-2026-07-24.txt`. Review pointed
+out that this is **not** the set either documented installation path produces:
+
+- the validation workflow installs `requirements.txt`, which asks for
+  `autogen-agentchat>=0.2.35,<0.3` while the lock pins 0.7.5 — a different
+  package set entirely;
+- the evaluation path installs `requirements/runtime-evaluation.txt`, whose
+  `deepeval` and `pytest` appear nowhere in the lock.
+
+So the job could report a clean Python audit while every set anyone actually
+installs carried a vulnerable dependency. The scan now covers `requirements.txt`,
+`requirements/runtime-contracts.txt`, and `requirements/runtime-evaluation.txt`
+alongside the lock.
+
+**It found something on the first run.**
+
+| Severity | Package | Version | OSV | Fixed in | Source |
+| --- | --- | --- | --- | --- | --- |
+| Medium (6.8) | `pytest` | 8.0 | [PYSEC-2026-1845](https://osv.dev/PYSEC-2026-1845), [GHSA-6w46-j5rx-g56g](https://osv.dev/GHSA-6w46-j5rx-g56g) | 9.0.3 | `requirements/runtime-evaluation.txt` |
+
+Fixed rather than triaged: the floor moved to `pytest>=9.0.3`. This file is a
+live manifest, not a dated snapshot, so editing it falsifies no record — the
+reason `click` in the lock was carried forward instead does not apply here.
+`deepeval` declares `pytest` with no upper bound, so nothing conflicts.
+
+The general point is the one worth keeping: **a scanner aimed at a file nobody
+installs is the same failure as a scanner that never runs.** Both report clean.
+
 ## Rollback
 
 Additive. Rolling back is deleting this file and the `dependency-audit` job in
