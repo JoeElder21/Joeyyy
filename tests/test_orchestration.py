@@ -232,12 +232,30 @@ class McpMountRegistryTests(unittest.TestCase):
         self.assertIn("governance", names)
         self.assertIn("filesystem", names)
         self.assertIn("civil3d", names)
+        self.assertIn("terraform", names)
+        self.assertIn("azure", names)
         for mount in mounts:
             self.assertTrue(mount["command"], mount["name"])
             self.assertTrue(mount["agents"], mount["name"])
             self.assertTrue(mount["purpose"], mount["name"])
             if not mount.get("verify_offline"):
                 self.assertTrue(mount.get("activation"), mount["name"])
+
+    def test_infrastructure_mounts_are_apex_locked_and_grant_gated(self):
+        """Terraform and Azure touch professional infrastructure, so they must
+        never be reachable from a JEOS specialist and never launch ungranted."""
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = {m["name"]: m for m in tomllib.load(source)["mounts"]}
+        for name in ("terraform", "azure"):
+            mount = mounts[name]
+            with self.subTest(mount=name):
+                self.assertTrue(mount.get("require_grant"))
+                self.assertNotIn("*", mount["agents"])
+                for agent in mount["agents"]:
+                    self.assertFalse(
+                        agent.startswith("jeos_"),
+                        f"{name} must stay out of the JEOS brain, got {agent}",
+                    )
 
 
 if __name__ == "__main__":

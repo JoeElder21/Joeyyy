@@ -61,3 +61,21 @@ agents = ["apex_delivery_commander", "apex_systems_blacksmith", "apex_chief_of_s
 purpose = "Live Civil 3D session access; see docs/CIVIL3D_MCP_BUILDOUT.md."
 verify_offline = false
 activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session scheduled)."
+
+[[mounts]]
+name = "terraform"
+require_grant = true
+command = ["docker", "run", "-i", "--rm", "hashicorp/terraform-mcp-server:1.1.0"]
+agents = ["apex_systems_blacksmith", "apex_delivery_commander", "apex_chief_of_staff"]
+purpose = "Infrastructure-as-code surface: provider/module registry lookup and Terraform Enterprise / HCP workspace operations. APEX-only; see docs/TERRAFORM_AZURE_MCP_BUILDOUT.md."
+verify_offline = false
+activation = "Docker daemon on Joe's machine, plus TFE_TOKEN and TFE_ADDRESS in the runtime env store for workspace tools. Registry-search tools need no credential; workspace tools do."
+
+[[mounts]]
+name = "azure"
+require_grant = true
+command = ["npx", "-y", "@azure/mcp@latest", "server", "start"]
+agents = ["apex_systems_blacksmith", "apex_delivery_commander", "apex_chief_of_staff"]
+purpose = "Azure resource discovery and management through the official Microsoft MCP server; the cloud target Terraform plans against. APEX-only; see docs/TERRAFORM_AZURE_MCP_BUILDOUT.md."
+verify_offline = false
+activation = "`az login` on Joe's machine (DefaultAzureCredential), or AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET in the runtime env store for headless use."

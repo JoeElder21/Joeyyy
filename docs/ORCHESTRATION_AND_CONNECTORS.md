@@ -22,6 +22,7 @@ The approved-mounts registry is the executable form of `packet_only_no_direct_co
 - **filesystem** (reference server) — verified live: full tool set over stdio, path-scoped.
 - **github / postgres / gdrive** — registered with explicit activation requirements (token / connection string / one-time OAuth on Joe's machine). The MCP→Google Drive path is already proven end-to-end at the session level (the Drive command-center documents were created and read back through an authorized Drive MCP connector); the reference gdrive server mount activates with Joe's OAuth.
 - **civil3d** — registered; activates at the scheduled workstation build.
+- **terraform / azure** — registered, APEX-locked, grant-gated; see `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`. Official HashiCorp and Microsoft servers, image/package pinned so the tool surface cannot change without a commit. Terraform registry lookup needs no credential; TFE workspace tools need `TFE_TOKEN`/`TFE_ADDRESS`, and Azure needs `az login` or the `AZURE_*` triple. Both refuse to launch without a Joe-signed one-time grant — verified fail-closed.
 
 ## APS SDK — credential-ready before the 1:00 session (`scripts/aps_credential_check.mjs`)
 

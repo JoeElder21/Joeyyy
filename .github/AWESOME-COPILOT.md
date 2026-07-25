@@ -31,6 +31,7 @@ Applied automatically to matching files via each file's `applyTo` glob.
 | --- | --- |
 | `meta-agentic-project-scaffold.agent.md` | Discovery agent: finds and pulls further awesome-copilot assets into the right folders. Pins `model: GPT-4.1` upstream. |
 | `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. |
+| `task-planner.agent.md` | Produces actionable implementation plans into `.copilot-tracking/`. Initially held out because it declares `terraform` and `azure_get_schema_for_Bicep` tools this repo had no home for; both are now registered mounts, so it is installed. See `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`, including the remaining `Microsoft Docs` gap. |
 
 ## Skills — `.github/skills/`
 
@@ -43,6 +44,21 @@ instead of hand-copying files:
 
 Each compares what is already in this repo against upstream, flags drift, and suggests additions.
 They need a `#fetch`-capable tool to reach raw.githubusercontent.com.
+
+## Selection report
+
+`scripts/build_awesome_copilot_report.py` generates a 5-page PDF covering the full
+upstream inventory considered (190 instructions / 221 agents / 391 skills), the measured
+repository profile the selection was made against, every adopted file with its rationale,
+the excluded groups and why, the privacy-guard interaction, and the verification gates.
+
+```bash
+pip install reportlab
+python scripts/build_awesome_copilot_report.py   # -> docs/reports/ (gitignored)
+```
+
+The PDF is not tracked: `scripts/privacy_guard.py` rejects non-source artifact types and
+non-UTF-8 files in this public tree. The generator is the source of truth.
 
 ## Updating
 
