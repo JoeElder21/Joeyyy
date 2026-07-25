@@ -35,3 +35,24 @@ jobs:
           # job directly rather than uploading SARIF that nothing would read.
           advanced-security: false
           persona: regular
+
+  dependency-audit:
+    name: Known vulnerabilities (osv-scanner)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Deferred in the original review on the assumption that signal would be low
+    # until requirements/lock-*.txt governed the real install. Run once by hand
+    # on 2026-07-25 to test that assumption, it returned three known
+    # vulnerabilities including a critical — so the assumption was wrong and the
+    # scan is standing from here. Findings: docs/DEPENDENCY_AUDIT_2026-07-25.md.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan pinned dependencies
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --lockfile=requirements/lock-2026-07-24.txt
+            --lockfile=connectors/aps/package-lock.json

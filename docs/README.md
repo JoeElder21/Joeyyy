@@ -23,6 +23,7 @@
 | [`BRAIN_CADENCE_RUNBOOK.md`](BRAIN_CADENCE_RUNBOOK.md) | Daily, weekly, and monthly brain-specific orchestration |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, reporting, supply-chain posture |
 | [`SECRET_HISTORY_SWEEP_2026-07-25.md`](SECRET_HISTORY_SWEEP_2026-07-25.md) | Full-history secret sweep: method, coverage proof, clean result |
+| [`DEPENDENCY_AUDIT_2026-07-25.md`](DEPENDENCY_AUDIT_2026-07-25.md) | Known-vulnerability scan of the pinned dependencies, and the lockfile resolution failure it surfaced |
 | [`../LICENSE`](../LICENSE) / [`../NOTICE`](../NOTICE) / [`../CITATION.cff`](../CITATION.cff) | Apache-2.0 grant, copyright and scope, citation metadata |
 
 ## Runtime and architecture

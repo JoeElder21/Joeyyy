@@ -46,6 +46,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/REPO_OPTIMIZATION_2026-07-25.md` — repository-engineering review: substrate gaps, evaluation and supply-chain candidates, and the five resolved decisions.
 - `evals/` + `docs/EVALUATION_HARNESS.md` — behavioral evaluation harness closing the output-quality half of the acceptance gate: 39 material modes derived from the brain manifests, metric contract traced to recorded gates, results published to the Evaluations folder on Drive rather than committed here.
 - `docs/SECRET_HISTORY_SWEEP_2026-07-25.md` — full-history secret sweep: clean across all 95 commits, with coverage verified independently of the tool's own summary.
+- `docs/DEPENDENCY_AUDIT_2026-07-25.md` — known-vulnerability scan of the pinned dependency set, plus the lockfile resolution conflict it exposed; now a standing weekly CI job.
+- `scripts/policy_enforcement.py` — the single policy-enforcement point evaluated immediately before tool execution: eight rules (roster, brain lock, connector policy, packet admission, writer lease, lifecycle stage, high-impact boundary, launch grant) in one call a caller cannot partially perform.
+- `evals/packet_validity.py` — deterministic, model-free evaluation metric running the live `PacketGuard`, so an evaluation and a real handoff are judged by identical rules.
 - `LICENSE`, `NOTICE`, `CITATION.cff` — Apache-2.0, with the reusable contribution scoped to the governance patterns rather than the roster.
 - `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
 - `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.

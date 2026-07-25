@@ -70,6 +70,18 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("zizmorcore/zizmor-action@", text)
         self.assertIn("schedule:", text, "audit rules must reach a quiet repository too")
 
+    def test_pinned_dependencies_are_scanned_for_known_vulnerabilities(self):
+        # Disclosures land against unchanged pins, so a dependency set that was
+        # clean at merge does not stay clean. Only a scheduled scan notices.
+        text = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("osv-scanner-action@", text)
+        for lockfile in (
+            "requirements/lock-2026-07-24.txt",
+            "connectors/aps/package-lock.json",
+        ):
+            with self.subTest(lockfile=lockfile):
+                self.assertIn(lockfile, text)
+
 
 class ValidationCoverageTests(unittest.TestCase):
     """Every checker the repository ships must actually run somewhere in CI."""
