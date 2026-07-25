@@ -209,7 +209,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # this test file itself trip the pattern it is testing.
         name = "TFE" + "_ADDRESS"
         scheme = "https" + "://"
-        for host in ("terraform.client-company.com", "tfe.someorg.internal.net"):
+        for host in ("terraform.client-company.com", "tfe.someorg.internal.net",
+                     "10.20.30.40", "terraform-internal"):
             with self.subTest(host=host, expect="flagged"):
                 self.assertIsNotNone(
                     pattern.search(f'{name} = "{scheme}{host}"'))
@@ -228,6 +229,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         for name in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "APS_CLIENT_ID"):
             with self.subTest(name=name, expect="flagged"):
                 self.assertIsNotNone(pattern.search(f'{name} = "{guid}"'))
+        # Azure accepts the tenant *domain* form, which is neither a GUID nor a
+        # long opaque token and was therefore invisible.
+        domain = "customer" + ".onmicrosoft.com"
+        with self.subTest(form="tenant domain", expect="flagged"):
+            self.assertIsNotNone(
+                pattern.search(f'{"AZURE" + "_TENANT_ID"} = "{domain}"'))
         for probe in (f'{"AZURE" + "_TENANT_ID"} = "<your-tenant-id>"',
                       f'{"TFE" + "_ADDRESS"} = "{"https" + "://"}app.terraform.io"'):
             with self.subTest(probe=probe, expect="clean"):

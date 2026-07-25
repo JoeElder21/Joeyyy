@@ -274,6 +274,35 @@ def authorize(
     return spec
 
 
+# Variables every child process needs simply to run. Nothing here identifies an
+# account or authorizes anything.
+BASELINE_ENV = (
+    "PATH", "HOME", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "TZ",
+    "SYSTEMROOT", "COMSPEC", "PATHEXT", "USERPROFILE",
+)
+
+
+def mount_env(spec: dict) -> dict[str, str]:
+    """The environment one mount is allowed to see.
+
+    Previously the launcher passed a copy of the entire process environment, so
+    starting the Azure mount handed a freshly downloaded npm package every other
+    credential on the machine -- TFE_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, any
+    APS secret -- none of which it needs. A mount now receives the baseline plus
+    exactly the variables it declares in `env` in config/mcp_mounts.toml.
+
+    Declaring nothing means the mount gets no credentials at all, which is the
+    safe default: a mount that needs one must say so in the registry, where the
+    grant reviewer can see it.
+    """
+    allowed = list(BASELINE_ENV) + list(spec.get("env", []))
+    return {
+        name: os.environ[name]
+        for name in allowed
+        if name in os.environ
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Trusted mount launcher.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -324,8 +353,7 @@ def main(argv: list[str] | None = None) -> int:
                           "command": spec["command"],
                           "dry_run": True}))
         return 0
-    env = dict(**os.environ)
-    return subprocess.call(spec["command"], cwd=str(ROOT), env=env)
+    return subprocess.call(spec["command"], cwd=str(ROOT), env=mount_env(spec))
 
 
 if __name__ == "__main__":

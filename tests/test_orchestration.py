@@ -303,8 +303,6 @@ class McpMountRegistryTests(unittest.TestCase):
                 self.assertIn("@sha256:", command)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 class SelectionReportBaselineTests(unittest.TestCase):
     """The generator is change evidence, so a figure it cannot compute must

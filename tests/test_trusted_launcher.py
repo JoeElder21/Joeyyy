@@ -10,7 +10,9 @@ import tempfile
 import unittest
 
 from scripts.agent_runtime import AuditLedger
-from scripts.trusted_launcher import LaunchDenied, authorize, issue_grant
+from scripts.trusted_launcher import (
+    BASELINE_ENV, LaunchDenied, authorize, issue_grant, mount_env,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -267,6 +269,60 @@ class TrustedLauncherTests(unittest.TestCase):
                  if DEFAULT_LEDGER.exists() else None)
         self.assertEqual(before, after,
                          "a denial path wrote to the machine-local ledger")
+
+
+    def test_a_mount_sees_only_its_declared_credentials(self):
+        """The launcher passed a copy of the whole process environment, so
+        starting the Azure mount handed a freshly downloaded npm package every
+        other credential on the machine. A mount now gets the baseline plus
+        exactly what it declares."""
+        import os
+
+        planted = {
+            "TFE" + "_TOKEN": "tfe-value",
+            "GITHUB" + "_PERSONAL_ACCESS_TOKEN": "gh-value",
+            "AZURE" + "_CLIENT_SECRET": "az-value",
+            "PATH": os.environ.get("PATH", "/usr/bin"),
+        }
+        original = {k: os.environ.get(k) for k in planted}
+        try:
+            os.environ.update(planted)
+            azure = mount_env({"env": ["AZURE" + "_CLIENT_SECRET"]})
+            self.assertIn("AZURE" + "_CLIENT_SECRET", azure)
+            self.assertNotIn("TFE" + "_TOKEN", azure)
+            self.assertNotIn("GITHUB" + "_PERSONAL_ACCESS_TOKEN", azure)
+            self.assertIn("PATH", azure)
+
+            # A mount declaring nothing gets no credentials at all.
+            bare = mount_env({})
+            self.assertTrue(set(bare) <= set(BASELINE_ENV))
+        finally:
+            for key, value in original.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_every_credentialed_mount_declares_its_env(self):
+        """A mount whose activation names a credential must declare it, or the
+        launcher will start it without the variable it needs -- and a mount that
+        declares extras would widen its own blast radius silently."""
+        import re
+        import tomllib
+
+        with (Path(__file__).resolve().parents[1]
+              / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+        for mount in mounts:
+            named = set(re.findall(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b",
+                                   " ".join(mount["command"])))
+            declared = set(mount.get("env", []))
+            with self.subTest(mount=mount["name"]):
+                self.assertTrue(
+                    named <= declared,
+                    f"{mount['name']} forwards {sorted(named - declared)} in its "
+                    f"command but does not declare them in env",
+                )
 
 
 if __name__ == "__main__":

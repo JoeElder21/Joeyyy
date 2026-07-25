@@ -41,7 +41,10 @@ DROP = colors.HexColor("#8A5A00")
 # The decision date is fixed history; every gate result, test count, pin and
 # tracked-inventory figure below is measured when this runs. Labelling all of it
 # with the original date would falsely timestamp regenerated evidence.
-BUILD_DATE = _dt.date.today().strftime("%-d %B %Y")
+_today = _dt.date.today()
+# %-d is a POSIX no-padding extension; on Windows strftime raises ValueError,
+# and it would do so at import time, before the PDF could be generated.
+BUILD_DATE = f"{_today.day} {_today.strftime('%B %Y')}"
 
 
 def count_tracked(pattern: str) -> int:

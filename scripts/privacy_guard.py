@@ -58,8 +58,15 @@ PATTERNS = {
     "private connector endpoint": re.compile(
         r"(?i)\btfe?[_-]?address\s*[:=]\s*[\"']?https?://"
         r"(?!app\.terraform\.io\b)(?!localhost\b)(?!127\.0\.0\.1\b)"
+        r"(?!0\.0\.0\.0\b)"
         r"(?!<)(?!your[-_.])(?!example\.)(?!\S*\.example\b)"
-        r"[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}"
+        # A private installation is just as often an IPv4 literal or a
+        # single-label intranet name as a dotted FQDN. Requiring a dot and an
+        # alphabetic TLD missed both, which is the majority of the private
+        # cases this pattern exists for.
+        r"(?:\d{1,3}(?:\.\d{1,3}){3}"
+        r"|[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}"
+        r"|[A-Za-z0-9][A-Za-z0-9-]*)"
     ),
     # Connector identifiers. AGENTS.md forbids these in this public repository
     # alongside credentials: a tenant or client id names Joe's actual cloud
@@ -71,7 +78,11 @@ PATTERNS = {
         r"|azure[_-]?subscription[_-]?id|aps[_-]?client[_-]?id"
         r"|tfe?[_-]?organization|gdrive[_-]?client[_-]?id)"
         r"\s*[:=]\s*[\"']?"
+        # GUID, opaque token, or -- for Azure -- the tenant *domain* form,
+        # which is neither and was therefore invisible.
         r"(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        r"|(?!your[-_.])(?!<)(?!example\.)"
+        r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+\.[A-Za-z]{2,}"
         r"|[A-Za-z0-9_-]{16,})[\"']?"
     ),
     # Credential-bearing names. A Terraform or GitHub token carries no
