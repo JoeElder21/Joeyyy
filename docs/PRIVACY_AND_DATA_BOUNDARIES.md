@@ -24,6 +24,14 @@ This repository is public. It stores only agent contracts, logical namespaces, s
 - `scripts/packet_guard.py` rejects manifest, namespace, target, roundtable, and lease mismatches before execution.
 - Completion requires a schema-valid mutation result containing an affirmed expected-state match, observed state, readback evidence, a lease-bounded verification time, rollback method, verified rollback test, and rollback evidence.
 
+## Third-party telemetry in the runtime stack
+
+An installed dependency that phones home is an outbound data flow, and it is subject to the same boundaries as any connector. Runtime libraries may not export mission data, packet content, prompts, or trace spans to a vendor endpoint.
+
+- **crewAI ships telemetry enabled by default**, POSTing spans to `telemetry.crewai.com`. Observed 2026-07-24 during a full-stack test run, where it failed only because the sandbox blocked the host — on a workstation it would have succeeded. `scripts/crew_bridge.py` therefore sets `CREWAI_DISABLE_TELEMETRY`, `CREWAI_TELEMETRY_OPT_OUT`, and `OTEL_SDK_DISABLED` before importing crewai, since the library reads them at import time. `setdefault` is used so an explicit environment decision by Joe still wins, and `tests/test_data_memory_layers.py` asserts the opt-out is in force.
+- Agent 007's own OpenTelemetry tracing (`scripts/observability.py`) is local by default: spans go to an in-memory exporter and the hash-chained ledger, never to a network collector. Pointing it at a collector — including a self-hosted Phoenix — is an activation decision, and any collector outside Joe's control is a connector requiring the same authorization as any other.
+- **At intake, every new runtime dependency must be checked for default-on telemetry**, and any found must be disabled in code at the import boundary and recorded here. Treat an undisclosed outbound flow from a dependency as an error-ledger entry, not a footnote.
+
 ## Repository hygiene
 
 - `.env*`, private keys and certificates, local databases, credentials, and runtime-memory directories are ignored.
