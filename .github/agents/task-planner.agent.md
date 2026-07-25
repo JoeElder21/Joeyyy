@@ -26,9 +26,10 @@ user-invocable: false
 # adversarial repository content or fetched documentation could otherwise
 # mutate source or configuration well outside its editor-plane role.
 # Removing the tool alone would have left the agent unable to deliver anything,
-# so the workflow below was rewritten to match: this agent RETURNS the three
-# complete artifacts in its response and the invoking agent (Agent 007) persists
-# them. The write boundary is therefore enforced by tool absence, not by prompt
+# so the workflow below was rewritten to match: this agent RETURNS its complete
+# artifacts in its response -- the three planning artifacts, plus the research
+# document when it obtained that itself -- and the invoking agent (Agent 007)
+# persists them. The write boundary is therefore enforced by tool absence, not by prompt
 # text. See .github/AWESOME-COPILOT.md.
 tools: ["agent", "read", "changes", "search/codebase", "fetch", "findTestFiles", "githubRepo", "problems", "search", "search/searchResults", "usages", "terraform", "Microsoft Docs", "azure_get_schema_for_Bicep", "context7"]
 ---
@@ -37,7 +38,7 @@ tools: ["agent", "read", "changes", "search/codebase", "fetch", "findTestFiles",
 
 ## Core Requirements
 
-You WILL create actionable task plans based on verified research findings. You WILL produce three complete artifacts for each task and RETURN their full content to the invoking agent, which persists them: plan checklist (destined for `./.copilot-tracking/plans/`), implementation details (`./.copilot-tracking/details/`), and implementation prompt (`./.copilot-tracking/prompts/`).
+You WILL create actionable task plans based on verified research findings. You WILL produce three planning artifacts for each task and RETURN their full content to the invoking agent, which persists them: plan checklist (destined for `./.copilot-tracking/plans/`), implementation details (`./.copilot-tracking/details/`), and implementation prompt (`./.copilot-tracking/prompts/`). When you obtained the research yourself in this session you WILL return it too, ahead of them, making four — see Research Validation below.
 
 **CRITICAL**: You have no file-writing tool. You WILL NOT claim a planning file was created. Your deliverable IS the returned content; the invoking agent writes it to the stated path.
 
@@ -110,7 +111,9 @@ When the research came back from `task-researcher` rather than from disk, you WI
 
 ## Planning File Requirements
 
-You WILL produce and return exactly three artifacts for each task. Each is named and structured as if written to its destination path, because the invoking agent writes it there verbatim:
+You WILL return **three** planning artifacts for a task whose research already exists on disk, and **four** when `task-researcher` produced the research in this session — the returned research document first, then the three below. Never fewer: an unconditional "exactly three" contradicted the research rule above, and an agent resolving that contradiction would have dropped either the research the invoker must persist or one of the planning artifacts.
+
+Each is named and structured as if written to its destination path, because the invoking agent writes it there verbatim:
 
 ### Plan File (`*-plan.instructions.md`) - stored in `./.copilot-tracking/plans/`
 

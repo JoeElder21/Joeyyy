@@ -47,6 +47,16 @@ description: 'Suggest relevant GitHub Copilot skills from the awesome-copilot re
 > file against the local copy before reporting a skill up to date; a comparison limited to
 > `SKILL.md` may report clean while executable contents have drifted.
 >
+> **Every fetch in this skill must use the resolved SHA, not `main`.** The body below
+> writes `raw.githubusercontent.com/github/awesome-copilot/main/...` and links to
+> `/blob/main/...`. Those are moving refs: upstream can advance between the inventory
+> fetch in step 1 and the per-file downloads later in the pass, so the comparison, the
+> installed bytes and the pin recorded in the manifest could each describe a different
+> revision. Resolve `main` to a commit SHA once at the start of the pass, treat it as an
+> input to every subsequent URL, and substitute it wherever `/main/` appears. Report the
+> pass as incomplete if the SHA could not be resolved -- a pass pinned to nothing is not
+> a pass. This is the executable form of the one-SHA rule in the activation contract.
+>
 > **Scan downloaded assets with explicit paths.** `python scripts/privacy_guard.py` with no
 > arguments enumerates via `git ls-files`, so a file you have just downloaded is invisible to
 > it until staged. Pass the paths: `python scripts/privacy_guard.py <downloaded-path> ...`,
