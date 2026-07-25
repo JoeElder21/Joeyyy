@@ -84,10 +84,19 @@ and the symlink handling in `scan_repository`) and in
 `is_vendored` call sites in `tests/test_privacy.py`, and the `vendor/` and
 `requirements/` lines in the root `README.md`.
 
-Note that the symlink handling in `scan_repository` and the `node_modules`
-exclusion in `enforce_toml` fix defects that predate this work. Prefer keeping
-those two even in a full withdrawal; reverting them would reopen a hole in the
-public-source privacy contract rather than restore a clean prior state.
+Two of the changes here fix defects that predate this work: the symlink
+handling in `scan_repository`, and the `node_modules` exclusion in
+`enforce_toml`. **Prefer keeping both even in a full withdrawal** — reverting
+them reopens a hole in the public-source privacy contract rather than
+restoring a clean prior state.
+
+If they *are* reverted anyway, they do not travel alone. Reverting
+`scripts/verify_runtime_stack.py` also requires removing
+`test_toml_exclusions_match_relative_paths_not_absolute_ones` from
+`tests/test_runtime_stack.py`: that test asserts the exclusion behaviour, so
+against the restored verifier it fails, and the unittest run this section
+requires at the end of a rollback cannot pass. A rollback that leaves the tree
+failing its own gate is worse than none, because it looks finished.
 
 Run the full validate chain after any rollback:
 `privacy_guard`, `validate_specialist_corps`, `verify_runtime_stack`, and the
@@ -143,10 +152,29 @@ ordinary PyPI packages (Jinja2, pydantic, the llama-index stack), not upstream
 code, so installing those declarations does not execute anything from these
 repos. `civil-innovation-agent` declares nothing at all.
 
-One exception to record: `awesome-civil-engineering`'s `generate.py` **was**
-executed once during verification, in a throwaway virtualenv, to confirm the
-declared dependencies were sufficient. That was upstream code running outside a
-sandbox and is the kind of step the isolation rule exists to govern.
+One exception to record, stated precisely because the first version of this
+paragraph got the reasoning wrong: `awesome-civil-engineering`'s `generate.py`
+**was** executed once during verification, to confirm the declared
+dependencies were sufficient.
+
+It ran in a throwaway virtualenv, and a virtualenv is **not** a sandbox — it
+isolates Python packages, not the filesystem, the network, or credentials.
+Citing it as the safeguard was wrong. Nothing about that venv would have
+stopped the script reading secrets or making network calls.
+
+What actually bounded the risk was the code, which should have been read
+*first* rather than reconstructed afterwards. `generate.py` is 142 lines
+importing only `argparse`, `re`, `sys`, `pathlib`, `typing`, `jinja2` and
+`pydantic`. It has no network client, no `subprocess`, and no environment
+access; its file I/O is confined to `data/resources.json`, `templates/`, and
+its own `README.md`, all under the script's own directory. On review it could
+not have exfiltrated anything — but that was established after the fact, which
+is the wrong order.
+
+The rule this bumps into is the FakeGit intake rule's "never execute code from
+an unverified repo". Correct sequence for any future re-run, and for the other
+two repositories, which have **not** been executed: read the code, then run it
+in a container or equivalent sandbox, then record both steps.
 
 Before any of these three is executed again, promoted, or given credentials,
 complete the outstanding checks — author-site cross-link, fork-network

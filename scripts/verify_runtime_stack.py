@@ -142,9 +142,19 @@ def enforce_toml() -> tuple[list[str], list[str]]:
         # not the same as "any path containing node_modules". A file the index
         # tracks is this repository's regardless of where it sits, so it stays
         # validated; only untracked installed content is skipped.
+        #
+        # With no index to consult (tracked is None — an extracted archive, or
+        # no git binary) the exclusion is not applied at all. A git archive
+        # contains only tracked files, so everything present is
+        # repository-owned; skipping on the path name alone there would drop
+        # genuinely repository-owned TOML and report valid.
         if ".git" in relative.parts:
             continue
-        if "node_modules" in relative.parts and str(relative) not in tracked:
+        if (
+            tracked is not None
+            and "node_modules" in relative.parts
+            and str(relative) not in tracked
+        ):
             continue
         # Vendored submodules under vendor/ carry the upstream project's TOML
         # contract, not this repository's, and are never committed here beyond

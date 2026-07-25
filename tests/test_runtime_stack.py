@@ -61,7 +61,11 @@ class RuntimeStackTests(unittest.TestCase):
         repository-relative path. Testing the absolute path would skip every
         file in such a checkout, reporting `valid` with nothing checked.
         """
+        import shutil
         import tempfile
+
+        if shutil.which("git") is None:
+            self.skipTest("no git binary; this fixture builds a real checkout")
 
         sys.path.insert(0, str(ROOT))
         try:
@@ -78,6 +82,19 @@ class RuntimeStackTests(unittest.TestCase):
             (nested / "node_modules" / "dep.toml").write_text(
                 "this is not valid toml\n", encoding="utf-8"
             )
+
+            # A real index, because the exclusion is now defined against one:
+            # installed dependency content is what is untracked, and with no
+            # index at all every file is validated instead. A bare temp
+            # directory would exercise that fallback rather than this rule.
+            def run(*args: str) -> None:
+                subprocess.run(args, cwd=nested, check=True, capture_output=True)
+
+            run("git", "init", "-q", ".")
+            run("git", "config", "user.email", "runtime-stack-fixture")
+            run("git", "config", "user.name", "runtime-stack-fixture")
+            run("git", "add", "pyproject.toml")
+            run("git", "commit", "-qm", "fixture")
 
             original = verify_runtime_stack.ROOT
             verify_runtime_stack.ROOT = nested

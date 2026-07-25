@@ -146,19 +146,25 @@ def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     return frozenset(name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE)
 
 
-def tracked_paths(root: Path = ROOT) -> frozenset[str]:
-    """Return every repository-relative path the index tracks, gitlinks included.
+def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
+    """Return every repository-relative path the index tracks, or None.
 
     Lets a caller tell this repository's own files from installed dependency
-    content that merely shares a directory name. Empty where the index is not
-    readable, which callers must treat as "cannot prove tracked".
+    content that merely shares a directory name.
+
+    ``None`` means the index could not be read at all — an extracted archive,
+    or no git binary — and is deliberately distinct from an empty set. The two
+    demand opposite fallbacks: an unreadable index means nothing can be ruled
+    *out*, while an empty index means nothing is tracked. Collapsing them into
+    one empty set makes every path look untracked, which silently disables any
+    exclusion built on this.
     """
     probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
     if probe is None or probe.returncode != 0 or probe.stdout.decode().strip() != "true":
-        return frozenset()
+        return None
     listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is None or listing.returncode != 0:
-        return frozenset()
+        return None
     return frozenset(name for _mode, name in _parse_ls_files(listing.stdout))
 
 
