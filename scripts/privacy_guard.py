@@ -76,6 +76,45 @@ PATTERNS = {
 }
 
 
+def submodule_paths(root: Path = ROOT) -> frozenset[str]:
+    """Return the repository-relative paths declared in ``.gitmodules``.
+
+    Parsed from the file rather than assumed from a directory name so the set
+    tracks whatever is actually declared. Missing file means no submodules.
+    """
+    gitmodules = root / ".gitmodules"
+    if not gitmodules.exists():
+        return frozenset()
+    return frozenset(
+        match.group(1).strip()
+        for match in re.finditer(
+            r"^\s*path\s*=\s*(.+?)\s*$",
+            gitmodules.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+    )
+
+
+def is_vendored(path: Path, root: Path = ROOT) -> bool:
+    """Report whether ``path`` lies inside a vendored third-party submodule.
+
+    Submodules record only a gitlink commit here, so their file contents are
+    never published by this repository and fall outside the public-source
+    privacy contract this scanner enforces — upstream placeholder addresses
+    and maintainer contacts are the upstream project's to police.
+
+    Scoped to the declared submodule paths themselves, so this repository's
+    own files under ``vendor/`` (its README) stay covered by the contract.
+    """
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    return any(
+        relative.is_relative_to(submodule) for submodule in submodule_paths(root)
+    )
+
+
 def repository_files(root: Path = ROOT) -> list[Path]:
     probe = subprocess.run(
         ["git", "rev-parse", "--is-inside-work-tree"],
@@ -91,11 +130,18 @@ def repository_files(root: Path = ROOT) -> list[Path]:
             capture_output=True,
             check=True,
         ).stdout.split(b"\0")
-        return [root / item.decode("utf-8") for item in tracked if item]
+        return [
+            path
+            for path in (root / item.decode("utf-8") for item in tracked if item)
+            if path.is_file() and not is_vendored(path, root)
+        ]
     return [
         path
         for path in root.rglob("*")
-        if path.is_file() and ".git" not in path.parts and "__pycache__" not in path.parts
+        if path.is_file()
+        and ".git" not in path.parts
+        and "__pycache__" not in path.parts
+        and not is_vendored(path, root)
     ]
 
 

@@ -26,6 +26,9 @@ import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.privacy_guard import is_vendored  # noqa: E402
 
 RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
     "contracts": [
@@ -125,7 +128,14 @@ def enforce_toml() -> tuple[list[str], list[str]]:
     checked: list[str] = []
     errors: list[str] = []
     for toml_path in sorted(ROOT.rglob("*.toml")):
-        if ".git" in toml_path.parts:
+        if {".git", "node_modules"} & set(toml_path.parts):
+            continue
+        # Vendored submodules under vendor/ carry the upstream project's TOML
+        # contract, not this repository's, and are never committed here beyond
+        # the gitlink commit. Installed npm trees are excluded for the same
+        # reason: an upstream package shipping malformed TOML must not fail
+        # this repository's contract check.
+        if is_vendored(toml_path, ROOT):
             continue
         try:
             parse(toml_path.read_text(encoding="utf-8"))

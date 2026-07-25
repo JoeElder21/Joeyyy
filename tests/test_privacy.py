@@ -3,7 +3,7 @@ import re
 import tempfile
 import unittest
 
-from scripts.privacy_guard import repository_files, scan_repository
+from scripts.privacy_guard import is_vendored, repository_files, scan_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +17,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             for path in ROOT.rglob("*")
             if path.is_file()
             and not any(part in excluded_parts for part in path.parts)
+            and not is_vendored(path, ROOT)
             and path.suffix.lower() in {".md", ".toml", ".json", ".py", ".yml", ".yaml"}
         ]
         prohibited = {
@@ -119,7 +120,11 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "memory.sqlite3",
         }
         for path in ROOT.rglob("*"):
-            if path.is_file() and not {".git", "node_modules"} & set(path.parts):
+            if (
+                path.is_file()
+                and not {".git", "node_modules"} & set(path.parts)
+                and not is_vendored(path, ROOT)
+            ):
                 with self.subTest(path=path.relative_to(ROOT)):
                     self.assertNotIn(path.name.lower(), prohibited_names)
 
