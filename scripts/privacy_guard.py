@@ -156,9 +156,17 @@ def repository_files(root: Path = ROOT) -> list[Path]:
 
 
 def scan_repository(root: Path = ROOT) -> list[str]:
+    """Scan every git-tracked text file. See scan_paths() for untracked input."""
+    return _scan_files(repository_files(root), root)
+
+
+def _scan_files(paths: list[Path], root: Path = ROOT) -> list[str]:
     findings: list[str] = []
-    for path in repository_files(root):
-        relative = path.relative_to(root)
+    for path in paths:
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = path
         if path.name.lower() in PROHIBITED_FILENAMES:
             findings.append(f"{relative}: prohibited private filename")
         if path.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES:
@@ -187,12 +195,55 @@ def scan_repository(root: Path = ROOT) -> list[str]:
     return findings
 
 
-def main() -> int:
-    findings = scan_repository()
+def scan_paths(paths: list[Path], root: Path = ROOT) -> list[str]:
+    """Scan exactly these paths, tracked or not, recursing into directories.
+
+    `scan_repository()` enumerates via `git ls-files`, so a freshly downloaded
+    file is invisible to it until staged. That made it useless as an intake gate
+    for the one thing intake exists to check -- newly fetched upstream content,
+    bundled executable assets included. Use this to scan candidate files before
+    they are added.
+    """
+    targets: list[Path] = []
+    for given in paths:
+        candidate = given if given.is_absolute() else (root / given)
+        if candidate.is_dir():
+            targets.extend(
+                child for child in sorted(candidate.rglob("*"))
+                if child.is_file()
+                and ".git" not in child.parts
+                and "__pycache__" not in child.parts
+            )
+        elif candidate.is_file():
+            targets.append(candidate)
+        else:
+            targets.append(candidate)  # reported as unreadable below
+    return _scan_files(targets, root)
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in ("-h", "--help"):
+        print(
+            "usage: privacy_guard.py [PATH ...]\n\n"
+            "  no arguments  scan every git-tracked text file\n"
+            "  PATH ...      scan exactly these files/directories, tracked or\n"
+            "                not. Use this on newly downloaded content before\n"
+            "                adding it, since tracked-only scanning cannot see it."
+        )
+        return 0
+
+    if argv:
+        findings = scan_paths([Path(arg) for arg in argv])
+        label = f"Privacy guard passed for {len(argv)} given path(s)."
+    else:
+        findings = scan_repository()
+        label = "Privacy guard passed."
+
     if findings:
         print("\n".join(findings))
         return 1
-    print("Privacy guard passed.")
+    print(label)
     return 0
 
 

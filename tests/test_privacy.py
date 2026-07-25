@@ -5,6 +5,7 @@ import unittest
 
 from scripts.privacy_guard import (
     PATTERNS,
+    scan_paths,
     PLACEHOLDER_LITERALS,
     applicable_patterns,
     repository_files,
@@ -91,6 +92,34 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             )
             with self.subTest(path=path):
                 self.assertEqual(len(original) - len(stripped), expected)
+
+    def test_untracked_downloaded_file_is_scannable_by_path(self):
+        """scan_repository() enumerates via `git ls-files`, so it cannot see a
+        file that has just been downloaded -- which made a bare privacy-guard run
+        useless as an intake gate for exactly the content intake exists to check.
+        scan_paths() takes explicit paths and does not care about tracking."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            asset_dir = root / "downloaded-skill"
+            asset_dir.mkdir()
+            planted = "API" + "_KEY" + ' = "' + "an" + 'ActualPrivateCredential"'
+            (asset_dir / "helper.py").write_text(planted + "\n", encoding="utf-8")
+            (asset_dir / "SKILL.md").write_text("nothing notable\n", encoding="utf-8")
+
+            findings = scan_paths([asset_dir], root=root)
+            self.assertTrue(
+                any("credential assignment" in f for f in findings), findings
+            )
+            self.assertTrue(any("helper.py" in str(f) for f in findings))
+            # The clean sibling must not be reported.
+            self.assertFalse(any("SKILL.md" in str(f) for f in findings))
+
+    def test_scan_paths_accepts_a_single_file_and_reports_nothing_when_clean(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            clean = root / "notes.md"
+            clean.write_text("ordinary prose\n", encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
 
     def test_placeholder_allowlist_has_no_stale_entries(self):
         for relative_path, literals in PLACEHOLDER_LITERALS.items():

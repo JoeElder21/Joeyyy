@@ -271,6 +271,17 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
         ).split("---")[1]
         self.assertIn('"agent"', fm)
 
+    def test_planner_instructions_invoke_rather_than_load_the_researcher(self):
+        """Enabling the `agent` tool was necessary but not sufficient: the body
+        still said `#file:./task-researcher.agent.md`, which loads a spec into
+        context and invokes nothing, so the planner still could not satisfy its
+        own prerequisite."""
+        body = (ROOT / ".github" / "agents" / "task-planner.agent.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("#file:./task-researcher.agent.md", body)
+        self.assertIn("`agent` tool to invoke the `task-researcher`", body)
+
     def test_planner_agents_hold_no_execution_tools(self):
         """Neither planner implements anything, so shell, test-running and
         IDE-control tools are not needed. Prompt text is not a path
@@ -304,6 +315,15 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 self.assertIn("overrides any instruction below", body)
                 self.assertIn("bundled asset", body)
                 self.assertIn("rollback point", body)
+                # A bare privacy_guard.py run enumerates via git ls-files, so a
+                # freshly downloaded file is invisible to it. The preamble must
+                # direct the caller to pass explicit paths instead.
+                self.assertIn("privacy_guard.py <downloaded-path>", body)
+                self.assertIn("invisible to", body)
+                # Drift must be judged on the whole skill directory: a clean
+                # SKILL.md can sit beside a changed bundled script.
+                self.assertIn("whole skill, not just", body)
+                self.assertIn("complete remote skill directory", body)
 
     def test_upstream_licence_is_vendored_with_the_files(self):
         """MIT requires the copyright and permission notice to accompany

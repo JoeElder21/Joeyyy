@@ -412,33 +412,44 @@ story.append(tbl(ex, [2.5 * inch, 4.2 * inch]))
 story.append(PageBreak())
 story.append(Paragraph("7. Interaction with the privacy guard", H1))
 story.append(Paragraph(
-    "Two adopted files are secure-coding guides, so they legitimately contain "
-    "illustrative credential handling and placeholder addresses. These tripped "
-    "<font face='Courier' size='8'>scripts/privacy_guard.py</font>, which "
-    "scans every tracked text file. Neither dropping the files nor broadly "
-    "weakening the guard was acceptable, so the patterns were split by "
-    "confidence.", BODY))
+    "Three adopted files are secure-coding guides, so they legitimately contain "
+    "illustrative credential handling and a placeholder address that the prose "
+    "heuristics in <font face='Courier' size='8'>scripts/privacy_guard.py"
+    "</font> cannot tell from real leakage. <b>No pattern is disabled for any "
+    "file.</b> The exact false-positive snippets are stripped as literals and "
+    "the complete pattern set then runs on what remains, so a real credential "
+    "added to one of those same files is still caught.", BODY))
 
-pg = [hdr("Adjustment", "Scope", "What stays enforced")]
+pg = [hdr("Design", "Verdict", "Why")]
 pg.append([
-    Paragraph("Two low-confidence prose heuristics "
-              "(<font face='Courier' size='7.5'>credential assignment</font>, "
-              "<font face='Courier' size='7.5'>email address</font>) skipped",
-              CELL),
-    Paragraph("Files under <font face='Courier' size='7.5'>"
-              ".github/instructions/</font> only", CELL),
-    Paragraph("Every high-confidence check — real-looking secret tokens, "
-              "cloud access keys, private key blocks, phone numbers, street "
-              "addresses, Drive links — remains active in that directory.",
-              CELL),
+    Paragraph("Directory-wide exemption — skip two patterns for everything "
+              "under <font face='Courier' size='7.5'>.github/instructions/"
+              "</font>", CELL),
+    Paragraph('<font color="#8A5A00"><b>rejected</b></font>', CELL),
+    Paragraph("A tracked <font face='Courier' size='7.5'>local.instructions.md"
+              "</font> holding a real address and a real credential passed the "
+              "scan. Any file later added or hand-authored there inherited the "
+              "exemption.", CELL),
 ])
 pg.append([
-    Paragraph("Two placeholder API keys pinned as exact literals", CELL),
-    Paragraph("One literal to one file", CELL),
-    Paragraph("A real credential in the same file still fails the scan. A "
-              "test fails if a pinned literal goes stale.", CELL),
+    Paragraph("Per-file, per-pattern relaxation — one file gives up one "
+              "pattern", CELL),
+    Paragraph('<font color="#8A5A00"><b>rejected</b></font>', CELL),
+    Paragraph("Still too coarse. Disabling a whole pattern for a whole file "
+              "meant a genuine credential appended to that same file also "
+              "passed.", CELL),
 ])
-story.append(tbl(pg, [2.3 * inch, 1.6 * inch, 2.8 * inch]))
+pg.append([
+    Paragraph("<b>Exact-literal stripping</b> — seven pinned snippets across "
+              "three named files, every pattern applied to the rest", CELL),
+    Paragraph('<font color="#1B6B4A"><b>in force</b></font>', CELL),
+    Paragraph("Only those literal strings are invisible. "
+              "<font face='Courier' size='7.5'>applicable_patterns()</font> "
+              "returns every pattern for every path, so a future exemption "
+              "must be a visible edit to a reviewed function. Both rejected "
+              "designs are permanent regression tests.", CELL),
+])
+story.append(tbl(pg, [2.35 * inch, 0.95 * inch, 3.4 * inch]))
 story.append(Spacer(1, 5))
 story.append(Paragraph(
     "<b>The guard demonstrated its value during this work.</b> It rejected two "
