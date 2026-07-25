@@ -412,6 +412,35 @@ exactly that one error string and nothing else, so forged leases still fail.
 Resolving it means changing a schema — a contract decision, and this change set
 promised to touch none.
 
+### Automated review, second pass — eight findings, five fixed
+
+A second Codex review went deeper than the first, into the enforcement point's
+trust model. Five fixed, three carried forward.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| `mutating` trusted from the caller | **Correct, and the worst of the eight** | Derived from the action; the flag can now only add strictness, never remove it. An `action="write"` with the flag left default previously skipped lease, lifecycle, and launch-grant entirely. |
+| Lease never checked against the issuing registry | **Correct** | Lease id verified against `LeaseRegistry.active_lease`. A fully-populated fabricated lease now fails, and with no registry supplied no mutation authorizes at all. |
+| Packet not bound to the invocation | **Correct** | Packet agent, brain, and resource are bound to the request, as `admit_delegation()` already did. A delegation for one specialist no longer authorizes another. |
+| Case artifacts not in the manifests | **Correct, factual** | `qa_findings` and `reflection_note` were invented; corrected to `qa_risk_packet` and `reflection_synthesis`, with a test that every case artifact exists in its brain manifest. |
+| `--run-id` accepted Windows separators | **Correct** | `..\..\name` escaped the gitignored tree on the documented Windows workstation. All separators and traversal components rejected, plus a resolved-path containment check. |
+| `coverage.json` written before pytest, so `modes_proven` stays 0 | **Correct, carried forward** | Populating `passed` needs the JUnit result parsed back after the run. Real gap; no evidence is currently published, so nothing is misreported today. |
+| Delegation ledger not passed to `packet_validity` | **Correct, carried forward** | `_validated_delegation` needs the originating delegation. Latent until dispatch is wired. |
+| osv-scanner scans a lock that is not what CI installs | **Correct, carried forward** | `requirements.txt` resolves `autogen-agentchat>=0.2.35,<0.3` while the scanned lock pins 0.7.5, and the evaluation tier is absent entirely. Needs locks generated per install manifest — which the unresolvable lockfile blocks anyway. |
+
+**The `mutating` finding deserves naming.** This module's entire argument is that
+a caller must not be able to perform the check set partially — and its own
+signature let a caller decline every mutation control by omitting one boolean.
+The failure was in the interface, not the rules.
+
+**Two fixes made the code more paranoid about itself.** A lease too malformed to
+key used to raise out of the enforcement point; an enforcement point that throws
+on hostile input is a denial of service on every legitimate caller sharing the
+process. It now denies. And the artifact-type test closes the gap that let the
+seed cases drift: the harness derives modes from the manifests precisely so they
+cannot drift, and artifacts were the one field still hand-written — which drifted
+immediately.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

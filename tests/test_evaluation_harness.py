@@ -110,6 +110,28 @@ class CaseIntegrityTests(unittest.TestCase):
                 for name in metrics:
                     self.assertIn(name, harness.METRIC_CONTRACT)
 
+    def test_case_artifacts_exist_in_the_brain_manifest(self):
+        # Two of the three seed cases originally named artifact types that no
+        # manifest declares (`qa_findings`, `reflection_note`). PacketGuard would
+        # have rejected any handoff emitting them, so those cases could never
+        # have become lawful completed missions — the harness would have been
+        # generating unpassable evidence requirements.
+        #
+        # The harness derives modes from the manifests precisely so they cannot
+        # drift; artifacts were the one field still hand-written, and they drifted
+        # immediately. Deriving is only safe where it is enforced.
+        modes = {mode.key: mode for mode in harness.load_modes()}
+        for key, case in harness.load_cases().items():
+            registered = set(modes[key].artifact_types)
+            for artifact in case.get("expected_artifacts", []):
+                with self.subTest(case=key, artifact=artifact):
+                    self.assertIn(
+                        artifact,
+                        registered,
+                        f"{key}: {artifact!r} is not a registered artifact type "
+                        f"({sorted(registered)})",
+                    )
+
     def test_every_case_forbids_cross_brain_leakage(self):
         for key, case in harness.load_cases().items():
             forbidden = " ".join(case["forbidden_behaviors"]).lower()

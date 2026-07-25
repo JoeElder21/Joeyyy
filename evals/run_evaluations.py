@@ -56,8 +56,19 @@ def run_id(stamp: str | None) -> str:
             "--run-id is required: name the run after the mission it evidences. "
             "Without it, a second run overwrites the first's results in place."
         )
-    cleaned = stamp.strip().replace("/", "-")
-    if cleaned in {".", ".."}:
+    # Replacing only "/" left "\" live as a separator on the documented Windows
+    # workstation, so `--run-id ..\..\name` escaped the gitignored output tree and
+    # could drop coverage and JUnit evidence — carrying private mission context —
+    # anywhere in a public repository. Reject every separator and traversal
+    # component rather than sanitising one of them.
+    cleaned = stamp.strip()
+    if any(part in cleaned for part in ("/", "\\", "..", "\0")) or Path(cleaned).is_absolute():
+        raise UnsafeRun(
+            f"--run-id {stamp!r} contains a path separator or traversal component. "
+            "Run results carry private mission context and must stay inside "
+            "evals/output/."
+        )
+    if cleaned in {".", ".."} or cleaned.startswith("."):
         raise UnsafeRun(f"--run-id {stamp!r} is not a usable directory name")
     return cleaned
 
@@ -135,6 +146,10 @@ def execute(stamp: str | None) -> int:
 
     target = Path(__file__).resolve().parent / "test_specialist_modes.py"
     out_dir = OUTPUT_ROOT / identifier
+    # Belt and braces: even with the name validated, confirm the resolved path
+    # is genuinely inside the gitignored tree before anything is written.
+    if not out_dir.resolve().is_relative_to(OUTPUT_ROOT.resolve()):
+        raise UnsafeRun(f"{out_dir} resolves outside {OUTPUT_ROOT}; refusing to write evidence")
     if out_dir.exists() and any(out_dir.iterdir()):
         raise UnsafeRun(
             f"{out_dir} already holds results. Choose a new --run-id rather than "

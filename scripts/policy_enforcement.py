@@ -37,13 +37,14 @@ from __future__ import annotations
 import datetime
 import sys
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from runtime.writer_lease import canonical_key  # noqa: E402
 from scripts.agent_runtime import AuditLedger, load_roster  # noqa: E402
 from scripts.packet_guard import PacketGuard  # noqa: E402
 
@@ -79,6 +80,27 @@ ACTIVE_LEASE_STATUSES = frozenset({"active", "in_flight"})
 # The single schema error tolerated on a writer lease, and only this one.
 # See the comment in PolicyEnforcementPoint._writer_lease for why.
 VERSION_MISMATCH_DEFECT = "$.schema_version: expected const '2.0'"
+
+# Action fragments that imply a mutation regardless of what the caller declares.
+# Deliberately generous: over-classifying a read as a mutation costs a lease,
+# while under-classifying a write costs every mutation control at once.
+MUTATING_ACTION_VERBS = (
+    "write",
+    "create",
+    "update",
+    "delete",
+    "remove",
+    "mutate",
+    "publish",
+    "send",
+    "commit",
+    "push",
+    "append",
+    "modify",
+    "set_",
+    "put",
+    "post",
+)
 
 
 def _load_brain_manifests(root: Path = ROOT) -> dict[str, dict[str, Any]]:
@@ -148,9 +170,17 @@ class PolicyEnforcementPoint:
     discovering them one round trip at a time.
     """
 
-    def __init__(self, root: Path = ROOT, guard: PacketGuard | None = None) -> None:
+    def __init__(
+        self,
+        root: Path = ROOT,
+        guard: PacketGuard | None = None,
+        registry: Any | None = None,
+    ) -> None:
         self.root = root
         self.guard = guard or PacketGuard(root)
+        # Authoritative source of issued leases. Without it, a mutation cannot
+        # be authorized at all -- see _registry_membership_errors.
+        self.registry = registry
         self.roster = load_roster(root)
         # `.codex/agents/*.toml` (what load_roster reads) carries brain and
         # instructions but NOT status or connector_policy — those live in the
@@ -166,7 +196,33 @@ class PolicyEnforcementPoint:
         merged.update(self.manifest.get(agent) or {})
         return merged
 
+    @staticmethod
+    def _is_mutating(request: ToolRequest) -> bool:
+        """Derive mutation status; never simply believe the caller.
+
+        `mutating` defaulted to False, so a caller that forgot the flag on an
+        `action="write"` request skipped the lease, lifecycle, and launch-grant
+        rules entirely — a shadow-stage specialist could write with no lease and
+        be allowed. An enforcement point whose protections a caller can decline
+        by omission is the failure this module exists to remove, and it had that
+        failure in its own signature.
+
+        The flag can now only ever *add* strictness: it is OR-ed with a
+        derivation from the action and resource, so declaring `mutating=False`
+        on a write no longer buys anything.
+        """
+        if request.mutating:
+            return True
+        action = (request.action or "").lower()
+        if any(verb in action for verb in MUTATING_ACTION_VERBS):
+            return True
+        return action in HIGH_IMPACT_ACTIONS
+
     def evaluate(self, request: ToolRequest) -> Decision:
+        # Re-derive once, up front, so every rule sees the same answer.
+        if self._is_mutating(request) and not request.mutating:
+            request = replace(request, mutating=True)
+
         reasons: list[str] = []
         checks: list[str] = []
 
@@ -231,8 +287,11 @@ class PolicyEnforcementPoint:
             if request.mutating:
                 return ["mutating request carries no packet; packet-only policy admits nothing"]
             return []
-        errors = self.guard.validate(request.packet_schema, request.packet)
-        return [f"packet rejected: {error}" for error in errors]
+        errors = [
+            f"packet rejected: {error}"
+            for error in self.guard.validate(request.packet_schema, request.packet)
+        ]
+        return errors + self._packet_scope_errors(request)
 
     def _writer_lease(self, request: ToolRequest) -> list[str]:
         """Validate the lease as a lease, not as two matching strings.
@@ -253,6 +312,20 @@ class PolicyEnforcementPoint:
             return [f"mutation of {request.resource!r} requires an active writer lease"]
 
         lease = request.lease
+
+        # Schema validity proves shape, never issuance. A caller that fabricates
+        # a *complete* lease-shaped dict passes every structural check, so the
+        # lease id must be confirmed against the authoritative registry that
+        # issued it — otherwise the single-active-writer invariant holds only
+        # against careless callers, not against the one this gate exists for.
+        #
+        # Fail-closed when no registry is supplied: an unverifiable lease is not
+        # a lease. Because enforce() has no live call sites yet, this can be
+        # strict from the outset rather than loosened later.
+        registry_errors = self._registry_membership_errors(lease)
+        if registry_errors:
+            return registry_errors
+
         raw = self.guard.validate("writer_lease.schema.json", lease)
         # KNOWN REPOSITORY DEFECT, scoped deliberately narrowly.
         #
@@ -300,6 +373,62 @@ class PolicyEnforcementPoint:
                 f"{request.resource_id!r}"
             )
         errors.extend(self._lease_expiry_errors(lease, request))
+        return errors
+
+    def _registry_membership_errors(self, lease: dict[str, Any]) -> list[str]:
+        """Confirm the lease was actually issued, not merely well-formed."""
+        if self.registry is None:
+            return [
+                "no authoritative lease registry available; a caller-supplied lease "
+                "cannot be verified as issued, and an unverifiable lease is not a lease"
+            ]
+        try:
+            key = canonical_key(
+                str(lease.get("owner_brain", "")),
+                str(lease.get("write_target", "")),
+                str(lease.get("resource_id", "")),
+            )
+        except Exception as error:
+            # A lease too malformed to even key must deny, not raise. An
+            # enforcement point that throws on hostile input is a denial-of-
+            # service on every legitimate caller sharing the process.
+            return [f"lease cannot be keyed, so it cannot be verified as issued: {error}"]
+        issued = self.registry.active_lease(key)
+        if issued is None:
+            return [f"no active lease is registered for {key!r}"]
+        if issued.get("lease_id") != lease.get("lease_id"):
+            return [
+                f"lease id {lease.get('lease_id')!r} does not match the registered "
+                f"active lease for {key!r}"
+            ]
+        return []
+
+    def _packet_scope_errors(self, request: ToolRequest) -> list[str]:
+        """Bind the packet to *this* invocation.
+
+        A schema-valid packet addressed to another specialist was previously
+        accepted as authorization, so a read-only delegation for one agent could
+        authorize a different agent's request. `admit_delegation()` already binds
+        addressee and brain; the enforcement point has to do the same or it is a
+        weaker gate than the one it consolidates.
+        """
+        packet = request.packet or {}
+        errors = []
+        addressee = packet.get("agent")
+        if addressee and addressee != request.agent:
+            errors.append(
+                f"packet addresses {addressee!r}, not the requesting agent {request.agent!r}"
+            )
+        brain = packet.get("owner_brain")
+        if brain and request.owner_brain and brain != request.owner_brain:
+            errors.append(
+                f"packet owner_brain {brain!r} does not match the request's {request.owner_brain!r}"
+            )
+        resource = packet.get("resource_id")
+        if resource and request.resource_id and resource != request.resource_id:
+            errors.append(
+                f"packet resource {resource!r} does not match the requested {request.resource_id!r}"
+            )
         return errors
 
     @staticmethod

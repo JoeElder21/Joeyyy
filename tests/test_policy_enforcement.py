@@ -36,6 +36,28 @@ JEOS_SPECIALIST = "jeos_reflection_forge"
 NOW = datetime.datetime(2026, 7, 25, 12, 0, tzinfo=datetime.UTC)
 
 
+def registry_and_lease(**overrides):
+    """A registry plus the lease it actually issued.
+
+    The enforcement point now verifies lease ids against the issuing registry,
+    so a test lease must come from a registry the point can see. That is the
+    point of the check: a lease nobody issued authorizes nothing.
+    """
+    registry = LeaseRegistry()
+    fields = {
+        "mission_id": "m-001",
+        "owner_brain": "APEX",
+        "writer_agent": CHIEF,
+        "write_target": "APEX/Strategy-Campaigns",
+        "resource_id": "campaign-alpha",
+        "expected_state": "campaign record absent",
+        "rollback": "delete created record",
+        "now": NOW,
+    }
+    fields.update(overrides)
+    return registry, dict(registry.issue(**fields))
+
+
 def real_lease(**overrides):
     """A genuine lease from the registry, not a stub.
 
@@ -120,7 +142,8 @@ class RuleCoverageTests(unittest.TestCase):
 
 class DenialTests(unittest.TestCase):
     def setUp(self):
-        self.pep = PolicyEnforcementPoint(ROOT)
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry)
 
     def test_unregistered_agent_is_denied(self):
         decision = self.pep.evaluate(ToolRequest(agent="rogue", action="read", resource="x"))
@@ -154,21 +177,68 @@ class DenialTests(unittest.TestCase):
         self.assertTrue(any("shadow" in reason for reason in decision.reasons))
 
     def test_every_high_impact_action_requires_explicit_instruction(self):
+        # Exercised at the rule rather than through evaluate(): high-impact
+        # actions are now also classified as mutations, so a full evaluation
+        # additionally demands a lease. That is correct -- publishing or
+        # transacting is a mutation -- but it is a different rule's business,
+        # and folding it in here would stop this test from testing this rule.
         for action in sorted(HIGH_IMPACT_ACTIONS):
             with self.subTest(action=action):
-                denied = self.pep.evaluate(
-                    ToolRequest(agent=CHIEF, action=action, resource="target")
+                without = ToolRequest(agent=CHIEF, action=action, resource="target")
+                self.assertTrue(self.pep._high_impact_boundary(without))
+                withi = ToolRequest(
+                    agent=CHIEF, action=action, resource="target", explicit_instruction=True
                 )
-                self.assertFalse(denied.allowed)
-                allowed = self.pep.evaluate(
-                    ToolRequest(
-                        agent=CHIEF,
-                        action=action,
-                        resource="target",
-                        explicit_instruction=True,
+                self.assertEqual(self.pep._high_impact_boundary(withi), [])
+
+    def test_high_impact_actions_are_treated_as_mutations(self):
+        # Signing, transacting, or publishing changes the world; classifying them
+        # as reads would skip the lease and lifecycle rules entirely.
+        for action in sorted(HIGH_IMPACT_ACTIONS):
+            with self.subTest(action=action):
+                self.assertTrue(
+                    self.pep._is_mutating(
+                        ToolRequest(agent=CHIEF, action=action, resource="target")
                     )
                 )
-                self.assertTrue(allowed.allowed, f"{action} still denied with instruction")
+
+    def test_a_write_action_is_mutating_even_if_the_caller_says_otherwise(self):
+        # The bypass: leaving the flag at its default skipped every mutation
+        # control. The flag may add strictness, never remove it.
+        request = ToolRequest(
+            agent=SPECIALIST,
+            action="write",
+            resource="APEX/Strategy-Campaigns",
+            owner_brain="APEX",
+        )
+        self.assertTrue(self.pep._is_mutating(request))
+        decision = self.pep.evaluate(request)
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("lease" in reason for reason in decision.reasons))
+
+    def test_a_lease_no_registry_issued_authorizes_nothing(self):
+        # A fully-populated, schema-valid, fabricated lease.
+        fabricated = dict(self.lease)
+        fabricated["lease_id"] = "fabricated-0001"
+        reasons = self.pep._writer_lease(self._mutating(lease=fabricated))
+        self.assertTrue(any("does not match the registered" in reason for reason in reasons))
+
+    def test_without_a_registry_no_mutation_can_be_authorized(self):
+        pep = PolicyEnforcementPoint(ROOT)  # no registry
+        reasons = pep._writer_lease(self._mutating(lease=self.lease))
+        self.assertTrue(any("cannot be verified as issued" in reason for reason in reasons))
+
+    def test_a_packet_addressed_to_another_agent_does_not_authorize(self):
+        reasons = self.pep._packet_scope_errors(
+            ToolRequest(
+                agent="apex_intelligence_forge",
+                action="read",
+                resource="x",
+                owner_brain="APEX",
+                packet={"agent": SPECIALIST, "owner_brain": "APEX"},
+            )
+        )
+        self.assertTrue(any("addresses" in reason for reason in reasons))
 
     def test_mutation_without_a_lease_is_denied(self):
         decision = self.pep.evaluate(
@@ -198,40 +268,52 @@ class DenialTests(unittest.TestCase):
             )
         )
         self.assertTrue(reasons)
-        self.assertTrue(any("lease rejected" in reason for reason in reasons))
+        # Rejected for *un-issuance*, which now fires before schema validation:
+        # a lease nobody issued fails whether or not its shape is right. The
+        # assertion is on the property, not on which message wins the race.
+        self.assertTrue(
+            any(
+                phrase in reason
+                for reason in reasons
+                for phrase in ("cannot be verified as issued", "cannot be keyed", "lease rejected")
+            )
+        )
 
     def test_a_genuine_registry_lease_is_accepted(self):
         # The accept path matters as much as the reject path: a rule that denies
         # everything is not enforcement, it is an outage.
-        reasons = self.pep._writer_lease(self._mutating(lease=real_lease()))
+        reasons = self.pep._writer_lease(
+            self._mutating(lease=self.lease, resource_id="campaign-alpha")
+        )
         self.assertEqual(reasons, [])
 
     def test_lease_held_by_another_agent_is_denied(self):
-        lease = real_lease(writer_agent=SPECIALIST)
-        reasons = self.pep._writer_lease(self._mutating(lease=lease))
+        registry, lease = registry_and_lease(writer_agent=SPECIALIST)
+        pep = PolicyEnforcementPoint(ROOT, registry=registry)
+        reasons = pep._writer_lease(self._mutating(lease=lease))
         self.assertTrue(any("held by" in reason for reason in reasons))
 
     def test_lease_does_not_stretch_to_another_target(self):
         reasons = self.pep._writer_lease(
-            self._mutating(lease=real_lease(), resource="APEX/Decision-Log")
+            self._mutating(lease=self.lease, resource="APEX/Decision-Log")
         )
         self.assertTrue(any("does not cover" in reason for reason in reasons))
 
     def test_expired_lease_is_denied(self):
-        lease = real_lease()
+        lease = dict(self.lease)
         lease["expires_at"] = "2020-01-01T00:00:00+00:00"
         reasons = self.pep._writer_lease(self._mutating(lease=lease))
         self.assertTrue(any("expired" in reason for reason in reasons))
 
     def test_closed_lease_authorizes_nothing_further(self):
-        lease = real_lease()
+        lease = dict(self.lease)
         lease["status"] = "verified"
         reasons = self.pep._writer_lease(self._mutating(lease=lease))
         self.assertTrue(reasons)
 
     def test_lease_for_another_resource_id_is_denied(self):
         reasons = self.pep._writer_lease(
-            self._mutating(lease=real_lease(), resource_id="campaign-beta")
+            self._mutating(lease=self.lease, resource_id="campaign-beta")
         )
         self.assertTrue(any("resource" in reason for reason in reasons))
 
@@ -242,7 +324,7 @@ class DenialTests(unittest.TestCase):
             resource="mount:civil3d",
             owner_brain="APEX",
             mutating=True,
-            lease=real_lease(write_target="mount:civil3d"),
+            lease=registry_and_lease(write_target="mount:civil3d")[1],
         )
         self.assertFalse(self.pep.evaluate(request).allowed)
 
