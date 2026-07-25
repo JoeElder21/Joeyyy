@@ -182,6 +182,19 @@ offline, so it adds no CI license dependency and no outbound calls.
 one-time full-history sweep, wrong tool for a pre-commit gate. Recommended as a **one-off
 audit** of this repository's history, not a standing hook.
 
+**Executed, not just configured.** The first version of this record said gitleaks was
+"adopted as a pre-commit hook" when `pre-commit` had never been installed,
+`.git/hooks/pre-commit` did not exist, and gitleaks had never run once. Both are now built
+and executed: gitleaks is clean on the working tree (1.67 MB) and across history (69
+non-merge commits — fewer than TruffleHog's 95 because `git log -p` produces no diff for
+merge commits), and all 14 hooks pass. Running them immediately paid for itself by
+surfacing a conflict between the whitespace hooks and the ezdxf-generated APS test fixture;
+generated fixtures are now excluded rather than being rewritten on every regeneration.
+
+The general lesson is worth more than the specific fix: **a configured tool and an executed
+tool are different claims, and only the second is evidence.** A `.pre-commit-config.yaml`
+in the tree proves a hook was written down, not that it runs or passes.
+
 ### Tier 2 — Evaluate
 
 #### 4. `snyk/agent-scan` — closes the inbound half of Finding 3. Score 7/10, low effort. **Verified.**
@@ -222,6 +235,23 @@ a rewrite would trade proven code for a new dependency and a policy language to 
 extractable idea now, worth taking regardless: **a single explicit policy-enforcement point
 immediately before tool execution**, rather than checks spread across the call path. Revisit
 Cedar itself only if the boundary rules outgrow readable Python.
+
+**Built: `scripts/policy_enforcement.py`.** Cedar's vocabulary transferred directly —
+principal (acting agent and its brain lock), action (tool invocation and packet mode),
+resource (connector, mount, or write target), context (writer lease, lifecycle stage, launch
+grant). Eight rules, evaluated in full rather than short-circuiting, so a caller fixing a
+denial sees every reason at once. It decides nothing new; every rule already existed and is
+still owned by the module that implemented it. What changed is that a caller can no longer
+perform the check set *partially*.
+
+That distinction stopped being theoretical during the build. The first draft read lifecycle
+stage and connector policy from `load_roster`, which reads `.codex/agents/*.toml` — files
+carrying neither field. Both rules silently returned "no objection" for every agent: no
+error, no failure, the checks simply never ran. **Two of eight rules were decorative and
+nothing said so.** That is precisely the fail-open-by-omission the consolidation exists to
+eliminate, it survived code review, and it died the moment the module was actually executed.
+`tests/test_policy_enforcement.py::test_no_rule_silently_no_ops` now fails if any rule
+becomes unable to deny anything.
 
 ### Tier 3 — Reference, no action
 
@@ -279,6 +309,19 @@ adopted in the same change.
 - `CLAUDE.md` — new: repository guidance for Claude-based runtimes, pointing at `AGENTS.md`
   as the single source of truth rather than duplicating it (duplication is how the two
   drift apart).
+
+**Closing the gap between recorded and running (2026-07-25, second pass):**
+
+An audit of this record against the repository found several Part 2 verdicts were paper.
+Each is now executed rather than described:
+
+| Item | Was | Is |
+| --- | --- | --- |
+| gitleaks | In `.pre-commit-config.yaml`; never installed, never run | Built and run. Clean on working tree and on 69 non-merge commits of history |
+| pre-commit | Config committed; `.git/hooks/pre-commit` absent | Installed and passing all 14 hooks; fires on every commit |
+| `packet_validity` | A sentence in the metric contract | `evals/packet_validity.py`, running the live `PacketGuard`; proven 1.0 on a valid v2.1 handoff and 0.0 on malformed, absent, and legacy packets |
+| Cedar absorption | "Worth taking regardless" — not taken | `scripts/policy_enforcement.py`, 8 rules, 19 tests |
+| `snyk/agent-scan` | Approved and wired into intake | Still unrun — needs a Snyk credential this environment does not hold. Honest status: **approved, not yet exercised** |
 
 **Quality baseline:**
 - `[tool.ruff]` config in `pyproject.toml`; the 4 pre-existing lint errors fixed
