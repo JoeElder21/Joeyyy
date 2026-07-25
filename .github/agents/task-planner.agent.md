@@ -170,7 +170,11 @@ applyTo: ".copilot-tracking/changes/{{date}}-{{task_description}}-changes.md"
 
 ### Standards References
 
-- #file:../../copilot/{{language}}.md - {{language_conventions_description}}
+<!-- Local override: upstream also emitted `#file:../../copilot/{{language}}.md`.
+     No `copilot/` directory, language guide, or generator for one exists in this
+     repository, so every plan carried a dangling standards dependency. The row
+     below already resolves standards from the vendored instruction set, which is
+     the real location, so the broken row is removed rather than replaced. -->
 - #file:../../.github/instructions/{{instruction_file}}.instructions.md - {{instruction_description}}
 
 ## Implementation Checklist

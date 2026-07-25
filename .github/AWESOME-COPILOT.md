@@ -87,6 +87,11 @@ invocation requires that tool, and a `#file` reference only loads a spec into co
 the tool enabled but the instructions unchanged the planner still loaded the researcher's
 definition instead of running it, and so still blocked before producing any plan.
 
+Its Plan Template also emitted a `#file:../../copilot/<language>.md` standards row, but no
+`copilot/` directory, language guide, or generator for one exists here, so every generated
+plan carried a dangling dependency. The row is removed: the adjacent row already resolves
+standards from `.github/instructions/`, which is where they actually live.
+
 `task-researcher` is vendored because `task-planner` mandatorily invokes it before any
 planning; without it the planner blocks on a missing dependency on every new task.
 
@@ -148,6 +153,10 @@ non-UTF-8 files in this public tree. The generator is the source of truth.
 **Refreshing a file is an intake action, not a download.** Prefer the discovery skills:
 they carry the gate checklist. If you refresh by hand, follow the same steps.
 
+Whichever path you use, resolve **one** upstream commit first and use it for the whole
+pass. The vendored skill files fetch from `main`; mixing revisions inside a single
+intake leaves this manifest's pin describing bytes that were never installed together.
+
 Fetch from a *pinned commit*, never from `main`. `main` moves, so a `curl` from it can
 write bytes that do not correspond to the SHA you then record — the pin would be a claim
 about content you never fetched.
@@ -159,7 +168,10 @@ F=markdown.instructions.md
 curl -fsSL -o "/tmp/$F" \
   "https://raw.githubusercontent.com/github/awesome-copilot/$PIN/instructions/$F"
 
-python scripts/privacy_guard.py "/tmp/$F"          # explicit path: the file is untracked
+# --as makes the guard treat the download as though it already sat at its
+# destination. Without it, the three files with placeholder allowlist entries
+# report false findings and pre-install intake is impossible.
+python scripts/privacy_guard.py "/tmp/$F" --as ".github/instructions/$F"
 diff "/tmp/$F" ".github/instructions/$F"           # review the whole diff before writing
 ```
 

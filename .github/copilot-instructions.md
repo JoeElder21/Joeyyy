@@ -39,6 +39,14 @@ activation.
 Also run the matching skill when the mission asks what is available, what is
 missing, or what has drifted from upstream, and at every weekly ecosystem audit.
 
+**Resolve one upstream commit first, and use it for every request in the pass.**
+The vendored skill files fetch from `main`, which moves. Comparing one file against
+`main` and downloading the next a moment later can mix revisions, so the pin recorded
+in the manifest would not identify the bytes installed. Resolve the SHA once, then use
+it for inventory, comparison, and every download in that intake. The skill files are
+upstream content and are not edited to enforce this — the requirement lives here,
+where this repository's policy belongs.
+
 Each needs a fetch-capable tool to reach `raw.githubusercontent.com`. If none is
 verified in the session, say the drift check could not run — never report an
 unrun check as clean.
