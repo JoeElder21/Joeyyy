@@ -53,6 +53,17 @@ def main() -> int:
             "agents": mount["agents"],
             "verify_offline": mount.get("verify_offline", False),
         }
+        # A signed grant names a MOUNT, and a mount is a whole server. Nothing
+        # in the launcher narrows it to the operation Joe had in mind when he
+        # signed, so the blast radius has to be stated where the authority is
+        # granted rather than inferred from `purpose`. A gated mount that does
+        # not declare it fails the gate.
+        if mount.get("require_grant"):
+            entry["grant_scope"] = mount.get("grant_scope", "")
+            if not entry["grant_scope"]:
+                entry["status"] = "undeclared grant scope"
+                report["mounts"].append(entry)
+                continue
         if not mount.get("verify_offline"):
             entry["status"] = "registered"
             entry["activation"] = mount.get("activation", "")

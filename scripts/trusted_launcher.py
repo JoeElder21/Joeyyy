@@ -131,7 +131,17 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     corps = corps if corps is not None else _corps()
     roster = set(corps.get("apex_roster", [])) | set(corps.get("jeos_roster", []))
     if agent not in roster:
-        return None
+        # The exemption belongs to the DESIGNATED EXECUTOR, not to "anyone the
+        # roster does not mention". Keying it on absence made a missing roster
+        # array -- syntactically valid TOML, exactly what a partial write
+        # leaves behind -- promote every allowlisted shadow specialist to the
+        # one identity that is not stage-gated. Nothing raised, because nothing
+        # was malformed. Name the executor instead, and refuse every other
+        # identity whose lifecycle this registry cannot account for.
+        executor = corps.get("governance", {}).get("designated_executor")
+        if executor and agent == executor:
+            return None
+        return "unrostered"
 
     deployed = corps.get("lifecycle", {}).get("deployed_stage")
     # Read the OWNING brain's manifest only. Walking apex-then-jeos meant an
@@ -268,6 +278,19 @@ def issue_grant(
     path.write_text(json.dumps(grant, indent=1, sort_keys=True), encoding="utf-8")
     path.chmod(0o600)
     return path
+
+
+def _grant_scope(mount: str) -> str:
+    """What a grant for `mount` actually authorizes, verbatim from the registry.
+
+    Never guess and never summarise: an empty string means the registry does
+    not declare it, and `verify_mcp_mounts.py` fails the gate on exactly that,
+    so silence here is a gate failure rather than an implied "narrow".
+    """
+    try:
+        return str(_load_mounts().get(mount, {}).get("grant_scope", ""))
+    except Exception:  # noqa: BLE001 - reporting must not break the mint path
+        return ""
 
 
 def _consumed_nonces(ledger: AuditLedger) -> set[str]:
@@ -510,8 +533,15 @@ def main(argv: list[str] | None = None) -> int:
         except LaunchDenied as denial:
             print(json.dumps({"granted": False, "error": str(denial)}))
             return 1
+        # Print what the signature actually authorizes. The grant names a
+        # mount, and a mount is an entire server: a grant minted for an Azure
+        # inventory task equally authorizes deletion, RBAC and credential
+        # tools, because nothing downstream mediates individual tool calls.
+        # Leaving that to be inferred from `purpose` asks Joe to sign a
+        # blast radius he was never shown.
         print(json.dumps({"grant": str(path), "mount": args.mount,
-                          "agent": args.agent, "minutes": args.minutes}))
+                          "agent": args.agent, "minutes": args.minutes,
+                          "authorizes": _grant_scope(args.mount)}))
         return 0
 
     try:

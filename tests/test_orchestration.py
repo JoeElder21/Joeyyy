@@ -534,6 +534,52 @@ class SelectionReportBaselineTests(unittest.TestCase):
                               "missing": ["crewai", "prefect"]})
         self.assertIn("2 of 20", missing_dependency_note(partial))
 
+    def test_the_mount_verifier_fails_an_undeclared_grant_scope(self):
+        """The declaration has to be enforced, or it is a convention.
+
+        `grant_scope` states the blast radius a signature actually authorizes.
+        If a new grant-gated mount can be added without one, the next Terraform
+        or Azure equivalent lands with its surface unstated and nothing
+        notices -- which is the situation this field exists to end."""
+        import subprocess
+        import tomllib
+
+        raw = (ROOT / "config" / "mcp_mounts.toml").read_text(encoding="utf-8")
+        stripped = "\n".join(
+            line for line in raw.splitlines()
+            if not line.startswith("grant_scope"))
+        # Sanity: the strip must actually remove something, or the negative
+        # case below proves nothing.
+        gated = [m for m in tomllib.loads(stripped)["mounts"]
+                 if m.get("require_grant")]
+        self.assertTrue(gated)
+        self.assertTrue(all("grant_scope" not in m for m in gated))
+
+        registry = ROOT / "config" / "mcp_mounts.toml"
+        backup = raw
+        try:
+            registry.write_text(stripped, encoding="utf-8")
+            completed = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
+                cwd=ROOT, capture_output=True, text=True, check=False)
+        finally:
+            registry.write_text(backup, encoding="utf-8")
+
+        self.assertNotEqual(completed.returncode, 0,
+                            "an undeclared grant scope must fail the gate")
+        payload = json.loads(completed.stdout)
+        self.assertFalse(payload["valid"])
+        self.assertIn(
+            "undeclared grant scope",
+            [entry.get("status") for entry in payload["mounts"]])
+
+        # And the unmodified registry must still pass, so the check is a real
+        # gate rather than a permanent failure.
+        restored = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
+            cwd=ROOT, capture_output=True, text=True, check=False)
+        self.assertEqual(restored.returncode, 0, restored.stdout[-400:])
+
     def test_a_failed_json_gate_row_names_the_actual_error(self):
         """These gates print JSON, so the first output line is "{". Taking it
         produced rows reading `FAILED (exit 1) — {`, which identifies

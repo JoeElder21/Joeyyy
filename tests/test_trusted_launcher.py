@@ -217,11 +217,12 @@ class TrustedLauncherTests(unittest.TestCase):
                     if not stage_permits_connector(entry["status"]):
                         self.assertFalse(stage_permits_connector(resolved))
 
-        # An agent with no per-agent entry falls back to the snapshot; an
-        # agent outside the roster is not stage-gated at all.
+        # An agent with no per-agent entry falls back to the snapshot; the
+        # NAMED designated executor is not stage-gated at all.
         snapshot_only = {
             "apex_roster": ["apex_probe"],
             "jeos_roster": [],
+            "governance": {"designated_executor": "apex_chief_of_staff"},
             "lifecycle": {"deployed_stage": "shadow"},
         }
         self.assertEqual(
@@ -250,6 +251,80 @@ class TrustedLauncherTests(unittest.TestCase):
                                     out_dir=Path(tmp) / "grants",
                                     agent=identity, ledger=ledger)
                     self.assertIn("is not on", str(caught.exception))
+
+    def test_only_the_named_executor_escapes_the_lifecycle_gate(self):
+        """The exemption belongs to an identity, not to a gap in the registry.
+
+        Keying it on "absent from the roster" meant a corps file that stays
+        syntactically VALID while missing a roster array -- what a partial
+        write leaves behind -- silently reclassified every allowlisted shadow
+        specialist as the one identity that is not stage-gated. Nothing raised,
+        because nothing was malformed, so the malformed-file denial added last
+        round does not cover this at all. Fail closed on any identity whose
+        lifecycle the registry cannot account for."""
+        partial = {
+            "jeos_roster": ["jeos_life_architect"],   # apex_roster lost
+            "governance": {"designated_executor": "apex_chief_of_staff"},
+            "lifecycle": {"deployed_stage": "shadow"},
+        }
+        for agent in ("apex_systems_blacksmith", "apex_delivery_commander"):
+            with self.subTest(agent=agent):
+                stage = specialist_stage(agent, corps=partial)
+                self.assertFalse(
+                    stage_permits_connector(stage),
+                    "a specialist erased from the roster must not inherit the "
+                    "designated executor's exemption",
+                )
+        # The named executor still is not stage-gated.
+        self.assertIsNone(specialist_stage("apex_chief_of_staff", corps=partial))
+
+        # And if the governance block itself is lost, nobody is exempt --
+        # including the executor. An exemption that survives the disappearance
+        # of the record naming it is not an exemption, it is a default.
+        headless = {"jeos_roster": [], "lifecycle": {"deployed_stage": "shadow"}}
+        for agent in ("apex_chief_of_staff", "apex_systems_blacksmith"):
+            with self.subTest(agent=agent, registry="no governance block"):
+                self.assertFalse(
+                    stage_permits_connector(
+                        specialist_stage(agent, corps=headless)))
+
+        # The real registry must still resolve both kinds correctly.
+        self.assertIsNone(specialist_stage("apex_chief_of_staff"))
+        self.assertEqual(specialist_stage("apex_systems_blacksmith"), "shadow")
+
+    def test_a_signed_grant_states_the_surface_it_authorizes(self):
+        """A grant names a MOUNT, and a mount is an entire server.
+
+        Nothing in the launcher mediates individual tool calls, so a grant
+        minted for an Azure inventory task equally authorizes deletion, RBAC
+        and credential tools. Leaving that to be inferred from `purpose` asks
+        Joe to sign a blast radius he was never shown, so every grant-gated
+        mount declares it, the mint path prints it, and the verifier fails a
+        gated mount that does not."""
+        import tomllib
+
+        import scripts.trusted_launcher as launcher
+
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            mounts = tomllib.load(source)["mounts"]
+
+        gated = [m for m in mounts if m.get("require_grant")]
+        self.assertTrue(gated, "no grant-gated mounts found; test is vacuous")
+        for mount in gated:
+            with self.subTest(mount=mount["name"]):
+                scope = mount.get("grant_scope", "")
+                self.assertTrue(
+                    scope.strip(),
+                    "a grant-gated mount must declare what a grant authorizes")
+                # It must describe the surface, not restate the purpose: the
+                # point is the part a reader would otherwise assume away.
+                self.assertIn("grant does not narrow", scope)
+                # And the mint path must read the same string, not a summary.
+                self.assertEqual(launcher._grant_scope(mount["name"]), scope)
+
+        # An unknown mount yields "", which the verifier treats as a failure
+        # rather than as a narrow scope.
+        self.assertEqual(launcher._grant_scope("no-such-mount"), "")
 
     def test_stage_resolution_reads_only_the_owning_brains_manifest(self):
         """One brain's files must not decide the other brain's authority.

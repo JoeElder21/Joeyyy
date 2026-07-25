@@ -277,6 +277,13 @@ MAX_PARSE_BYTES = 2_000_000
 # Hard ceiling on reconstructed values, so a hostile alias graph cannot turn
 # the privacy gate into the outage.
 MAX_EMITTED_VALUES = 20_000
+# Emitted when that ceiling is reached. Stopping the walk bounds the work, but
+# stopping SILENTLY converts the denial-of-service into a bypass: 20,000
+# harmless leaves ahead of a credential push it past the budget, the regex
+# fallback cannot normalise the constructs the parser exists to handle, and the
+# file reports clean. A truncated reconstruction is an unfinished check, and an
+# unfinished check is reported, never passed.
+TRUNCATION_MARKER = "__privacy_guard_reconstruction_truncated__"
 
 
 def _yaml_loader():
@@ -360,6 +367,8 @@ def yaml_reconstructed_values(text: str) -> str:
             walk(document)
     except (Exception, RecursionError):  # noqa: BLE001 - any parse failure falls back
         return ""
+    if budget[0] <= 0:
+        lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
 
 
@@ -413,6 +422,8 @@ def toml_reconstructed_values(text: str) -> str:
             lines.append(_reconstructed(key, "=", node))
 
     walk(document)
+    if budget[0] <= 0:
+        lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
 
 
@@ -848,11 +859,31 @@ def _scan_files(
         # authoritative where it works; the normalisers stay so a missing
         # PyYAML, a non-YAML file, or an oversized document degrades to partial
         # coverage rather than none.
+        # Read truncation from the PARSER OUTPUT, never from the concatenated
+        # scannable text: this module defines the marker as a literal, so a
+        # substring test over raw file text reports privacy_guard.py itself as
+        # an incomplete scan. The reconstructions are the only place the marker
+        # can legitimately appear, and it is stripped before matching so it
+        # cannot be mistaken for content.
+        reconstructions = [yaml_reconstructed_values(text),
+                           toml_reconstructed_values(text)]
+        truncated = any(TRUNCATION_MARKER in value for value in reconstructions)
+        reconstructions = [value.replace(TRUNCATION_MARKER, "")
+                           for value in reconstructions]
         scannable = strip_known_placeholders(
             relative,
             fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text)))
-            + "\n" + yaml_reconstructed_values(text)
-            + "\n" + toml_reconstructed_values(text))
+            + "\n" + "\n".join(reconstructions))
+        # A truncated reconstruction means part of this file was never matched
+        # against anything. Report it as an incomplete scan rather than letting
+        # the patterns that did run stand in for the ones that could not: a
+        # budget that stops quietly is a way to push a credential out of scope
+        # by padding the file in front of it.
+        if truncated:
+            findings.append(
+                f"{relative}: incomplete scan — value reconstruction stopped "
+                f"at {MAX_EMITTED_VALUES} values, so part of this file was "
+                f"never matched. Split the file or review it by hand.")
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")

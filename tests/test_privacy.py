@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.privacy_guard import (
     MAX_EMITTED_VALUES,
     PATTERNS,
+    TRUNCATION_MARKER,
     PLACEHOLDER_LITERALS,
     applicable_patterns,
     fold_block_scalars,
@@ -831,6 +832,57 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             secret,
             yaml_reconstructed_values(
                 f"defaults: &d {secret}\n{cred}: *d\n"))
+
+    def test_an_exhausted_reconstruction_budget_fails_the_scan(self):
+        """A bound that stops quietly converts the outage into a bypass.
+
+        The budget added to stop an alias bomb also stops on ORDINARY volume:
+        pad a file with 20,000 harmless leaves and everything after them is
+        never emitted, while the regex fallback cannot normalise the very
+        constructs the parser exists to handle. The file then reports clean --
+        so padding became a way to push a credential out of scope. A truncated
+        reconstruction is an unfinished check, and this repository's rule is
+        that an unfinished check is reported, never passed."""
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        filler_yaml = "".join(
+            f"k{index}: v{index}\n" for index in range(MAX_EMITTED_VALUES + 50))
+        filler_toml = "".join(
+            f'k{index} = "v{index}"\n'
+            for index in range(MAX_EMITTED_VALUES + 50))
+        # Both formats, and in each the credential sits in a construct only the
+        # parser normalises -- so the fallback genuinely cannot cover for it.
+        cases = {
+            "padded.yaml": filler_yaml + 'tail: {"%s": !!str %s}\n' % (cred, secret),
+            "padded.toml": filler_toml + '"AZURE\\u005fCLIENT\\u005fSECRET" = "%s"\n' % secret,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, body in cases.items():
+                probe = root / name
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(probe=name):
+                    findings = scan_paths([probe], root=root)
+                    self.assertTrue(
+                        any("incomplete scan" in finding for finding in findings),
+                        f"{name}: truncation reported clean -- {findings}",
+                    )
+
+            # The marker must not leak into the report as a pattern hit, and a
+            # file that fits inside the budget must stay silent.
+            ordinary = root / "ordinary.yaml"
+            ordinary.write_text("name: governance\npurpose: read only\n",
+                                encoding="utf-8")
+            self.assertEqual(scan_paths([ordinary], root=root), [])
+
+        # And the bound it was added for still holds: the alias bomb is walked
+        # once per shared subtree, so it stays under budget and is not reported
+        # as incomplete. Bounding and failing closed are separate properties.
+        bomb = "a: &a [x, x, x, x, x, x, x, x, x, x]\n"
+        for name in "bcdefg":
+            previous = chr(ord(name) - 1)
+            bomb += f"{name}: &{name} [{', '.join(['*' + previous] * 10)}]\n"
+        self.assertNotIn(TRUNCATION_MARKER, yaml_reconstructed_values(bomb))
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
