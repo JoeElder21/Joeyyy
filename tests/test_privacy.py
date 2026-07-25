@@ -21,20 +21,22 @@ CONTACT_HEURISTIC_CHECKS = {
     "phone number",
     "street address",
 }
-PLACEHOLDER_MARKERS = (
-    "example",
-    "test",
-    "placeholder",
-    "changeme",
-    "change-me",
-    "your",
-    "dummy",
-    "fake",
-    "sample",
-    "redacted",
-    "xxx",
-    "password",
-    "secret",
+# Complete placeholder forms, matched against the WHOLE literal. A substring test
+# would waive any live credential containing a common word; keep these anchored.
+PLACEHOLDER_VALUE_PATTERNS = (
+    re.compile(
+        r"\A(?i:test|example|sample|dummy|fake|placeholder|redacted|changeme"
+        r"|change[-_]me|foo|bar|baz|x{3,})[a-z0-9]*(?:[-_][a-z0-9]+)?\Z"
+    ),
+    re.compile(r"(?i)\A(?:pass)?word\Z|\A(?:secret|token|credential)s?\Z"),
+    re.compile(r"(?i)\A(?:sk|pk|rk)_test_[a-z0-9]+\Z"),
+    re.compile(r"\A<[^>]+>\Z"),
+    re.compile(r"\A\{\{[^}]+\}\}\Z"),
+    re.compile(r"(?i)\A\$\{?[a-z_][a-z0-9_]*\}?\Z"),
+    re.compile(
+        r"(?i)\A(?:your|my|the)[-_]"
+        r"(?:api[-_]?key|access[-_]?token|token|secret|password|credential|key|value)s?\Z"
+    ),
 )
 CREDENTIAL_LITERAL = re.compile(
     r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
@@ -50,11 +52,15 @@ def is_vendored_documentation(relative: Path) -> bool:
     )
 
 
+PLACEHOLDER_MAX_LENGTH = 20
+
+
 def non_placeholder_credentials(text: str) -> list[str]:
     return [
         match.group(1)
         for match in CREDENTIAL_LITERAL.finditer(text)
-        if not any(marker in match.group(1).lower() for marker in PLACEHOLDER_MARKERS)
+        if len(match.group(1)) > PLACEHOLDER_MAX_LENGTH
+        or not any(p.match(match.group(1)) for p in PLACEHOLDER_VALUE_PATTERNS)
     ]
 
 
@@ -124,18 +130,43 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             self.assertTrue(
                 any("leak.md" in f and "secret token" in f for f in findings), findings
             )
+            (vendored / "leak.md").unlink()
 
             # A provider-agnostic credential must also be caught, even though the
             # generic detector is relaxed for placeholder literals in this tree.
+            # Each of these embeds a word that appears in the placeholder forms;
+            # none is a complete placeholder, so all must still be reported.
             key_name = "api" + "_key"
-            (vendored / "generic.md").write_text(
-                key_name + '="live-production-key-4938291"\n', encoding="utf-8"
-            )
+            live_values = [
+                "live-production-key-4938291",
+                "my-secret-live-prod-4938291",
+                "prod-password-rotate-2026",
+                "attacker-test-key-99331",
+                # Begins with a dummy word but carries a live-looking tail.
+                "testing-servers-real-key-771",
+                "Example-Corp-LIVE-KEY-88213",
+                # Split so this file stays clean under the guard's own token pattern.
+                "sk" + "_test_but_actually_live-9931-REALKEY",
+            ]
+            for index, value in enumerate(live_values):
+                leak = vendored / f"generic{index}.md"
+                leak.write_text(f'{key_name}="{value}"\n', encoding="utf-8")
+                findings = scan_repository(root)
+                self.assertTrue(
+                    any(leak.name in f and "credential assignment" in f for f in findings),
+                    f"{value!r} was not reported: {findings}",
+                )
+                leak.unlink()
+
+            # Complete placeholder forms must still pass.
+            for value in ["testpass123", "password", "sk_test_123", "your-api-key"]:
+                doc = vendored / "ph.md"
+                doc.write_text(f'{key_name}="{value}"\n', encoding="utf-8")
+                findings = scan_repository(root)
+                self.assertEqual(findings, [], f"{value!r} should be treated as filler")
+                doc.unlink()
             findings = scan_repository(root)
-        self.assertTrue(
-            any("generic.md" in f and "credential assignment" in f for f in findings),
-            findings,
-        )
+        self.assertEqual(findings, [], findings)
 
     def test_dedicated_privacy_guard_scans_every_tracked_text_file(self):
         self.assertEqual(scan_repository(ROOT), [])

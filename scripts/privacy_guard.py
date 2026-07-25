@@ -97,22 +97,50 @@ VENDORED_CREDENTIAL_LITERAL = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*[\"']([^\"']{8,})[\"']"
 )
-# Substrings that mark a literal as documentation filler rather than a live secret.
-PLACEHOLDER_MARKERS = (
-    "example",
-    "test",
-    "placeholder",
-    "changeme",
-    "change-me",
-    "your",
-    "dummy",
-    "fake",
-    "sample",
-    "redacted",
-    "xxx",
-    "password",
-    "secret",
+# Complete placeholder forms. These must match the WHOLE literal, never a substring:
+# a substring test would waive a live credential that merely happens to contain a
+# common word, so a real secret would silently pass here.
+PLACEHOLDER_VALUE_PATTERNS = (
+    # Conventional dummy values: testpass123, example-key, dummy_token_1. At most one
+    # trailing segment is allowed: an unbounded tail would waive live values that
+    # merely begin with a dummy word, e.g. "testing-servers-real-key-771".
+    # Only the dummy word itself is case-insensitive. The tail is deliberately
+    # lowercase-only: mixed case signals generated entropy, not documentation filler,
+    # so "test-aKq93LmZx0Pp" is reported while "testpass123" is not.
+    re.compile(
+        r"\A(?i:test|example|sample|dummy|fake|placeholder|redacted|changeme"
+        r"|change[-_]me|foo|bar|baz|x{3,})[a-z0-9]*(?:[-_][a-z0-9]+)?\Z"
+    ),
+    # Bare words used as their own sample value: password, secret, token.
+    re.compile(r"(?i)\A(?:pass)?word\Z|\A(?:secret|token|credential)s?\Z"),
+    # Vendor test-mode keys, which are non-live by construction: sk_test_123.
+    re.compile(r"(?i)\A(?:sk|pk|rk)_test_[a-z0-9]+\Z"),
+    # Fill-me-in markers: <your-api-key>, {{token}}, ${API_KEY}, $API_KEY.
+    re.compile(r"\A<[^>]+>\Z"),
+    re.compile(r"\A\{\{[^}]+\}\}\Z"),
+    re.compile(r"(?i)\A\$\{?[a-z_][a-z0-9_]*\}?\Z"),
+    # your-api-key / my_token, where the whole value is the instruction. The trailing
+    # noun is enumerated on purpose: a trailing wildcard here would waive live values
+    # such as a "my-secret-<env>-<digits>" key.
+    re.compile(
+        r"(?i)\A(?:your|my|the)[-_]"
+        r"(?:api[-_]?key|access[-_]?token|token|secret|password|credential|key|value)s?\Z"
+    ),
 )
+
+
+PLACEHOLDER_MAX_LENGTH = 20
+
+
+def is_placeholder_value(value: str) -> bool:
+    """True when the whole literal is a recognized documentation placeholder.
+
+    Length-capped as a backstop: real credentials are long, and a short dummy value
+    is the only thing these forms are meant to cover.
+    """
+    if len(value) > PLACEHOLDER_MAX_LENGTH:
+        return False
+    return any(pattern.match(value) for pattern in PLACEHOLDER_VALUE_PATTERNS)
 
 
 def is_vendored_documentation(relative: Path) -> bool:
@@ -142,8 +170,7 @@ def vendored_credential_findings(text: str) -> list[str]:
     """Credential literals in vendored docs that are not recognized placeholders."""
     labels = []
     for match in VENDORED_CREDENTIAL_LITERAL.finditer(text):
-        value = match.group(1).lower()
-        if not any(marker in value for marker in PLACEHOLDER_MARKERS):
+        if not is_placeholder_value(match.group(1)):
             labels.append("credential assignment")
     return labels
 
