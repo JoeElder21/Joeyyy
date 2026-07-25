@@ -97,6 +97,19 @@ VENDORED_CREDENTIAL_LITERAL = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*[\"']([^\"']{8,})[\"']"
 )
+# The unquoted `.env` / shell form, which carries real secrets just as often - a
+# key name, an equals sign, and a bare value with no quotes around it. Captured
+# separately because the quoted rule above cannot see it.
+VENDORED_CREDENTIAL_BARE = re.compile(
+    r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
+    r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
+    r"\s*[:=]\s*([^\s#\"']{8,})"
+)
+# An unquoted right-hand side is only credential-shaped when it is one opaque run of
+# word characters. Anything holding a dot, bracket, paren, comma, or slash is code -
+# an attribute lookup, a call, a subscript, a type annotation - and has no value to
+# leak, which is what every unquoted match in the vendored samples turns out to be.
+OPAQUE_LITERAL = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]{7,}\Z")
 # Complete placeholder forms. These must match the WHOLE literal, never a substring:
 # a substring test would waive a live credential that merely happens to contain a
 # common word, so a real secret would silently pass here.
@@ -171,6 +184,10 @@ def vendored_credential_findings(text: str) -> list[str]:
     labels = []
     for match in VENDORED_CREDENTIAL_LITERAL.finditer(text):
         if not is_placeholder_value(match.group(1)):
+            labels.append("credential assignment")
+    for match in VENDORED_CREDENTIAL_BARE.finditer(text):
+        value = match.group(1)
+        if OPAQUE_LITERAL.match(value) and not is_placeholder_value(value):
             labels.append("credential assignment")
     return labels
 

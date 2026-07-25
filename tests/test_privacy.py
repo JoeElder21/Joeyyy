@@ -43,6 +43,15 @@ CREDENTIAL_LITERAL = re.compile(
     r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
     r"\s*[:=]\s*[\"']([^\"']{8,})[\"']"
 )
+# Unquoted .env / shell form. An unquoted value only looks like a credential when it
+# is one opaque run of word characters; anything with a dot, bracket, paren or comma
+# is code rather than a secret.
+CREDENTIAL_BARE = re.compile(
+    r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password"
+    r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token)"
+    r"\s*[:=]\s*([^\s#\"']{8,})"
+)
+OPAQUE_LITERAL = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]{7,}\Z")
 
 
 def is_vendored_documentation(relative: Path) -> bool:
@@ -55,13 +64,20 @@ def is_vendored_documentation(relative: Path) -> bool:
 PLACEHOLDER_MAX_LENGTH = 20
 
 
+def _is_filler(value: str) -> bool:
+    return len(value) <= PLACEHOLDER_MAX_LENGTH and any(
+        p.match(value) for p in PLACEHOLDER_VALUE_PATTERNS
+    )
+
+
 def non_placeholder_credentials(text: str) -> list[str]:
-    return [
-        match.group(1)
-        for match in CREDENTIAL_LITERAL.finditer(text)
-        if len(match.group(1)) > PLACEHOLDER_MAX_LENGTH
-        or not any(p.match(match.group(1)) for p in PLACEHOLDER_VALUE_PATTERNS)
+    found = [m.group(1) for m in CREDENTIAL_LITERAL.finditer(text) if not _is_filler(m.group(1))]
+    found += [
+        m.group(1)
+        for m in CREDENTIAL_BARE.finditer(text)
+        if OPAQUE_LITERAL.match(m.group(1)) and not _is_filler(m.group(1))
     ]
+    return found
 
 
 class PublicRepositoryPrivacyTests(unittest.TestCase):
@@ -148,15 +164,36 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 # Split so this file stays clean under the guard's own token pattern.
                 "sk" + "_test_but_actually_live-9931-REALKEY",
             ]
+            # Both the quoted form and the unquoted .env/shell form must be caught.
             for index, value in enumerate(live_values):
-                leak = vendored / f"generic{index}.md"
-                leak.write_text(f'{key_name}="{value}"\n', encoding="utf-8")
+                for form, body in (
+                    ("quoted", f'{key_name}="{value}"\n'),
+                    ("bare", f"{key_name}={value}\n"),
+                ):
+                    leak = vendored / f"generic{index}.md"
+                    leak.write_text(body, encoding="utf-8")
+                    findings = scan_repository(root)
+                    self.assertTrue(
+                        any(
+                            leak.name in f and "credential assignment" in f
+                            for f in findings
+                        ),
+                        f"{form} {value!r} was not reported: {findings}",
+                    )
+                    leak.unlink()
+
+            # Unquoted expressions are code, not secrets, and must stay quiet.
+            for expression in [
+                "var.database_password",
+                "self.jwt_manager.create_access_token(user)",
+                "request.META.get('HTTP_X_API_KEY')",
+                "Annotated[str,",
+            ]:
+                doc = vendored / "expr.md"
+                doc.write_text(f"{key_name} = {expression}\n", encoding="utf-8")
                 findings = scan_repository(root)
-                self.assertTrue(
-                    any(leak.name in f and "credential assignment" in f for f in findings),
-                    f"{value!r} was not reported: {findings}",
-                )
-                leak.unlink()
+                self.assertEqual(findings, [], f"{expression!r} is code, not a secret")
+                doc.unlink()
 
             # Complete placeholder forms must still pass.
             for value in ["testpass123", "password", "sk_test_123", "your-api-key"]:
