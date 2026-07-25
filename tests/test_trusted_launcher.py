@@ -20,38 +20,62 @@ class TrustedLauncherTests(unittest.TestCase):
         ledger = AuditLedger(Path(tmp) / "launcher.jsonl")
         return key, ledger
 
-    def test_agent_scoped_mount_requires_an_agent_identity(self):
-        """The `agents` allowlist was documentation only: authorize() never
-        looked at it, so narrowing a mount to one agent changed no runtime
-        decision. Launching an agent-scoped mount without an identity must now
-        fail closed rather than silently ignoring the allowlist."""
+    def test_grant_for_an_agent_scoped_mount_needs_an_identity(self):
+        """The identity lives in the signed grant, so it must be supplied when
+        the grant is minted -- which only Joe's machine can do."""
         with tempfile.TemporaryDirectory() as tmp:
-            key, ledger = self._env(tmp)
-            grant = issue_grant("terraform", 30, key_path=key,
-                                out_dir=Path(tmp) / "grants")
+            key, _ = self._env(tmp)
             with self.assertRaises(LaunchDenied) as caught:
-                authorize("terraform", grant, key_path=key, ledger=ledger)
+                issue_grant("terraform", 30, key_path=key,
+                            out_dir=Path(tmp) / "grants")
             self.assertIn("--agent is required", str(caught.exception))
 
-    def test_agent_absent_from_the_allowlist_is_denied(self):
+    def test_grant_cannot_be_minted_for_a_non_allowlisted_agent(self):
         with tempfile.TemporaryDirectory() as tmp:
-            key, ledger = self._env(tmp)
-            grant = issue_grant("terraform", 30, key_path=key,
-                                out_dir=Path(tmp) / "grants")
+            key, _ = self._env(tmp)
             for identity in ("jeos_life_architect", "apex_systems_blacksmith",
                              "not_an_agent"):
                 with self.subTest(agent=identity):
                     with self.assertRaises(LaunchDenied) as caught:
-                        authorize("terraform", grant, key_path=key,
-                                  ledger=ledger, agent=identity)
-                    self.assertIn("not on this mount's allowlist",
-                                  str(caught.exception))
+                        issue_grant("terraform", 30, key_path=key,
+                                    out_dir=Path(tmp) / "grants",
+                                    agent=identity)
+                    self.assertIn("is not on", str(caught.exception))
+
+    def test_caller_cannot_claim_an_identity_it_was_not_granted(self):
+        """The whole point of signing the identity. An earlier version read it
+        from a CLI flag, so any holder of a valid grant could assert Agent 007."""
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            grant = issue_grant("terraform", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_chief_of_staff")
+            with self.assertRaises(LaunchDenied) as caught:
+                authorize("terraform", grant, key_path=key, ledger=ledger,
+                          agent="apex_systems_blacksmith")
+            self.assertIn("grant authorizes", str(caught.exception))
+
+    def test_editing_the_identity_in_a_grant_breaks_its_signature(self):
+        """The agent field is inside the HMAC payload, so tampering is caught by
+        the signature check rather than by trusting the file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            grant = issue_grant("azure", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_chief_of_staff")
+            body = json.loads(grant.read_text())
+            body["agent"] = "apex_systems_blacksmith"
+            tampered = Path(tmp) / "tampered.json"
+            tampered.write_text(json.dumps(body))
+            with self.assertRaisesRegex(LaunchDenied, "signature invalid"):
+                authorize("azure", tampered, key_path=key, ledger=ledger)
 
     def test_denied_identity_is_recorded_in_the_ledger(self):
         with tempfile.TemporaryDirectory() as tmp:
             key, ledger = self._env(tmp)
             grant = issue_grant("azure", 30, key_path=key,
-                                out_dir=Path(tmp) / "grants")
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_chief_of_staff")
             with self.assertRaises(LaunchDenied):
                 authorize("azure", grant, key_path=key, ledger=ledger,
                           agent="jeos_energy_director")
@@ -65,13 +89,13 @@ class TrustedLauncherTests(unittest.TestCase):
             self.assertEqual(denials[-1]["detail"]["agent"],
                              "jeos_energy_director")
 
-    def test_allowlisted_agent_with_a_valid_grant_is_authorized(self):
+    def test_signed_identity_authorizes_and_is_logged(self):
         with tempfile.TemporaryDirectory() as tmp:
             key, ledger = self._env(tmp)
             grant = issue_grant("terraform", 30, key_path=key,
-                                out_dir=Path(tmp) / "grants")
-            spec = authorize("terraform", grant, key_path=key, ledger=ledger,
-                             agent="apex_chief_of_staff")
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_chief_of_staff")
+            spec = authorize("terraform", grant, key_path=key, ledger=ledger)
             self.assertIn("hashicorp/terraform-mcp-server", " ".join(spec["command"]))
             entries = [
                 json.loads(line)
@@ -81,6 +105,22 @@ class TrustedLauncherTests(unittest.TestCase):
             granted = [e for e in entries if e["event"] == "launch_authorized"]
             self.assertEqual(granted[-1]["detail"]["agent"],
                              "apex_chief_of_staff")
+
+    def test_agent_scoped_mounts_all_require_a_grant(self):
+        """A non-wildcard mount that skipped grants would fall back to an
+        unauthenticated caller-supplied identity. This invariant keeps the
+        signed path the only path for every agent-scoped mount."""
+        import tomllib
+        with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
+            for mount in tomllib.load(source)["mounts"]:
+                if "*" in mount.get("agents", []):
+                    continue
+                with self.subTest(mount=mount["name"]):
+                    self.assertTrue(
+                        mount.get("require_grant"),
+                        f"{mount['name']} is agent-scoped but grant-free, so its "
+                        "identity would be unauthenticated",
+                    )
 
     def test_wildcard_mount_still_launches_without_an_agent(self):
         """governance is agents = ["*"]; requiring an identity there would break
@@ -108,7 +148,8 @@ class TrustedLauncherTests(unittest.TestCase):
     def test_tampered_expired_and_reused_grants_are_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             key, ledger = self._env(tmp)
-            grant_path = issue_grant("civil3d", 30, key, Path(tmp), now=1_000_000)
+            grant_path = issue_grant("civil3d", 30, key, Path(tmp), now=1_000_000,
+                                     agent="apex_chief_of_staff")
 
             tampered = json.loads(grant_path.read_text())
             tampered["mount"] = "github"
@@ -122,18 +163,17 @@ class TrustedLauncherTests(unittest.TestCase):
 
             # civil3d is agent-scoped, so the allowlist check now applies to it
             # too: an identity is required even with a valid grant.
-            spec = authorize("civil3d", grant_path, key, ledger, now=1_000_060,
-                             agent="apex_chief_of_staff")
+            spec = authorize("civil3d", grant_path, key, ledger, now=1_000_060)
             self.assertEqual(spec["name"], "civil3d")
             with self.assertRaisesRegex(LaunchDenied, "already consumed"):
-                authorize("civil3d", grant_path, key, ledger, now=1_000_120,
-                          agent="apex_chief_of_staff")
+                authorize("civil3d", grant_path, key, ledger, now=1_000_120)
             self.assertEqual(ledger.verify(), [])
 
     def test_grant_for_wrong_mount_is_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             key, ledger = self._env(tmp)
-            grant_path = issue_grant("filesystem", 30, key, Path(tmp), now=2_000_000)
+            grant_path = issue_grant("filesystem", 30, key, Path(tmp), now=2_000_000,
+                                     agent="apex_chief_of_staff")
             with self.assertRaisesRegex(LaunchDenied, "is for 'filesystem'"):
                 authorize("civil3d", grant_path, key, ledger, now=2_000_060)
 

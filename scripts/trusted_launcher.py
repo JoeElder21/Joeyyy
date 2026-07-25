@@ -10,13 +10,14 @@ not an assumption.
 
 Usage (Joe, on the machine that will run the mount):
 
-    python scripts/trusted_launcher.py grant --mount civil3d --minutes 30
-    python scripts/trusted_launcher.py launch --mount civil3d --grant <file> \
+    python scripts/trusted_launcher.py grant --mount civil3d --minutes 30 \
         --agent apex_chief_of_staff
+    python scripts/trusted_launcher.py launch --mount civil3d --grant <file>
 
-Launch is refused unless --agent appears in that mount's `agents` allowlist in
-config/mcp_mounts.toml (mounts allowing "*" are exempt). Every denial is
-recorded with the rejected identity.
+The authorized identity is signed into the grant, so a caller cannot claim an
+identity it was not granted -- forging one needs the signing key. It is checked
+against that mount's `agents` allowlist in config/mcp_mounts.toml (mounts
+allowing "*" are exempt). Every denial is recorded with the rejected identity.
 
 Mounts marked `require_grant = true` in config/mcp_mounts.toml refuse to
 launch without a valid grant. Read-only mounts (e.g. governance) launch
@@ -73,14 +74,37 @@ def _sign(key: bytes, payload: dict) -> str:
 def issue_grant(
     mount: str, minutes: int, key_path: Path = DEFAULT_KEY_PATH,
     out_dir: Path | None = None, now: float | None = None,
+    agent: str | None = None,
 ) -> Path:
-    """Create a signed, single-use grant file for one mount."""
+    """Create a signed, single-use grant file for one mount and one identity.
+
+    The agent is part of the signed payload. A caller cannot claim an identity
+    it was not granted, because forging one requires the signing key -- which
+    lives outside the repository and only exists on Joe's machine. An earlier
+    version read the identity from a CLI flag at launch time, which any caller
+    holding a valid grant could set to anything.
+    """
     mounts = _load_mounts()
     if mount not in mounts:
         raise LaunchDenied(f"unknown mount {mount!r}")
+
+    allowed = mounts[mount].get("agents", [])
+    if "*" not in allowed:
+        if agent is None:
+            raise LaunchDenied(
+                f"mount {mount!r} is agent-scoped; --agent is required when "
+                f"minting the grant (allowed: {', '.join(allowed) or 'none'})"
+            )
+        if agent not in allowed:
+            raise LaunchDenied(
+                f"agent {agent!r} is not on {mount!r}'s allowlist "
+                f"({', '.join(allowed) or 'none'})"
+            )
+
     now = now if now is not None else time.time()
     payload = {
         "mount": mount,
+        "agent": agent,
         "issued_at": int(now),
         "expires_at": int(now + minutes * 60),
         "nonce": secrets.token_hex(16),
@@ -119,10 +143,11 @@ def authorize(
 ) -> dict:
     """Fail-closed authorization. Returns the mount spec or raises LaunchDenied.
 
-    `agent` is the identity the mount is being launched for. It is checked
-    against the mount's `agents` allowlist, which is the executable half of
-    `packet_only_no_direct_connectors`: before this check the allowlist was
-    documentation only, so narrowing it changed no runtime decision.
+    For a grant-gated mount the authoritative identity is the one signed into
+    the grant; `agent` is only an optional cross-check and a mismatch is refused.
+    The allowlist is the executable half of `packet_only_no_direct_connectors`:
+    it was documentation only until this check existed, and then briefly relied
+    on a caller-supplied flag any grant holder could set to anything.
     """
     ledger = ledger or AuditLedger(DEFAULT_LEDGER)
     mounts = _load_mounts()
@@ -134,8 +159,8 @@ def authorize(
         ledger.append("launch_denied", detail)
         return LaunchDenied(f"launch of {mount!r} denied: {reason}")
 
-    def check_agent(spec: dict) -> None:
-        """Enforce the mount's `agents` allowlist.
+    def check_agent(spec: dict, identity: str | None) -> None:
+        """Enforce the mount's `agents` allowlist against a *signed* identity.
 
         Ordered after the grant check on purpose: the Joe-signed grant is the
         human authority to start anything at all, and the allowlist is the scope
@@ -145,14 +170,14 @@ def authorize(
         allowed = spec.get("agents", [])
         if "*" in allowed:
             return
-        if agent is None:
+        if identity is None:
             raise deny(
-                "mount is agent-scoped; --agent is required so the allowlist "
-                f"can be enforced (allowed: {', '.join(allowed) or 'none'})"
+                "mount is agent-scoped; the grant must carry a signed agent "
+                f"identity (allowed: {', '.join(allowed) or 'none'})"
             )
-        if agent not in allowed:
+        if identity not in allowed:
             raise deny(
-                f"agent {agent!r} is not on this mount's allowlist "
+                f"agent {identity!r} is not on this mount's allowlist "
                 f"({', '.join(allowed) or 'none'})"
             )
 
@@ -161,7 +186,10 @@ def authorize(
         raise deny("mount is not registered; unlisted mounts are unreachable")
 
     if not spec.get("require_grant"):
-        check_agent(spec)
+        # Only wildcard mounts may skip a grant, so there is no unauthenticated
+        # identity to trust here. test_agent_scoped_mounts_all_require_a_grant
+        # keeps that invariant true.
+        check_agent(spec, agent)
         ledger.append(
             "launch_authorized",
             {"mount": mount, "agent": agent, "grant": "not-required"},
@@ -173,7 +201,10 @@ def authorize(
         grant = json.loads(Path(grant_path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise deny(f"grant unreadable: {error}") from error
-    payload = {k: grant.get(k) for k in ("mount", "issued_at", "expires_at", "nonce")}
+    payload = {
+        k: grant.get(k)
+        for k in ("mount", "agent", "issued_at", "expires_at", "nonce")
+    }
     if not key_path.exists():
         raise deny("no signing key exists; only Joe's machine can mint grants")
     expected = _sign(key_path.read_bytes(), payload)
@@ -186,10 +217,19 @@ def authorize(
         raise deny("grant expired")
     if payload["nonce"] in _consumed_nonces(ledger):
         raise deny("grant already consumed (single-use)")
-    check_agent(spec)
+
+    # The identity that counts is the one inside the signature, never a value
+    # the caller supplied. A passed --agent is only a cross-check.
+    signed_agent = payload["agent"]
+    if agent is not None and agent != signed_agent:
+        raise deny(
+            f"grant authorizes {signed_agent!r}, but launch claimed {agent!r}"
+        )
+    check_agent(spec, signed_agent)
+
     ledger.append(
         "launch_authorized",
-        {"mount": mount, "agent": agent, "nonce": payload["nonce"],
+        {"mount": mount, "agent": signed_agent, "nonce": payload["nonce"],
          "expires_at": payload["expires_at"]},
     )
     return spec
@@ -201,20 +241,29 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("grant", help="Mint a signed one-time grant (Joe only).")
     g.add_argument("--mount", required=True)
     g.add_argument("--minutes", type=int, default=30)
+    g.add_argument("--agent",
+                   help="Identity this grant authorizes. Signed into the grant, "
+                        "so it cannot be changed at launch. Required for any "
+                        "mount whose agents list is not ['*'].")
     l = sub.add_parser("launch", help="Launch a mount under grant control.")
     l.add_argument("--mount", required=True)
     l.add_argument("--grant", type=Path)
     l.add_argument("--agent",
-                   help="Identity to launch for; must appear in the mount's "
-                        "agents allowlist. Required unless the mount allows '*'.")
+                   help="Optional cross-check. The authoritative identity is "
+                        "the one signed into the grant; if this is supplied it "
+                        "must match, otherwise the launch is refused.")
     l.add_argument("--dry-run", action="store_true",
                    help="Verify authorization without executing.")
     args = parser.parse_args(argv)
 
     if args.cmd == "grant":
-        path = issue_grant(args.mount, args.minutes)
+        try:
+            path = issue_grant(args.mount, args.minutes, agent=args.agent)
+        except LaunchDenied as denial:
+            print(json.dumps({"granted": False, "error": str(denial)}))
+            return 1
         print(json.dumps({"grant": str(path), "mount": args.mount,
-                          "minutes": args.minutes}))
+                          "agent": args.agent, "minutes": args.minutes}))
         return 0
 
     try:
