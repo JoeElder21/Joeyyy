@@ -842,6 +842,25 @@ That is shape (a) — fixing the instance and missing the class — **inside the
 
 **What these two say together.** Every fail-open this round was introduced by a fix for a fail-open, and each reproduced a failure shape already written down in this record. The checklist is not the problem — both shapes were on it. The problem is that the checklist is applied to the *reported* defect and not to the *repair*, and a repair is new code with the same standing as any other. Reviewing one's own fix against the list before pushing is now part of the working procedure, not an afterthought.
 
+### Automated review, twenty-third pass — two findings, two fixed
+
+**Both were documents claiming a control runs when it does not** — the same class as the pre-commit overstatement two rounds earlier, in two places that overstatement did not reach.
+
+**The README described the enforcement point as active.** `scripts/policy_enforcement.py` was listed as "the single policy-enforcement point **evaluated immediately before tool execution**: eight rules … in one call a caller cannot partially perform." `enforce()` appears only in its own module and its tests. This record has said so plainly since the eleventh pass, and the README told the opposite story to anyone reading the repository map first — that eight controls are running when none are.
+
+Corrected to say it is built, tested, and unwired. The accompanying test derives the claim from the actual call sites rather than banning the phrase outright, so the stronger wording becomes permissible again the moment the wiring lands instead of leaving the document pessimistic afterwards.
+
+**`task validate` omitted the lint steps it stands in for.** `CONTRIBUTING.md` presents it as the alternative to the manual sequence, and that sequence ends with `ruff check` and `ruff format --check` — so the advertised shortcut passed while the same tree failed the required CI lint job.
+
+**That aggregate-vs-hand-run divergence has now occurred three times**, in both directions: the mount verifier was made strict in the aggregate and left permissive by hand, then strict by hand and left permissive in the aggregate; and the formatter was added to three documents *and* this file's `lint` task while `validate` — the command people actually run — was missed. The eighteenth pass recorded that fix as covering "four places, not the one reported". It was four of five.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| README claimed the gate runs before tool execution | **Correct — P2** | Described as built-and-unwired; the test reads the call sites, so the claim re-enables itself when true. |
+| `task validate` skipped lint and format | **Correct — P2** | Chained in. A test now derives every required step from the manual sequence, so a step added to one and not the other fails. |
+
+**Why a checklist entry did not catch the second one.** "Fixing the reported instance and missing the class" was on the list and was applied — the eighteenth pass deliberately swept for the formatter across documents and found four. The sweep covered *documents*, and `task validate` is a command definition. **The class was scoped to the file type where the instance was found, not to the property being fixed.** The property is "anything a contributor is told to run"; that set includes taskipy tasks, pre-commit hooks, and CI jobs as well as prose. The test added here is derived from the manual sequence rather than enumerating a list of places, which is the shape that does not need a sweep to stay complete.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

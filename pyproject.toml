@@ -1,5 +1,13 @@
 [tool.taskipy.tasks]
-validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python scripts/verify_mcp_mounts.py --strict && python -m unittest discover -s tests -v"
+# Includes lint. `task validate` is advertised in CONTRIBUTING.md as the
+# alternative to the full manual sequence, and that sequence ends with
+# `ruff check` and `ruff format --check` -- so a shortcut omitting them
+# passes locally and fails the required CI lint job. This is the same
+# aggregate-vs-hand-run divergence recorded twice already: the mount
+# verifier was made strict in one place and left permissive in the other,
+# and the formatter was added to three documents and this file's `lint`
+# task while `validate` -- the command people actually run -- was missed.
+validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python scripts/verify_mcp_mounts.py --strict && ruff check . && ruff format --check . && python -m unittest discover -s tests -v"
 test = "python -m unittest discover -s tests -v"
 # Both, because CI runs both: `ruff check` does not verify formatting, so a
 # `task lint` that stops there passes locally and fails the required

@@ -397,7 +397,7 @@ python scripts/validate_specialist_corps.py
 python -m unittest discover -s tests -v
 
 # Via taskipy (adds the runtime-stack audit)
-task validate      # privacy + corps + runtime stack + tests
+task validate      # privacy + corps + runtime stack + mounts + lint + format + tests
 task test
 task autogen-preflight
 

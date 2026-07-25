@@ -247,6 +247,74 @@ class IssueFormEnforceabilityTests(unittest.TestCase):
                     )
 
 
+class AggregateShortcutTests(unittest.TestCase):
+    """The advertised shortcut must cover the sequence it stands in for."""
+
+    def test_task_validate_covers_the_documented_manual_sequence(self):
+        # `task validate` is presented in CONTRIBUTING.md as the alternative to
+        # running the manual sequence, so a step in that sequence and missing
+        # from the shortcut means the shortcut passes while CI fails.
+        #
+        # This divergence has now appeared three times: the mount verifier was
+        # made strict in the aggregate and left permissive by hand, then strict
+        # by hand and permissive in the aggregate; and the formatter was added
+        # to three documents and the `lint` task while `validate` -- the command
+        # people actually run -- was missed. Derived from pyproject rather than
+        # restated, so a step added to one and not the other fails here.
+        validate = ""
+        for line in PYPROJECT.read_text(encoding="utf-8").splitlines():
+            if line.startswith("validate = "):
+                validate = line
+                break
+        self.assertTrue(validate, "no `validate` task is defined")
+        for step in (
+            "privacy_guard.py",
+            "validate_specialist_corps.py",
+            "verify_runtime_stack.py",
+            "verify_mcp_mounts.py --strict",
+            "ruff check",
+            "ruff format --check",
+            "unittest discover -s tests",
+        ):
+            with self.subTest(step=step):
+                self.assertIn(
+                    step,
+                    validate,
+                    f"`task validate` is advertised as the full sequence but omits {step}",
+                )
+
+
+class UnwiredComponentTests(unittest.TestCase):
+    """A component with no call sites may not be described as active."""
+
+    def test_the_readme_does_not_claim_enforce_runs_before_tools(self):
+        # `enforce()` appears only in its own module and its tests, so the
+        # consolidated gate constrains nothing at runtime. The README described
+        # it as "evaluated immediately before tool execution", which tells an
+        # operator that eight controls are running when none are.
+        #
+        # Asserted against the actual call sites so the claim becomes sayable
+        # again the moment it becomes true, rather than staying pessimistic
+        # after the wiring lands.
+        callers = []
+        for path in sorted((ROOT / "scripts").glob("*.py")) + sorted(
+            (ROOT / "runtime").glob("*.py")
+        ):
+            if path.name == "policy_enforcement.py":
+                continue
+            if "enforce(" in path.read_text(encoding="utf-8"):
+                callers.append(path.name)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        if callers:
+            return  # wired: the stronger claim is now permitted
+        self.assertNotIn(
+            "evaluated immediately before tool execution",
+            readme,
+            "enforce() has no call sites, so the README must not describe it as running",
+        )
+        self.assertIn("not yet wired", readme)
+
+
 class ContributorSurfaceTests(unittest.TestCase):
     """A public repository needs a stated boundary, not an implied one."""
 
