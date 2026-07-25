@@ -24,6 +24,7 @@ execution) is activation-gated and never called here.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,19 @@ from scripts.agent_runtime import (
 from scripts.packet_guard import PacketGuard
 
 ROOT = Path(__file__).resolve().parents[1]
+
+TELEMETRY_OPT_OUTS = {
+    # crewAI ships opt-out-by-default telemetry that POSTs spans to
+    # telemetry.crewai.com. Mission data is APEX/JEOS content and must not
+    # leave the runtime, so these are set before crewai is imported — the
+    # library reads them at import time. setdefault, so an explicit
+    # environment decision by Joe still wins.
+    "CREWAI_DISABLE_TELEMETRY": "true",
+    "CREWAI_TELEMETRY_OPT_OUT": "true",
+    "OTEL_SDK_DISABLED": "true",
+}
+for _name, _value in TELEMETRY_OPT_OUTS.items():
+    os.environ.setdefault(_name, _value)
 
 try:  # degrade cleanly when the runtime stack is not installed
     from crewai import Agent as CrewAgent

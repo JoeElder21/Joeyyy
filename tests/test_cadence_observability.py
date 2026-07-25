@@ -73,12 +73,43 @@ class ObservabilityTests(unittest.TestCase):
             self.assertEqual(errors, [])
 
             review = tracer.weekly_review()
-            self.assertEqual(review["total_spans"], 3)
+            self.assertEqual(review["source"], "ledger")
+            self.assertEqual(review["total_records"], 3)
             self.assertEqual(review["by_outcome"]["delegation.admission:admitted"], 1)
             self.assertEqual(review["by_outcome"]["delegation.admission:rejected"], 1)
             self.assertEqual(review["by_outcome"]["specialist.return:valid"], 1)
             self.assertEqual(len(review["rejections"]), 1)
             self.assertIn("legacy", review["rejections"][0]["errors"])
+            # Brain key present, so the audit's APEX/JEOS rows have evidence.
+            self.assertEqual(review["by_brain"]["APEX"], 3)
+
+    def test_review_aggregates_across_separate_runs_and_reports_window(self):
+        """The durable-store fix: a week of separate runs must sum. A review
+        reading the in-process exporter would see only its own run."""
+        from scripts.observability import MissionTracer
+
+        guard = PacketGuard(ROOT)
+        roster = load_roster(ROOT)
+        delegation, _ = _v21_pair()
+        with tempfile.TemporaryDirectory() as tmp:
+            shared = Path(tmp) / "audit.jsonl"
+            first = MissionTracer(AuditLedger(shared))
+            first.traced_admission(deepcopy(delegation), "apex_war_architect", roster, guard)
+            # A separate tracer stands in for a later, separate run.
+            second = MissionTracer(AuditLedger(shared))
+            later = deepcopy(delegation)
+            later["mission_id"] = "mission-2"
+            later["delegation_id"] = "delegation-2"
+            second.traced_admission(later, "apex_war_architect", roster, guard)
+
+            review = second.weekly_review()
+            self.assertEqual(review["total_records"], 2)
+            self.assertEqual(review["by_outcome"]["delegation.admission:admitted"], 2)
+
+            empty = second.weekly_review(since="2099-01-01T00:00:00+00:00")
+            self.assertEqual(empty["total_records"], 0)
+            self.assertEqual(empty["note"], "no records in window")
+            self.assertEqual(empty["window"]["since"], "2099-01-01T00:00:00+00:00")
 
 
 if __name__ == "__main__":
