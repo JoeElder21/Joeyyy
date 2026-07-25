@@ -17,16 +17,46 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { AuthenticationClient, Scopes } from "@aps_sdk/authentication";
-import { DataManagementClient } from "@aps_sdk/data-management";
-import { ModelDerivativeClient } from "@aps_sdk/model-derivative";
-import { OssClient } from "@aps_sdk/oss";
-
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_MODEL = join(ROOT, "testdata", "aps_test_model.dxf");
-const READ_SCOPES = [Scopes.DataRead, Scopes.ViewablesRead];
-// Step 4 needs a sandbox bucket + upload + translate job; still no ACC/hub writes.
-const STEP4_SCOPES = [...READ_SCOPES, Scopes.DataWrite, Scopes.DataCreate, Scopes.BucketCreate, Scopes.BucketRead, Scopes.BucketDelete];
+let authModulePromise;
+let dmModulePromise;
+let mdModulePromise;
+let ossModulePromise;
+let scopeSetsPromise;
+
+function loadAuthModule() {
+  authModulePromise ??= import("@aps_sdk/authentication");
+  return authModulePromise;
+}
+
+function loadDataManagementModule() {
+  dmModulePromise ??= import("@aps_sdk/data-management");
+  return dmModulePromise;
+}
+
+function loadModelDerivativeModule() {
+  mdModulePromise ??= import("@aps_sdk/model-derivative");
+  return mdModulePromise;
+}
+
+function loadOssModule() {
+  ossModulePromise ??= import("@aps_sdk/oss");
+  return ossModulePromise;
+}
+
+async function scopeSets() {
+  const { Scopes } = await loadAuthModule();
+  const read = [Scopes.DataRead, Scopes.ViewablesRead];
+  // Step 4 needs a sandbox bucket + upload + translate job; still no ACC/hub writes.
+  const step4 = [...read, Scopes.DataWrite, Scopes.DataCreate, Scopes.BucketCreate, Scopes.BucketRead, Scopes.BucketDelete];
+  return { read, step4 };
+}
+
+function getScopeSets() {
+  scopeSetsPromise ??= scopeSets();
+  return scopeSetsPromise;
+}
 
 function credentials() {
   const { APS_CLIENT_ID: id, APS_CLIENT_SECRET: secret } = process.env;
@@ -51,6 +81,7 @@ function record(step, name, ok, detail) {
 
 async function token(scopes) {
   const { id, secret } = credentials();
+  const { AuthenticationClient } = await loadAuthModule();
   const auth = new AuthenticationClient();
   const t = await auth.getTwoLeggedToken(id, secret, scopes);
   return t.access_token;
@@ -58,11 +89,12 @@ async function token(scopes) {
 
 // Step 2 — two-legged auth via @aps_sdk/authentication.
 async function step2() {
-  const accessToken = await token(READ_SCOPES);
+  const scopes = (await getScopeSets()).read;
+  const accessToken = await token(scopes);
   const ok = typeof accessToken === "string" && accessToken.length > 20;
   record(2, "two-legged token obtained", ok, {
     token_sha256_prefix: createHash("sha256").update(accessToken).digest("hex").slice(0, 12),
-    scopes: READ_SCOPES,
+    scopes,
   });
   return ok;
 }
@@ -78,6 +110,7 @@ async function step3() {
       "APS_SANDBOX_HUB_ID and APS_SANDBOX_ACCESS_TOKEN are required after explicit authorization for a personally owned sandbox hub.");
     return false;
   }
+  const { DataManagementClient } = await loadDataManagementModule();
   const dm = new DataManagementClient();
   // Keep the sensitive-token assignment out of source-shaped text so the
   // repository privacy guard continues to reject real credential assignments.
@@ -94,11 +127,12 @@ async function step3() {
 
 // Step 4 — OSS upload of the synthetic test model + Model Derivative translate.
 async function step4() {
-  const accessToken = await token(STEP4_SCOPES);
+  const accessToken = await token((await getScopeSets()).step4);
   const modelPath = DEFAULT_MODEL;
   // A unique, harness-owned transient bucket prevents an operator supplied
   // bucket from redirecting this upload to a shared or production location.
   const bucketKey = `aps-gate-${randomUUID().replaceAll("-", "")}`;
+  const { OssClient } = await loadOssModule();
   const oss = new OssClient();
 
   await oss.createBucket("US", { bucketKey, policyKey: "transient" }, { accessToken });
@@ -107,6 +141,7 @@ async function step4() {
   const details = await oss.getObjectDetails(bucketKey, objectKey, { accessToken });
   const urn = Buffer.from(details.objectId).toString("base64url");
 
+  const { ModelDerivativeClient } = await loadModelDerivativeModule();
   const md = new ModelDerivativeClient();
   await md.startJob({ input: { urn }, output: { formats: [{ type: "svf2", views: ["2d", "3d"] }] } }, { accessToken });
 
@@ -129,12 +164,13 @@ async function step4() {
 // Step 5 — element properties via Model Derivative, spot-checked against the
 // generator's own validated ground truth (layer names from make_test_model.py).
 async function step5() {
-  const accessToken = await token(READ_SCOPES);
+  const accessToken = await token((await getScopeSets()).read);
   const urn = evidence.urn;
   if (!urn) {
     record(5, "properties extraction", false, "no harness-owned URN — run the full gate so step 4 creates the synthetic model.");
     return false;
   }
+  const { ModelDerivativeClient } = await loadModelDerivativeModule();
   const md = new ModelDerivativeClient();
   const views = await md.getModelViews(urn, { accessToken });
   const guid = views.data?.metadata?.[0]?.guid;
@@ -161,8 +197,9 @@ function selectedSteps(args) {
 
 async function cleanup() {
   if (!evidence.sandboxObject) return;
-  const accessToken = await token(STEP4_SCOPES);
+  const accessToken = await token((await getScopeSets()).step4);
   const { bucketKey, objectKey } = evidence.sandboxObject;
+  const { OssClient } = await loadOssModule();
   const oss = new OssClient();
   await oss.deleteObject(bucketKey, objectKey, { accessToken });
   await oss.deleteBucket(bucketKey, { accessToken });
