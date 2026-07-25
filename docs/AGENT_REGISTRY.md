@@ -239,7 +239,7 @@ planner runs without the capabilities its instructions assume.
 
 ### Local overrides (intentional divergence from upstream)
 
-`prompt-engineer.agent.md` adds `tools: []`, which upstream omits. Per `.github/instructions/agents.instructions.md`, an omitted `tools` field grants every available built-in and MCP tool. That agent consumes arbitrary user-supplied text, so leaving all tools enabled would let prompt injection reach the repository and connected systems. The override is deliberate and will show as drift when the discovery skills compare against upstream — that is expected, not staleness. Do not "fix" it by reverting to upstream.
+`prompt-engineer.agent.md` adds `tools: []`, which upstream omits. Per `.github/instructions/agents.instructions.md`, an omitted `tools` field grants every available built-in and MCP tool. That agent consumes arbitrary user-supplied text, so leaving all tools enabled would let prompt injection reach the repository and connected systems. The override is deliberate and must be preserved. **Do not treat a drift report on this file as expected.** Each discovery skill normalizes the overrides recorded in `.github/AWESOME-COPILOT.md` out of both sides before comparing every remaining byte, so anything still reported after normalization is a genuine upstream or local change and must be investigated. Dismissing it wholesale is how a real upstream update hides behind a local override. Never "fix" the override itself by reverting to upstream.
 
 ### Not installed, and why
 

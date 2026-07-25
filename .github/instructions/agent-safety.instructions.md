@@ -8,7 +8,15 @@ applyTo: '**'
 ## Core Principles
 
 - **Fail closed**: If a governance check errors or is ambiguous, deny the action rather than allowing it
-- **Policy as configuration**: Define governance rules in YAML/JSON files, not hardcoded in application logic
+<!-- Local override (not upstream): upstream named YAML/JSON specifically.
+     This file applies to `**`, and this repository's governance IS
+     configuration -- in TOML (config/mcp_mounts.toml,
+     config/specialist_corps.toml, both brain rosters), which the runtime
+     reads. Naming only YAML/JSON invited a policy change to create a shadow
+     file in the wrong format beside the registry the runtime actually
+     consumes. The principle is unchanged; the format list now matches
+     reality. See .github/AWESOME-COPILOT.md. -->
+- **Policy as configuration**: Define governance rules in configuration the runtime actually reads — in this repository that is TOML (`config/mcp_mounts.toml`, `config/specialist_corps.toml`, `brains/*/agents.toml`) — not hardcoded in application logic, and never in a parallel file the runtime does not consume
 - **Least privilege**: Agents should have the minimum tool access needed for their task
 - **Append-only audit**: Never modify or delete audit trail entries — immutability enables compliance
 

@@ -7,9 +7,18 @@ until Joe activates it.
 
 Origin: the `task-planner` Copilot agent in the awesome-copilot collection
 declares `terraform`, `Microsoft Docs`, and `azure_get_schema_for_Bicep` in its
-tool list. It was held out of the install (see `.github/AWESOME-COPILOT.md`)
-because those tools had no home in this repository. This build-out gives them
-one.
+tool list, and those tools had no home in this repository.
+
+**Read this before assuming the planner is enabled.** The same change installs
+`task-planner`, but as lifecycle stage `candidate` with those tool names
+**unwired**: this build-out registers mounts for the *native* Agent 007 runtime
+(`scripts/trusted_launcher.py`, `scripts/verify_mcp_mounts.py`), which
+authorizes native APEX agent IDs — not Copilot custom agents. They are separate
+planes. Wiring Copilot-side MCP so the planner can actually reach these tools is
+an open decision recorded under Known gaps below, and is one reason the planner
+remains `candidate`. An earlier version of this paragraph said the tools were
+"held out" and that this build-out "gives them a home", which read as though the
+planner were enabled by it.
 
 ## Mounts
 

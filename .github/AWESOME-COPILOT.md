@@ -14,11 +14,23 @@ Files are copied in verbatim (except where a **local override** is noted below) 
 them up from the standard locations. The vendored files themselves are editor-side authoring aids
 and change no runtime or brain behaviour.
 
-Landing them did change three things elsewhere, none of which this file's inventory covers: the
-Agent 007 contract now activates on either name and carries the `copilot_layer` and
-`mission_protocol` blocks; `scripts/privacy_guard.py` strips documented placeholder snippets; and
-`config/mcp_mounts.toml` gained two grant-gated mounts. See `AGENTS.md`,
-`.github/copilot-instructions.md`, and `docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`.
+Landing them changed four things elsewhere, none of which this file's inventory covers:
+
+1. The Agent 007 contract now activates on either name and carries the `copilot_layer` and
+   `mission_protocol` blocks.
+2. `scripts/privacy_guard.py` strips documented placeholder snippets, and gained connector
+   patterns plus parser-backed value reconstruction.
+3. `config/mcp_mounts.toml` gained two grant-gated mounts, and every mount now declares the
+   environment variables it receives.
+4. **`scripts/trusted_launcher.py` changed the activation contract of every grant-gated
+   mount, including the pre-existing `civil3d`.** The authorized identity is signed into the
+   grant at mint time, lifecycle eligibility is enforced both at mint and again when the
+   grant is consumed, and each mount receives a filtered environment rather than the whole
+   one. An earlier version of this paragraph listed only the first three and so hid a
+   behavioural change to a pre-existing connector workflow from this file's audit trail.
+
+See `AGENTS.md`, `.github/copilot-instructions.md`, and
+`docs/TERRAFORM_AZURE_MCP_BUILDOUT.md`.
 
 ## Instructions — `.github/instructions/`
 

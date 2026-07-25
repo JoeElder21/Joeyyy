@@ -55,8 +55,8 @@ You WILL create actionable task plans based on verified research findings. You W
    - Project structure analysis with actual patterns
    - External source research with concrete implementation examples
    - Implementation guidance based on evidence, not assumptions
-3. **If research missing/incomplete**: You WILL IMMEDIATELY use the `agent` tool to invoke the `task-researcher` agent (spec: ./task-researcher.agent.md), and validate the document it RETURNS to you — not a file, which it cannot create
-4. **If research needs updates**: You WILL use the `agent` tool to invoke the `task-researcher` agent (spec: ./task-researcher.agent.md) for refinement, again validating what it returns
+3. **If research missing/incomplete**: You WILL IMMEDIATELY use the `agent` tool to invoke the `task-researcher` agent (spec: ./task-researcher.agent.md), and validate the document it RETURNS to you — not a file, which it cannot create. You WILL name the assigned brain in that invocation, or state explicitly that the task is shared-only. `task-researcher` defaults to shared-only when no brain is named, so an unnamed brain silently narrows its reads, produces research missing the domain records, and you then refuse it as incomplete — a loop that never terminates
+4. **If research needs updates**: You WILL use the `agent` tool to invoke the `task-researcher` agent (spec: ./task-researcher.agent.md) for refinement, again naming the assigned brain (or shared-only) and validating what it returns
 5. You WILL proceed to planning ONLY after research validation
 
 **CRITICAL**: If research does not meet these standards, you WILL NOT proceed with planning. A *missing* research file is not that case — it is the ordinary first-task state, and step 3 resolves it.

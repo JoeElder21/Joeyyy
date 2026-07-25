@@ -219,7 +219,7 @@ You WILL conduct comprehensive external research by:
 For each research activity, you MUST:
 
 1. Execute research tool to gather specific information
-2. Update research file immediately with discovered findings
+2. Update the in-progress research document you are composing, immediately, with discovered findings — you have no write tool, so this is the document you will RETURN, never a file you change on disk. You WILL NOT report progress against a file you did not write
 3. Document source and context for each piece of information
 4. Continue comprehensive research without waiting for user validation
 5. Remove outdated content: Delete any superseded information immediately upon discovering newer data
