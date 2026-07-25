@@ -1,6 +1,7 @@
 ---
 name: django-backend-expert
 description: Expert Django backend developer specializing in models, views, services, and Django-specific implementations. MUST BE USED for Django backend development tasks. Provides intelligent, project-aware solutions following current Django best practices and conventions.
+tools: LS, Read, Grep, Glob
 ---
 
 # Django Backend Expert
@@ -268,8 +269,14 @@ class OrderService:
             # block, a later failure (save, signal receiver, email, or the commit
             # itself) rolls back the order while the external charge remains, leaving
             # a charged customer with no order and no compensation path.
+            # Enqueue a durable task rather than calling the gateway inline. An
+            # on_commit callback runs in-process with no retry: if capture raises, the
+            # order and the inventory decrement are already committed, the exception
+            # escapes to the caller, and a client retry creates a second order and
+            # decrements stock again. A queued, retryable task keyed on the order id
+            # is the only version of this that reconciles.
             transaction.on_commit(
-                lambda: self._capture_payment_and_finalize(order.pk, user.pk)
+                lambda: capture_payment_task.delay(order.pk, user.pk)
             )
             
             return order
@@ -278,47 +285,61 @@ class OrderService:
             logger.error(f"Order creation failed: {str(e)}")
             raise
     
-    def _capture_payment_and_finalize(self, order_id: int, user_id: int) -> None:
-        """Capture payment after the order transaction has committed.
 
-        Runs outside the atomic block on purpose. Capturing inside it means any later
-        failure - a save, a signal receiver, the confirmation email, or the commit
-        itself - rolls back the order while the external charge stands, leaving a
-        charged customer with no order and no compensation path.
+@shared_task(bind=True, max_retries=5, autoretry_for=(PaymentGatewayUnavailable,),
+             retry_backoff=True, retry_jitter=True)
+def capture_payment_task(self, order_id: int, user_id: int) -> None:
+    """Capture payment for an order that has already committed.
 
-        Must be idempotent: on_commit hooks and task retries are at-least-once, and the
-        gateway must not double-charge. Key the capture on the order id.
-        """
-        order = Order.objects.get(id=order_id)
-        user = User.objects.get(id=user_id)
-        
-        if order.status != Order.Status.PENDING:
-            return  # already captured by an earlier delivery of this hook
-        
-        payment_result = self._process_payment(order, user, idempotency_key=str(order.pk))
-        
-        if not payment_result.success:
-            order.status = Order.Status.PAYMENT_FAILED
-            order.save(update_fields=['status'])
-            self._release_inventory(order)
-            logger.error("Payment failed for order %s: %s", order.pk, payment_result.error_message)
-            return
-        
-        order.status = Order.Status.PAID
-        order.payment_id = payment_result.transaction_id
-        order.save(update_fields=['status', 'payment_id'])
-        
-        # Compensate explicitly if anything after capture fails: the money has moved,
-        # so the order must not be silently rolled back.
-        try:
-            self._send_order_confirmation(order)
-            order_placed.send(sender=self.__class__, order=order)
-        except Exception:
-            logger.exception(
-                "Post-payment step failed for paid order %s; payment %s stands and "
-                "needs reconciliation", order.pk, payment_result.transaction_id
-            )
-            raise
+    Deliberately outside the order transaction. Capturing inside it means a later
+    failure rolls back the order while the external charge stands, leaving a charged
+    customer with no order. Moving it out inverts the risk, so every failure path here
+    must reconcile the pending order rather than let the exception escape.
+
+    Idempotent by construction: delivery is at-least-once, so the status guard and the
+    gateway idempotency key must both be honoured or a retry double-charges.
+    """
+    service = OrderService()
+    order = Order.objects.get(id=order_id)
+    
+    if order.status != Order.Status.PENDING:
+        return  # already captured by an earlier delivery
+    
+    try:
+        payment_result = service._process_payment(
+            order, User.objects.get(id=user_id), idempotency_key=str(order.pk)
+        )
+    except PaymentGatewayUnavailable:
+        raise  # transient: autoretry_for re-queues with backoff, order stays PENDING
+    except Exception:
+        # Terminal failure. Reconcile rather than leaving stock held by a dead order.
+        order.status = Order.Status.PAYMENT_FAILED
+        order.save(update_fields=['status'])
+        service._release_inventory(order)
+        logger.exception("Payment capture failed permanently for order %s", order.pk)
+        return
+    
+    if not payment_result.success:
+        order.status = Order.Status.PAYMENT_FAILED
+        order.save(update_fields=['status'])
+        service._release_inventory(order)
+        logger.error("Payment declined for order %s: %s", order.pk, payment_result.error_message)
+        return
+    
+    order.status = Order.Status.PAID
+    order.payment_id = payment_result.transaction_id
+    order.save(update_fields=['status', 'payment_id'])
+    
+    # The money has moved. A later failure must not roll the order back, so log for
+    # reconciliation and let the task retry only the notification side.
+    try:
+        service._send_order_confirmation(order)
+        order_placed.send(sender=OrderService, order=order)
+    except Exception:
+        logger.exception(
+            "Post-payment step failed for PAID order %s; payment %s stands and needs "
+            "reconciliation", order.pk, payment_result.transaction_id
+        )
     
     def _validate_inventory(self, cart_items: List[Dict]) -> None:
         """Validate product availability"""

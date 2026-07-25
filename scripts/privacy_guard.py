@@ -86,6 +86,9 @@ HIGH_CONFIDENCE_PATTERNS = frozenset(
 # suppress a real employee address or postal address committed to this public repo.
 CONTACT_HEURISTIC_PATTERNS = frozenset({"email address", "street address"})
 # RFC 2606 / RFC 6761 names reserved so they can never route to a real mailbox.
+# Only names that cannot route to a real mailbox. domain.com, email.com, mail.com,
+# acme.com and yourcompany.com are live registered domains that merely look like
+# filler, so they are deliberately NOT here: exempting them would waive a real address.
 RESERVED_EMAIL_DOMAINS = frozenset(
     {
         "example.com",
@@ -97,11 +100,6 @@ RESERVED_EMAIL_DOMAINS = frozenset(
         "invalid",
         "localhost",
         "local",
-        "domain.com",
-        "email.com",
-        "mail.com",
-        "yourcompany.com",
-        "acme.com",
     }
 )
 RESERVED_EMAIL_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
@@ -157,11 +155,22 @@ VENDORED_CREDENTIAL_BARE = re.compile(
 # so requiring word characters alone silently waived them. Detect the expression forms
 # instead - a call, a subscript, an attribute lookup, a trailing separator - and treat
 # everything else as a candidate credential.
+# Anchored on the WHOLE value, not searched inside it. A bare `\.[A-Za-z_]` search
+# matched any dotted token, so every JWT — header.payload.signature — read as an
+# attribute lookup and was waived. A dotted *expression* is identifier.identifier all
+# the way down; a JWT segment is base64url and will not match that shape.
+# Checked BEFORE the expression rule below, because a JWT's base64url segments are
+# themselves valid identifier shapes: header.payload.signature reads as an attribute
+# chain to any structural test. Three long dot-separated segments is a token, not code.
+JWT_LIKE = re.compile(r"\A[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}=*\Z")
+IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
 CODE_EXPRESSION = re.compile(
-    r"[()\[\]{}]"          # call, subscript, literal, or f-string braces
-    r"|\.[A-Za-z_]"        # attribute lookup: obj.attr
-    r"|::|->|=>"           # scope / lambda / arrow operators
-    r"|[,;]\s*\Z"          # trailing separator left by the surrounding code
+    rf"\A(?:"
+    rf"{IDENT}(?:\.{IDENT})+"       # attribute lookup: obj.attr.attr
+    rf"|{IDENT}"                    # bare identifier: a variable or type name
+    rf")[,;]?\Z"
+    r"|[()\[\]{}]"                  # a call, subscript, literal, or f-string brace
+    r"|::|->|=>"                    # scope / lambda / arrow operators
 )
 # Complete placeholder forms. These must match the WHOLE literal, never a substring:
 # a substring test would waive a live credential that merely happens to contain a
@@ -240,6 +249,9 @@ def vendored_credential_findings(text: str) -> list[str]:
             labels.append("credential assignment")
     for match in VENDORED_CREDENTIAL_BARE.finditer(text):
         value = match.group(1)
+        if JWT_LIKE.match(value):
+            labels.append("credential assignment")
+            continue
         if not CODE_EXPRESSION.search(value) and not is_placeholder_value(value):
             labels.append("credential assignment")
     return labels

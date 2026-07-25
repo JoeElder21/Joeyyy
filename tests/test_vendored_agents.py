@@ -35,10 +35,17 @@ def frontmatter_of(path: Path) -> str:
     return match.group(1)
 
 
-def declared_tools(path: Path) -> list[str]:
+def declared_tools(path: Path) -> list[str] | None:
+    """Declared tools, or None when the field is absent.
+
+    None is NOT the same as "no tools". Claude Code treats an omitted `tools:` field
+    as *inherit every tool the main thread has*, Write and Bash included, so an
+    absent field is the most permissive state rather than the most restrictive.
+    Callers must fail on None instead of treating it as an empty allowlist.
+    """
     match = re.search(r"^tools:[ \t]*(.+)$", frontmatter_of(path), re.M)
     if not match:
-        return []
+        return None
     return [tool.strip() for tool in match.group(1).split(",") if tool.strip()]
 
 
@@ -46,6 +53,30 @@ def declared_name(path: Path) -> str:
     match = re.search(r"^name:[ \t]*(\S+)[ \t]*$", frontmatter_of(path), re.M)
     assert match is not None, f"{path} declares no single-token name"
     return match.group(1)
+
+
+REGISTRY = ROOT / "docs" / "AGENT_REGISTRY.md"
+REGISTRY_HEADING = "## Vendored reference corps"
+
+
+class VendoredRegistryConsistencyTests(unittest.TestCase):
+    """Guards the rollback path, which is only correct if it removes both halves.
+
+    The contract tests below skip when the prompt directory is gone, so a rollback that
+    deleted the prompts but left the registry section would otherwise stay green while
+    the registry claimed 33 discoverable candidates that no longer exist.
+    """
+
+    def test_registry_section_and_prompt_directory_agree(self):
+        registered = REGISTRY_HEADING in REGISTRY.read_text(encoding="utf-8")
+        present = VENDORED.is_dir() and any(agent_files())
+        self.assertEqual(
+            registered,
+            present,
+            "docs/AGENT_REGISTRY.md and .claude/agents/awesome-claude-agents/ disagree: "
+            f"registry section {'present' if registered else 'absent'}, prompts "
+            f"{'present' if present else 'absent'}. Roll back or restore both together.",
+        )
 
 
 class VendoredAgentContractTests(unittest.TestCase):
@@ -76,11 +107,27 @@ class VendoredAgentContractTests(unittest.TestCase):
                 )
             seen[name] = path
 
+    def test_every_prompt_declares_an_explicit_tool_allowlist(self):
+        """An omitted `tools:` field inherits everything, including Write and Bash.
+
+        This must be checked separately from the write-capable assertion below: a
+        missing field yields no forbidden *names* to match on, so a test that only
+        inspects declared names passes while the agent silently holds full access.
+        """
+        for path in self.files:
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertIsNotNone(
+                    declared_tools(path),
+                    "no `tools:` field — this inherits all tools rather than none",
+                )
+
     def test_no_vendored_agent_declares_a_write_capable_tool(self):
         """Agent 007 is the sole write-capable agent; vendored prompts stay read-only."""
         for path in self.files:
-            granted = set(declared_tools(path)) & FORBIDDEN_TOOLS
+            tools = declared_tools(path)
             with self.subTest(path=path.relative_to(ROOT)):
+                self.assertIsNotNone(tools, "missing `tools:` grants everything")
+                granted = set(tools) & FORBIDDEN_TOOLS
                 self.assertEqual(
                     granted, set(), f"write-capable tools must be stripped: {granted}"
                 )

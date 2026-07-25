@@ -30,10 +30,12 @@ These are registered in `docs/AGENT_REGISTRY.md` under **Vendored reference corp
 `candidate` status. Three things follow from that, and they are enforced by
 `tests/test_vendored_agents.py` rather than left to convention:
 
-- **Read-only.** Every `Write`, `WriteFile`, `Edit`, `MultiEdit`, and `Bash` grant was
-  stripped on intake, from all 16 prompts that declared one. `AGENTS.md` makes Agent 007
-  the sole write-capable agent and keeps specialists on proposed writes; a vendored
-  prompt is not an exception to that.
+- **Read-only.** All 33 prompts now carry an explicit read-only `tools:` allowlist.
+  Sixteen declared write-capable tools upstream and were stripped; the other seventeen
+  declared **no** `tools:` field at all, which in Claude Code means *inherit every tool
+  the main thread has* — the most permissive state, not the most restrictive — so an
+  explicit allowlist was added to each. `AGENTS.md` makes Agent 007 the sole
+  write-capable agent; a vendored prompt is not an exception to that.
 - **Not a substitute for the registered corps.** They own no brain, hold no memory
   namespace, and are never issued a writer lease. Treat output as a proposal.
 - **Untrusted text.** Many prompts say "MUST BE USED" or "PROACTIVELY". That is upstream
@@ -83,12 +85,21 @@ Re-apply all of the following when syncing, then run
    (`-----…`) where the closing `---` delimiter belonged. The block did not parse,
    so the agent never registered. Normalized to a well-formed `---` … `---` block.
 
-### Tool constraint (16 files)
+### Tool constraint (33 files)
 
-Every write-capable tool was removed from the `tools:` line of all 16 prompts that
-declared one, leaving `LS`, `Read`, `Grep`, `Glob`, and where upstream declared them
-`WebFetch`/`WebSearch`. `orchestrators/team-configurator.md` also had a duplicate `LS`
-entry, dropped at the same time.
+Two distinct problems, both closed:
+
+- **16 prompts declared write-capable tools.** `Write`, `WriteFile`, `Edit`,
+  `MultiEdit`, and `Bash` were removed, leaving `LS`, `Read`, `Grep`, `Glob`, and where
+  upstream declared them `WebFetch`/`WebSearch`. `orchestrators/team-configurator.md`
+  also had a duplicate `LS` entry, dropped at the same time.
+- **17 prompts declared no `tools:` field at all.** An omitted field does not mean "no
+  tools" — Claude Code grants the subagent everything the main thread has, `Write` and
+  `Bash` included. Each now carries an explicit `tools: LS, Read, Grep, Glob`.
+
+`tests/test_vendored_agents.py` asserts the presence of the field separately from its
+contents, because a missing field exposes no forbidden tool *names* to match on and
+would otherwise pass a check that only inspects what is declared.
 
 ### Agent bodies (9)
 
@@ -105,7 +116,7 @@ would mislead anyone acting on them. Each was reported by automated review on th
 | `specialized/python/security-expert.md` | `Fernet.generate_key()` is already base64; encoding it again produced a 44-byte value `algorithms.AES` rejects | Generates 32 raw bytes via `secrets.token_bytes`, encoded once |
 | `specialized/python/web-scraping-expert.md` | `headers` left in `**kwargs` *and* passed explicitly → `TypeError` on every custom-header request | `kwargs.pop('headers', {})` |
 | `specialized/python/ml-data-expert.md` | Appended `nn.Softmax` while training with `CrossEntropyLoss`, which applies log-softmax itself → softmax twice, distorted gradients | Output layer emits logits; added `predict_proba()` for inference |
-| `specialized/django/django-backend-expert.md` | Three: stock decremented without re-checking under `select_for_update` (oversell); payment captured *inside* `transaction.atomic` (charged customer, rolled-back order); success-rate division by zero on a valid empty import | Re-validates under the lock; capture moved to `transaction.on_commit` with an idempotency key and explicit compensation; guarded denominator |
+| `specialized/django/django-backend-expert.md` | Three: stock decremented without re-checking under `select_for_update` (oversell); payment captured *inside* `transaction.atomic` (charged customer, rolled-back order); success-rate division by zero on a valid empty import | Re-validates under the lock; capture moved to a durable retryable Celery task enqueued from `transaction.on_commit`, idempotent on order id, reconciling the pending order on every failure path; guarded denominator |
 
 Everything else is byte-identical to upstream.
 

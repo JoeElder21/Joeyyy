@@ -6,6 +6,7 @@ author: Claude Code Specialist
 tags: [python, performance, optimization, profiling, concurrency, async, memory, cpu, scaling]
 expertise_level: expert
 category: specialized/python
+tools: LS, Read, Grep, Glob
 ---
 
 # Python Performance Expert Agent

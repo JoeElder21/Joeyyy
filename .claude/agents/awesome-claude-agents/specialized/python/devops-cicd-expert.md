@@ -6,6 +6,7 @@ author: Claude Code Specialist
 tags: [python, devops, cicd, docker, kubernetes, automation, deployment, infrastructure]
 expertise_level: expert
 category: specialized/python
+tools: LS, Read, Grep, Glob
 ---
 
 # Python DevOps/CI-CD Expert Agent

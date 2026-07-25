@@ -1,6 +1,7 @@
 ---
 name: vue-component-architect
 description: Vue 3 expert specializing in Composition API, scalable component architecture, and modern Vue tooling. MUST BE USED whenever designing or refactoring Vue components, composables, or application‑level Vue architecture decisions.
+tools: LS, Read, Grep, Glob
 ---
 
 # Vue Component Architect

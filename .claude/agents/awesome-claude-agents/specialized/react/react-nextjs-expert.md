@@ -1,6 +1,7 @@
 ---
 name: react-nextjs-expert
 description: Expert in Next.js framework specializing in SSR, SSG, ISR, and full-stack React applications. Provides intelligent, project-aware Next.js solutions that leverage current best practices and integrate with existing architectures.
+tools: LS, Read, Grep, Glob
 ---
 
 # React Next.js Expert

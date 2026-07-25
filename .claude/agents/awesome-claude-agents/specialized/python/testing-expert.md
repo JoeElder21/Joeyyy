@@ -6,6 +6,7 @@ author: Claude Code Specialist
 tags: [python, testing, pytest, unittest, mocking, coverage, tdd, bdd, automation]
 expertise_level: expert
 category: specialized/python
+tools: LS, Read, Grep, Glob
 ---
 
 # Python Testing Expert Agent

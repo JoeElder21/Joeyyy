@@ -6,6 +6,7 @@ author: Claude Code Specialist
 tags: [python, security, cryptography, authentication, authorization, vulnerability, compliance, secure-coding]
 expertise_level: expert
 category: specialized/python
+tools: LS, Read, Grep, Glob
 ---
 
 # Python Security Expert Agent

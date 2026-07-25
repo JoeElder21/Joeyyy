@@ -228,8 +228,14 @@ unregistered prompt in the discovery path bypasses this registry by construction
 - Validation: `tests/test_vendored_agents.py` enforces the read-only tool constraint,
   unique kebab-case names, parseable frontmatter, and that every delegation target named in
   a vendored prompt resolves to an agent that exists.
-- Rollback: delete `.claude/agents/awesome-claude-agents/` and the guard prefix entry in
-  `scripts/privacy_guard.py`. Nothing else in the repository depends on them.
+- Rollback: delete `.claude/agents/awesome-claude-agents/`, remove **this registry
+  section**, delete `tests/test_vendored_agents.py`, and remove the
+  `DOCUMENTATION_ONLY_PREFIXES` entry plus the vendored-value helpers in
+  `scripts/privacy_guard.py` and their mirror in `tests/test_privacy.py`. All five are
+  required: deleting only the prompt directory leaves this section asserting that 33
+  candidates are discoverable when none are, and the contract test skips itself when the
+  directory is absent, so validation would stay green over an inconsistent state.
+  Nothing else in the repository depends on them.
 
 ## Intake rule
 

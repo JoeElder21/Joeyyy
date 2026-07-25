@@ -6,6 +6,7 @@ author: Claude Code Specialist
 tags: [python, scraping, beautifulsoup, scrapy, selenium, async, data-extraction, automation]
 expertise_level: expert
 category: specialized/python
+tools: LS, Read, Grep, Glob
 ---
 
 # Python Web Scraping Expert Agent
