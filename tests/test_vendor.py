@@ -8,13 +8,12 @@ submodule paths — a widened exclusion would silently stop scanning this
 repository's own files.
 """
 
-from pathlib import Path
 import configparser
 import subprocess
 import unittest
+from pathlib import Path
 
 from scripts.privacy_guard import is_vendored, submodule_paths
-
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SUBMODULES = {
@@ -24,9 +23,7 @@ EXPECTED_SUBMODULES = {
     "vendor/awesome-civil-engineering": (
         "https://github.com/QuantumNovice/awesome-civil-engineering.git"
     ),
-    "vendor/civil-innovation-agent": (
-        "https://github.com/Sun3hine7/civil-innovation-agent.git"
-    ),
+    "vendor/civil-innovation-agent": ("https://github.com/Sun3hine7/civil-innovation-agent.git"),
     "vendor/relay": "https://github.com/AgentWorkforce/relay.git",
 }
 
@@ -36,8 +33,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         parser = configparser.ConfigParser()
         parser.read(ROOT / ".gitmodules", encoding="utf-8")
         declared = {
-            parser.get(section, "path"): parser.get(section, "url")
-            for section in parser.sections()
+            parser.get(section, "path"): parser.get(section, "url") for section in parser.sections()
         }
         self.assertEqual(declared, EXPECTED_SUBMODULES)
 
