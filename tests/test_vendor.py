@@ -358,6 +358,36 @@ class VendorScannerExclusionTests(unittest.TestCase):
     def test_paths_outside_the_repository_are_not_vendored(self) -> None:
         self.assertFalse(is_vendored(Path("/etc/hosts"), ROOT))
 
+    def test_scanners_degrade_rather_than_crash_without_a_git_binary(self) -> None:
+        """No git installed must mean "nothing provable", not a crash.
+
+        subprocess.run raises FileNotFoundError when the binary is absent,
+        regardless of check=False, so a caller inspecting only returncode still
+        dies. These scanners run in minimal containers and extracted archives.
+
+        The fallback is deliberately fail-closed: with no index to consult,
+        nothing can be proven vendored, so everything is scanned. `.gitmodules`
+        is not consulted as a substitute — a stale entry there must never
+        exclude a first-party file from a privacy scan.
+        """
+        import scripts.privacy_guard as guard
+
+        original = guard.subprocess.run
+
+        def no_git(args, *rest, **kwargs):
+            if args and args[0] == "git":
+                raise FileNotFoundError(2, "No such file or directory: 'git'")
+            return original(args, *rest, **kwargs)
+
+        guard.subprocess.run = no_git
+        try:
+            self.assertEqual(gitlink_paths(ROOT), frozenset())
+            self.assertFalse(is_vendored(ROOT / "vendor" / "relay" / "README.md", ROOT))
+            # Falls back to the filesystem walk instead of raising.
+            self.assertTrue(repository_files(ROOT))
+        finally:
+            guard.subprocess.run = original
+
 
 class TrackedSymlinkScanTests(unittest.TestCase):
     """Gitlinks are dropped by index mode, never by probing the filesystem.

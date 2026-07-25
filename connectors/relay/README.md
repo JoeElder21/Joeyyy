@@ -67,5 +67,19 @@ install scripts can be reviewed and run deliberately.
 Before anything in this repository may route work through relay: a configured
 transport boundary, an isolation test against a local relay instance, and a
 recorded writer-lease policy for any resource a relayed agent could mutate.
-Until then this stays a declaration, consistent with the disposition column in
-`docs/EXTERNAL_RUNTIME_REGISTER_2026-07-24.md`.
+Until then this stays a declaration.
+
+**Not yet in the runtime register.** An earlier version of this file claimed
+consistency with a disposition column in
+`docs/EXTERNAL_RUNTIME_REGISTER_2026-07-24.md`, but that register enumerates
+IDs 11–24 and has no relay entry — an auditor following the cross-reference
+would find nothing. The claim is withdrawn rather than papered over.
+
+What *does* apply is that register's operating rule, which is general and not
+per-entry: an external system becomes usable only through a configured MCP
+boundary or an equally restrictive tested proxy, and a package declaration
+never grants access. This connector is consistent with that rule.
+
+Adding the four vendored repositories to the register is registry intake, a
+decision for the repository owner rather than something to be done as a side
+effect of this connector's README. It is recorded as an open item.

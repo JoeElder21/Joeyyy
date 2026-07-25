@@ -31,8 +31,8 @@ git add vendor/<name>
 ```
 
 **Advancing the gitlink is not the whole update.** A submodule's pin is one of
-several records that must move together, and the other three are easy to
-forget:
+several records that must move together, and the rest are easy to forget. For
+`relay` specifically, all five must move or the suite fails:
 
 1. The pin row in the table above — its short SHA is asserted by
    `tests/test_vendor.py`, so a bare gitlink advance fails the suite rather
@@ -40,7 +40,15 @@ forget:
 2. Any declared dependency for that repo — for `relay`, the `agent-relay`
    version in `connectors/relay/package.json`. Leaving it behind means
    auditing newer source while installing the older published CLI.
-3. That dependency's lockfile, regenerated with
+3. `connectors/relay/README.md` — its provenance table carries both the
+   version and the pinned short SHA, and `test_every_relay_provenance_record_agrees`
+   asserts both.
+4. `RELAY_TAG` and `RELAY_TAG_COMMIT` in `tests/test_vendor.py`, which bind
+   the gitlink to the commit the release tag names.
+   `test_relay_gitlink_is_the_documented_release_tag` fails otherwise — and
+   deliberately so: it is the one check here that compares the index against
+   an upstream fact rather than against another record in this repository.
+5. That dependency's lockfile, regenerated with
    `npm --prefix connectors/relay install --package-lock-only --ignore-scripts`,
    plus the Node floor if the new tree demands a higher one. The `--prefix` is
    required: without it, npm operates on the current working directory, so

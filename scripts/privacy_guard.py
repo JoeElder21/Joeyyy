@@ -99,31 +99,38 @@ def submodule_paths(root: Path = ROOT) -> frozenset[str]:
     )
 
 
+def run_git(args: list[str], root: Path = ROOT) -> subprocess.CompletedProcess | None:
+    """Run a git command, returning None when git itself is unavailable.
+
+    Minimal containers and extracted source archives may have no git binary at
+    all. ``subprocess.run`` raises ``FileNotFoundError`` in that case
+    regardless of ``check``, so callers that only inspect ``returncode`` still
+    crash. These scanners must degrade to "nothing provable from the index"
+    rather than take the whole run down with them.
+    """
+    try:
+        return subprocess.run([*args], cwd=root, capture_output=True, check=False)
+    except OSError:
+        return None
+
+
 def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     """Return the repository-relative paths the git index proves are submodules.
 
     Derived from the ``160000`` index mode, never from ``.gitmodules`` text: a
     stale or malformed ``path =`` entry naming a tracked regular directory
     would otherwise exclude first-party files from every scan that consults
-    this. Returns empty outside a git work tree, where no gitlink is provable.
+    this. Returns empty where no gitlink is provable — outside a git work
+    tree, or where git is not installed.
     """
-    probe = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if probe.returncode != 0 or probe.stdout.strip() != "true":
+    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
+    if probe is None or probe.returncode != 0 or probe.stdout.decode().strip() != "true":
         return frozenset()
-    listing = subprocess.run(
-        ["git", "ls-files", "-s", "-z"],
-        cwd=root,
-        capture_output=True,
-        check=True,
-    ).stdout.split(b"\0")
+    listing = run_git(["git", "ls-files", "-s", "-z"], root)
+    if listing is None or listing.returncode != 0:
+        return frozenset()
     names = []
-    for entry in listing:
+    for entry in listing.stdout.split(b"\0"):
         if not entry:
             continue
         metadata, _, name = entry.decode("utf-8").partition("\t")
@@ -165,24 +172,19 @@ def is_vendored(
 
 
 def repository_files(root: Path = ROOT) -> list[Path]:
-    probe = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if probe.returncode == 0 and probe.stdout.strip() == "true":
+    # run_git rather than subprocess.run: with no git binary installed the
+    # latter raises FileNotFoundError regardless of check=False, taking down a
+    # scan that should instead fall back to walking the filesystem.
+    probe = run_git(["git", "rev-parse", "--is-inside-work-tree"], root)
+    listing = None
+    if probe is not None and probe.returncode == 0 and probe.stdout.decode().strip() == "true":
         # -s exposes the index mode so gitlinks can be dropped by mode. Testing
         # the filesystem instead (``is_file()``) would also silently drop a
         # tracked dangling symlink — e.g. ``token.json -> /home/joe/secret`` —
         # which is exactly the kind of entry this scanner exists to catch.
-        tracked = subprocess.run(
-            ["git", "ls-files", "-s", "-z"],
-            cwd=root,
-            capture_output=True,
-            check=True,
-        ).stdout.split(b"\0")
+        listing = run_git(["git", "ls-files", "-s", "-z"], root)
+    if listing is not None and listing.returncode == 0:
+        tracked = listing.stdout.split(b"\0")
         # The index mode is the only evidence used here. `.gitmodules` text is
         # deliberately not consulted: a stale or malformed `path =` entry
         # naming a tracked regular directory would otherwise exclude
