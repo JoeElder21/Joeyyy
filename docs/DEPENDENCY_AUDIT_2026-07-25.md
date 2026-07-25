@@ -148,6 +148,57 @@ reason `click` in the lock was carried forward instead does not apply here.
 The general point is the one worth keeping: **a scanner aimed at a file nobody
 installs is the same failure as a scanner that never runs.** Both report clean.
 
+## Addendum 2 — locks generated for the floating tiers
+
+The first attempt at scanning the floating manifests enabled resolution, so the
+scanner would derive concrete versions from `>=` ranges. It failed in CI:
+
+```
+failed resolution for .../runtime-contracts.txt: rpc error: code = Unavailable
+...
+Total 0 packages affected by 0 known vulnerabilities
+Exit code: 127
+```
+
+**Note what that says.** The resolver was down, so the scan covered nothing — and
+still printed a clean total. It exited 127 rather than 0, so the gate held, but
+the output it produced was indistinguishable from a genuine pass. That is the
+third appearance in this file of the same failure: *a scanner that does not scan
+reports no vulnerabilities.*
+
+Resolved by generating locks instead of resolving at scan time:
+
+| Lock | Source | Packages |
+| --- | --- | --- |
+| `requirements/lock-runtime-root.txt` | `requirements.txt` | resolved set |
+| `requirements/lock-runtime-contracts.txt` | `requirements/runtime-contracts.txt` | resolved set |
+| `requirements/lock-runtime-evaluation.txt` | `requirements/runtime-evaluation.txt` | resolved set |
+
+Generated with `uv pip compile <source> -o <lock> --python-version 3.12
+--no-header`, scanned with `--no-resolve` for the same reason the dated lock is:
+a lock already *is* the resolved set, so the scan needs no third-party service
+and cannot go quiet when one is unavailable.
+
+These are explicitly **not** dated evidence records. They are meant to be
+regenerated, and pins in them may be edited to take a fix — the constraint that
+keeps `click` unfixed in `lock-2026-07-24.txt` does not apply here.
+
+### One triage reassessed as a result
+
+Querying OSV directly for all 92 pinned packages across the three new locks
+returned exactly one finding: `diskcache 5.6.3` (PYSEC-2026-2447, CVSS 5.2).
+
+It was already triaged — but **the stated reason was wrong**, and generating the
+locks is what exposed that. The reason said diskcache sat "in the same undeployed
+tier as chromadb", which held when the only scanned input was the dated lock. The
+evaluation lock shows it resolving into the evaluation tier, a documented
+workstation install path. The finding stays triaged because no upstream fix
+exists, but the justification is now "no fix exists" alone rather than "nothing
+installs it", and `osv-scanner.toml` says so.
+
+A triage reason is a claim like any other. This one was accurate when written and
+became false when the scanned surface widened, without anything failing.
+
 ## Rollback
 
 Additive. Rolling back is deleting this file and the `dependency-audit` job in

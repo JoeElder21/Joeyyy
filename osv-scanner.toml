@@ -35,6 +35,17 @@ while chromadb requires <6.0.0)."""
 [[IgnoredVulns]]
 id = "PYSEC-2026-2447"
 ignoreUntil = 2026-08-25
-reason = """diskcache 5.6.3, CVSS 5.2, no fix available. Transitive, medium, and
-in the same undeployed tier as chromadb. Lowest priority of the three; resolves
-with the same decision."""
+reason = """diskcache 5.6.3, CVSS 5.2, no fix available upstream. Transitive via
+deepeval.
+
+REASSESSED 2026-07-25 and the original reason no longer holds. It said "in the
+same undeployed tier as chromadb", which was true when the only scanned input was
+lock-2026-07-24.txt. Generating requirements/lock-runtime-evaluation.txt showed
+diskcache resolving into the evaluation tier -- a documented workstation install
+path, not an undeployed one. So this is a real exposure on the machine that runs
+evaluations, downgraded only by having no upstream fix and by that machine not
+being internet-exposed.
+
+Kept as a triage rather than a blocker because no version resolves it, but the
+justification is now "no fix exists" alone, not "nothing installs it". Revisit at
+expiry, or sooner if deepeval drops the dependency."""

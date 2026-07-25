@@ -144,22 +144,26 @@ jobs:
             --config=osv-scanner.toml
             --lockfile=requirements.txt:requirements/lock-2026-07-24.txt
             --lockfile=connectors/aps/package-lock.json
-      - name: Resolve and scan the floating install manifests
+      - name: Scan the generated locks for the floating install manifests
         uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:
-          # No --no-resolve: these are the sets CI and the workstation actually
-          # install (`requirements.txt` asks for autogen-agentchat >=0.2.35,<0.3
-          # where the lock pins 0.7.5; runtime-evaluation.txt carries deepeval
-          # and pytest, which appear in no lock at all). Resolution is what
-          # turns a declared range into the versions a `pip install` would
-          # choose, and only those can be checked against advisories.
+          # These are the resolved forms of the sets CI and the workstation
+          # actually install, generated with `uv pip compile` and committed.
           #
-          # This step depends on the resolver being reachable, which the pinned
-          # scan deliberately does not. That is the cost of scanning a file that
-          # has no resolved form of its own; the fix is to generate locks for
-          # these tiers, which is already recorded as open work.
+          # The first attempt scanned the floating manifests directly with
+          # resolution enabled. That failed in CI with
+          # `rpc error: code = Unavailable` -- and reported "0 packages, 0
+          # vulnerabilities" while doing it. A scan that scanned nothing would
+          # have read as clean on a green exit, which is the same failure the
+          # original audit recorded when a missing extractor prefix made the
+          # job exit before scanning.
+          #
+          # Locking removes the dependency on a third-party resolver being up.
+          # `--no-resolve` is correct here for the same reason it is correct for
+          # lock-2026-07-24.txt: a lock already IS the resolved set.
           scan-args: |-
+            --no-resolve
             --config=osv-scanner.toml
-            --lockfile=requirements.txt:requirements.txt
-            --lockfile=requirements.txt:requirements/runtime-contracts.txt
-            --lockfile=requirements.txt:requirements/runtime-evaluation.txt
+            --lockfile=requirements.txt:requirements/lock-runtime-root.txt
+            --lockfile=requirements.txt:requirements/lock-runtime-contracts.txt
+            --lockfile=requirements.txt:requirements/lock-runtime-evaluation.txt
