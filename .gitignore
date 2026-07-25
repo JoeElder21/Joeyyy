@@ -27,3 +27,6 @@ brains/apex/memory/*
 !brains/apex/memory/README.md
 brains/jeos/memory/*
 !brains/jeos/memory/README.md
+
+# Node vendored dependencies (connectors)
+node_modules/

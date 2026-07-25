@@ -48,6 +48,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/BRAIN_CADENCE_RUNBOOK.md` — daily, weekly, and monthly brain-specific orchestration.
 - `docs/SPECIALIST_ACCEPTANCE_TESTS.md` — static, shadow, activation, and value gates.
 - `docs/ECOSYSTEM_REPO_ANALYSIS.md` — ranked external-repository analysis and build/absorb/skip verdicts.
+- `docs/FRAMEWORK_INTEGRATION_PROGRAM.md` — framework integration sequence, AutoGen-first implementation, deployment gates, and Google Drive publication record.
+- `docs/AUTOGEN_INTEGRATION.md` — bounded Microsoft AutoGen runtime-adapter contract, validation, and Drive-record handoff.
+- `runtime/autogen_orchestrator.py` — optional AutoGen `ConversableAgent`/`GroupChatManager` cadence adapter; requires a verified host runtime.
 - `docs/FRONTIER_REPO_SCAN_2026-07-24.md` — proactive frontier scan: adoption candidates, absorption patterns, and the FakeGit intake-hardening finding.
 - `docs/INTEGRATION_BUILDOUT_2026-07-24.md` — runtime integration record: installed stack tiers, registered workstation deployments, flagged items, and first build tickets.
 - `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`) and the resolved version lock.
@@ -73,7 +76,8 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/trusted_launcher.py` — user-signed, one-time launch grants for write-capable mounts; denial paths proven by tests.
 - `docs/CIVIL3D_FIRST_WRITE_TEST.md` — the separately-approved synthetic disposable DWG first-write protocol.
 - `config/dream_team_roster.toml` — dream-team charter modes: 40 roles registered 2026-07-24 on Joe's instruction as modes of the ten v2.1 specialists, per his roles-as-modes decision.
-- `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation.
+- `runtime/` — executable governance: the lifecycle gate engine (`lifecycle.py`, stdlib-pure) and its LangGraph state machine (`lifecycle_graph.py`) with a hard human checkpoint before activation; the cadence engine (`cadence.py`) building validated delegation plans from the brain manifests plus the real TICKET-005 hygiene sweep, and its Prefect scheduling layer (`cadence_flow.py`); the writer-lease registry and serialized mutation admission (`writer_lease.py`) with Celery per-key queues (`lease_queue.py`); the graphiti memory-trial harness (`memory_trial.py`).
+- `docs/RECONCILIATION_2026-07-24.md` — cross-stream ownership record: canonical homes for lifecycle/cadence/leases, ticket-4 absorption, memory-layer decision rule, drift locks.
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/ADK_SAMPLES_ABSORPTION.md` — google/adk-samples absorption record: nine patterns absorbed, eight dropped as already-built, two observability defects fixed.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
@@ -84,13 +88,15 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `templates/specialist-handoff.md` — human-readable specialist packet.
 - `templates/weekly-agent-audit.md` — weekly ecosystem review.
 - `scripts/validate_specialist_corps.py` — honest static and synthetic v2.1 packet validation.
+- `runtime/autogen_groupchat.py` — legacy planning/prototype adapter; governed runtime callers use `runtime/autogen_orchestrator.py`.
+- `requirements-runtime.txt` — opt-in runtime integration dependency set.
 - `tests/test_agent_contract.py` — contract validation.
 - `tests/test_specialist_corps.py` — roster, isolation, schema, privacy, and registry validation.
 - `tests/test_local_validation.py` — validates the harness result and its no-runtime claims.
 
 ## Validation
 
-Run:
+Repository validation and the optional AutoGen adapter require Python 3.11 or 3.12. Run:
 
 ```bash
 python scripts/privacy_guard.py
@@ -98,7 +104,9 @@ python scripts/validate_specialist_corps.py
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the same checks on pushes to `main` and pull requests.
+For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. The dependency uses Microsoft's official `autogen-agentchat` distribution and remains pinned to the legacy 0.2 API. This repository does not contain model configuration or connector credentials.
+
+GitHub Actions validates Python 3.11 and 3.12, installs the pinned adapter dependency, and runs the same checks plus a no-model AutoGen lifecycle smoke test on pushes to `main` and pull requests.
 
 The harness parses the configuration and validates synthetic v2.1 packets and fail-closed boundary probes. It does not invoke named agents, call connectors, complete real missions, or prove output quality.
 
