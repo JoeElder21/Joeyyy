@@ -308,17 +308,13 @@ def _sign(key: bytes, payload: dict) -> str:
 
 
 def issue_grant(
-<<<<<<< HEAD
     mount: str,
     minutes: int,
     key_path: Path = DEFAULT_KEY_PATH,
     out_dir: Path | None = None,
     now: float | None = None,
-=======
-    mount: str, minutes: int, key_path: Path = DEFAULT_KEY_PATH,
-    out_dir: Path | None = None, now: float | None = None,
-    agent: str | None = None, ledger: AuditLedger | None = None,
->>>>>>> refs/remotes/origin/main
+    agent: str | None = None,
+    ledger: AuditLedger | None = None,
 ) -> Path:
     """Create a signed, single-use grant file for one mount and one identity.
 
@@ -636,12 +632,12 @@ def authorize(
 
     ledger.append(
         "launch_authorized",
-<<<<<<< HEAD
-        {"mount": mount, "nonce": payload["nonce"], "expires_at": payload["expires_at"]},
-=======
-        {"mount": mount, "agent": signed_agent, "nonce": payload["nonce"],
-         "expires_at": payload["expires_at"]},
->>>>>>> refs/remotes/origin/main
+        {
+            "mount": mount,
+            "agent": signed_agent,
+            "nonce": payload["nonce"],
+            "expires_at": payload["expires_at"],
+        },
     )
     return spec
 
@@ -700,32 +696,24 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("grant", help="Mint a signed one-time grant (Joe only).")
     g.add_argument("--mount", required=True)
     g.add_argument("--minutes", type=int, default=30)
-<<<<<<< HEAD
-    launch = sub.add_parser("launch", help="Launch a mount under grant control.")
-    launch.add_argument("--mount", required=True)
-    launch.add_argument("--grant", type=Path)
-    launch.add_argument(
-        "--dry-run", action="store_true", help="Verify authorization without executing."
+    g.add_argument(
+        "--agent",
+        help="Identity this grant authorizes. Signed into the grant, "
+             "so it cannot be changed at launch. Required for any "
+             "mount whose agents list is not ['*'].",
     )
-    args = parser.parse_args(argv)
-
-    if args.cmd == "grant":
-        path = issue_grant(args.mount, args.minutes)
-        print(json.dumps({"grant": str(path), "mount": args.mount, "minutes": args.minutes}))
-=======
-    g.add_argument("--agent",
-                   help="Identity this grant authorizes. Signed into the grant, "
-                        "so it cannot be changed at launch. Required for any "
-                        "mount whose agents list is not ['*'].")
     l = sub.add_parser("launch", help="Launch a mount under grant control.")
     l.add_argument("--mount", required=True)
     l.add_argument("--grant", type=Path)
-    l.add_argument("--agent",
-                   help="Optional cross-check. The authoritative identity is "
-                        "the one signed into the grant; if this is supplied it "
-                        "must match, otherwise the launch is refused.")
-    l.add_argument("--dry-run", action="store_true",
-                   help="Verify authorization without executing.")
+    l.add_argument(
+        "--agent",
+        help="Optional cross-check. The authoritative identity is "
+             "the one signed into the grant; if this is supplied it "
+             "must match, otherwise the launch is refused.",
+    )
+    l.add_argument(
+        "--dry-run", action="store_true", help="Verify authorization without executing."
+    )
     args = parser.parse_args(argv)
 
     if args.cmd == "grant":
@@ -740,10 +728,17 @@ def main(argv: list[str] | None = None) -> int:
         # tools, because nothing downstream mediates individual tool calls.
         # Leaving that to be inferred from `purpose` asks Joe to sign a
         # blast radius he was never shown.
-        print(json.dumps({"grant": str(path), "mount": args.mount,
-                          "agent": args.agent, "minutes": args.minutes,
-                          "authorizes": _grant_scope(args.mount)}))
->>>>>>> refs/remotes/origin/main
+        print(
+            json.dumps(
+                {
+                    "grant": str(path),
+                    "mount": args.mount,
+                    "agent": args.agent,
+                    "minutes": args.minutes,
+                    "authorizes": _grant_scope(args.mount),
+                }
+            )
+        )
         return 0
 
     try:
@@ -754,29 +749,23 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"authorized": False, "error": str(denial)}))
         return 1
     if args.dry_run:
-<<<<<<< HEAD
         print(
             json.dumps(
                 {
                     "authorized": True,
                     "mount": args.mount,
+                    # The identity that was actually authorized, which for
+                    # the documented launch command comes from the signed
+                    # grant rather than the optional --agent flag. Echoing
+                    # args.agent printed null in exactly the case dry-run
+                    # exists to evidence.
+                    "agent": authorized.get("agent"),
+                    "agent_source": authorized.get("agent_source"),
                     "command": spec["command"],
                     "dry_run": True,
                 }
             )
         )
-=======
-        print(json.dumps({"authorized": True, "mount": args.mount,
-                          # The identity that was actually authorized, which for
-                          # the documented launch command comes from the signed
-                          # grant rather than the optional --agent flag. Echoing
-                          # args.agent printed null in exactly the case dry-run
-                          # exists to evidence.
-                          "agent": authorized.get("agent"),
-                          "agent_source": authorized.get("agent_source"),
-                          "command": spec["command"],
-                          "dry_run": True}))
->>>>>>> refs/remotes/origin/main
         return 0
     return subprocess.call(spec["command"], cwd=str(ROOT), env=mount_env(spec))
 

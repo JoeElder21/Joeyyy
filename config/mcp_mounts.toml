@@ -10,7 +10,6 @@
 # server in-container and list its tools with no credentials.
 # activation = "..."     -> what unlocks the mount when credentials or a
 # workstation are required.
-<<<<<<< HEAD
 # expected_tools = [...] -> the tools this mount must actually offer. A
 # completed handshake proved only that a process started; verification
 # reported success whatever list_tools() returned, including an empty one.
@@ -22,7 +21,6 @@
 # is a new capability reaching the whole corps unreviewed. Set it where this
 # repository owns the server and the list is the full contract; leave it off
 # where the list is the subset we depend on from an upstream release.
-=======
 # env = [...]            -> the ONLY variables the launcher forwards to this
 # mount. Anything not listed is withheld, including variables the server reads
 # with a silent default, so a mount must declare every one it depends on.
@@ -30,7 +28,6 @@
 # launcher also forwards proxy and CA-bundle variables. Kept off by default:
 # a proxy URL can carry credentials, and a purely local mount has no use for
 # one.
->>>>>>> refs/remotes/origin/main
 
 [[mounts]]
 name = "governance"
@@ -54,7 +51,8 @@ expected_tools = [
 [[mounts]]
 name = "filesystem"
 require_grant = true
-<<<<<<< HEAD
+grant_scope = "Full read/write on every path the server is started against. A grant does not narrow it to a subtree."
+network = true
 # Version-pinned. `npx -y @modelcontextprotocol/server-filesystem` with no
 # `@<version>` fetches and executes whatever the registry currently serves, so
 # an unchanged commit could run different code on every CI run and on Joe's
@@ -74,11 +72,6 @@ expected_tools = [
   "read_text_file",
   "write_file",
 ]
-=======
-grant_scope = "Full read/write on every path the server is started against. A grant does not narrow it to a subtree."
-network = true
-command = ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
->>>>>>> refs/remotes/origin/main
 agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
 purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
 verify_offline = true

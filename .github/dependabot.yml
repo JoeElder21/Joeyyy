@@ -46,7 +46,7 @@ updates:
     groups:
       aps-sdk:
         patterns: ["@aps_sdk/*"]
-      npm-other:
+      aps-other:
         patterns: ["*"]
         exclude-patterns: ["@aps_sdk/*"]
     commit-message:

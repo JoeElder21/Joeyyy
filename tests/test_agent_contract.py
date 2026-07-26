@@ -46,25 +46,15 @@ class AgentContractTests(unittest.TestCase):
         self.assertTrue(self.instructions.strip())
 
     def test_activation_contract(self):
-<<<<<<< HEAD
         self.assert_phrases(
             [
                 "<identity_and_activation>",
                 'When Joe says "Activate Agent 007"',
-                '"Agent 007 activated."',
+                '"Agent 007 activated. Awesome Copilot layer active."',
                 "Do not require a second invocation",
                 "operating mode, not a claim of omniscience",
             ]
         )
-=======
-        self.assert_phrases([
-            "<identity_and_activation>",
-            'When Joe says "Activate Agent 007"',
-            '"Agent 007 activated. Awesome Copilot layer active."',
-            "Do not require a second invocation",
-            "operating mode, not a claim of omniscience",
-        ])
->>>>>>> refs/remotes/origin/main
 
     def test_activation_is_bidirectional_with_the_copilot_layer(self):
         """Either name must bring up both layers; neither may be a reduced mode."""
@@ -98,7 +88,6 @@ class AgentContractTests(unittest.TestCase):
         # read-only (asserted per-agent in test_specialist_corps).
         self.assertEqual(self.agent["sandbox_mode"], "workspace-write")
         self.assertNotIn("approval_policy", self.agent)
-<<<<<<< HEAD
         self.assert_phrases(
             [
                 "<delegated_authority>",
@@ -108,6 +97,9 @@ class AgentContractTests(unittest.TestCase):
                 "edit authorized external systems",
                 "commit, and push code",
                 "Do not ask Joe for per-action approval",
+                "final permit or agency submission",
+                "scheduled-task creation or deletion",
+                "modification of Separation governance",
             ]
         )
 
@@ -115,35 +107,12 @@ class AgentContractTests(unittest.TestCase):
         self.assert_phrases(
             [
                 "<agent_community>",
-                "full registered corps",
+                "smallest evidence-justified team",
                 "delegation packet",
                 "one designated writer",
                 "Reconcile disagreements using evidence",
             ]
         )
-=======
-        self.assert_phrases([
-            "<delegated_authority>",
-            "send messages and emails",
-            "calendar events",
-            "complete, or reorganize tasks",
-            "edit authorized external systems",
-            "commit, and push code",
-            "Do not ask Joe for per-action approval",
-            "final permit or agency submission",
-            "scheduled-task creation or deletion",
-            "modification of Separation governance",
-        ])
-
-    def test_agent_community_contract(self):
-        self.assert_phrases([
-            "<agent_community>",
-            "smallest evidence-justified team",
-            "delegation packet",
-            "one designated writer",
-            "Reconcile disagreements using evidence",
-        ])
->>>>>>> refs/remotes/origin/main
         self.assertTrue(PROTOCOL_PATH.is_file())
 
     def test_registry_and_new_agent_intake(self):
@@ -471,12 +440,9 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
         import re
 
         # Recorded, not tolerated: each entry is a known gap with an owner.
-        # Resolve with:
-        #   gh api repos/actions/checkout/git/ref/tags/v4 --jq .object.sha
-        UNPINNED_PENDING_RESOLUTION = {
-            "actions/checkout@v4",
-            "actions/setup-python@v5",
-        }
+        # actions/checkout@v4 and actions/setup-python@v5 were here; both are
+        # now SHA-pinned in every workflow (resolved during main-branch merge).
+        UNPINNED_PENDING_RESOLUTION: set[str] = set()
 
         workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
         self.assertTrue(workflows, "no workflows found; test is vacuous")

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-=======
-from pathlib import Path
 import os
->>>>>>> refs/remotes/origin/main
 import unittest
 from pathlib import Path
 

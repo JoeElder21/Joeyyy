@@ -6,12 +6,6 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
-<<<<<<< HEAD
-import tempfile
-import tomllib
-import unittest
-from pathlib import Path
-=======
 import json
 import os
 from pathlib import Path
@@ -21,7 +15,6 @@ import tempfile
 import tomllib
 import unittest
 from unittest import mock
->>>>>>> refs/remotes/origin/main
 
 from scripts.agent_runtime import CHIEF, AuditLedger, load_roster
 from scripts.jeos_knowledge import GraphAccessDenied, JeosKnowledgeGraph
@@ -257,7 +250,6 @@ class McpMountRegistryTests(unittest.TestCase):
             if not mount.get("verify_offline"):
                 self.assertTrue(mount.get("activation"), mount["name"])
 
-<<<<<<< HEAD
     def test_offline_verifiable_mounts_declare_the_tools_they_must_offer(self):
         # Without a declared contract, verification asserted only that a process
         # started and answered. An offline-verifiable mount is the one case
@@ -299,7 +291,6 @@ class McpMountRegistryTests(unittest.TestCase):
 
         mount = {"name": "filesystem", "expected_tools": ["read_text_file"]}
         self.assertEqual(_verdict(mount, ["read_text_file", "brand_new_tool"]), "verified")
-=======
     def test_infrastructure_mounts_are_apex_locked_and_grant_gated(self):
         """Terraform and Azure touch professional infrastructure, so they must
         never be reachable from a JEOS specialist and never launch ungranted.
@@ -1147,7 +1138,6 @@ class SelectionReportBaselineTests(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("from report_gates import", source)
         self.assertNotIn("def run_gate(", source)
->>>>>>> refs/remotes/origin/main
 
 
 if __name__ == "__main__":

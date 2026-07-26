@@ -8,11 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
-<<<<<<< HEAD
-=======
 import time
-from pathlib import Path
->>>>>>> refs/remotes/origin/main
 import tempfile
 import unittest
 from pathlib import Path
