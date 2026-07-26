@@ -84,6 +84,42 @@ def missing_dependency_note(output: str) -> str:
             "so this checks declarations only)")
 
 
+def static_validation_note(output: str) -> str:
+    """Say when a passing gate exercised nothing live.
+
+    `validate_specialist_corps.py` reports, on every normal build,
+    `connectors_called: false`, `named_agents_invoked: false`,
+    `real_missions_completed: false` and
+    `validation_mode: static_contract_and_synthetic_packet` -- and the row
+    rendered as a bare `passed, "valid": true`. A reader could not tell that no
+    connector was contacted, no named agent ran, and no real mission was
+    completed. The neighbouring gates disclose unprobed mounts and absent
+    packages; this one disclosed the largest scope limit of the three by saying
+    nothing. Same rule, same row: never render an unrun check as a clean one.
+    """
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    unexercised = [
+        label for key, label in (
+            ("connectors_called", "no connector called"),
+            ("named_agents_invoked", "no named agent invoked"),
+            ("real_missions_completed", "no real mission completed"),
+        )
+        if payload.get(key) is False
+    ]
+    mode = payload.get("validation_mode")
+    if not unexercised and not isinstance(mode, str):
+        return ""
+    parts = list(unexercised)
+    if isinstance(mode, str) and mode:
+        parts.append(f"mode: {mode.replace('_', ' ')}")
+    return f" ({'; '.join(parts)})" if parts else ""
+
+
 def failure_detail(completed) -> str:
     """The most informative line available from a failed gate.
 
@@ -174,7 +210,8 @@ def run_gate(script: str) -> str:
     output = completed.stdout.strip()
     if not output:
         return "passed"
-    note = unverified_note(output) + missing_dependency_note(output)
+    note = (unverified_note(output) + missing_dependency_note(output)
+            + static_validation_note(output))
     if '"valid": true' in output:
         checked = re.search(r'"(\w+_checked)":\s*(\d+)', output)
         detail = (f" — {checked.group(2)} {checked.group(1).replace('_', ' ')}"
@@ -252,6 +289,15 @@ def count_tracked_at(ref: str, pattern: str) -> int:
 # which would silently rewrite the report's headline delta to zero and destroy
 # the change evidence it exists to carry.
 PRE_INSTALL_BASELINE = "89a2c1531765355843a1f3ed64ced85cf5d8aed6"
+# The FIRST commit of this installation work. Pinned for one reason: it is the
+# only stable way to tell an upstream tip from this branch. `_merged_upstream_tips`
+# reads every merge's second parent, which is correct while merges bring main
+# INTO this branch -- but once GitHub integrates the PR, that merge's second
+# parent is this branch, so every file the branch added would be counted as
+# having come from elsewhere and the published delta would collapse to zero,
+# in the report whose whole purpose is to be installation evidence. A commit
+# that contains BRANCH_ROOT is this work, not upstream.
+BRANCH_ROOT = "7e2f52418cc8ea6221289d71368c45cf18fc69ff"
 
 
 def _branch_point() -> str:
@@ -287,6 +333,18 @@ def _tracked_set_at(ref: str, suffix: str) -> set[str] | None:
     return {line for line in out.stdout.splitlines() if line.endswith(suffix)}
 
 
+def _contains(commit: str, ancestor: str) -> bool:
+    """Whether `ancestor` is reachable from `commit`."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, commit],
+            cwd=root, capture_output=True, text=True, check=False)
+    except OSError:
+        return False
+    return out.returncode == 0
+
+
 def _merged_upstream_tips() -> list[str]:
     """The main tips this branch has merged in, from the merges' second parents.
 
@@ -296,8 +354,13 @@ def _merged_upstream_tips() -> list[str]:
     report published "adds 32" for a branch that adds 20, in the one document
     meant to serve as installation evidence.
 
-    A merge's second parent is a permanent record of the upstream tip that was
-    merged, so unlike merge-base it does not collapse once this work lands.
+    A merge's second parent is a permanent record of the tip that was merged,
+    unlike merge-base, which collapses. But it is only an UPSTREAM tip while
+    merges run main-into-branch; the integration merge that lands this PR has
+    this branch as its second parent, and counting that would put every file
+    the branch added into "came from elsewhere" and publish a delta of zero --
+    the same erasure, from the other direction. A tip that contains
+    BRANCH_ROOT is this work, so it is excluded.
     """
     root = Path(__file__).resolve().parents[1]
     try:
@@ -308,9 +371,10 @@ def _merged_upstream_tips() -> list[str]:
         return []
     if out.returncode != 0:
         return []
-    return [parts[2] for parts in
-            (line.split() for line in out.stdout.splitlines())
-            if len(parts) >= 3]
+    seconds = [parts[2] for parts in
+               (line.split() for line in out.stdout.splitlines())
+               if len(parts) >= 3]
+    return [tip for tip in seconds if not _contains(tip, BRANCH_ROOT)]
 
 
 MARKDOWN_NOW = count_tracked("*.md")

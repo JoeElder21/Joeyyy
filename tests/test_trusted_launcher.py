@@ -339,6 +339,51 @@ class TrustedLauncherTests(unittest.TestCase):
             self.assertEqual(granted["detail"].get("agent"),
                              "apex_systems_blacksmith")
 
+    def test_a_scalar_allowlist_is_not_a_wildcard(self):
+        """Python string membership made `"*" in "*"` true.
+
+        `agents = "*"` is syntactically valid TOML and a plausible typo, and it
+        was read as a WILDCARD: `issue_grant()` minted a null-identity grant
+        and `authorize()` accepted it, bypassing the identity check and the
+        lifecycle gate together. Any scalar does it -- a string contains every
+        substring of itself -- so this is about the TYPE, not about `*`."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        malformed = {
+            "scalar wildcard": "*",
+            "scalar agent name": "apex_chief_of_staff",
+            "integer": 1,
+            "list holding a blank": ["", "apex_chief_of_staff"],
+            "list holding a non-string": ["apex_chief_of_staff", 2],
+        }
+        for label, agents in malformed.items():
+            spec = {"name": "probe", "agents": agents,
+                    "command": ["true"], "require_grant": True}
+            with tempfile.TemporaryDirectory() as tmp:
+                key, ledger = self._env(tmp)
+                with mock.patch.object(launcher, "_load_mounts",
+                                       lambda spec=spec: {"probe": spec}):
+                    with self.subTest(allowlist=label):
+                        with self.assertRaises(LaunchDenied) as caught:
+                            issue_grant("probe", 30, key_path=key,
+                                        out_dir=Path(tmp) / "grants",
+                                        ledger=ledger)
+                        self.assertIn("allowlist", str(caught.exception))
+                    events = [
+                        json.loads(line)["event"] for line
+                        in ledger.path.read_text(encoding="utf-8").splitlines()
+                        if line.strip()
+                    ]
+                    self.assertEqual(events, ["grant_denied"])
+
+        # A real wildcard mount must still launch without a grant, or this has
+        # broken the one case the wildcard exists for.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, ledger = self._env(tmp)
+            authorize("governance", None, ledger=ledger)
+
     def test_a_structurally_invalid_registry_is_denied_and_audited(self):
         """Valid TOML is not the same as a usable registry.
 

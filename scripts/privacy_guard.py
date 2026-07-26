@@ -48,6 +48,20 @@ PROHIBITED_ARTIFACT_SUFFIXES = {
 # this class ends one: a port, a path, a query, a fragment, a closing quote,
 # whitespace, or the end of the input.
 HOST_END = r"(?=[:/?#\s\"']|$)"
+# A reserved-name exemption additionally requires that the expression STOPS
+# there. An address assigned as a reserved host literal followed by a
+# concatenation operator and a second literal ends the reserved name at its
+# closing quote, satisfying HOST_END, while the real endpoint is assembled from
+# what follows -- the same continuation trick that defeated the placeholder
+# allowlist, one pattern over. An exemption may only apply to a value that
+# nothing continues. (Described rather than written out: this file is scanned
+# by its own patterns, which have now caught eight of my own additions.)
+# Two separate shapes, because a single alternation let the value's OWN
+# closing quote count as a continuation and un-exempted every legitimate
+# reserved host: an operator after an optional closing quote, or a second
+# string literal immediately after this one (implicit concatenation).
+NOT_CONTINUED = (r"(?![\"']?[ \t]*[+%*\\])"
+                 r"(?![\"'][ \t]*[\"'`])")
 # The same idea for a quoted or bare VALUE: an exclusion is only safe when it
 # covers the entire value, not a prefix of one.
 VALUE_END = r"(?=[\s\"',}\]#]|$)"
@@ -70,8 +84,8 @@ PATTERNS = {
         # app.terraform.io.corp -- real private hosts that merely start with an
         # exempt name -- were silently excused. HOST_END requires a port, path,
         # query, fragment, quote, whitespace or end of input to follow.
-        r"(?!app\.terraform\.io" + HOST_END + r")"
-        r"(?!localhost" + HOST_END + r")"
+        r"(?!app\.terraform\.io" + HOST_END + NOT_CONTINUED + r")"
+        r"(?!localhost" + HOST_END + NOT_CONTINUED + r")"
         r"(?!127\.0\.0\.1" + HOST_END + r")"
         r"(?!0\.0\.0\.0" + HOST_END + r")"
         # IPv6 loopback and unspecified, in the bracketed URL form.
@@ -83,8 +97,8 @@ PATTERNS = {
         # domain both passed. RFC 2606 reserves exactly example.com/.net/.org
         # and the .example/.invalid/.test TLDs; nothing else here is reserved,
         # and a vendor's fictional company name is not a reservation.
-        r"(?!(?:[A-Za-z0-9-]+\.)*example\.(?:com|net|org)" + HOST_END + r")"
-        r"(?!\S*\.(?:example|invalid|test)" + HOST_END + r")"
+        r"(?!(?:[A-Za-z0-9-]+\.)*example\.(?:com|net|org)" + HOST_END + NOT_CONTINUED + r")"
+        r"(?!\S*\.(?:example|invalid|test)" + HOST_END + NOT_CONTINUED + r")"
         r"(?!<)"
         # A private installation is just as often an IPv4 literal, a bracketed
         # IPv6 literal, or a single-label intranet name as a dotted FQDN.
@@ -414,8 +428,18 @@ def yaml_reconstructed_values(text: str) -> str:
                 truncated[0] = True
                 continue
             if isinstance(node, yaml.ScalarNode):
-                if path and node.value:
-                    emit(path, node.value)
+                if node.value:
+                    if path:
+                        emit(path, node.value)
+                    else:
+                        # A top-level scalar, or an element of a root sequence,
+                        # has NO key -- and requiring one discarded every
+                        # decoded value in those documents, so an escaped token
+                        # in a bare JSON or YAML string was invisible while the
+                        # unescaped form is caught by the raw scan. The decoded
+                        # text is the finding; the key is not what made it one.
+                        budget[0] -= 1
+                        lines.append(_reconstructed("value", ":", node.value))
                 continue
             # Key the visit on (identity, KEY PATH), not identity alone. An
             # alias composes to the SAME node object, so a mapping first
@@ -1061,10 +1085,22 @@ def _scan_files(
         )
         reconstructions = [value.replace(TRUNCATION_MARKER, "")
                            for value in (yaml_values, toml_values)]
+        # The RAW text is scanned alongside every normalised copy. Each
+        # normaliser is destructive by design -- strip_yaml_node_properties
+        # deletes anchors and tags so the value beneath them can be read -- and
+        # a credential can live in the deleted metadata itself: an anchor NAMED
+        # for a cloud access key matched the raw text and vanished from the
+        # only copy that carried it, while the composed-node reconstruction
+        # emits values, not property spellings. Normalisation may only ADD
+        # readings, never remove one.
         scannable = strip_known_placeholders(
             relative,
-            fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text)))
-            + "\n" + "\n".join(reconstructions))
+            "\n".join([
+                text,
+                fold_toml_multiline(
+                    fold_block_scalars(strip_yaml_node_properties(text))),
+                *reconstructions,
+            ]))
         # A file that declares a parseable format and could not be parsed, or
         # was cut short, has had part of itself matched against nothing. Report
         # that rather than letting the patterns that did run stand in for the
@@ -1138,27 +1174,21 @@ def scan_paths(
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
 
-    # `--` ends option parsing: everything after it is a PATH, whatever it is
-    # named. Without it, a repository file called `--help` handed to this
-    # scanner printed usage and exited 0 -- a green gate that scanned nothing,
-    # from a filename an untrusted contributor chooses. The session template's
-    # changed-file invocation relies on this.
-    if "--" in argv:
+    # `--` ends OPTION parsing; it does not discard the options before it.
+    # Two separate defects met here. Without any separator, a repository file
+    # named `--help` handed to this scanner printed usage and exited 0 -- a
+    # green gate that scanned nothing, from a filename anyone can choose. The
+    # first repair returned early on the literal paths, which then dropped
+    # `--as`, so the documented option-safe form `--as DEST -- <path>` skipped
+    # the destination check that the same call without the separator applies.
+    # Split, parse the options that precede it, and append the literal paths.
+    literal_paths: list[str] = []
+    separated = "--" in argv
+    if separated:
         marker = argv.index("--")
-        options, literal_paths = argv[:marker], argv[marker + 1:]
-    else:
-        options, literal_paths = argv, []
+        argv, literal_paths = argv[:marker], argv[marker + 1:]
 
-    if literal_paths:
-        findings = scan_paths([Path(arg) for arg in literal_paths])
-        if findings:
-            print("\n".join(findings))
-            return 1
-        print(f"Privacy guard passed for {len(literal_paths)} given path(s).")
-        return 0
-
-    argv = options
-    if argv and argv[0] in ("-h", "--help"):
+    if not separated and argv and argv[0] in ("-h", "--help"):
         print(
             "usage: privacy_guard.py [PATH ...] [--as DEST]\n\n"
             "  no arguments  scan every git-tracked text file\n"
@@ -1168,11 +1198,13 @@ def main(argv: list[str] | None = None) -> int:
             "  --as DEST     treat the single given PATH as though it already sat\n"
             "                at repo-relative DEST. Needed to scan a candidate in\n"
             "                a temp directory against the per-file allowlists, so\n"
-            "                intake can run before the file is installed."
+            "                intake can run before the file is installed.\n"
+            "  --            end option parsing; every later argument is a PATH."
         )
         return 0
 
     destinations: dict[Path, Path] = {}
+    destination: Path | None = None
     if "--as" in argv:
         marker = argv.index("--as")
         if marker + 1 >= len(argv):
@@ -1180,14 +1212,18 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         destination = Path(argv[marker + 1])
         argv = argv[:marker] + argv[marker + 2:]
-        if len(argv) != 1:
+
+    given = argv + literal_paths
+    if destination is not None:
+        if len(given) != 1:
             print("--as applies to exactly one PATH")
             return 2
-        destinations[Path(argv[0])] = destination
+        destinations[Path(given[0])] = destination
 
-    if argv:
-        findings = scan_paths([Path(arg) for arg in argv], destinations=destinations)
-        label = f"Privacy guard passed for {len(argv)} given path(s)."
+    if given:
+        findings = scan_paths([Path(arg) for arg in given],
+                              destinations=destinations)
+        label = f"Privacy guard passed for {len(given)} given path(s)."
     else:
         findings = scan_repository()
         label = "Privacy guard passed."

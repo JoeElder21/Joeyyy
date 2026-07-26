@@ -505,6 +505,42 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # nothing about the failure being distinguishable.
         self.assertGreater(report_gates.count_tracked("*.md"), 0)
 
+    def test_the_integration_merge_is_not_read_as_an_upstream_tip(self):
+        """The remedy collapsed in exactly the case its docstring claimed.
+
+        `_merged_upstream_tips` reads every merge's second parent, which is
+        right while merges bring main INTO this branch. Once GitHub integrates
+        the PR, that merge's second parent is this branch — so every file the
+        branch added would count as having come from elsewhere and the
+        published delta would read zero, in the document whose whole purpose is
+        installation evidence. The same erasure the pin was added to prevent,
+        arriving from the other direction."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import report_gates
+        finally:
+            sys.path.pop(0)
+
+        # Every tip counted as upstream must genuinely predate this work.
+        for tip in report_gates._merged_upstream_tips():
+            with self.subTest(tip=tip[:10]):
+                self.assertFalse(
+                    report_gates._contains(tip, report_gates.BRANCH_ROOT),
+                    "a commit containing this branch's first commit is this "
+                    "work, not an upstream tip")
+
+        # HEAD contains BRANCH_ROOT, so a merge whose second parent is HEAD --
+        # which is what the integration merge looks like -- is excluded.
+        self.assertTrue(
+            report_gates._contains("HEAD", report_gates.BRANCH_ROOT),
+            "BRANCH_ROOT must be an ancestor of HEAD or the anchor is wrong")
+        # And the baseline must NOT contain it, or every tip would be excluded
+        # and the delta would over-count again.
+        self.assertFalse(
+            report_gates._contains(report_gates.PRE_INSTALL_BASELINE,
+                                   report_gates.BRANCH_ROOT))
+        self.assertGreater(report_gates.MARKDOWN_ADDED, 0)
+
     def test_the_delta_excludes_work_that_arrived_from_main(self):
         """The headline figure must measure THIS branch, not the merge.
 
@@ -697,6 +733,47 @@ class SelectionReportBaselineTests(unittest.TestCase):
             [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
             cwd=ROOT, capture_output=True, text=True, check=False)
         self.assertEqual(restored.returncode, 0, restored.stdout[-400:])
+
+    def test_the_corps_row_discloses_that_nothing_live_ran(self):
+        """The largest scope limit of the three gates disclosed nothing.
+
+        `validate_specialist_corps.py` reports, on every normal build, that no
+        connector was called, no named agent invoked and no real mission
+        completed — and the row rendered as a bare `passed, "valid": true`. The
+        neighbouring gates already name unprobed mounts and absent packages;
+        this one stayed silent about the biggest limitation, in the document
+        whose stated rule is that an unrun check is never rendered clean."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            from report_gates import run_gate, static_validation_note
+        finally:
+            sys.path.pop(0)
+
+        payload = json.dumps({
+            "valid": True,
+            "connectors_called": False,
+            "named_agents_invoked": False,
+            "real_missions_completed": False,
+            "validation_mode": "static_contract_and_synthetic_packet",
+        })
+        note = static_validation_note(payload)
+        for expected in ("no connector called", "no named agent invoked",
+                         "no real mission completed", "static contract"):
+            with self.subTest(disclosure=expected):
+                self.assertIn(expected, note)
+
+        # A gate that DID exercise these must not carry the note, or it is
+        # boilerplate rather than a measurement.
+        exercised = json.dumps({
+            "valid": True, "connectors_called": True,
+            "named_agents_invoked": True, "real_missions_completed": True,
+        })
+        self.assertEqual(static_validation_note(exercised), "")
+        self.assertEqual(static_validation_note("not json"), "")
+
+        # And the real row must carry it, end to end.
+        row = run_gate("validate_specialist_corps.py")
+        self.assertIn("no connector called", row)
 
     def test_a_failed_json_gate_row_names_the_actual_error(self):
         """These gates print JSON, so the first output line is "{". Taking it

@@ -110,6 +110,26 @@ def _brain_manifest(path: str) -> dict:
         raise ManifestUnavailable(f"{path}: {error}") from error
 
 
+def mount_allowlist(spec: dict, mount: str) -> list[str]:
+    """The mount's `agents` allowlist, or raise ManifestUnavailable.
+
+    `agents = "*"` is syntactically valid TOML and a plausible typo, and
+    Python string membership made `"*" in "*"` true -- so a scalar was read as
+    a WILDCARD, minting a null-identity grant that `authorize()` then accepted,
+    bypassing both the identity check and the lifecycle gate. Any scalar would
+    do it: `"apex_chief_of_staff"` contains no `*`, but it does contain every
+    substring of itself, so a one-character agent name would match too. The
+    field must be a list of non-empty strings before `*` means anything.
+    """
+    declared = spec.get("agents", [])
+    if not isinstance(declared, (list, tuple)) or not all(
+            isinstance(name, str) and name.strip() for name in declared):
+        raise ManifestUnavailable(
+            f"mount {mount!r}: `agents` must be a list of agent names; the "
+            "registry cannot say who is allowed")
+    return list(declared)
+
+
 def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     """The lifecycle stage of a roster specialist, or None if not one.
 
@@ -301,7 +321,12 @@ def issue_grant(
     if mount not in mounts:
         raise refuse(f"unknown mount {mount!r}")
 
-    allowed = mounts[mount].get("agents", [])
+    try:
+        allowed = mount_allowlist(mounts[mount], mount)
+    except ManifestUnavailable as error:
+        raise refuse(
+            f"cannot read the allowlist: {error}. A malformed allowlist is an "
+            "authorization failure, not a wildcard.")
     if "*" not in allowed:
         if agent is None:
             raise refuse(
@@ -445,7 +470,12 @@ def authorize(
         within that authority. Reporting a missing grant first keeps the more
         fundamental refusal the one the caller sees.
         """
-        allowed = spec.get("agents", [])
+        try:
+            allowed = mount_allowlist(spec, mount)
+        except ManifestUnavailable as error:
+            raise deny(
+                f"cannot read the allowlist: {error}. A malformed allowlist "
+                "is an authorization failure, not a wildcard.")
         if "*" in allowed:
             return
         if identity is None:

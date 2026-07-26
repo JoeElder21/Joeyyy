@@ -1620,6 +1620,148 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             with self.subTest(form=label):
                 self.assertIn(secret, fold_toml_multiline(body))
 
+    def test_normalisation_only_adds_readings_never_removes_one(self):
+        """Every normaliser is destructive by design.
+
+        `strip_yaml_node_properties` deletes anchors and tags so the value
+        beneath them can be read -- and a credential can live in the deleted
+        metadata itself. An anchor NAMED for a cloud access key matched the raw
+        text and then vanished from the only copy carrying it, while the
+        composed-node reconstruction emits values, not property spellings. The
+        raw text is now scanned alongside every normalised copy."""
+        akia = "AKIA" + "ABCDEFGHIJKLMNOP"
+        token = "gh" + "p_abcdefghijklmnop"
+        hidden_in_metadata = {
+            "anchor name": "key: &%s benign\n" % akia,
+            "tag name": "key: !%s benign\n" % akia,
+            "anchor on a sequence entry": "- &%s benign\n" % akia,
+            "token as an anchor": "key: &%s benign\n" % token,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, body) in enumerate(hidden_in_metadata.items()):
+                probe = root / f"meta{index}.yaml"
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(case=label):
+                    self.assertTrue(scan_paths([probe], root=root),
+                                    f"{label}: {body!r}")
+
+            # An ordinary anchor is still not a finding, so this is not simply
+            # "flag every anchor".
+            clean = root / "clean.yaml"
+            clean.write_text("key: &shared benign\nother: *shared\n",
+                             encoding="utf-8")
+            self.assertEqual(scan_paths([clean], root=root), [])
+
+    @needs_yaml
+    def test_a_keyless_scalar_is_still_scanned(self):
+        """A document can BE a scalar, and that one had no key.
+
+        Requiring a key path discarded every decoded value in a top-level
+        scalar or a root sequence, so an escaped token in a bare JSON or YAML
+        string was invisible -- while the unescaped form is caught by the raw
+        scan. The decoded text is the finding; the key is not what made it
+        one."""
+        cases = {
+            "json escaped scalar": ("k0.json", '"gh\\u0070_abcdefghijklmnop"\n'),
+            "yaml escaped scalar": ("k1.yaml", '"gh\\x70_abcdefghijklmnop"\n'),
+            "root sequence entry": ("k2.yaml", '- "gh\\x70_abcdefghijklmnop"\n'),
+            "json array entry": ("k3.json", '["gh\\u0070_abcdefghijklmnop"]\n'),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for label, (name, body) in cases.items():
+                probe = root / name
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(case=label):
+                    self.assertTrue(scan_paths([probe], root=root), label)
+
+            for name, body in (("ok.json", '"an ordinary string"\n'),
+                               ("ok.yaml", "- just a list entry\n")):
+                probe = root / name
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(clean=name):
+                    self.assertEqual(scan_paths([probe], root=root), [])
+
+    def test_a_reserved_host_exemption_requires_the_expression_to_stop(self):
+        """The same continuation trick, one pattern over.
+
+        Round 26 stopped an approved PLACEHOLDER being extended by a
+        concatenation operator. The reserved-HOST exemptions had the identical
+        hole: the reserved name ends at its closing quote, satisfying HOST_END,
+        while the real endpoint is assembled from the literal after it."""
+        address = "TFE" + "_ADDRESS"
+        scheme = "https"
+        must_flag = {
+            "concatenated": f'{address} = "{scheme}://example.com" + ".corp.com"',
+            "adjacent literal": f'{address} = "{scheme}://example.com" ".corp.com"',
+            "formatted": f'{address} = "{scheme}://example.com" %% suffix',
+            "loopback continued": f'{address} = "{scheme}://localhost" + ".corp"',
+            "saas continued":
+                f'{address} = "{scheme}://app.terraform.io" + ".corp"',
+            "plain private host": f'{address} = "{scheme}://tfe.clientcorp.com"',
+        }
+        must_be_clean = {
+            "reserved alone": f'{address} = "{scheme}://example.com"',
+            "reserved subdomain": f'{address} = "{scheme}://tfe.example.com"',
+            "reserved tld": f'{address} = "{scheme}://tfe.invalid"',
+            "public saas": f'{address} = "{scheme}://app.terraform.io"',
+            "loopback with port": f'{address} = "{scheme}://localhost:8080"',
+            "unquoted reserved": f"{address} = {scheme}://example.com",
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for group, cases, expected in (("flag", must_flag, True),
+                                           ("clean", must_be_clean, False)):
+                for index, (label, body) in enumerate(cases.items()):
+                    probe = root / f"{group}{index}.py"
+                    probe.write_text(body + "\n", encoding="utf-8")
+                    with self.subTest(case=label, expect=group):
+                        self.assertEqual(
+                            bool(scan_paths([probe], root=root)), expected,
+                            f"{label}: {body}")
+
+    def test_the_option_separator_keeps_the_options_before_it(self):
+        """`--` ends option PARSING; it does not discard the options.
+
+        The first repair returned early on the literal paths, which dropped
+        `--as` -- so the documented option-safe form `--as DEST -- <path>`
+        skipped the destination check that the same call without the separator
+        applies. Both properties have to hold at once: a filename cannot become
+        an option, and an option before the separator still counts."""
+        import contextlib
+        import io
+
+        import scripts.privacy_guard as guard
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            benign = root / "-leading-dash.json"
+            benign.write_text('{"ok": 1}\n', encoding="utf-8")
+
+            # The destination check must apply with and without the separator.
+            for argv in (["--as", "credentials.json", str(benign)],
+                         ["--as", "credentials.json", "--", str(benign)]):
+                captured = io.StringIO()
+                with contextlib.redirect_stdout(captured):
+                    code = guard.main(argv)
+                with self.subTest(argv=" ".join(argv)):
+                    self.assertEqual(code, 1)
+                    self.assertIn("prohibited private filename",
+                                  captured.getvalue())
+
+            # And the round-28 property must still hold.
+            (root / "--help").write_text("harmless\n", encoding="utf-8")
+            planted = "API" + "_KEY" + ' = "' + "an" + 'ActualPrivateCredential"'
+            (root / "leaky.toml").write_text(planted + "\n", encoding="utf-8")
+            captured = io.StringIO()
+            with contextlib.redirect_stdout(captured):
+                code = guard.main(
+                    ["--", str(root / "--help"), str(root / "leaky.toml")])
+            self.assertEqual(code, 1)
+            self.assertIn("credential assignment", captured.getvalue())
+            self.assertNotIn("usage: privacy_guard.py", captured.getvalue())
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 
