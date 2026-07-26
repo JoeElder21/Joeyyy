@@ -17,6 +17,16 @@ __pycache__/
 runtime-memory/
 private-memory/
 brain-memory/
+
+# Hash-chained launcher/audit ledgers: machine-local runtime evidence, not
+# source. Regenerated per machine; publishing them would leak operational
+# activity from a public repository.
+audit/*.jsonl
+
+# Generated report artifacts. privacy_guard.py rejects non-source artifact
+# types and non-UTF-8 files in this public tree, so the PDF stays untracked;
+# scripts/build_awesome_copilot_report.py is the tracked source of truth.
+docs/reports/
 secrets/
 credentials/
 *.sqlite

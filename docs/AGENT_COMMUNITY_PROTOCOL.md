@@ -35,7 +35,7 @@ Machine-valid returns use `schemas/handoff_packet.schema.json`.
 
 ## Coordination rules
 
-- Use the smallest useful team and run independent work in parallel when it improves speed or coverage.
+- Staff each mission from the full registered corps, scaling the team to the mission, and run independent work in parallel when it improves speed or coverage. (Amended 2026-07-24 on Joe's direct instruction, superseding the former smallest-useful-team rule.)
 - Use one designated writer for each file, branch, calendar event, task record, message thread, or external record.
 - Route cross-agent questions and changed requirements through Agent 007.
 - Reconcile disagreements with evidence. Preserve unresolved positions for Joe rather than silently averaging them.

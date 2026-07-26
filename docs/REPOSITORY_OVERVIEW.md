@@ -9,7 +9,7 @@ All-encompassing overview and technical breakdown of this repository, written as
 | Head commit analysed | `2ba3fb2` — Merge PR #25: ADK-sample absorption, observability fixes, vendor telemetry opt-out |
 | Primary language | Python 3.11 / 3.12 (plus Node 18+ for the APS connector) |
 | Scale | 150 tracked files, ~18,900 lines of source, config, schema and docs |
-| Test suite | 243 tests, 0 failures, 28 dependency-gated skips |
+| Test suite | 496 tests, 0 failures, 31 dependency-gated skips. PyYAML is required: without it the privacy guard fails closed and 5 tests fail, by design |
 | Validation | `privacy_guard` PASS; `validate_specialist_corps` PASS (10 contract packets, 10 boundary rejections) |
 
 Every status claim below was read from the repository or produced by running its own tooling, not inferred from the README.
@@ -55,7 +55,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 
 | Term | Meaning |
 | --- | --- |
-| **Agent 007** | Operating alias of `apex_chief_of_staff`. Sole cross-brain agent, sole holder of writer leases while specialists are in shadow, final integrator of every mission. Activated by the literal phrase *"Activate Agent 007"*, answered with exactly *"Agent 007 activated."* |
+| **Agent 007** | Operating alias of `apex_chief_of_staff`. Sole cross-brain agent, sole holder of writer leases while specialists are in shadow, final integrator of every mission. Activated by *"Activate Agent 007"* **or** *"Awesome Copilot"* — one bidirectional trigger — answered with exactly *"Agent 007 activated. Awesome Copilot layer active."* |
 | **Brain** | One of two sealed data domains: **APEX** (professional) or **JEOS** (personal). Every packet, namespace, write target and specialist carries an owner brain. |
 | **Brain lock** | The hard rule that a specialist may read, challenge, hand off to, and write only inside its own brain. Enforced in PacketGuard, the AutoGen orchestrator, the memory gateway and the evidence index — not merely stated in prompts. |
 | **Mirrored class** | One of five functional pairings across the brains: *strategy*, *opportunity/momentum*, *execution/capacity*, *intelligence/reflection*, *systems/automation*. Mirroring is structural only — a mirrored pair shares a class name and nothing else. |
@@ -80,7 +80,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 | `schemas/` | The seven canonical JSON Schemas. Single source of truth for packet structure; Pydantic models are generated from these at import time. | 7 |
 | `runtime/` | **Contract enforcement logic.** Stdlib-pure, CI-provable: lifecycle gates, cadence engine, writer-lease registry, mutation admission. Optional graph/queue/flow layers import lazily. | 10 |
 | `scripts/` | **SDK and service integration.** Governed dispatch bridges, PacketGuard, privacy guard, memory/evidence gateways, MCP server, observability, trusted launcher, validators. | 20 |
-| `tests/` | 24 unittest modules, 243 tests. Dependency-gated tests skip cleanly, so the whole suite runs stdlib-only in ~2 seconds. | 25 |
+| `tests/` | 26 unittest modules, 496 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 27 |
 | `docs/` | Architectural records: protocols, registries, absorption records, build-out guides, migration and reconciliation records. This is where *why* lives. | 29 |
 | `connectors/` | `aps/` — a Node 18+ harness running the Autodesk Platform Services validation gate, with a synthetic DXF test model and its generator. | 7 |
 | `templates/` | Human-readable operating templates: agent intake, project intake, specialist handoff, daily brief, weekly agent audit. | 5 |
@@ -347,7 +347,7 @@ Dependencies are organised into six purpose-named tiers under `requirements/`, e
 
 ### The two root manifests
 
-- **`requirements.txt`** — the *only* file CI installs. It contains exactly one dependency: `autogen-agentchat>=0.2.35,<0.3`, pinned to Microsoft's official distribution and to the legacy AutoGen 0.2 API, gated on Python 3.11–3.12.
+- **`requirements.txt`** — the *only* file CI installs. It contains two entries: `autogen-agentchat>=0.2.35,<0.3`, pinned to Microsoft's official distribution and to the legacy AutoGen 0.2 API and gated on Python 3.11–3.12; and `PyYAML>=6.0`, a **coverage** dependency for `scripts/privacy_guard.py`. The guard reconstructs YAML values through a real parser because six consecutive review rounds found a regex normaliser its grammar walked around; without PyYAML it degrades to those normalisers rather than failing, so the package is required for full coverage, not for the repository to run. CI installs it so the authoritative path is the one exercised.
 - **`requirements-runtime.txt`** — opt-in integrations, installed only for adapters actually enabled in a deployment.
 
 **Every optional dependency is imported lazily.** This is a deliberate, repository-wide pattern. `runtime/cadence_flow.py` has a `_prefect()` accessor; `lease_queue.py` imports Celery inside `make_app()`; `lifecycle_graph.py` imports LangGraph only when built. The consequence: **the entire test suite runs in a stdlib-only environment in about two seconds**, and 28 tests skip cleanly rather than failing. Preserve this when adding any new integration.
@@ -360,7 +360,7 @@ The lock file pins `autogen-agentchat==0.7.5` and `autogen-core==0.7.5`, while `
 
 ## 11. Testing and CI
 
-**243 tests across 24 modules; 0 failures; 28 skipped; ~2.0 seconds** on Python 3.11.
+**496 tests across 26 modules; 0 failures; 31 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent the run reports 48 skips and 5 failures, which is the guard refusing to certify a tree it could not fully read. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
 
 | Module | Tests | Coverage focus |
 | --- | --- | --- |
@@ -584,7 +584,7 @@ The trigger phrase is literal and the response is literal:
 
 ```
 Joe:      Activate Agent 007. <mission>
-Agent:    Agent 007 activated.
+Agent:    Agent 007 activated. Awesome Copilot layer active.
           <infers mission from message + context; begins without a second prompt>
 ```
 
@@ -617,6 +617,6 @@ Agent 007's contract carries a standing instruction: *"Preserve the current reco
 
 ## Summary
 
-Joeyyy is a contract-first, enforcement-backed multi-agent governance system with two sealed data domains and eleven agents, of which one is active. Its distinguishing property is that it refuses to claim capability it cannot demonstrate — and it has 243 tests, a privacy scanner, a fail-closed packet validator and a denial-first launcher to keep that refusal honest.
+Joeyyy is a contract-first, enforcement-backed multi-agent governance system with two sealed data domains and eleven agents, of which one is active. Its distinguishing property is that it refuses to claim capability it cannot demonstrate — and it has 496 tests, a privacy scanner, a fail-closed packet validator and a denial-first launcher to keep that refusal honest.
 
 When working in it: read `AGENTS.md` and `docs/RECONCILIATION_2026-07-24.md` before touching code, keep enforcement in `runtime/` and integration in `scripts/`, move contract + docs + registry + tests as one unit, and never let a change make the system sound more capable than it is.
