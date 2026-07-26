@@ -301,6 +301,23 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 with self.subTest(agent=name, tool=tool):
                     self.assertNotIn(tool, tools_line)
 
+    def test_the_changed_file_scan_survives_an_ordinary_deletion(self):
+        """A mandatory step that cannot pass gets skipped, not fixed.
+
+        `git diff --name-only` lists deleted paths too, so an unstaged deletion
+        handed the scanner a path that no longer exists; it reported the file
+        unreadable and exited non-zero. The front-loaded validation the
+        contract requires after the FIRST edit therefore could not pass at all
+        for the most ordinary edit there is."""
+        template = " ".join(
+            (ROOT / "templates" / "session-start.md").read_text(
+                encoding="utf-8").split())
+        self.assertIn("--diff-filter=d", template)
+        self.assertIn("drops deleted paths", template)
+        # The untracked half must still be present -- the reason the command
+        # exists at all.
+        self.assertIn("--others --exclude-standard", template)
+
     def test_workflow_actions_are_sha_pinned_or_recorded_as_unpinned(self):
         """The vendored CI standard requires full commit-SHA pins.
 

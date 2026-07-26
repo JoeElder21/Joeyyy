@@ -610,6 +610,48 @@ class SelectionReportBaselineTests(unittest.TestCase):
                               "missing": ["crewai", "prefect"]})
         self.assertIn("2 of 20", missing_dependency_note(partial))
 
+    def test_a_grant_scope_must_be_readable_not_merely_truthy(self):
+        """This field is the only blast-radius disclosure before signing.
+
+        The check was a truthiness test, so `1`, `true` and `"   "` all passed
+        while telling Joe nothing at the moment he authorizes a whole-server
+        grant. An unreadable disclosure is worse than none, because it looks
+        like one."""
+        import subprocess
+
+        registry = ROOT / "config" / "mcp_mounts.toml"
+        original = registry.read_text(encoding="utf-8")
+        unusable = {
+            "blank string": 'grant_scope = "   "',
+            "empty string": 'grant_scope = ""',
+            "integer": "grant_scope = 1",
+            "boolean": "grant_scope = true",
+        }
+        try:
+            for label, replacement in unusable.items():
+                lines, replaced = [], False
+                for line in original.splitlines():
+                    if line.startswith("grant_scope") and not replaced:
+                        lines.append(replacement)
+                        replaced = True
+                    else:
+                        lines.append(line)
+                self.assertTrue(replaced, "no grant_scope line to replace")
+                registry.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                completed = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
+                    cwd=ROOT, capture_output=True, text=True, check=False)
+                with self.subTest(value=label):
+                    self.assertNotEqual(completed.returncode, 0, label)
+                    self.assertIn("undeclared grant scope", completed.stdout)
+        finally:
+            registry.write_text(original, encoding="utf-8")
+
+        restored = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
+            cwd=ROOT, capture_output=True, text=True, check=False)
+        self.assertEqual(restored.returncode, 0, restored.stdout[-300:])
+
     def test_the_mount_verifier_fails_an_undeclared_grant_scope(self):
         """The declaration has to be enforced, or it is a convention.
 

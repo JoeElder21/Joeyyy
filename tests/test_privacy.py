@@ -1576,6 +1576,50 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             # path of its own.
             self.assertNotIn("unreadable", report)
 
+    def test_normalisers_stay_linear_on_hostile_lines(self):
+        """A gate that can be stalled is a gate that can be skipped.
+
+        `_TOML_MULTILINE` was unanchored, so its key expression was retried
+        from every character of every line; because the key matches greedily
+        and then has to find `=`, a long identifier-like line backtracked
+        quadratically -- 16,000 characters took over four seconds, so an
+        ordinary sub-2 MB markdown or vendored file could stall intake and CI
+        before either emitted a finding. A TOML assignment always begins a line
+        (inline tables cannot contain newlines), so anchoring is correct as
+        well as linear."""
+        import time
+
+        # Growth must be roughly linear, not quadratic. Absolute timings vary
+        # by machine, so assert the SHAPE: 8x the input must not cost anywhere
+        # near 64x the time.
+        timings = {}
+        for size in (8_000, 64_000):
+            probe = "a" * size + "\n"
+            started = time.time()
+            fold_toml_multiline(probe)
+            timings[size] = time.time() - started
+        self.assertLess(timings[64_000], 2.0,
+                        f"64k of one line took {timings[64_000]:.2f}s")
+
+        # A realistic hostile file: many long non-assignment lines.
+        bulk = ("b" * 4_000 + "\n") * 200
+        started = time.time()
+        fold_toml_multiline(bulk)
+        self.assertLess(time.time() - started, 5.0)
+
+        # Anchoring must not have cost the fold its job.
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        quotes = '"' * 3
+        for label, body in {
+            "bare key": "%s = %s\n%s\n%s\n" % (cred, quotes, secret, quotes),
+            "quoted key": '"%s" = %s\n%s\n%s\n' % (cred, quotes, secret, quotes),
+            "indented": "  %s = %s\n%s\n%s\n" % (cred, quotes, secret, quotes),
+            "literal delimiter": "%s = '''\n%s\n'''\n" % (cred, secret),
+        }.items():
+            with self.subTest(form=label):
+                self.assertIn(secret, fold_toml_multiline(body))
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

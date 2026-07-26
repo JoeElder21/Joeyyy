@@ -250,8 +250,20 @@ _BLOCK_SCALAR_HEADER = re.compile(
 )
 
 
+# Anchored to the start of a line. Unanchored, `_KEY` was retried from every
+# character of every line, and since it matches greedily and then has to find
+# `=`, a long identifier-like line backtracked quadratically: 16,000 characters
+# took over four seconds, so an ordinary sub-2 MB markdown file could stall the
+# intake and CI gates before they emitted anything. A TOML assignment always
+# begins a line (inline tables cannot contain newlines, so a multiline string
+# is never inside one), which makes the anchor correct as well as linear.
 _TOML_MULTILINE = re.compile(
-    r"(?P<key>" + _KEY + r")\s*=\s*"
+    # The optional `-` is a YAML sequence marker: a list of connector entries
+    # writes `- KEY = """..."""`, which is a real shape the fold must still
+    # see. Anchoring without it silently dropped that case -- caught by an
+    # existing test, which is the only reason this anchor did not become a
+    # detection regression.
+    r"(?m)^[ \t]*(?:-[ \t]+)?(?P<key>" + _KEY + r")[ \t]*=[ \t]*"
     r"(?P<q>\"{3}|'{3})(?P<body>[\s\S]*?)(?P=q)"
 )
 
