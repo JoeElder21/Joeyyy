@@ -29,3 +29,20 @@ d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/sp
 # The example has to look like the thing it warns about.
 7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/code-review-generic.instructions.md:stripe-access-token:142
 7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
+
+# --- working-tree fingerprints ---
+#
+# The CI job runs BOTH `gitleaks git` (history) and `gitleaks dir` (the tree),
+# and the two produce DIFFERENT fingerprint forms: history entries carry a
+# commit prefix, working-tree entries do not. Listing only the history form
+# left the `dir .` scan failing with the identical six findings. The line
+# numbers also differ between the two, because history pins the line as it was
+# in that commit and the tree pins it as it is now.
+#
+# Same six placeholders as above, verified at the lines cited.
+.github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
+.github/instructions/code-review-generic.instructions.md:stripe-access-token:142
+.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:461
+.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:462
+.claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:592
+scripts/privacy_guard.py:generic-api-key:330
