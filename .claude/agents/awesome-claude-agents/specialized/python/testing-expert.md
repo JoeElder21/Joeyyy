@@ -79,6 +79,11 @@ I am a specialized Python testing expert with comprehensive knowledge of:
 ```ini
 [tool:pytest]
 minversion = 7.0
+# Sans ceci, pytest-asyncio (mode strict par défaut) ne collecte que les coroutines
+# portant explicitement @pytest.mark.asyncio : les tests d'intégration marqués
+# seulement `integration` sont ignorés ou signalés comme non exécutés, et les fixtures
+# async déclarées avec @pytest.fixture livrent un générateur au lieu d'un client.
+asyncio_mode = auto
 addopts = 
     --strict-markers
     --strict-config
@@ -120,6 +125,7 @@ log_cli_date_format = %Y-%m-%d %H:%M:%S
 **conftest.py** (Global test configuration):
 ```python
 import pytest
+import pytest_asyncio
 import asyncio
 import tempfile
 import shutil
@@ -192,25 +198,27 @@ def db_session(test_db_engine):
     transaction.rollback()
     connection.close()
 
-@pytest.fixture
-def async_db_session():
-    """Async database session fixture"""
+@pytest_asyncio.fixture
+async def async_db_session():
+    """Async database session fixture.
+
+    Must be an *async* fixture that yields the session. A plain `@pytest.fixture`
+    returning `_async_session` injected the async-generator function itself, so every
+    test received a callable instead of an AsyncSession - and teardown never ran.
+    """
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     
-    async def _async_session():
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-        
-        # Create tables
-        from src.database.models import Base
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        
-        async with AsyncSession(engine) as session:
-            yield session
-        
-        await engine.dispose()
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     
-    return _async_session
+    # Create tables
+    from src.database.models import Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    async with AsyncSession(engine) as session:
+        yield session
+    
+    await engine.dispose()
 
 # Redis fixtures
 @pytest.fixture
@@ -1341,6 +1349,7 @@ class TestMutationTesting:
 import factory
 from factory import Faker, SubFactory, LazyAttribute
 from datetime import datetime, timedelta
+from decimal import Decimal
 import random
 from typing import List, Optional
 
@@ -1392,7 +1401,9 @@ class ProductFactory(factory.Factory):
     name = Faker('word')
     description = Faker('text', max_nb_chars=200)
     price = Faker('pydecimal', left_digits=3, right_digits=2, positive=True)
-    cost = LazyAttribute(lambda obj: obj.price * 0.7)  # 70% of price
+    # Decimal * float lève TypeError : `pydecimal` renvoie un Decimal, il faut donc
+    # un Decimal en face plutôt que le littéral flottant 0.7.
+    cost = LazyAttribute(lambda obj: obj.price * Decimal('0.7'))  # 70% of price
     stock = Faker('random_int', min=0, max=100)
     sku = factory.Sequence(lambda n: f"SKU-{n:06d}")
     category = SubFactory(CategoryFactory)
