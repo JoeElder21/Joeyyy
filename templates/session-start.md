@@ -49,7 +49,7 @@ reason is audit evidence; a missing line is a gap.
       asks what is available or has drifted, or reaches a weekly audit
 - [ ] Drift check reported as UNRUN when no fetch-capable tool is verified
 - [ ] Ownership classified (APEX | JEOS | shared | governance | unknown)
-- [ ] Mission staffed from the full registered corps, scaled to the mission,
+- [ ] Mission staffed from the smallest evidence-justified team, scaled to the mission,
       one designated writer per shared resource (AGENTS.md)
 - [ ] Existing contract/registry/tests read before changing them
 - [ ] First meaningful edit made

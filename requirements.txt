@@ -4,12 +4,16 @@
 # Repository tooling and PacketGuard require Python 3.11–3.12.
 # Use Microsoft's official distribution for the legacy AutoGen 0.2 API.
 autogen-agentchat>=0.2.35,<0.3; python_version >= "3.11" and python_version < "3.13"
-# REQUIRED for privacy validation, not optional. scripts/privacy_guard.py
-# reconstructs YAML and JSON values through this parser, and without it every
-# file declaring those formats is reported as an incomplete scan rather than
-# passed -- deliberately, because the alternative was a local gate weaker than
-# CI: fallback regexes cannot decode an escaped credential key, so a bare run
-# on a developer machine approved files CI rejects. Install it before running
-# the guard. The rest of the suite still runs stdlib-only; the parser-dependent
-# tests skip.
+# REQUIRED, not optional, for two independent reasons.
+#
+# scripts/privacy_guard.py reconstructs YAML and JSON values through this
+# parser; without it every file declaring those formats is reported as an
+# incomplete scan rather than passed -- deliberately, because fallback regexes
+# cannot decode an escaped credential key, so a bare run on a developer machine
+# would approve files CI rejects.
+#
+# tests/test_claude_agents.py also needs it to validate the generated
+# .claude/agents/*.md frontmatter with a real parser. A hand-rolled check
+# previously accepted `description: Agent 007: Joe ...`, which is invalid YAML,
+# so the shipped chief-of-staff projection could not have been loaded.
 PyYAML>=6.0

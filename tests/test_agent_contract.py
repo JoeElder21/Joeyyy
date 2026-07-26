@@ -76,9 +76,9 @@ class AgentContractTests(unittest.TestCase):
             "Unknown ownership means investigate and flag",
         ])
 
-    def test_lare_conflict_is_preserved(self):
-        self.assertIn("Preserve the current recorded LARE ownership conflict", self.instructions)
-        self.assertIn("do not silently choose or merge", self.instructions)
+    def test_lare_amendment_is_applied(self):
+        self.assertIn("Apply the current valid LARE amendment", self.instructions)
+        self.assertIn("record supersession", self.instructions)
 
     def test_delegated_authority_covers_requested_actions(self):
         # Agent 007 is the sole write-capable native agent; specialists stay
@@ -93,12 +93,15 @@ class AgentContractTests(unittest.TestCase):
             "edit authorized external systems",
             "commit, and push code",
             "Do not ask Joe for per-action approval",
+            "final permit or agency submission",
+            "scheduled-task creation or deletion",
+            "modification of Separation governance",
         ])
 
     def test_agent_community_contract(self):
         self.assert_phrases([
             "<agent_community>",
-            "full registered corps",
+            "smallest evidence-justified team",
             "delegation packet",
             "one designated writer",
             "Reconcile disagreements using evidence",
@@ -377,7 +380,7 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
         checklist = " ".join(
             (ROOT / "templates" / "session-start.md").read_text(
                 encoding="utf-8").split())
-        self.assertIn("Mission staffed from the full registered corps",
+        self.assertIn("Mission staffed from the smallest evidence-justified team",
                       checklist)
         self.assertNotIn("if Agent 007 ran it alone", checklist)
         # The general convention must survive -- removing the exception must
@@ -521,9 +524,9 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
         # The duty exists in the contract...
-        self.assertIn("Staff each mission from the full registered corps", agents)
+        self.assertIn("Activate the smallest evidence-justified team", agents)
         # ...so the reusable checklist must be able to record it.
-        self.assertIn("Mission staffed from the full registered corps", checklist)
+        self.assertIn("Mission staffed from the smallest evidence-justified team", checklist)
         self.assertIn("one designated writer per shared resource", checklist)
         # The escape hatch is the template's GENERAL convention -- a recorded
         # skip rather than an omission -- not a special permission attached to
