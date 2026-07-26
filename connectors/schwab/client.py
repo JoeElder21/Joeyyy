@@ -7,10 +7,11 @@ fills and realized gains against current holdings.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
 import time
-from typing import Any, Callable, Iterable, Sequence
 import urllib.parse
+from collections.abc import Callable, Iterable, Sequence
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 from connectors.schwab.config import (
     MARKETDATA_BASE_URL,
@@ -42,7 +43,7 @@ class SchwabError(RuntimeError):
 
 def _iso_millis(moment: datetime) -> str:
     """Schwab's order filters want ISO-8601 with milliseconds and a Z suffix."""
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _chunk(items: Sequence[str], size: int) -> Iterable[Sequence[str]]:
@@ -75,9 +76,7 @@ class SchwabClient:
             if cleaned:
                 query = "?" + urllib.parse.urlencode(cleaned)
         headers = {"Accept": "application/json", **bundle.authorization_header()}
-        response: HttpResponse = send_with_retry(
-            self.transport, "GET", url + query, headers
-        )
+        response: HttpResponse = send_with_retry(self.transport, "GET", url + query, headers)
         if not response.ok:
             raise SchwabError(response.status, url, response.text()[:500])
         return response.json()
@@ -115,7 +114,7 @@ class SchwabClient:
         status: str | None = None,
     ) -> list[dict[str, Any]]:
         """Read recent orders for reconciliation. This does not place orders."""
-        end = datetime.now(timezone.utc)
+        end = datetime.now(UTC)
         payload = self._get(
             f"{TRADER_BASE_URL}/accounts/{account_hash}/orders",
             {
@@ -132,7 +131,7 @@ class SchwabClient:
         lookback_days: int = 30,
         types: str = "TRADE",
     ) -> list[dict[str, Any]]:
-        end = datetime.now(timezone.utc)
+        end = datetime.now(UTC)
         payload = self._get(
             f"{TRADER_BASE_URL}/accounts/{account_hash}/transactions",
             {
@@ -187,7 +186,9 @@ class SchwabClient:
         candles.sort(key=lambda candle: candle.get("datetime", 0))
         return candles
 
-    def market_hours(self, markets: Sequence[str] = ("equity",), on: date | None = None) -> dict[str, Any]:
+    def market_hours(
+        self, markets: Sequence[str] = ("equity",), on: date | None = None
+    ) -> dict[str, Any]:
         """Report whether a market session is open, so a brief can say so."""
         payload = self._get(
             f"{MARKETDATA_BASE_URL}/markets",

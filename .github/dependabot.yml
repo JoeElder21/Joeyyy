@@ -1,0 +1,91 @@
+version: 2
+
+# Grouped weekly updates. Grouping keeps PR volume low enough that each one is
+# actually reviewed rather than rubber-stamped, which matters more here than
+# update latency: every dependency in this repository is an absorption surface.
+#
+# Every ecosystem carries a cooldown, flagged by zizmor's dependabot-cooldown
+# audit on the first run of this file. A compromised release is usually caught
+# and yanked within days, so waiting before adopting a brand-new version is the
+# cheapest defense against the supply-chain class this repository is built to
+# resist (docs/FRONTIER_REPO_SCAN_2026-07-24.md). Majors wait longer: they carry
+# the largest diff and the least review time upstream.
+updates:
+  - package-ecosystem: pip
+    # Both directories. The root holds only `requirements.txt`, which does not
+    # include the tiered manifests -- so watching `/` alone left deepeval,
+    # pytest, mcp, and anthropic outside the update mechanism entirely while
+    # this file claimed Python coverage. Those are the manifests CI and the
+    # workstation actually install, which is the same gap the dependency scan
+    # had before it was pointed at them.
+    directories:
+      - /
+      - /requirements
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      python-runtime:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(python)"
+
+  - package-ecosystem: npm
+    directory: /connectors/aps
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      aps-sdk:
+        patterns: ["@aps_sdk/*"]
+      aps-other:
+        patterns: ["*"]
+        exclude-patterns: ["@aps_sdk/*"]
+    commit-message:
+      prefix: "deps(aps)"
+
+  # The second npm tree, added when the relay connector was declared and left
+  # out of this file -- so `agent-relay` received no update PRs while the
+  # ecosystem block above claimed npm coverage. A declaration-only dependency
+  # still resolves a real transitive graph into
+  # `connectors/relay/package-lock.json`, and that lock is what the
+  # vulnerability scan reads.
+  - package-ecosystem: npm
+    directory: /connectors/relay
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      relay:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(relay)"
+
+  # Workflow actions are SHA-pinned, so this is the mechanism that keeps those
+  # pins current. Without it, pinning trades supply-chain risk for staleness.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(actions)"

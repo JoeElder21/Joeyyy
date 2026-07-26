@@ -5,9 +5,9 @@ and the 2026-07-25 supersessions recorded in
 docs/CONSTITUTION_ADOPTION_2026-07-25.md.
 """
 
-from pathlib import Path
 import tomllib
 import unittest
+from pathlib import Path
 
 from scripts.privacy_guard import gitlink_paths, is_vendored
 
@@ -100,9 +100,7 @@ class ConstitutionCanonicalCopyTests(unittest.TestCase):
             if path == AGENTS_PATH:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
-            title_as_heading = any(
-                line.strip() == CONSTITUTION_TITLE for line in text.splitlines()
-            )
+            title_as_heading = any(line.strip() == CONSTITUTION_TITLE for line in text.splitlines())
             section_hits = sum(heading in text for heading in SECTION_HEADINGS)
             if title_as_heading or section_hits >= 3:
                 carriers.append(str(path.relative_to(ROOT)))
@@ -199,9 +197,7 @@ class ContractCascadeTests(unittest.TestCase):
 
     def test_lare_amendment_cascaded(self):
         self.assertIn("Apply the current valid LARE amendment", self.instructions)
-        self.assertNotIn(
-            "Preserve the current recorded LARE ownership conflict", self.instructions
-        )
+        self.assertNotIn("Preserve the current recorded LARE ownership conflict", self.instructions)
 
     def test_always_gated_list_cascaded(self):
         for phrase in (

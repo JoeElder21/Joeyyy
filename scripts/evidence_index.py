@@ -103,9 +103,7 @@ if LLAMA_INDEX_AVAILABLE:
                 return []
             if self._index is None:
                 self._index = SimpleKeywordTableIndex.from_documents(self._documents)
-            retriever = self._index.as_retriever(
-                retriever_mode="simple", similarity_top_k=top_k
-            )
+            retriever = self._index.as_retriever(retriever_mode="simple", similarity_top_k=top_k)
             nodes = retriever.retrieve(query)
             self._log("index_read", {"agent": agent, "query": query, "hits": len(nodes)})
             return [
@@ -121,8 +119,6 @@ if LLAMA_INDEX_AVAILABLE:
         """Build the governed index set from the namespace registry."""
         registry = registry or DEFAULT_INDEXES
         return {
-            namespace: EvidenceIndex(
-                namespace, spec["brain"], spec["writer"], roster, ledger
-            )
+            namespace: EvidenceIndex(namespace, spec["brain"], spec["writer"], roster, ledger)
             for namespace, spec in registry.items()
         }

@@ -7,8 +7,9 @@ becomes ``None`` and is reported as unknown rather than as zero.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Any
 
 #: Instruments that represent cash sweep or money-market balances rather
 #: than a tradable position with a thesis.
@@ -181,9 +182,7 @@ def parse_position(raw: dict[str, Any]) -> Holding | None:
     market_value = _number(raw, "marketValue") or 0.0
     average_price = _number(raw, "averagePrice", "averageLongPrice", "averageShortPrice")
 
-    unrealized = _number(
-        raw, "longOpenProfitLoss", "shortOpenProfitLoss", "openProfitLoss"
-    )
+    unrealized = _number(raw, "longOpenProfitLoss", "shortOpenProfitLoss", "openProfitLoss")
     if unrealized is None and average_price is not None:
         unrealized = market_value - (average_price * quantity)
 

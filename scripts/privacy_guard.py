@@ -70,12 +70,25 @@ HOST_END = r"(?=[:/?#\s\"']|$)"
 # a bare dot class would have. The placeholder-stripping guard below has
 # treated a dot as a continuation since it was written, so leaving it out here
 # was an inconsistency inside one file, not a judgement about the shape.
-NOT_CONTINUED = (r"(?![\"']?[ \t]*[+%*\\])"
-                 r"(?![\"'][ \t]*[\"'`])"
-                 r"(?![\"']?[ \t]*\.[A-Za-z_])")
+NOT_CONTINUED = (
+    r"(?![\"']?[ \t]*[+%*\\])"
+    r"(?![\"'][ \t]*[\"'`])"
+    r"(?![\"']?[ \t]*\.[A-Za-z_])"
+)
 # The same idea for a quoted or bare VALUE: an exclusion is only safe when it
 # covers the entire value, not a prefix of one.
 VALUE_END = r"(?=[\s\"',}\]#]|$)"
+# VALUE_END allows a quote to follow because every exemption it was written for
+# matches a BARE value and therefore stops just before that value's own closing
+# quote. An exemption whose pattern already consumes its closing quote sits one
+# character further on, and there a following quote can never be the value's
+# own -- it can only open a concatenated literal. Reusing VALUE_END at such a
+# site let `= "{placeholder}""realCredential"` keep the exemption, because the
+# opening quote of the second literal satisfied "the value ended here".
+#
+# Split out rather than tightened in place: removing the quote from VALUE_END
+# itself would break the bare-value sites, which need it.
+QUOTED_VALUE_END = r"(?=[\s,}\]#]|$)"
 LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1"
 PATTERNS = {
     "secret token": re.compile(
@@ -167,7 +180,37 @@ PATTERNS = {
         r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
         r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
         # As above: allow the closing quote of a JSON key before the delimiter.
-        r"[\"']?\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
+        # An f-string interpolation is not a literal secret. A test that probes
+        # this very pattern writes `"{secret}"`, which is exactly eight
+        # characters and so satisfied the 8+ value branch -- the guard flagged
+        # its own fixture and the whole scan failed. Excluded as narrowly as
+        # possible: the value must be a lone `{identifier}` and nothing else, so
+        # a real credential that merely contains a brace is still caught. This
+        # is a false-positive repair, not a relaxation; the test below proves a
+        # genuine secret in the identical shape still trips.
+        #
+        # "and nothing else" was the CLAIM and not the code. The lookahead ended
+        # at the placeholder's closing quote and never asked what came after, so
+        # an assignment that OPENS with a placeholder and then concatenates a
+        # real value -- the shape a template-plus-secret takes -- suppressed the
+        # whole pattern on the strength of its first eight characters. A control
+        # differing only in that prefix was flagged, which is what made it a
+        # fail-open rather than a judgement call. NOT_CONTINUED is the same
+        # anchor the hostname and organization exemptions already carry for this
+        # exact reason; a second spelling of "the exemption must cover the whole
+        # value" is how two rules drift apart. The end-anchor is
+        # QUOTED_VALUE_END rather than VALUE_END because this exemption consumes
+        # its own closing quote -- see the note there. With VALUE_END, adjacent
+        # literals (`"{prefix}""realCredential"`) still slipped through, since
+        # the second literal's opening quote read as "the value ended".
+        #
+        # This does now flag `= "{prefix}".format(...)`, which holds no literal
+        # secret. That over-flag is deliberate and in the safe direction: the
+        # author restructures one line, where the alternative was a real
+        # credential reaching a public repository behind a placeholder prefix.
+        r"[\"']?\s*[:=]\s*"
+        r"(?!\s*[\"']\{[A-Za-z_][A-Za-z0-9_]*\}[\"']" + QUOTED_VALUE_END + NOT_CONTINUED + r")"
+        r"(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
     ),
     # Organization and workspace slugs. These sit apart from "connector
     # identifier" because that pattern's opaque-value branch requires 16+
@@ -191,7 +234,13 @@ PATTERNS = {
         r"name|company|team|tenant|client)?" + VALUE_END + NOT_CONTINUED + r")"
         r"(?!example[-_.]?(?:org|organization|workspace|name)?" + VALUE_END + NOT_CONTINUED + r")"
         r"(?!<)(?!placeholder" + VALUE_END + NOT_CONTINUED + r")"
-        r"(?!org" + VALUE_END + NOT_CONTINUED + r")(?!organization" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!org"
+        + VALUE_END
+        + NOT_CONTINUED
+        + r")(?!organization"
+        + VALUE_END
+        + NOT_CONTINUED
+        + r")"
         r"(?!workspace" + VALUE_END + NOT_CONTINUED + r")(?!name" + VALUE_END + NOT_CONTINUED + r")"
         # Each placeholder must also be an UNCONTINUED complete expression:
         # a slug built from an approved placeholder plus a second literal is
@@ -203,15 +252,9 @@ PATTERNS = {
     "bearer credential": re.compile(
         r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._~+/-]{12,}={0,2}"
     ),
-    "email address": re.compile(
-        r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE
-    ),
-    "phone number": re.compile(
-        r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"
-    ),
-    "raw Drive or Docs link": re.compile(
-        r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE
-    ),
+    "email address": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+    "phone number": re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"),
+    "raw Drive or Docs link": re.compile(r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE),
     "street address": re.compile(
         r"\b[1-9]\d{1,5}\s+(?:[A-Za-z0-9.'-]+\s+){1,6}"
         r"(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
@@ -266,72 +309,73 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
     # that alters a sample fails the guard until the new literal is reviewed and pinned
     # here. That cost is the point.
     Path(".claude/agents/awesome-claude-agents/specialized/django/django-api-developer.md"): (
-        'a' + "pi_key = request.META.get('HTTP_X_API_KEY')",
-        'p' + "assword='testpass123'",
+        "a" + "pi_key = request.META.get('HTTP_X_API_KEY')",
+        "p" + "assword='testpass123'",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/django/django-backend-expert.md"): (
-        'test' + "@example.com'",
+        "test" + "@example.com'",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md"): (
-        'p' + 'assword = var.database_password',
+        "p" + "assword = var.database_password",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/django-expert.md"): (
-        'P' + "ASSWORD': get_env_variable('DB_PASSWORD'),",
-        'P' + "ASSWORD': get_env_variable('DB_READ_PASSWORD', default=get_env_variable('DB_PASSWORD')),",
+        "P" + "ASSWORD': get_env_variable('DB_PASSWORD'),",
+        "P"
+        + "ASSWORD': get_env_variable('DB_READ_PASSWORD', default=get_env_variable('DB_PASSWORD')),",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/fastapi-expert.md"): (
-        'P' + 'assword = Annotated[str',
-        'user' + '@example.com"',
-        'password: P' + 'assword = Field(description="Mot de passe (min 8 caractères)")',
+        "P" + "assword = Annotated[str",
+        "user" + '@example.com"',
+        "password: P" + 'assword = Field(description="Mot de passe (min 8 caractères)")',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/ml-data-expert.md"): (
-        'ml' + '@example.com"',
+        "ml" + '@example.com"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/python-expert.md"): (
-        'email' + '@example.com"',
-        'test' + '@example.com"',
-        'test' + '@example.com)>"',
-        'p' + 'assword="testpassword123"',
-        'nonexistent' + '@example.com"',
-        'newuser' + '@example.com"',
-        'p' + 'assword": "password123"',
+        "email" + '@example.com"',
+        "test" + '@example.com"',
+        "test" + '@example.com)>"',
+        "p" + 'assword="testpassword123"',
+        "nonexistent" + '@example.com"',
+        "newuser" + '@example.com"',
+        "p" + 'assword": "password123"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/security-expert.md"): (
-        'a' + 'ccess_token = self.jwt_manager.create_access_token(user)',
-        'a' + "ccess_token': access_token",
-        'user' + '@example.com"',
+        "a" + "ccess_token = self.jwt_manager.create_access_token(user)",
+        "a" + "ccess_token': access_token",
+        "user" + '@example.com"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/testing-expert.md"): (
-        'john' + '@example.com"',
-        'jane' + '@example.com"',
-        'admin' + '@example.com"',
-        'test' + '@example.com"',
-        'new' + '@example.com"',
-        'p' + 'assword": "secure_password"',
-        'wrong' + '@example.com"',
-        'p' + 'assword="password"',
-        'recipient' + '@example.com"',
-        'user1' + '@example.com"',
-        'user2' + '@example.com"',
-        'user3' + '@example.com"',
-        'a' + 'pi_key="sk_test_123"',
-        'c' + 'lient_secret": "pi_123456_secret_abc"',
-        'newuser' + '@example.com"',
-        'p' + 'assword": "secure_password123"',
-        'auth' + '@example.com"',
-        'update' + '@example.com"',
-        'customer' + '@example.com"',
-        '12' + '3 Main St"',
-        'unique' + '@example.com"',
-        'p' + 'assword": "password123"',
-        'p' + 'assword": "valid_password123"',
+        "john" + '@example.com"',
+        "jane" + '@example.com"',
+        "admin" + '@example.com"',
+        "test" + '@example.com"',
+        "new" + '@example.com"',
+        "p" + 'assword": "secure_password"',
+        "wrong" + '@example.com"',
+        "p" + 'assword="password"',
+        "recipient" + '@example.com"',
+        "user1" + '@example.com"',
+        "user2" + '@example.com"',
+        "user3" + '@example.com"',
+        "a" + 'pi_key="sk_test_123"',
+        "c" + 'lient_secret": "pi_123456_secret_abc"',
+        "newuser" + '@example.com"',
+        "p" + 'assword": "secure_password123"',
+        "auth" + '@example.com"',
+        "update" + '@example.com"',
+        "customer" + '@example.com"',
+        "12" + '3 Main St"',
+        "unique" + '@example.com"',
+        "p" + 'assword": "password123"',
+        "p" + 'assword": "valid_password123"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/rails/rails-api-developer.md"): (
-        'a' + 'ccess_token: tokens[:access_token]',
-        'a' + 'ccess_token: encode_token(',
+        "a" + "ccess_token: tokens[:access_token]",
+        "a" + "ccess_token: encode_token(",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/rails/rails-backend-expert.md"): (
-        'p' + 'assword: password',
+        "p" + "assword: password",
     ),
 }
 
@@ -452,9 +496,11 @@ def _yaml_loader():
         pass
 
     _Tolerant.add_multi_constructor(
-        "", lambda loader, suffix, node: _construct_unknown(loader, node))
+        "", lambda loader, suffix, node: _construct_unknown(loader, node)
+    )
     _Tolerant.add_multi_constructor(
-        "tag:", lambda loader, suffix, node: _construct_unknown(loader, node))
+        "tag:", lambda loader, suffix, node: _construct_unknown(loader, node)
+    )
     return _Tolerant
 
 
@@ -735,13 +781,13 @@ def toml_reconstructed_values(text: str) -> str:
 
 
 _ESCAPED_CHAR = re.compile(
-    r"\\u\{([0-9A-Fa-f]{1,6})\}"      # ES6 \u{5f}
-    r"|\\[uU]([0-9A-Fa-f]{4,8})"      # \u005f, \U0000005f
-    r"|\\x([0-9A-Fa-f]{2})"           # \x5f
-    r"|\\([0-7]{1,3})"                # \137
-    r"|%([0-9A-Fa-f]{2})"             # %5F
-    r"|&#x([0-9A-Fa-f]{1,6});"        # &#x5f;
-    r"|&#([0-9]{1,7});"               # &#95;
+    r"\\u\{([0-9A-Fa-f]{1,6})\}"  # ES6 \u{5f}
+    r"|\\[uU]([0-9A-Fa-f]{4,8})"  # \u005f, \U0000005f
+    r"|\\x([0-9A-Fa-f]{2})"  # \x5f
+    r"|\\([0-7]{1,3})"  # \137
+    r"|%([0-9A-Fa-f]{2})"  # %5F
+    r"|&#x([0-9A-Fa-f]{1,6});"  # &#x5f;
+    r"|&#([0-9]{1,7});"  # &#95;
 )
 
 
@@ -755,8 +801,10 @@ def _decoded_char(match: re.Match[str]) -> str:
         elif ent_dec is not None:
             code = int(ent_dec, 10)
         else:
-            code = int(next(g for g in (hex_braced, hex_esc, hex_byte,
-                                        percent, ent_hex) if g is not None), 16)
+            code = int(
+                next(g for g in (hex_braced, hex_esc, hex_byte, percent, ent_hex) if g is not None),
+                16,
+            )
         char = chr(code)
     except (ValueError, OverflowError):
         return match.group(0)
@@ -814,8 +862,7 @@ def strip_yaml_node_properties(text: str) -> str:
     anchor AND the value together.
     """
     anchors = {
-        match.group("name"): match.group("value")
-        for match in _YAML_ANCHOR_DEF.finditer(text)
+        match.group("name"): match.group("value") for match in _YAML_ANCHOR_DEF.finditer(text)
     }
     if anchors:
         text = _YAML_ALIAS.sub(
@@ -988,10 +1035,11 @@ def path_findings(relative: Path) -> list[str]:
     """
     parts = str(relative).replace("\\", "/").split("/")
     probes = (" ".join(parts), "=".join(parts))
-    return [f"{relative}: possible {label} in the file path"
-            for label, pattern in applicable_patterns(relative).items()
-            if any(pattern.search(probe) for probe in probes)]
-
+    return [
+        f"{relative}: possible {label} in the file path"
+        for label, pattern in applicable_patterns(relative).items()
+        if any(pattern.search(probe) for probe in probes)
+    ]
 
 
 def submodule_paths(root: Path = ROOT) -> frozenset[str]:
@@ -1093,9 +1141,7 @@ def gitlink_paths(root: Path = ROOT) -> frozenset[str]:
     listing = run_git(["git", "ls-files", "-s", "-z"], root)
     if listing is None or listing.returncode != 0:
         return frozenset()
-    return frozenset(
-        name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE
-    )
+    return frozenset(name for mode, name in _parse_ls_files(listing.stdout) if mode == GITLINK_MODE)
 
 
 def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
@@ -1120,9 +1166,7 @@ def tracked_paths(root: Path = ROOT) -> frozenset[str] | None:
     return frozenset(name for _mode, name in _parse_ls_files(listing.stdout))
 
 
-def is_vendored(
-    path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None
-) -> bool:
+def is_vendored(path: Path, root: Path = ROOT, gitlinks: frozenset[str] | None = None) -> bool:
     """Report whether ``path`` lies inside a vendored third-party submodule.
 
     Submodules record only a gitlink commit here, so their file contents are
@@ -1176,9 +1220,7 @@ def repository_files(root: Path = ROOT) -> list[Path]:
         # contents never reach this list anyway — `git ls-files` does not
         # recurse into a submodule's own index.
         return [
-            root / name
-            for mode, name in _parse_ls_files(listing.stdout)
-            if mode != GITLINK_MODE
+            root / name for mode, name in _parse_ls_files(listing.stdout) if mode != GITLINK_MODE
         ]
     gitlinks = gitlink_paths(root)
     return [
@@ -1223,7 +1265,8 @@ def scan_repository(root: Path = ROOT) -> list[str]:
 
 
 def _scan_files(
-    paths: list[Path], root: Path = ROOT,
+    paths: list[Path],
+    root: Path = ROOT,
     destinations: dict[Path, Path] | None = None,
 ) -> list[str]:
     """Scan `paths`. `destinations` maps a scanned path to the repo-relative
@@ -1280,7 +1323,9 @@ def _scan_files(
             findings.append(f"{relative}: non-UTF-8 file is not allowed in this public source tree")
             continue
         if text.startswith(LFS_POINTER_PREFIX):
-            findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: Git LFS pointer is not allowed in this public source tree"
+            )
         # Parser output FIRST, regex normalisation underneath. The parser is
         # authoritative where it works; the normalisers stay so a missing
         # PyYAML, a non-YAML file, or an oversized document degrades to partial
@@ -1308,13 +1353,12 @@ def _scan_files(
         # escapes, and read clean. The scanner has explicit JSON support in its
         # patterns; the completeness check has to cover the same formats the
         # patterns claim.
-        declared = (
-            (suffix in {".yaml", ".yml", ".json"}
-             and TRUNCATION_MARKER in yaml_values)
-            or (suffix == ".toml" and TRUNCATION_MARKER in toml_values)
+        declared = (suffix in {".yaml", ".yml", ".json"} and TRUNCATION_MARKER in yaml_values) or (
+            suffix == ".toml" and TRUNCATION_MARKER in toml_values
         )
-        reconstructions = [value.replace(TRUNCATION_MARKER, "")
-                           for value in (yaml_values, toml_values)]
+        reconstructions = [
+            value.replace(TRUNCATION_MARKER, "") for value in (yaml_values, toml_values)
+        ]
         # The RAW text is scanned alongside every normalised copy. Each
         # normaliser is destructive by design -- strip_yaml_node_properties
         # deletes anchors and tags so the value beneath them can be read -- and
@@ -1325,13 +1369,15 @@ def _scan_files(
         # readings, never remove one.
         scannable = strip_known_placeholders(
             relative,
-            "\n".join([
-                text,
-                fold_toml_multiline(
-                    fold_block_scalars(strip_yaml_node_properties(text))),
-                decode_source_escapes(text),
-                *reconstructions,
-            ]))
+            "\n".join(
+                [
+                    text,
+                    fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text))),
+                    decode_source_escapes(text),
+                    *reconstructions,
+                ]
+            ),
+        )
         # A file that declares a parseable format and could not be parsed, or
         # was cut short, has had part of itself matched against nothing. Report
         # that rather than letting the patterns that did run stand in for the
@@ -1344,7 +1390,8 @@ def _scan_files(
                 "reconstruction could not be completed (unparseable, too "
                 "large, too deeply nested, or past the value budget), so part "
                 "of this file was never matched. Fix the syntax, split the "
-                "file, or review it by hand.")
+                "file, or review it by hand."
+            )
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")
@@ -1352,7 +1399,8 @@ def _scan_files(
 
 
 def scan_paths(
-    paths: list[Path], root: Path = ROOT,
+    paths: list[Path],
+    root: Path = ROOT,
     destinations: dict[Path, Path] | None = None,
 ) -> list[str]:
     """Scan exactly these paths, tracked or not, recursing into directories.
@@ -1447,7 +1495,7 @@ def main(argv: list[str] | None = None) -> int:
     separated = "--" in argv
     if separated:
         marker = argv.index("--")
-        argv, literal_paths = argv[:marker], argv[marker + 1:]
+        argv, literal_paths = argv[:marker], argv[marker + 1 :]
 
     if not separated and argv and argv[0] in ("-h", "--help"):
         print(
@@ -1472,7 +1520,7 @@ def main(argv: list[str] | None = None) -> int:
             print("--as requires a repo-relative destination path")
             return 2
         destination = Path(argv[marker + 1])
-        argv = argv[:marker] + argv[marker + 2:]
+        argv = argv[:marker] + argv[marker + 2 :]
 
     given = argv + literal_paths
     if destination is not None:
@@ -1482,8 +1530,7 @@ def main(argv: list[str] | None = None) -> int:
         destinations[Path(given[0])] = destination
 
     if given:
-        findings = scan_paths([Path(arg) for arg in given],
-                              destinations=destinations)
+        findings = scan_paths([Path(arg) for arg in given], destinations=destinations)
         label = f"Privacy guard passed for {len(given)} given path(s)."
     else:
         findings = scan_repository()

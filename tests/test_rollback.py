@@ -1,8 +1,7 @@
-from pathlib import Path
 import subprocess
 import tomllib
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RETIRED_NATIVE_FILES = {
@@ -68,11 +67,7 @@ class RollbackTests(unittest.TestCase):
         )
         prior_paths = set(result.stdout.splitlines())
         self.assertTrue(RETIRED_NATIVE_FILES.issubset(prior_paths))
-        current_paths = {
-            str(path.relative_to(ROOT))
-            for path in ROOT.rglob("*")
-            if path.is_file()
-        }
+        current_paths = {str(path.relative_to(ROOT)) for path in ROOT.rglob("*") if path.is_file()}
         self.assertTrue(RETIRED_NATIVE_FILES.isdisjoint(current_paths))
 
 
