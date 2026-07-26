@@ -387,7 +387,15 @@ def yaml_reconstructed_values(text: str) -> str:
     try:
         import yaml
     except ImportError:
-        return ""
+        # An absent parser is a coverage loss like any other, and the caller
+        # decides whether it matters -- it does for a file that DECLARES YAML
+        # or JSON. Returning "" made the mandated local command approve a
+        # declared YAML file whose escaped credential key the fallback regexes
+        # cannot decode, so a credential could be committed with a green gate
+        # behind it and only CI (where PyYAML is installed) would object. A
+        # gate that is weaker on the developer's machine than in CI is the
+        # wrong way round.
+        return TRUNCATION_MARKER
 
     lines: list[str] = []
     # Walk the COMPOSED NODE GRAPH, not the constructed Python object. The

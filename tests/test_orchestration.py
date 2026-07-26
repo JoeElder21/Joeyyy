@@ -510,36 +510,65 @@ class SelectionReportBaselineTests(unittest.TestCase):
 
         `_merged_upstream_tips` reads every merge's second parent, which is
         right while merges bring main INTO this branch. Once GitHub integrates
-        the PR, that merge's second parent is this branch — so every file the
+        the PR, that merge's second parent is this branch -- so every file the
         branch added would count as having come from elsewhere and the
         published delta would read zero, in the document whose whole purpose is
-        installation evidence. The same erasure the pin was added to prevent,
-        arriving from the other direction."""
+        installation evidence.
+
+        Skips rather than fails where the anchors are absent. A shallow clone
+        has neither, and the first version of this test asserted reachability
+        unconditionally: it passed in CI (`fetch-depth: 0`) and failed in any
+        `--depth 1` checkout. `_branch_point` already reports the figure as
+        unmeasurable there; the test has to agree rather than demand history
+        the clone does not have."""
         sys.path.insert(0, str(ROOT / "scripts"))
         try:
             import report_gates
         finally:
             sys.path.pop(0)
 
-        # Every tip counted as upstream must genuinely predate this work.
+        if not report_gates._known(report_gates.BRANCH_ROOT):
+            self.assertEqual(
+                report_gates.MARKDOWN_ADDED, -1,
+                "with the anchor absent the delta must read unmeasurable, "
+                "never a number")
+            self.skipTest("shallow clone: the branch anchor is not present")
+
         for tip in report_gates._merged_upstream_tips():
             with self.subTest(tip=tip[:10]):
-                self.assertFalse(
-                    report_gates._contains(tip, report_gates.BRANCH_ROOT),
+                self.assertIs(
+                    report_gates._contains(tip, report_gates.BRANCH_ROOT), False,
                     "a commit containing this branch's first commit is this "
                     "work, not an upstream tip")
 
-        # HEAD contains BRANCH_ROOT, so a merge whose second parent is HEAD --
-        # which is what the integration merge looks like -- is excluded.
-        self.assertTrue(
-            report_gates._contains("HEAD", report_gates.BRANCH_ROOT),
+        self.assertIs(
+            report_gates._contains("HEAD", report_gates.BRANCH_ROOT), True,
             "BRANCH_ROOT must be an ancestor of HEAD or the anchor is wrong")
-        # And the baseline must NOT contain it, or every tip would be excluded
-        # and the delta would over-count again.
-        self.assertFalse(
+        self.assertIs(
             report_gates._contains(report_gates.PRE_INSTALL_BASELINE,
-                                   report_gates.BRANCH_ROOT))
+                                   report_gates.BRANCH_ROOT), False)
         self.assertGreater(report_gates.MARKDOWN_ADDED, 0)
+
+    def test_an_unanswerable_history_reports_no_delta_rather_than_a_wrong_one(self):
+        """A shallow clone cannot classify a merge tip at all.
+
+        `merge-base --is-ancestor` exits non-zero both when the answer is "no"
+        and when the commit is absent, and collapsing those to a boolean made
+        an unanswerable question read as "not this branch" -- the answer that
+        erases the branch's own delta. Unknown is now its own result."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import report_gates
+        finally:
+            sys.path.pop(0)
+
+        absent = "0" * 40
+        self.assertFalse(report_gates._known(absent))
+        self.assertIsNone(report_gates._contains("HEAD", absent))
+        self.assertIsNone(report_gates._contains(absent, "HEAD"))
+
+        with mock.patch.object(report_gates, "BRANCH_ROOT", absent):
+            self.assertEqual(report_gates._markdown_added(), -1)
 
     def test_the_delta_excludes_work_that_arrived_from_main(self):
         """The headline figure must measure THIS branch, not the merge.

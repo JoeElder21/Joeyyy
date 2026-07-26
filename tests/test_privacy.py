@@ -535,6 +535,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 with self.subTest(clean=body):
                     self.assertEqual(scan_paths([clean], root=root), [])
 
+    @needs_yaml
     def test_explicit_yaml_tags_do_not_hide_the_value(self):
         """A YAML parser discards the tag and keeps the value, so the scan must.
 
@@ -642,6 +643,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 sorted(f.split(": ", 1)[1] for f in findings if "notes" in f),
             )
 
+    @needs_yaml
     def test_yaml_node_properties_and_aliases_do_not_hide_the_value(self):
         """Tag, anchor and alias are three tokens that each sit between a key
         and its value, and each hid it from the assignment patterns.
@@ -958,6 +960,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             bomb += f"{name}: &{name} [{', '.join(['*' + previous] * 10)}]\n"
         self.assertNotIn(TRUNCATION_MARKER, yaml_reconstructed_values(bomb))
 
+    @needs_yaml
     def test_an_oversized_file_is_reported_not_silently_unparsed(self):
         """The size cap is attacker-selectable, so it must fail closed too.
 
@@ -1316,6 +1319,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 self.assertIn("harmless", emitted,
                               "the later entry must survive too")
 
+    @needs_yaml
     def test_an_unfinished_reconstruction_is_reported_only_where_it_matters(self):
         """Both halves, because each alone is a defect this round found.
 
@@ -1620,6 +1624,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             with self.subTest(form=label):
                 self.assertIn(secret, fold_toml_multiline(body))
 
+    @needs_yaml
     def test_normalisation_only_adds_readings_never_removes_one(self):
         """Every normaliser is destructive by design.
 
@@ -1761,6 +1766,53 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("credential assignment", captured.getvalue())
             self.assertNotIn("usage: privacy_guard.py", captured.getvalue())
+
+    def test_a_missing_parser_fails_closed_for_declared_formats(self):
+        """The local gate must not be weaker than CI.
+
+        Without PyYAML the reconstruction returned "" and a declared YAML or
+        JSON file passed on the fallback regexes, which cannot decode an
+        escaped credential key -- so the mandated local command could approve a
+        credential-bearing file that CI, where PyYAML is installed, would
+        reject. A gate that is more permissive on the developer's machine than
+        in CI is the wrong way round: the developer's run is the one that
+        happens before the commit."""
+        from unittest import mock
+
+        import scripts.privacy_guard as guard
+
+        secret = "Xy7Q" + "secretValue0192"
+        escaped = '"AZURE\\u005fCLIENT_SECRET"'
+        declared = {
+            "yaml": ("p.yaml", "%s: \"%s\"\n" % (escaped, secret)),
+            "yml": ("q.yml", "%s: \"%s\"\n" % (escaped, secret)),
+            "json": ("r.json", "{%s: \"%s\"}\n" % (escaped, secret)),
+        }
+        undeclared = {
+            "markdown": ("s.md", "ordinary prose\n"),
+            "python": ("t.py", "x = 1\n"),
+            "toml": ("u.toml", 'name = "governance"\n'),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            # Simulate the real condition: the import fails.
+            with mock.patch.dict(sys.modules, {"yaml": None}):
+                for label, (name, body) in declared.items():
+                    probe = root / name
+                    probe.write_text(body, encoding="utf-8")
+                    with self.subTest(declared=label):
+                        self.assertTrue(
+                            scan_paths([probe], root=root),
+                            f"{label}: a declared format with no parser must "
+                            f"report an incomplete scan")
+                for label, (name, body) in undeclared.items():
+                    probe = root / name
+                    probe.write_text(body, encoding="utf-8")
+                    with self.subTest(undeclared=label):
+                        self.assertEqual(
+                            scan_paths([probe], root=root), [],
+                            f"{label}: a file that never claimed YAML must "
+                            f"stay clean without the parser")
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.

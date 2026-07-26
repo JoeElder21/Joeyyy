@@ -278,8 +278,9 @@ class TrustedLauncherTests(unittest.TestCase):
                 self.assertFalse(stage_permits_connector(
                     specialist_stage("apex_probe", corps=corps)))
             with_path = {**corps, "apex_brain_manifest": "brains/apex/agents.toml"}
-            with mock.patch.object(launcher, "_brain_manifest",
-                                   lambda path: {"agents": {}}):
+            with mock.patch.object(
+                    launcher, "_brain_manifest",
+                    lambda path: {"brain": "APEX", "agents": {}}):
                 with self.subTest(snapshot=permissive, shape="no agent entry"):
                     self.assertFalse(stage_permits_connector(
                         specialist_stage("apex_probe", corps=with_path)))
@@ -338,6 +339,57 @@ class TrustedLauncherTests(unittest.TestCase):
             ][-1]
             self.assertEqual(granted["detail"].get("agent"),
                              "apex_systems_blacksmith")
+
+    def test_a_manifest_must_declare_the_brain_it_speaks_for(self):
+        """Brain-locking is only real if the file is checked, not the path.
+
+        The stage was read from whatever sat at the APEX path. A manifest
+        swapped into the wrong path -- structurally valid, declaring the other
+        brain, carrying an `active` entry for the requested identity -- then
+        supplied authority for an agent it does not own, and the connector gate
+        opened on the strength of the wrong brain's records. Each manifest
+        names its own brain; take it at that word or refuse."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        corps = {
+            "apex_roster": ["apex_probe"],
+            "jeos_roster": ["jeos_probe"],
+            "apex_brain_manifest": "brains/apex/agents.toml",
+            "jeos_brain_manifest": "brains/jeos/agents.toml",
+            "governance": {"designated_executor": "apex_chief_of_staff"},
+            "lifecycle": {"deployed_stage": "shadow",
+                          "connector_stages": ["active", "value-proven"]},
+        }
+        # Both directions, and the missing-declaration case.
+        wrong = {
+            "apex path declares JEOS":
+                ("apex_probe", {"brain": "JEOS",
+                                "agents": {"apex_probe": {"status": "active"}}}),
+            "jeos path declares APEX":
+                ("jeos_probe", {"brain": "APEX",
+                                "agents": {"jeos_probe": {"status": "active"}}}),
+            "no brain declared":
+                ("apex_probe", {"agents": {"apex_probe": {"status": "active"}}}),
+        }
+        for label, (agent, manifest) in wrong.items():
+            with mock.patch.object(launcher, "_brain_manifest",
+                                   lambda path, m=manifest: m):
+                with self.subTest(case=label):
+                    with self.assertRaises(ManifestUnavailable) as caught:
+                        specialist_stage(agent, corps=corps)
+                    self.assertIn("brain", str(caught.exception))
+
+        # The correctly-declared manifest still resolves, so this refuses a
+        # mismatch rather than refusing everything.
+        right = {"brain": "APEX", "agents": {"apex_probe": {"status": "shadow"}}}
+        with mock.patch.object(launcher, "_brain_manifest", lambda path: right):
+            self.assertEqual(specialist_stage("apex_probe", corps=corps),
+                             "shadow")
+        # And the real registry keeps working.
+        self.assertEqual(specialist_stage("apex_systems_blacksmith"), "shadow")
+        self.assertEqual(specialist_stage("jeos_life_architect"), "shadow")
 
     def test_a_scalar_allowlist_is_not_a_wildcard(self):
         """Python string membership made `"*" in "*"` true.
@@ -453,7 +505,8 @@ class TrustedLauncherTests(unittest.TestCase):
         for permissive in ("apex", "jeos"):
             def manifest(path, permissive=permissive):
                 status = "active" if permissive in path else "restricted"
-                return {"agents": {"both_probe": {"status": status}}}
+                return {"brain": "JEOS" if "jeos" in path else "APEX",
+                        "agents": {"both_probe": {"status": status}}}
             with mock.patch.object(launcher, "_brain_manifest", manifest):
                 with self.subTest(permissive_brain=permissive):
                     with self.assertRaises(ManifestUnavailable) as caught:
@@ -465,7 +518,8 @@ class TrustedLauncherTests(unittest.TestCase):
         single = {**corps, "jeos_roster": []}
         with mock.patch.object(
                 launcher, "_brain_manifest",
-                lambda path: {"agents": {"both_probe": {"status": "shadow"}}}):
+                lambda path: {"brain": "APEX",
+                              "agents": {"both_probe": {"status": "shadow"}}}):
             self.assertEqual(specialist_stage("both_probe", corps=single),
                              "shadow")
 
@@ -603,8 +657,12 @@ class TrustedLauncherTests(unittest.TestCase):
             def load(path: str) -> dict:
                 if broken in path:
                     raise ManifestUnavailable(f"{path}: gone")
-                agent = "jeos_probe" if "jeos" in path else "apex_probe"
-                return {"agents": {agent: {"status": "shadow"}}}
+                jeos = "jeos" in path
+                agent = "jeos_probe" if jeos else "apex_probe"
+                # The manifest must declare the brain it speaks for; a fixture
+                # that omits it is refused, which is the point of that check.
+                return {"brain": "JEOS" if jeos else "APEX",
+                        "agents": {agent: {"status": "shadow"}}}
             return load
 
         # Either brain may be the broken one; the healthy brain must resolve

@@ -198,10 +198,23 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
             f"{agent!r} is listed in both the APEX and JEOS rosters; brain "
             "ownership is ambiguous, so no authoritative stage exists")
     manifest_key = "apex_brain_manifest" if in_apex else "jeos_brain_manifest"
+    expected_brain = "APEX" if in_apex else "JEOS"
     per_agent = None
     manifest_path = corps.get(manifest_key)
     if manifest_path:
-        entry = _brain_manifest(manifest_path).get("agents", {}).get(agent)
+        manifest = _brain_manifest(manifest_path)
+        # The file at the APEX path must SAY it is the APEX manifest. Reading
+        # the per-agent stage without checking meant a manifest swapped into
+        # the wrong path -- structurally valid, declaring the other brain --
+        # supplied authority for an identity it does not own, which is the
+        # brain-locking boundary AGENTS.md builds the whole separation on. The
+        # manifest names its own brain; take it at that word or refuse.
+        declared_brain = manifest.get("brain")
+        if declared_brain != expected_brain:
+            raise ManifestUnavailable(
+                f"{manifest_path} declares brain {declared_brain!r}, not "
+                f"{expected_brain!r}; it cannot speak for {agent!r}")
+        entry = manifest.get("agents", {}).get(agent)
         if isinstance(entry, dict) and entry.get("status"):
             per_agent = entry["status"]
 

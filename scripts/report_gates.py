@@ -333,15 +333,41 @@ def _tracked_set_at(ref: str, suffix: str) -> set[str] | None:
     return {line for line in out.stdout.splitlines() if line.endswith(suffix)}
 
 
-def _contains(commit: str, ancestor: str) -> bool:
-    """Whether `ancestor` is reachable from `commit`."""
+class _Unanswerable(Exception):
+    """This clone cannot classify a merge tip, so no delta can be published."""
+
+
+def _known(commit: str) -> bool:
+    """Whether this clone actually has `commit`."""
     root = Path(__file__).resolve().parents[1]
+    try:
+        out = subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+                             cwd=root, capture_output=True, text=True,
+                             check=False)
+    except OSError:
+        return False
+    return out.returncode == 0
+
+
+def _contains(commit: str, ancestor: str) -> bool | None:
+    """True/False if answerable, None if this clone cannot tell.
+
+    In a shallow clone the anchor commit is absent entirely and `merge-base`
+    exits non-zero -- which is indistinguishable, to a boolean, from "not an
+    ancestor". Collapsing the two made an unanswerable question read as "no",
+    so a tip that IS this branch would be treated as upstream and every file
+    the branch added would be subtracted from its own delta. An unanswerable
+    question is reported, never guessed.
+    """
+    root = Path(__file__).resolve().parents[1]
+    if not _known(commit) or not _known(ancestor):
+        return None
     try:
         out = subprocess.run(
             ["git", "merge-base", "--is-ancestor", ancestor, commit],
             cwd=root, capture_output=True, text=True, check=False)
     except OSError:
-        return False
+        return None
     return out.returncode == 0
 
 
@@ -374,7 +400,18 @@ def _merged_upstream_tips() -> list[str]:
     seconds = [parts[2] for parts in
                (line.split() for line in out.stdout.splitlines())
                if len(parts) >= 3]
-    return [tip for tip in seconds if not _contains(tip, BRANCH_ROOT)]
+    tips = []
+    for tip in seconds:
+        verdict = _contains(tip, BRANCH_ROOT)
+        if verdict is None:
+            # Cannot tell whether this tip is our own work. Refusing to answer
+            # is the only safe option: including it may erase the branch's
+            # delta, excluding it may inflate it. `_markdown_added` reports the
+            # figure as unmeasurable instead of publishing either guess.
+            raise _Unanswerable(tip)
+        if not verdict:
+            tips.append(tip)
+    return tips
 
 
 MARKDOWN_NOW = count_tracked("*.md")
@@ -395,7 +432,11 @@ def _markdown_added() -> int:
     if here is None or baseline is None:
         return -1
     elsewhere = set(baseline)
-    for tip in _merged_upstream_tips():
+    try:
+        tips = _merged_upstream_tips()
+    except _Unanswerable:
+        return -1
+    for tip in tips:
         merged = _tracked_set_at(tip, ".md")
         if merged is None:
             # Cannot prove which side a file came from, so do not guess.
