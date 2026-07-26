@@ -174,11 +174,25 @@ jobs:
           # dependency stayed invisible. Applying one global flag to inputs of
           # two different kinds was the error: correct for a lockfile, wrong
           # for a requirements file with `>=`.
+          #
+          # Both npm locks. The relay connector's lock was committed alongside
+          # the APS one and only the APS one was scanned, so the second npm
+          # dependency tree in this repository -- `agent-relay` and its
+          # transitive graph -- sat outside the vulnerability gate while this job
+          # read as full coverage. `tests/test_repo_hygiene.py` now derives the
+          # set from the tree, because the next connector added would repeat
+          # this exactly.
+          #
+          # These comments live ABOVE `scan-args:` and not inside it. A `|-`
+          # block scalar has no comment syntax: a `#` line indented into the
+          # block is literal text, so the first draft of this note was passed to
+          # osv-scanner as eight arguments.
           scan-args: |-
             --no-resolve
             --config=osv-scanner.toml
             --lockfile=requirements.txt:requirements/lock-2026-07-24.txt
             --lockfile=connectors/aps/package-lock.json
+            --lockfile=connectors/relay/package-lock.json
       - name: Scan the generated locks for the floating install manifests
         uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:

@@ -401,7 +401,15 @@ def _record_passes(report: dict, results: Path, identifier: str) -> dict:
     dirty = report.get("provenance", {}).get("tree_dirty")
     if dirty is not False:
         report["modes_proven"] = 0
-        report["behavioral_modes_proven"] = []
+        # `False`, not `[]`. `Coverage.summary()` emits this key as a BOOLEAN
+        # (`bool(self.modes) and not self.unproven`), and the withholding path
+        # replaced it with an empty list. Both are falsy in Python, so nothing
+        # here noticed -- but the artifact is JSON read by other things, and a
+        # consumer doing `proven is False`, `proven == False`, or any typed
+        # deserialization sees a type it was never promised. A withheld claim has
+        # to be the same shape as the claim it withholds, or "false" and
+        # "absent" become indistinguishable downstream.
+        report["behavioral_modes_proven"] = False
         report["evidence_withheld"] = (
             f"tree_dirty={dirty!r}: results were produced from a working tree that does "
             "not match its commit, so no mode can be recorded as proven. Commit or "

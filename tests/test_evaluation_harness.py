@@ -1005,11 +1005,25 @@ class DirtyTreeEvidenceTests(unittest.TestCase):
         self.module = run_evaluations
 
     def _report(self, dirty):
+        # Shaped like a real summary: `behavioral_modes_proven` is the boolean
+        # `Coverage.summary()` emits. The fixture used to hand in a list of mode
+        # names, which is not a value the producing code can ever write, so the
+        # withholding path was only ever tested against input it does not see.
         return {
             "provenance": {"tree_dirty": dirty},
             "modes_proven": 3,
-            "behavioral_modes_proven": ["a", "b", "c"],
+            "behavioral_modes_proven": True,
         }
+
+    def test_the_withheld_claim_has_the_same_type_the_summary_emits(self):
+        # The two live in different modules and drifted once already. Comparing
+        # against the producer means a future change to either shape fails here
+        # rather than in whatever reads the artifact.
+        emitted = harness.build_coverage().summary()["behavioral_modes_proven"]
+        withheld = self.module._record_passes(self._report(True), Path("/nonexistent"), "run")[
+            "behavioral_modes_proven"
+        ]
+        self.assertIs(type(withheld), type(emitted))
 
     def test_a_dirty_tree_records_no_proven_modes(self):
         # provenance() recorded `tree_dirty: true` and the run marked modes
@@ -1018,7 +1032,12 @@ class DirtyTreeEvidenceTests(unittest.TestCase):
         # these records as rollback evidence.
         result = self.module._record_passes(self._report(True), Path("/nonexistent"), "run")
         self.assertEqual(result["modes_proven"], 0)
-        self.assertEqual(result["behavioral_modes_proven"], [])
+        # `is False`, not `== []` and not merely falsy. The withholding path
+        # wrote an empty list where `Coverage.summary()` writes a boolean, and
+        # the previous version of this line asserted that -- a test encoding the
+        # type mismatch as the expected result. Identity here is what makes the
+        # shape, not just the truthiness, the thing under test.
+        self.assertIs(result["behavioral_modes_proven"], False)
         self.assertIn("evidence_withheld", result)
 
     def test_an_unknown_tree_state_also_withholds_evidence(self):

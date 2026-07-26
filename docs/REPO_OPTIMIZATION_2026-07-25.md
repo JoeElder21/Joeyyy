@@ -1385,6 +1385,93 @@ while returning a copy is not detectable: after `del self._active[key]` nothing
 outside holds a reference, so no behavioural test can distinguish it from the
 copy. It is kept as defence in depth against a future path that retains one.
 
+### Thirty-third pass — three findings fixed, four already on the decision list
+
+Rounds thirty-one and thirty-two are recorded in their commit messages
+(`212b548`, `42c8aed`) rather than here; this section covers the round that
+followed them.
+
+Seven findings arrived. Four are items this record already defers to Joe —
+delegation-issuance authentication, consequential-parameter binding on
+instruction grants, the Windows/colorama evaluation lock, and the filesystem
+mount's missing npm lock. Re-listing them as new findings would inflate the
+count and obscure that they are waiting on a decision, not on work. Three were
+new and are fixed.
+
+**The packet's own concurrency controls were declared and never read.**
+`require_expected_version` and `require_idempotency_key` are **required** fields
+of `schemas/delegation_packet.schema.json`, so every validated write-bearing
+packet states a position on both — and no rule consulted either. A packet
+setting both to `true` admitted a mutating request that supplied neither.
+Reproduced first, with a control: the same request against a packet that waives
+both is allowed, so the denial is attributable to the flag and nothing else.
+Every other dimension of a write — target, record, brain, lease, operation — was
+bound while the two controls the issuer itself insisted on were optional in
+practice; a blind overwrite and a double-apply both passed the check that exists
+to stop them.
+
+Three things about the fix are worth stating:
+
+- **Absence of a flag is not read as a demand.** That looks like the "absent
+  scope means unlimited scope" defect this record fixes three times, but it is
+  the opposite shape: an allowlist's silence is a claim about what is permitted,
+  whereas these flags are a claim about what the *issuer requires*. Inventing a
+  requirement the issuer did not state would deny lawful appends to append-only
+  records, where no prior version exists to compare against — fail-shut instead
+  of fail-open, and just as broken. A **malformed** flag is different and is
+  treated as a demand: only `False` and absence waive.
+- **The controls are enumerated once, against the schema.** A test derives the
+  set of `require_*` fields from `delegation_packet.schema.json` and asserts the
+  gate reads exactly those, because a third control added to the schema would
+  otherwise be a required field no rule consults — which is this finding again.
+- **It proves the control is CARRIED, not that it is HONOURED.** Nothing at a
+  policy boundary can tell whether the executor performs a compare-and-set, or
+  whether an idempotency key was already consumed; that needs a ledger of
+  applied keys at the execution boundary — the same shape as the unimplemented
+  nonce consumption for instruction grants, and open alongside it. Carrying the
+  value is the precondition: before this, a mutation reached the executor with
+  nothing to compare and nothing to deduplicate, so the executor could not
+  honour the control even if it tried.
+
+**One mutant survived and produced a better test.** Replacing
+`demanded is False or demanded is None` with `if not demanded` left the suite
+green, because the case written for it used the string `"false"` — truthy in
+Python, so both spellings held the line. The falsy malformed values (`0`, `""`,
+`[]`) are where truthiness silently waives the control, and the test now covers
+all four. A surviving mutant is a missing test, not an equivalent one.
+
+**`behavioral_modes_proven` was withheld as `[]` where it is emitted as a
+boolean.** `Coverage.summary()` writes `bool(self.modes) and not self.unproven`;
+the dirty-tree withholding path replaced it with an empty list. Both are falsy,
+so nothing in Python noticed — but the artifact is JSON read by other things,
+and a consumer doing `proven is False` or any typed deserialization sees a type
+it was never promised. **The test asserted the defect**: it compared against
+`[]`, which is the recurring shape where a test encodes the wrong value as the
+expected one. It now asserts `is False`, and a second test compares the withheld
+type against the producing module's, so the two cannot drift again.
+
+**The relay connector's npm lock was outside the vulnerability gate and the
+update mechanism.** `connectors/relay/package-lock.json` was committed alongside
+the APS one; only APS was scanned by `osv-scanner` and only APS had a Dependabot
+entry, so the second npm dependency tree in this repository — `agent-relay` and
+its transitive graph — received neither vulnerability reports nor update PRs
+while both files read as complete coverage. The hygiene test that should have
+caught it enumerated lockfiles **by hand**, so it passed. It now derives the set
+from the tree, on both the scan and the update side.
+
+**Two YAML near-misses in that fix are now tested for, because both parse.**
+The first draft put the explanatory comment *inside* the `scan-args: |-` block —
+a block scalar has no comment syntax, so those eight lines would have been
+passed to `osv-scanner` as arguments. The repair then left **two** `scan-args:`
+keys under one step, which parses fine and silently discards the earlier value.
+`tests/test_repo_hygiene.py` now detects both classes across every workflow and
+`dependabot.yml`, hand-rolled rather than parsed because PyYAML is in no live
+requirements manifest and `skipUnless(yaml)` is the silent-degradation pattern
+this record spent a round removing. The detector distinguishes **data** blocks
+from **script** blocks: a `#` line in `run: |` is a correct shell comment, and
+the first version flagged every commented step script in the repository — a
+check that fires on correct code gets suppressed, and then it is not a check.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
@@ -1416,7 +1503,16 @@ Not a decision backlog — the actual work the harness exposed:
   than a mechanical one.
 - **The filesystem mount's npm package has no committed lock** and is outside
   the vulnerability scan. Its top-level version is pinned; its transitive set is
-  not.
+  not. Distinct from the relay connector's lock, which was committed but
+  unscanned and is now covered — this one has nothing to scan, so closing it
+  means generating and committing a lock for a mount, which is a connector
+  decision rather than a hygiene edit.
+- **Idempotency keys and expected versions are checked for presence, not
+  honoured.** The gate now refuses a mutation that omits a control its packet
+  demands, but nothing verifies the executor performs a compare-and-set or that
+  a key was not already applied. That needs a ledger of consumed keys at the
+  execution boundary — the same missing mechanism as instruction-grant nonce
+  consumption, and it lands with it or not at all.
 - **`scripts/trusted_launcher.py` forwards the whole inherited environment** to
   every mounted process, so unrelated credentials reach mounts that do not need
   them. The fix is a per-mount `env` allowlist in `config/mcp_mounts.toml` plus

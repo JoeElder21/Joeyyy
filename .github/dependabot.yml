@@ -52,6 +52,27 @@ updates:
     commit-message:
       prefix: "deps(aps)"
 
+  # The second npm tree, added when the relay connector was declared and left
+  # out of this file -- so `agent-relay` received no update PRs while the
+  # ecosystem block above claimed npm coverage. A declaration-only dependency
+  # still resolves a real transitive graph into
+  # `connectors/relay/package-lock.json`, and that lock is what the
+  # vulnerability scan reads.
+  - package-ecosystem: npm
+    directory: /connectors/relay
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      relay:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(relay)"
+
   # Workflow actions are SHA-pinned, so this is the mechanism that keeps those
   # pins current. Without it, pinning trades supply-chain risk for staleness.
   - package-ecosystem: github-actions

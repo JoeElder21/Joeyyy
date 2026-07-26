@@ -490,6 +490,23 @@ class ToolRequest:
     # `delete`), matched against what the packet proposed. Without it, every
     # check bound *where* a write lands and none bound *what it does*.
     operation: str | None = None
+    # The concurrency controls the packet's `mutation_contract` can DEMAND.
+    #
+    # `require_expected_version` and `require_idempotency_key` are required
+    # fields of the delegation schema, so every validated packet states a
+    # position on both -- and nothing read either one. A write-bearing packet
+    # setting both to `true` was admitted for a request that supplied neither,
+    # which is the schema declaring a control and the gate ignoring it: a
+    # blind-overwrite and a double-apply both passed the check that exists to
+    # stop them. Reproduced before fixing.
+    #
+    # Strings, both of them. An expected version is an opaque revision token in
+    # every store this repository talks to (etag, revision hash, `v7`), not an
+    # integer to be arithmetically compared, and typing it as one keeps
+    # `normalize()`'s single string discipline instead of adding a second shape
+    # for one field.
+    expected_version: str | None = None
+    idempotency_key: str | None = None
     # The MCP mount actually executing this invocation, carried independently of
     # `resource`.
     #
@@ -734,6 +751,8 @@ class PolicyEnforcementPoint:
             ("owner_brain", request.owner_brain, None, False),
             ("resource_id", request.resource_id, None, False),
             ("operation", request.operation, None, False),
+            ("expected_version", request.expected_version, None, False),
+            ("idempotency_key", request.idempotency_key, None, False),
             ("mount", request.mount, None, False),
         ):
             if value is None and required:
@@ -1671,6 +1690,7 @@ class PolicyEnforcementPoint:
         errors.extend(self._prohibited_scope_errors(request, packet))
         errors.extend(self._packet_namespace_errors(request, packet))
         errors.extend(self._packet_operation_errors(request, packet))
+        errors.extend(self._packet_concurrency_errors(request, packet))
         return errors
 
     def _prohibited_scope_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
@@ -1837,6 +1857,81 @@ class PolicyEnforcementPoint:
         if operation not in allowed:
             return [f"packet proposes {sorted(allowed)}, not {operation!r}"]
         return []
+
+    # The two `mutation_contract` flags, paired with the request field each one
+    # obliges. Enumerated once so a third control added to the schema is a
+    # one-line change here rather than a second hand-written branch that
+    # silently keeps reading only these two.
+    _CONCURRENCY_CONTROLS: tuple[tuple[str, str, str], ...] = (
+        (
+            "require_expected_version",
+            "expected_version",
+            "a write with no expected version is a blind overwrite of whatever is there now",
+        ),
+        (
+            "require_idempotency_key",
+            "idempotency_key",
+            "a write with no idempotency key applies twice on retry",
+        ),
+    )
+
+    def _packet_concurrency_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
+        """A control the packet demands must actually be carried.
+
+        `require_expected_version` and `require_idempotency_key` are REQUIRED
+        fields of the delegation schema, so a validated packet always states a
+        position on both, and no rule read either. Every other dimension --
+        target, record, brain, lease, operation -- was bound while the two
+        controls the packet itself insisted on were optional in practice.
+
+        Absence of the flags is NOT read as a demand. That looks like the
+        "absent scope means unlimited scope" defect this module has fixed three
+        times, but it is the opposite shape: an allowlist's silence is a claim
+        about what is permitted, whereas these flags are a claim about what the
+        *issuer* requires. Inventing a requirement the issuer did not state
+        would deny lawful appends to append-only logs, where neither control
+        applies. A malformed flag is a different matter and is treated as a
+        demand: only `False` and absence waive, so the string `"false"` -- which
+        is truthy in Python and would otherwise silently disable the control --
+        does not. The schema types both flags as booleans and rejects that
+        packet first; this rule does not lean on that, because a rule whose
+        correctness depends on a validator running upstream breaks the day it is
+        called from anywhere else.
+
+        **What this does not do.** It proves the control is CARRIED, not that it
+        is HONOURED. Nothing here can tell whether the executor performs a
+        compare-and-set against the version it was handed, or whether the
+        idempotency key was already consumed -- that needs a ledger of applied
+        keys at the execution boundary, the same shape as the unimplemented
+        nonce consumption for instruction grants, and it is recorded with it in
+        `docs/REPO_OPTIMIZATION_2026-07-25.md`. Carrying the value is the
+        precondition: today a mutation reaches the executor with nothing to
+        compare and nothing to deduplicate, so the executor could not honour
+        the control even if it tried.
+        """
+        if not request.mutating:
+            return []
+        contract = packet.get("mutation_contract") or {}
+        if not isinstance(contract, dict):
+            # A validated packet cannot get here, but `_packet_operations`
+            # already tolerates a malformed contract by treating it as absent,
+            # and a rule that raises where its sibling refuses is not a stricter
+            # rule -- it is an unwound enforcement boundary.
+            return [
+                "packet mutation_contract must be an object, got "
+                f"{type(contract).__name__}; a malformed contract is refused, not read"
+            ]
+        errors: list[str] = []
+        for flag, field_name, consequence in self._CONCURRENCY_CONTROLS:
+            demanded = contract.get(flag)
+            if demanded is False or demanded is None:
+                continue
+            supplied = getattr(request, field_name)
+            if supplied is None or not str(supplied).strip():
+                errors.append(
+                    f"packet sets {flag} but the request supplies no {field_name}; {consequence}"
+                )
+        return errors
 
     def _packet_namespace_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
         """The packet must authorize *this* resource, not merely exist.

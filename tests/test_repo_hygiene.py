@@ -18,6 +18,22 @@ PRE_COMMIT = ROOT / ".pre-commit-config.yaml"
 PYPROJECT = ROOT / "pyproject.toml"
 OPTIMIZATION_RECORD = ROOT / "docs" / "REPO_OPTIMIZATION_2026-07-25.md"
 
+
+def _npm_lockfiles() -> list[str]:
+    """Every committed npm lock, as a repo-relative POSIX path.
+
+    Derived from the tree rather than listed, because a list is what let the
+    relay connector's lock go unscanned. `node_modules` is excluded: those locks
+    belong to dependencies, are not committed, and are covered transitively by
+    the top-level lock that resolved them.
+    """
+    return [
+        path.relative_to(ROOT).as_posix()
+        for path in ROOT.rglob("package-lock.json")
+        if "node_modules" not in path.parts and ".git" not in path.parts
+    ]
+
+
 # `uses: owner/repo@ref` — captures the ref so it can be checked for a SHA pin.
 USES_PATTERN = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", re.MULTILINE)
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -95,6 +111,30 @@ class WorkflowSecurityTests(unittest.TestCase):
             with self.subTest(lockfile=lockfile):
                 self.assertIn(lockfile, text)
 
+    def test_every_npm_lockfile_in_the_tree_is_scanned(self):
+        # The hand-written list above named the APS lock and the relay lock was
+        # committed later, so a second npm dependency tree sat outside the
+        # vulnerability gate while the job read as complete coverage. Deriving
+        # the set from the tree means the next connector added either appears in
+        # the scan or fails here; enumerating it by hand means the next one
+        # repeats this.
+        text = SECURITY_WORKFLOW.read_text(encoding="utf-8")
+        locks = sorted(_npm_lockfiles())
+        self.assertTrue(locks, "no package-lock.json found; this test would be vacuous")
+        for lockfile in locks:
+            with self.subTest(lockfile=lockfile):
+                self.assertIn(lockfile, text)
+
+    def test_every_npm_lockfile_in_the_tree_gets_update_pull_requests(self):
+        # The same omission on the update side. A scanned-but-unupdated lock
+        # reports vulnerabilities nothing moves off, and an updated-but-unscanned
+        # one moves without anyone knowing why it needed to.
+        text = DEPENDABOT.read_text(encoding="utf-8")
+        for lockfile in sorted(_npm_lockfiles()):
+            directory = "/" + str(Path(lockfile).parent)
+            with self.subTest(directory=directory):
+                self.assertIn(f"directory: {directory}", text)
+
 
 class ValidationCoverageTests(unittest.TestCase):
     """Every checker the repository ships must actually run somewhere in CI."""
@@ -145,6 +185,157 @@ class ValidationCoverageTests(unittest.TestCase):
             "every package-ecosystem entry needs its own cooldown block",
         )
         self.assertEqual(text.count("default-days:"), ecosystems)
+
+
+class WorkflowYamlShapeTests(unittest.TestCase):
+    """Two ways a YAML edit passes review and changes nothing, or everything.
+
+    Both were live for minutes while the relay lockfile was added to the OSV
+    scan. Neither is caught by anything else here: a workflow that parses is not
+    a workflow that says what its author read.
+
+    Hand-rolled rather than parsed. PyYAML is in no live requirements manifest,
+    and `skipUnless(yaml)` is the silent-degradation pattern this repository
+    spent a round removing -- a test that skips itself reports the same green as
+    one that passed. See `test_scan_applicability_is_its_own_required_question`
+    for the same decision.
+    """
+
+    def _yaml_files(self) -> list[Path]:
+        return [
+            *sorted(WORKFLOW_DIR.glob("*.yml")),
+            *sorted(WORKFLOW_DIR.glob("*.yaml")),
+            DEPENDABOT,
+        ]
+
+    # Block scalars whose CONTENT is a language with its own comment syntax. A
+    # `#` line in `run: |` is a shell comment and entirely correct; the same line
+    # in `scan-args: |-` is argv. The first version of this detector did not
+    # distinguish them and flagged every commented step script in the repository
+    # -- a check that fires on correct code gets suppressed, and then it is not a
+    # check.
+    _SCRIPT_KEYS = frozenset({"run", "script"})
+
+    @classmethod
+    def _block_scalar_comment_lines(cls, text: str) -> list[tuple[int, str]]:
+        """Lines inside a data `|`/`>` block that LOOK like comments and are not.
+
+        A block scalar has no comment syntax of its own, so an indented `#` line
+        is literal content. `scan-args: |-` followed by an explanatory `#` note
+        passed eight comment lines to osv-scanner as arguments -- the workflow
+        still parsed, the step still ran, and the tool exited on an unknown flag.
+        """
+        offenders: list[tuple[int, str]] = []
+        in_script = False
+        block_indent: int | None = None
+        for number, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            if block_indent is not None:
+                indent = len(line) - len(line.lstrip())
+                if stripped and indent <= block_indent:
+                    block_indent = None  # the block ended; fall through
+                elif stripped.startswith("#") and not in_script:
+                    offenders.append((number, stripped))
+                    continue
+                else:
+                    continue
+            if not stripped or stripped.startswith("#"):
+                continue
+            head = stripped.split("#", 1)[0].rstrip()
+            if ": " in head or head.endswith(":"):
+                key = head.split(":", 1)[0].strip().removeprefix("- ").strip()
+                value = head.split(":", 1)[1].strip()
+                if value and value[0] in "|>":
+                    block_indent = len(line) - len(line.lstrip())
+                    in_script = key in cls._SCRIPT_KEYS
+        return offenders
+
+    @staticmethod
+    def _duplicate_sibling_keys(text: str) -> list[tuple[int, str]]:
+        """Keys repeated among siblings, where the later one silently wins.
+
+        Editing one occurrence of `scan-args:` and leaving another produced a
+        file that parsed, validated, and dropped the edit. A duplicate key is
+        never intentional in these files.
+        """
+        offenders: list[tuple[int, str]] = []
+        seen: dict[int, set[str]] = {}
+        block_indent: int | None = None
+        for number, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip())
+            if block_indent is not None:
+                if stripped and indent <= block_indent:
+                    block_indent = None
+                else:
+                    continue
+            if not stripped or stripped.startswith("#"):
+                continue
+            for depth in list(seen):
+                if depth > indent:
+                    del seen[depth]
+            if stripped.startswith("- "):
+                # A new sequence item opens a fresh mapping at this depth, and
+                # its first key sits further right than the dash.
+                for depth in list(seen):
+                    if depth >= indent:
+                        del seen[depth]
+                stripped = stripped[2:]
+                indent += 2
+            head = stripped.split("#", 1)[0].rstrip()
+            if ": " not in head and not head.endswith(":"):
+                continue
+            key = head.split(":", 1)[0].strip()
+            value = head.split(":", 1)[1].strip()
+            if key in seen.setdefault(indent, set()):
+                offenders.append((number, key))
+            seen[indent].add(key)
+            if value and value[0] in "|>":
+                block_indent = indent
+        return offenders
+
+    def test_no_comment_is_stranded_inside_a_block_scalar(self):
+        for path in self._yaml_files():
+            with self.subTest(path=path.name):
+                self.assertEqual(
+                    self._block_scalar_comment_lines(path.read_text(encoding="utf-8")),
+                    [],
+                    f"{path.name}: a `#` line inside a `|` block is an ARGUMENT, not a "
+                    "comment; move the note above the key",
+                )
+
+    def test_no_key_is_silently_overwritten_by_a_sibling(self):
+        for path in self._yaml_files():
+            with self.subTest(path=path.name):
+                self.assertEqual(
+                    self._duplicate_sibling_keys(path.read_text(encoding="utf-8")),
+                    [],
+                    f"{path.name}: a repeated key parses and discards the earlier value",
+                )
+
+    def test_the_detectors_detect(self):
+        # Without this, both tests above pass on any input, including the
+        # defects they were written for -- and a scanner that finds nothing
+        # reads exactly like a clean tree.
+        stranded = "jobs:\n  a:\n    steps:\n      - with:\n          args: |-\n            --x\n            # note\n"
+        self.assertTrue(self._block_scalar_comment_lines(stranded))
+        duplicated = (
+            "jobs:\n  a:\n    steps:\n      - with:\n          args: one\n          args: two\n"
+        )
+        self.assertTrue(self._duplicate_sibling_keys(duplicated))
+        # And the reverse direction: the real files' shapes must not be flagged.
+        # Two steps each carrying `args:` are siblings of DIFFERENT parents.
+        distinct = (
+            "jobs:\n  a:\n    steps:\n      - name: one\n        with:\n          args: |-\n"
+            "            --x\n      - name: two\n        with:\n          args: |-\n            --y\n"
+        )
+        self.assertEqual(self._duplicate_sibling_keys(distinct), [])
+        self.assertEqual(self._block_scalar_comment_lines(distinct), [])
+        # A shell comment in `run: |` is correct and must not be flagged. The
+        # first version of the detector reported every commented step script in
+        # this repository, which is how a check earns a suppression.
+        script = "jobs:\n  a:\n    steps:\n      - run: |\n          set -e\n          # explain\n          echo hi\n"
+        self.assertEqual(self._block_scalar_comment_lines(script), [])
 
 
 class LocalGateTests(unittest.TestCase):

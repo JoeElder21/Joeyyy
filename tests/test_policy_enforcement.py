@@ -13,6 +13,7 @@ actually executed.
 `test_no_rule_silently_no_ops` exists so it cannot come back.
 """
 
+import dataclasses
 import datetime
 import json
 import tempfile
@@ -3273,6 +3274,171 @@ class GovernanceMountAdmissionTests(unittest.TestCase):
             any("writer lease" in reason for reason in decision.reasons),
             "if this no longer demands a lease, the audit path was added -- update "
             "this class and the record in docs/REPO_OPTIMIZATION_2026-07-25.md",
+        )
+
+
+class ThirtyThirdPassRegressionTests(unittest.TestCase):
+    """The packet's own concurrency controls, which nothing read.
+
+    `require_expected_version` and `require_idempotency_key` are REQUIRED fields
+    of the delegation schema, so every validated write-bearing packet states a
+    position on both, and no rule consulted either. A packet setting both to
+    `true` admitted a mutating request that supplied neither.
+
+    Every case here varies ONE thing against a control that differs only in
+    that thing, because the reproduction for this finding first appeared to
+    deny for the flag when it was actually denying for an unnamed operation --
+    two variables, one conclusion, and the conclusion was wrong.
+    """
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+        self.helper = FifteenthPassRegressionTests("setUp")
+        self.helper.registry, self.helper.lease = self.registry, self.lease
+        self.helper.pep = self.pep
+
+    def _packet(self, **contract_overrides):
+        packet = self.helper._write_bearing_delegation()
+        packet["mutation_contract"].update(contract_overrides)
+        return packet
+
+    def _request(self, packet, **overrides):
+        request = self.helper._request(packet)
+        # The lawful operation, always. Omitting it denies for a DIFFERENT
+        # reason, which is how the first reproduction of this finding misread
+        # itself.
+        return dataclasses.replace(request, operation="upsert", **overrides)
+
+    def test_a_demanded_expected_version_must_be_supplied(self):
+        decision = self.pep.evaluate(self._request(self._packet(), idempotency_key="key-1"))
+        self.assertFalse(decision.allowed)
+        self.assertTrue(
+            any("no expected_version" in reason for reason in decision.reasons),
+            decision.reasons,
+        )
+
+    def test_a_demanded_idempotency_key_must_be_supplied(self):
+        decision = self.pep.evaluate(self._request(self._packet(), expected_version="rev-7"))
+        self.assertFalse(decision.allowed)
+        self.assertTrue(
+            any("no idempotency_key" in reason for reason in decision.reasons),
+            decision.reasons,
+        )
+
+    def test_carrying_both_controls_is_allowed(self):
+        # The control for the two above. Without it, "denied" could mean the
+        # write path is denied for every request, in which case the controls
+        # above are proving nothing.
+        decision = self.pep.evaluate(
+            self._request(self._packet(), expected_version="rev-7", idempotency_key="key-1")
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_a_packet_that_waives_both_needs_neither(self):
+        # The reverse direction. A fix that demanded these controls
+        # unconditionally would deny lawful appends to append-only records,
+        # where no version exists to compare against -- fail-shut instead of
+        # fail-open, and just as broken. This case differs from
+        # `test_a_demanded_expected_version_must_be_supplied` in the FLAGS
+        # alone.
+        decision = self.pep.evaluate(
+            self._request(
+                self._packet(require_expected_version=False, require_idempotency_key=False)
+            )
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_a_blank_control_is_not_a_supplied_one(self):
+        # `expected_version=""` satisfies a presence check and carries nothing
+        # to compare against. The whitespace form is the one a template
+        # substitution produces.
+        decision = self.pep.evaluate(
+            self._request(self._packet(), expected_version="   ", idempotency_key="key-1")
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(
+            any("no expected_version" in reason for reason in decision.reasons),
+            decision.reasons,
+        )
+
+    def test_a_malformed_flag_does_not_waive_the_control(self):
+        # The schema rejects a non-boolean flag before this rule sees it, so
+        # this exercises the rule directly: it must not be the schema alone
+        # standing between `"false"` -- truthy in Python -- and a disabled
+        # control.
+        # Both spellings, because they fail differently. `"false"` is truthy, so
+        # a plain `if not demanded: continue` happens to hold the line against
+        # it -- which is why the truthiness mutant SURVIVED against that case
+        # alone. `0` is falsy, and under truthiness it silently waives the
+        # control. Only the second case makes "only `False` and absence waive"
+        # an enforced claim rather than a comment.
+        for malformed in ("false", 0, "", []):
+            with self.subTest(flag=malformed):
+                errors = self.pep._packet_concurrency_errors(
+                    self._request(self._packet(), idempotency_key="key-1"),
+                    self._packet(require_expected_version=malformed),
+                )
+                self.assertTrue(any("no expected_version" in error for error in errors), errors)
+
+    def test_a_malformed_contract_is_refused_rather_than_raising(self):
+        errors = self.pep._packet_concurrency_errors(
+            self._request(self._packet()), {"mutation_contract": ["append"]}
+        )
+        self.assertTrue(any("must be an object" in error for error in errors), errors)
+
+    def test_a_read_carries_no_such_obligation(self):
+        # The controls bind writes. Demanding them of a read would deny every
+        # governed read issued under a write-bearing delegation.
+        errors = self.pep._packet_concurrency_errors(
+            dataclasses.replace(self._request(self._packet()), mutating=False, operation=None),
+            self._packet(),
+        )
+        self.assertEqual(errors, [])
+
+    def test_every_schema_declared_control_is_enforced(self):
+        # The hand-enumerated-list defect: a third control added to
+        # `mutation_contract` would be a required schema field that no rule
+        # reads, which is the exact finding this class closes. Comparing
+        # against the schema means the omission fails here rather than in a
+        # review round.
+        schema = json.loads(
+            (ROOT / "schemas" / "delegation_packet.schema.json").read_text(encoding="utf-8")
+        )
+        declared = {
+            name
+            for name in schema["properties"]["mutation_contract"]["required"]
+            if name.startswith("require_")
+        }
+        enforced = {flag for flag, _field, _why in PolicyEnforcementPoint._CONCURRENCY_CONTROLS}
+        self.assertEqual(
+            declared,
+            enforced,
+            "the schema requires a control this gate does not read, or vice versa",
+        )
+
+    def test_the_obliged_request_fields_exist(self):
+        # `getattr(request, field_name)` would raise AttributeError inside the
+        # enforcement point if a control named a field `ToolRequest` does not
+        # carry -- a crash where a denial belongs.
+        names = {f.name for f in dataclasses.fields(ToolRequest)}
+        for _flag, field_name, _why in PolicyEnforcementPoint._CONCURRENCY_CONTROLS:
+            with self.subTest(field=field_name):
+                self.assertIn(field_name, names)
+
+    def test_a_non_string_control_is_refused_by_normalization(self):
+        # Same class as every other caller-supplied field: a list reaching
+        # `.strip()` must be reported and blanked, not raised.
+        _normalized, errors = PolicyEnforcementPoint.normalize(
+            ToolRequest(
+                agent=CHIEF,
+                action="write",
+                resource="APEX/Strategy-Campaigns",
+                expected_version=["rev-7"],
+            )
+        )
+        self.assertTrue(
+            any("expected_version must be a string" in error for error in errors), errors
         )
 
 
