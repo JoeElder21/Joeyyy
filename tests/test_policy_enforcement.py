@@ -45,7 +45,27 @@ from scripts.trusted_launcher import _sign
 ROOT = Path(__file__).resolve().parents[1]
 SPECIALIST = "apex_war_architect"
 JEOS_SPECIALIST = "jeos_reflection_forge"
-NOW = datetime.datetime(2026, 7, 25, 12, 0, tzinfo=datetime.UTC)
+# The suite's "current instant", taken from the real clock ONCE at import.
+#
+# This was the literal `datetime(2026, 7, 25, 12, 0)`, and it was a time bomb
+# that went off. `registry_and_lease()` issues its fixture lease at this instant
+# with the registry's 24-hour maximum TTL, and `PacketGuard` checks lease expiry
+# against `datetime.now(UTC)` with no injectable clock -- so every lease-bearing
+# test passed until 2026-07-26 12:00Z and failed from then on. CI's last green
+# run finished at 11:54Z, six minutes before the cliff, and nothing in the diff
+# had changed.
+#
+# Two clocks, one decision: the enforcement point ran on a frozen clock while the
+# guard it delegates to ran on the real one. Fixed by making the frozen clock
+# track the real one, because the guard's is the one that cannot be injected.
+#
+# Read once at import rather than per call, so a single test run still sees a
+# stable instant -- the determinism the frozen constant was for -- while never
+# drifting more than one run's duration from the guard's clock. Every use is
+# RELATIVE (`NOW + delta`, `NOW - delta`); no test asserts this literal date, which
+# is what makes deriving it safe. `test_the_fixture_lease_is_live_against_real_time`
+# fails if it is ever re-frozen.
+NOW = datetime.datetime.now(datetime.UTC).replace(microsecond=0)
 
 
 def registry_and_lease(**overrides):
@@ -3858,7 +3878,10 @@ class DelegationActionAllowlistTests(unittest.TestCase):
             (ROOT / "schemas" / "delegation_packet.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
-            PolicyEnforcementPoint._delegation_action_vocabulary(),
+            # Read through the enforcement point's ROOT, which is what the rule
+            # itself now uses -- a staticmethod call here would test a different
+            # source than the code does.
+            self.pep._delegation_action_vocabulary(),
             frozenset(schema["properties"]["allowed_actions"]["items"]["enum"]),
         )
 
@@ -4002,16 +4025,20 @@ class LifecycleReloadTests(unittest.TestCase):
     def test_only_the_active_stage_executes(self):
         # Every stage the manifests can carry, plus the absent case. A denylist
         # would have to enumerate all of them; this asserts the allowlist.
-        from scripts.policy_enforcement import EXECUTING_STAGE, NON_EXECUTING_STAGES
+        from scripts.policy_enforcement import NON_EXECUTING_STAGES
 
-        self._set_status(EXECUTING_STAGE)
-        self.assertEqual(self.pep._lifecycle_stage(self._mutating_request()), [])
+        executing = self.pep._executing_stages()
+        self.assertTrue(executing, "the registry declared no executing stage")
+        for stage in sorted(executing):
+            with self.subTest(executing=stage):
+                self._set_status(stage)
+                self.assertEqual(self.pep._lifecycle_stage(self._mutating_request()), [])
         for stage in sorted(NON_EXECUTING_STAGES) + ["invented_stage", ""]:
             with self.subTest(stage=stage):
                 self._set_status(stage)
                 self.assertTrue(
                     self.pep._lifecycle_stage(self._mutating_request()),
-                    f"stage {stage!r} is not {EXECUTING_STAGE!r} and must not execute",
+                    f"stage {stage!r} is not a declared executing stage",
                 )
 
 
@@ -4321,4 +4348,347 @@ class MalformedMountRegistryTests(unittest.TestCase):
         self.assertEqual(
             _mount_names({"mounts": [{"name": "gdrive"}, {"name": "governance"}]}),
             {"gdrive", "governance"},
+        )
+
+
+class ThirtyNinthPassRegressionTests(unittest.TestCase):
+    """Four over- and under-gates, two of them inside earlier fixes of mine."""
+
+    # AGENTS.md section 9 reserves "final PERMIT OR AGENCY submission". `final` and
+    # `submission` were in the qualifier set, so ordinary internal work was gated.
+    SUBMISSION_GATED = (
+        "submit_permit",
+        "submit_permit_application",
+        "submit_to_agency",
+        "submit_agency_filing",
+        "submit_final_permit",
+        "submit_regulatory_filing",
+        "submitPermit",
+        # Naming the category itself must still gate, via the folded fallback.
+        "final_submission",
+    )
+    SUBMISSION_UNGATED = (
+        "submit_final_report",
+        "submit_final_draft",
+        "submit_final_version",
+        "submit_report",
+        "submit_draft",
+        "submit_form",
+        "submit_timesheet",
+    )
+    # `send` was mapped bare, so a scheduled brief to Joe demanded a signed
+    # instruction -- and the issuer refuses without a TTY, so the unattended path
+    # could not be authorized at all.
+    SEND_GATED = (
+        "send_email",
+        "send_report",
+        "send_update",
+        "send_newsletter",
+        "send_report_to_client",
+        "send_to_public",
+        "send_press_release",
+        # The bypass the absence requirement exists for: an internal marker does
+        # not buy an exemption when an external one is also present.
+        "send_report_to_joe_and_client",
+        "sendEmail",
+    )
+    SEND_UNGATED = (
+        "send_report_to_joe",
+        "send_to_joe",
+        "send_brief_to_joe",
+        "send_internal_note",
+        "send_to_roundtable",
+        "send_to_self",
+        "send_to_inbox",
+    )
+
+    def _gated(self, action):
+        return PolicyEnforcementPoint._boundary_category(action) in HIGH_IMPACT_ACTIONS
+
+    def test_permit_and_agency_submissions_are_gated(self):
+        for action in self.SUBMISSION_GATED:
+            with self.subTest(action=action):
+                self.assertTrue(self._gated(action), f"{action} is a reserved submission")
+
+    def test_an_internal_final_artifact_is_not_a_permit_submission(self):
+        for action in self.SUBMISSION_UNGATED:
+            with self.subTest(action=action):
+                self.assertFalse(
+                    self._gated(action),
+                    f"{action} is ordinary internal work; 'final' is an adjective on the "
+                    "artifact, not a statement about who receives it",
+                )
+
+    def test_external_sends_are_gated(self):
+        for action in self.SEND_GATED:
+            with self.subTest(action=action):
+                self.assertEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "public_publication",
+                    f"{action} may leave the estate and must reach the boundary",
+                )
+
+    def test_internal_deliveries_are_not_publications(self):
+        for action in self.SEND_UNGATED:
+            with self.subTest(action=action):
+                self.assertFalse(
+                    self._gated(action),
+                    f"{action} delivers internally; gating it makes the unattended "
+                    "scheduled path unsatisfiable, because the issuer needs a TTY",
+                )
+
+    def test_an_unstated_destination_is_still_gated(self):
+        # Absence of an external marker is not evidence of an internal
+        # destination. `send_report` names neither and must gate.
+        from scripts.policy_enforcement import _is_internal_delivery
+
+        self.assertFalse(_is_internal_delivery(("send", "report")))
+        self.assertTrue(_is_internal_delivery(("send", "report", "to", "joe")))
+        self.assertFalse(_is_internal_delivery(("send", "to", "joe", "and", "client")))
+
+
+class ExecutingStageTests(unittest.TestCase):
+    """Promotion out of `active` must not revoke execution authority.
+
+    Round 36 inverted this rule from a denylist to an allowlist -- correctly --
+    and then hardcoded the allowlist as the single value `"active"`.
+    `config/specialist_corps.toml` declares
+    `connector_stages = ["active", "value-proven"]`, so a specialist promoted to
+    the stage the whole lifecycle exists to reach lost the authority it had at
+    the stage below. Inverting a denylist is exactly when its contents need
+    re-reading against the source.
+    """
+
+    AGENT = "apex_war_architect"
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp()) / "repo"
+        self.tmp.mkdir(parents=True)
+        for relative in (".codex", "brains", "schemas", "config"):
+            source = ROOT / relative
+            if source.exists():
+                shutil.copytree(source, self.tmp / relative)
+        self.manifest = self.tmp / "brains" / "apex" / "agents.toml"
+        self.original = self.manifest.read_text(encoding="utf-8")
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(self.tmp, registry=self.registry, clock=lambda: NOW)
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp.parent, ignore_errors=True)
+
+    def _set_status(self, status):
+        lines, current = [], None
+        for line in self.original.splitlines():
+            match = re.match(r"\[agents\.([a-z0-9_]+)\]", line.strip())
+            if match:
+                current = match.group(1)
+            if current == self.AGENT and line.strip().startswith("status"):
+                line = f'status = "{status}"'
+            lines.append(line)
+        self.manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _request(self):
+        return ToolRequest(
+            agent=self.AGENT,
+            action="write",
+            resource="APEX/Strategy-Campaigns",
+            owner_brain="APEX",
+            mutating=True,
+        )
+
+    def test_the_executing_stages_come_from_the_registry(self):
+        # Compared against the registry file itself, not a copied list. Two
+        # readers of one governance key is how the launcher and this gate would
+        # come to disagree about who may act.
+        import tomllib
+
+        with (ROOT / "config" / "specialist_corps.toml").open("rb") as handle:
+            declared = tomllib.load(handle)["lifecycle"]["connector_stages"]
+        self.assertEqual(self.pep._executing_stages(), frozenset(declared))
+
+    def test_every_declared_executing_stage_may_mutate(self):
+        for stage in sorted(self.pep._executing_stages()):
+            with self.subTest(stage=stage):
+                self._set_status(stage)
+                self.assertEqual(
+                    self.pep._lifecycle_stage(self._request()),
+                    [],
+                    f"{stage} is a declared executing stage and must be permitted",
+                )
+
+    def test_no_other_stage_may_mutate(self):
+        from scripts.policy_enforcement import NON_EXECUTING_STAGES
+
+        for stage in sorted(NON_EXECUTING_STAGES) + ["invented_stage", ""]:
+            with self.subTest(stage=stage):
+                self._set_status(stage)
+                self.assertTrue(
+                    self.pep._lifecycle_stage(self._request()),
+                    f"{stage} is not a declared executing stage",
+                )
+
+    def test_an_unresolvable_registry_denies_rather_than_permits(self):
+        # If the registry cannot say which stages may execute, none may. The
+        # Chief is exempt earlier, so this degrades to "only Agent 007 writes"
+        # -- the repository's own shadow posture -- not to an outage or a bypass.
+        # Asserted by making the resolver itself fail, rather than by building a
+        # new enforcement point against a broken registry -- that raises inside
+        # the launcher's loader during construction, which is a different
+        # (and also fail-closed) path.
+        fresh = PolicyEnforcementPoint(self.tmp, registry=self.registry, clock=lambda: NOW)
+        fresh._executing_stages = lambda: frozenset()
+        self._set_status("active")
+        self.assertTrue(
+            fresh._lifecycle_stage(self._request()),
+            "an unreadable registry left execution authority in force",
+        )
+        self.assertEqual(
+            fresh._lifecycle_stage(
+                ToolRequest(
+                    agent=CHIEF,
+                    action="write",
+                    resource="APEX/Strategy-Campaigns",
+                    owner_brain="APEX",
+                    mutating=True,
+                )
+            ),
+            [],
+            "the Chief must still write when the registry is unreadable",
+        )
+
+
+class ActionVocabularyRootTests(unittest.TestCase):
+    """The vocabulary must come from the root the packet is validated against.
+
+    The previous round's fix cached it with `lru_cache(maxsize=1)` over the
+    MODULE-level `ROOT`, while `PacketGuard(root)` validates against the
+    constructed root. For an alternate checkout whose schema declares an extra
+    action, the packet was validated against one schema and the allowlist check
+    read another -- so the extra action fell outside the recognised vocabulary
+    and `_packet_action_errors` skipped it.
+    """
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp()) / "repo"
+        self.tmp.mkdir(parents=True)
+        for relative in (".codex", "brains", "schemas", "config"):
+            source = ROOT / relative
+            if source.exists():
+                shutil.copytree(source, self.tmp / relative)
+        self.schema = self.tmp / "schemas" / "delegation_packet.schema.json"
+        self.registry, self.lease = registry_and_lease()
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp.parent, ignore_errors=True)
+
+    def _pep(self, root):
+        return PolicyEnforcementPoint(root, registry=self.registry, clock=lambda: NOW)
+
+    def test_the_vocabulary_follows_the_constructed_root(self):
+        document = json.loads(self.schema.read_text(encoding="utf-8"))
+        document["properties"]["allowed_actions"]["items"]["enum"].append("novel_action")
+        self.schema.write_text(json.dumps(document, indent=2), encoding="utf-8")
+
+        self.assertIn("novel_action", self._pep(self.tmp)._delegation_action_vocabulary())
+        # And the control: the module root must be unaffected, which is what
+        # proves the cache is keyed rather than shared.
+        self.assertNotIn("novel_action", self._pep(ROOT)._delegation_action_vocabulary())
+
+    def test_two_roots_do_not_share_one_cached_answer(self):
+        # Order-independent: the module root is read FIRST here, so a
+        # `maxsize=1` cache keyed on nothing would return its answer for the
+        # alternate root too.
+        self._pep(ROOT)._delegation_action_vocabulary()
+        document = json.loads(self.schema.read_text(encoding="utf-8"))
+        document["properties"]["allowed_actions"]["items"]["enum"].append("second_action")
+        self.schema.write_text(json.dumps(document, indent=2), encoding="utf-8")
+        self.assertIn("second_action", self._pep(self.tmp)._delegation_action_vocabulary())
+
+    def test_an_unreadable_schema_yields_an_empty_vocabulary(self):
+        # Exercised on the reader directly. Constructing a PolicyEnforcementPoint
+        # against a root with an unparseable schema raises inside PacketGuard,
+        # which is the correct behaviour and is why this rule never runs alone:
+        # `_guard_errors` has already denied by then. The empty set is defence in
+        # depth, not the thing standing between a bad schema and an allow.
+        self.schema.write_text("{ not json", encoding="utf-8")
+        self.assertEqual(PolicyEnforcementPoint._action_vocabulary_for(self.tmp), frozenset())
+
+    def test_a_schema_missing_the_enum_yields_an_empty_vocabulary(self):
+        self.schema.write_text(json.dumps({"properties": {}}), encoding="utf-8")
+        self.assertEqual(PolicyEnforcementPoint._action_vocabulary_for(self.tmp), frozenset())
+
+    def test_a_missing_schema_file_yields_an_empty_vocabulary(self):
+        self.schema.unlink()
+        self.assertEqual(PolicyEnforcementPoint._action_vocabulary_for(self.tmp), frozenset())
+
+
+class FixtureClockTests(unittest.TestCase):
+    """The suite's clock must agree with the one PacketGuard cannot be given.
+
+    `NOW` was the literal `datetime(2026, 7, 25, 12, 0)`. `registry_and_lease()`
+    issues its fixture lease at that instant with the registry's 24-hour maximum
+    TTL, and `PacketGuard` checks lease expiry against `datetime.now(UTC)` with no
+    injectable clock -- so every lease-bearing test passed until 2026-07-26 12:00Z
+    and failed from then on, with nothing in the diff having changed. CI's last
+    green run finished at 11:54Z, six minutes before the cliff.
+
+    Two clocks for one decision. The guard's is the one that cannot be injected,
+    so the fixture clock is the one that has to track it.
+    """
+
+    def test_the_fixture_lease_is_live_against_real_time(self):
+        # The assertion that would have caught it. Compared against the REAL
+        # clock, deliberately, because the whole defect was that the fixture
+        # agreed with itself and not with the guard.
+        _registry, lease = registry_and_lease()
+        expires = datetime.datetime.fromisoformat(lease["expires_at"])
+        real_now = datetime.datetime.now(datetime.UTC)
+        self.assertGreater(
+            expires,
+            real_now,
+            "the fixture lease is already expired against the real clock, which is "
+            "the clock PacketGuard uses; every lease-bearing test will fail",
+        )
+        # And not merely live by a second: a suite that takes minutes must not
+        # cross the boundary mid-run.
+        self.assertGreater(
+            expires - real_now,
+            datetime.timedelta(hours=1),
+            "the fixture lease expires within the hour, so a slow run will "
+            "straddle its expiry and fail unpredictably",
+        )
+
+    def test_the_fixture_clock_is_not_a_frozen_literal(self):
+        # The direct guard against re-freezing. A constant date passes the test
+        # above for exactly as long as its lease window, then rots -- which is
+        # what happened.
+        drift = abs(datetime.datetime.now(datetime.UTC) - NOW)
+        self.assertLess(
+            drift,
+            datetime.timedelta(hours=1),
+            "NOW has drifted from the real clock, so it has been pinned to a "
+            "literal again; PacketGuard's expiry checks cannot be injected and "
+            "will disagree with it",
+        )
+
+    def test_the_guard_really_uses_the_real_clock(self):
+        # The premise, asserted rather than assumed. If PacketGuard ever gains an
+        # injectable clock, the reasoning above stops applying and this class
+        # should be revisited rather than silently kept.
+        source = (ROOT / "scripts" / "packet_guard.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "datetime.now(UTC)",
+            source,
+            "packet_guard no longer reads the real clock directly; re-examine "
+            "whether NOW still needs to track it",
         )

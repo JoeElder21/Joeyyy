@@ -58,6 +58,11 @@ from scripts.packet_guard import PacketGuard  # noqa: E402
 from scripts.trusted_launcher import DEFAULT_KEY_PATH as DEFAULT_LAUNCH_KEY  # noqa: E402
 from scripts.trusted_launcher import _sign as _sign_grant  # noqa: E402
 
+# The one reader of the registry's connector/executing stage list. Imported
+# rather than re-read: two readers of one governance key is how the launcher
+# and this gate would come to disagree about who may act.
+from scripts.trusted_launcher import connector_stages as _connector_stages  # noqa: E402
+
 # The exact fields `trusted_launcher.issue_grant` signs, in its order. An
 # HMAC is over the whole dict, so a verifier reconstructing a different set
 # rejects every valid grant -- which is what happened when the issuer gained
@@ -266,7 +271,55 @@ LEGAL_COMMITMENT_NOUNS = frozenset(
 # Gating every `submit` would demand Joe's signature for saving a draft, and a
 # boundary that fires on ordinary work is one an operator learns to wave
 # through -- the same reasoning that keeps `read` out of the issuer.
-SUBMISSION_QUALIFIERS = frozenset({"permit", "agency", "final", "submission"})
+#
+# `final` and `submission` were in this set and are the whole finding. AGENTS.md
+# section 9 reserves "final PERMIT OR AGENCY submission", so the regulator is what
+# makes the act reserved -- `submit_final_report` and `submit_final_draft` are
+# ordinary internal work and demanded Joe's personally signed instruction. The
+# object carries the meaning, exactly as it does for the legal, schedule,
+# governance and credential rules; `final` is an adjective on the artifact, not a
+# statement about who receives it.
+#
+# Naming the category directly still gates: `_boundary_category` falls through to
+# the folded action, and `final_submission` is a member of HIGH_IMPACT_ACTIONS.
+SUBMISSION_QUALIFIERS = frozenset({"permit", "agency", "regulator", "regulatory"})
+
+# `send` is a public publication only when the destination is not internal.
+#
+# AGENTS.md section 9 reserves "public publication in Joe's name". `send` was
+# mapped bare, so `send_report_to_joe` -- the delivery path a scheduled brief
+# uses -- required a signed live instruction. That is worse than a nuisance here:
+# the issuer refuses without a TTY by design, so an unattended scheduled
+# delivery could not be authorized at all. A control that cannot be satisfied on
+# the path it governs is the unsatisfiable-gate defect this record has already
+# recorded once.
+#
+# Gating remains the DEFAULT and the exemption is narrow: an internal marker must
+# be present AND no external marker may be. Requiring the absence too is what
+# stops `send_report_to_joe_and_client` from buying an exemption with the word
+# `joe` -- the same "an exemption must cover the whole value" property the
+# privacy guard learned twice.
+INTERNAL_DESTINATIONS = frozenset({"joe", "self", "internal", "roundtable", "inbox", "local"})
+EXTERNAL_DESTINATIONS = frozenset(
+    {
+        "client",
+        "clients",
+        "customer",
+        "vendor",
+        "supplier",
+        "public",
+        "external",
+        "press",
+        "media",
+        "agency",
+        "regulator",
+        "partner",
+        "subscriber",
+        "list",
+        "everyone",
+        "world",
+    }
+)
 
 # Scheduled-task creation or deletion. The SCHEDULING marker is what makes it
 # gated: a `create` or `delete` of a SCHEDULE is reserved, while creating a
@@ -331,6 +384,20 @@ SCHEDULE_ACT_VERBS = frozenset({"schedule", "unschedule", "reschedule"})
 def _is_schedule_marker(token: str) -> bool:
     """Whether one action token names a scheduling mechanism."""
     return any(marker in token for marker in SCHEDULE_MARKERS)
+
+
+def _is_internal_delivery(tokens: tuple[str, ...]) -> bool:
+    """Whether a `send` names an internal destination and no external one.
+
+    Both halves are load-bearing. Presence alone would let
+    `send_report_to_joe_and_client` claim the exemption on the word `joe`; the
+    absence requirement is what makes the exemption cover the WHOLE destination.
+    An action naming neither is gated, because an unstated destination is not
+    evidence of an internal one.
+    """
+    if any(token in EXTERNAL_DESTINATIONS for token in tokens):
+        return False
+    return any(token in INTERNAL_DESTINATIONS for token in tokens)
 
 
 def _changes_a_schedule(tokens: tuple[str, ...]) -> bool:
@@ -462,13 +529,6 @@ AUTHORIZATION_SCHEMAS = frozenset(
 # AGENTS.md, while specialists are in shadow, Agent 007 alone executes and
 # verifies mutations.
 NON_EXECUTING_STAGES = frozenset({"candidate", "shadow", "restricted", "deprecated", "retired"})
-# The allowlist the lifecycle gate actually reads. `NON_EXECUTING_STAGES` is kept
-# because `evals/harness.py` imports it to describe which stages a proposed
-# write may come from, but a DENYLIST is the wrong shape for an authorization
-# decision: it has to enumerate every stage that will ever exist, and the one it
-# misses is permitted. `None` was that one -- an agent with no `status` in the
-# brain manifest matched no entry and was allowed to mutate.
-EXECUTING_STAGE = "active"
 
 CHIEF = "apex_chief_of_staff"
 
@@ -2317,20 +2377,48 @@ class PolicyEnforcementPoint:
         return errors
 
     @staticmethod
-    @functools.lru_cache(maxsize=1)
-    def _delegation_action_vocabulary() -> frozenset[str]:
-        """The six actions `allowed_actions` can name, read from the schema.
+    @functools.lru_cache(maxsize=8)
+    def _action_vocabulary_for(root: Path) -> frozenset[str]:
+        """The actions `allowed_actions` can name, read from THIS root's schema.
 
         Read rather than restated. A hand-copied list here and an `enum` there
         are two enforceable answers to one question, and this module has already
         paid for that twice -- once with the launch-grant field list, once with
         the boundary categories. If the schema grows a seventh action, this rule
         sees it without an edit.
+
+        Keyed on `root`, which the previous version was not. It was
+        `lru_cache(maxsize=1)` over a read of the MODULE-level `ROOT`, while
+        `PacketGuard(root)` validates against the constructed root -- so for a
+        staged, temporary, or alternate checkout whose schema declares an extra
+        action, the packet was validated against one schema and the allowlist
+        check read another. The extra action fell outside the vocabulary this
+        rule recognised, so `_packet_action_errors` skipped it and authorized an
+        action the packet had withheld.
+
+        The same class as the `mutating` and `launch_grant_verified` defects in
+        spirit: a check that reads a different source than the thing it is
+        checking. It arrived in my own fix for the missing `allowed_actions`
+        binding one round earlier, which is the third time a cache in this module
+        has been scoped to the process rather than to its input.
+
+        A failure to read the schema returns the EMPTY set, which makes every
+        action fall outside the vocabulary and the rule abstain. That is not
+        fail-open by omission: the packet cannot be validated at all without this
+        schema, so `_guard_errors` has already denied on a root whose schema is
+        unreadable, and this rule never runs alone.
         """
-        schema = json.loads(
-            (ROOT / "schemas" / "delegation_packet.schema.json").read_text(encoding="utf-8")
-        )
-        return frozenset(schema["properties"]["allowed_actions"]["items"]["enum"])
+        try:
+            schema = json.loads(
+                (root / "schemas" / "delegation_packet.schema.json").read_text(encoding="utf-8")
+            )
+            return frozenset(schema["properties"]["allowed_actions"]["items"]["enum"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return frozenset()
+
+    def _delegation_action_vocabulary(self) -> frozenset[str]:
+        """This enforcement point's vocabulary, from the root it was built for."""
+        return self._action_vocabulary_for(self.root)
 
     def _packet_action_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
         """An action the delegation withheld is not authorized by holding it.
@@ -2563,6 +2651,10 @@ class PolicyEnforcementPoint:
             token in CREDENTIAL_NOUNS for token in tokens
         ):
             return "credential_or_access_change"
+        # An internal delivery is not a publication. Placed before the verb map
+        # so `send` reaches it; the exemption is narrow and defaults to gating.
+        if "send" in tokens and _is_internal_delivery(tokens):
+            return folded
 
         # A read of a high-impact NOUN is not the high-impact act.
         #
@@ -2586,8 +2678,43 @@ class PolicyEnforcementPoint:
                 return HIGH_IMPACT_VERBS[token]
         return folded
 
+    def _executing_stages(self) -> frozenset[str]:
+        """Stages at which a specialist may execute, from the canonical registry.
+
+        Round 36 inverted this rule from a denylist to an allowlist -- correctly,
+        because `None` is in no frozenset and an agent with no `status` was
+        permitted -- and then hardcoded that allowlist as the single value
+        `"active"`. `config/specialist_corps.toml` declares
+        `connector_stages = ["active", "value-proven"]`, and the docs tie
+        writer-eligibility to "active or value-proven status". So a specialist
+        PROMOTED out of active had its execution authority revoked by the
+        promotion: fail-shut, and invisible until the first agent reached the
+        stage the whole lifecycle exists to reach.
+
+        Inverting a denylist is exactly when its contents need re-reading against
+        the source. I inverted it and hand-wrote one member.
+
+        `scripts/trusted_launcher.connector_stages` already reads this key and
+        already fails closed on a missing or malformed value, so it is imported
+        rather than re-read here. Two readers of one governance key is how the
+        launcher and this gate would come to disagree about who may act --
+        `.github/instructions/agent-safety.instructions.md` puts the rule in the
+        configuration precisely so there is one answer.
+
+        A `ManifestUnavailable` becomes the EMPTY set, which denies every
+        specialist mutation. That is the fail-closed direction: if the registry
+        cannot say which stages may execute, none may. The Chief is exempt above
+        and unaffected, so an unreadable registry degrades to "only Agent 007
+        writes" -- the repository's own shadow-stage posture -- rather than to an
+        outage or a bypass.
+        """
+        try:
+            return _connector_stages()
+        except Exception:  # noqa: BLE001 - any failure to resolve must deny, not raise
+            return frozenset()
+
     def _lifecycle_stage(self, request: ToolRequest) -> list[str]:
-        """Only `active` executes. An UNKNOWN stage is not an active one.
+        """Only a registry-declared executing stage may mutate.
 
         The rule was `if stage in NON_EXECUTING_STAGES`, and `None` is in no
         frozenset -- so an agent whose brain manifest carries no `status`, or
@@ -2596,26 +2723,29 @@ class PolicyEnforcementPoint:
         permission, which is the defect this module has removed from scope,
         operations, and packets and had left in the lifecycle gate.
 
-        Found by a test written for the reload above: dropping the manifest cache
-        when it becomes unreadable produced exactly this state, and the comment
-        I wrote claimed the call site already failed closed. It did not. The
-        claim was checked only because the test asserted the behaviour rather
-        than the intention.
+        Found by a test written for the manifest reload: dropping the cache when
+        it becomes unreadable produced exactly this state, and the comment I
+        wrote claimed the call site already failed closed. It did not. The claim
+        was checked only because the test asserted the behaviour rather than the
+        intention.
 
-        Inverted to an allowlist for the same reason the mutating-verb list was
-        inverted in round 7: a denylist of non-executing stages must enumerate
-        every stage that ever exists, and the one it misses is permitted. Only
-        `active` executes, so `active` is what this names.
+        An allowlist for the same reason the mutating-verb list was inverted in
+        round 7: a denylist of non-executing stages must enumerate every stage
+        that ever exists, and the one it misses is permitted. The allowlist is
+        READ from the registry rather than written here -- see
+        `_executing_stages`.
         """
         if not request.mutating or request.agent == CHIEF:
             return []
+        permitted = self._executing_stages()
         stage = self._spec(request.agent).get("status")
-        if stage == EXECUTING_STAGE:
+        if stage in permitted:
             return []
         described = repr(stage) if stage else "unknown (no status in the brain manifest)"
+        allowed = ", ".join(sorted(permitted)) or "none (the registry could not be read)"
         return [
             f"{request.agent!r} is in {described}; only {CHIEF} executes and verifies "
-            f"mutations while specialists are not {EXECUTING_STAGE!r}"
+            f"mutations unless a specialist is at an executing stage ({allowed})"
         ]
 
     def _high_impact_boundary(self, request: ToolRequest) -> list[str]:

@@ -1893,6 +1893,88 @@ probe list. And my O_EXCL test called `os.open` on the path *itself*, which test
 the standard library and passed with the flag removed from the issuer; pinning
 the nonce so two issuances collide is what actually exercises it.
 
+### Thirty-ninth pass — four findings, and a time bomb that went off mid-round
+
+**The time bomb first, because it was not a finding and it broke everything.**
+Partway through this round the mandatory suite went from green to 45 failures
+with nothing in the diff to explain it. Every failure said
+`active writer lease is expired`. It reproduced identically against the
+COMMITTED file, which is what established it was not the round's work.
+
+`NOW` in `tests/test_policy_enforcement.py` was the literal
+`datetime(2026, 7, 25, 12, 0)`. `registry_and_lease()` issues its fixture lease
+at that instant with the registry's 24-hour maximum TTL, and `PacketGuard` checks
+lease expiry against `datetime.now(UTC)` **with no injectable clock**. So every
+lease-bearing test passed until 2026-07-26 12:00Z and failed from 12:00Z onward.
+CI's last green run finished at **11:54Z — six minutes before the cliff.**
+
+Two clocks for one decision: the enforcement point ran on a frozen clock while
+the guard it delegates to ran on the real one. The guard's is the one that cannot
+be injected, so the fixture clock is what had to track it. `NOW` is now read from
+the real clock once at import — stable within a run, never drifting from the
+guard. Every use was already relative (`NOW ± delta`) and no test asserted the
+literal date, which is what made this safe.
+
+`FixtureClockTests` guards all three properties: the fixture lease must be live
+against the REAL clock with more than an hour to spare, `NOW` must not have
+drifted from real time (which is what re-freezing it would cause), and
+`packet_guard` must still be reading the real clock directly — because if it ever
+gains an injectable clock the reasoning changes and the class should be revisited
+rather than silently kept. Verified by re-freezing the constant and watching two
+of the three fail.
+
+This is the same class as the `VulnerabilityTriageTests` window check earlier in
+this record, where I deliberately anchored on the file's newest entry rather than
+`date.today()` to avoid "a check that starts failing on a fixed calendar day for
+reasons unrelated to any change". I wrote that sentence and the suite already
+contained one.
+
+**Promotion out of `active` revoked execution authority.** Round 36 inverted the
+lifecycle rule from a denylist to an allowlist — correctly, because `None` is in
+no frozenset — and then hardcoded the allowlist as the single value `"active"`.
+`config/specialist_corps.toml` declares
+`connector_stages = ["active", "value-proven"]`. So a specialist promoted to the
+stage the whole lifecycle exists to reach lost the authority it held one stage
+below, and nothing would have surfaced it until the first promotion.
+
+**Inverting a denylist is exactly when its contents need re-reading against the
+source.** I inverted it and hand-wrote one member. The set now comes from
+`scripts/trusted_launcher.connector_stages`, which already reads that key and
+already fails closed — imported rather than re-read, because two readers of one
+governance key is how the launcher and this gate would come to disagree about who
+may act, and `config/specialist_corps.toml`'s own comment says the rule lives
+there for that reason.
+
+**`final` alone made a submission a permit submission.** AGENTS.md §9 reserves
+"final **permit or agency** submission", and the qualifier set held `final` and
+`submission` as well — so `submit_final_report` and `submit_final_draft`, ordinary
+internal work, demanded Joe's personally signed instruction. `final` is an
+adjective on the artifact, not a statement about who receives it. Naming the
+category directly still gates, through the folded fallback.
+
+**Every `send` was a public publication, including to Joe.** `send` was mapped
+bare, so `send_report_to_joe` — the delivery path a scheduled brief uses —
+required a signed live instruction. That is worse than a nuisance: the issuer
+refuses without a TTY by design, so the unattended path could not be authorized
+**at all**. A control that cannot be satisfied on the path it governs is the
+unsatisfiable-gate defect this record has already recorded once.
+
+Gating stays the default and the exemption is narrow — an internal marker must be
+present **and** no external marker may be. Requiring the absence too is what stops
+`send_report_to_joe_and_client` buying an exemption with the word `joe`, which is
+the same "an exemption must cover the whole value" property the privacy guard
+learned twice. An action naming neither is gated, because an unstated destination
+is not evidence of an internal one.
+
+**The action vocabulary was cached from the wrong root.** My own fix for the
+missing `allowed_actions` binding used `lru_cache(maxsize=1)` over a read of the
+MODULE-level `ROOT`, while `PacketGuard(root)` validates against the constructed
+root. For a staged or alternate checkout whose schema declares an extra action,
+the packet was validated against one schema and the allowlist check read another
+— so the extra action fell outside the recognised vocabulary and the rule skipped
+it. Keyed on `root` now. **Third time a cache in this module has been scoped to
+the process rather than to its input** (brain manifests, mount registry, this).
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
