@@ -716,9 +716,14 @@ story.append(Paragraph(
     "additions scoped to the repository as it exists at that time, which keeps "
     f"the {_rate(ADOPTED_TOTAL, PRIMARY_AVAILABLE)} adoption rate a deliberate position "
     "rather than a snapshot that "
-    "quietly rots. Bump the pinned commit in "
-    "<font face='Courier' size='8'>.github/AWESOME-COPILOT.md</font> whenever "
-    "files are refreshed.", BODY))
+    "quietly rots. The pin in "
+    "<font face='Courier' size='8'>.github/AWESOME-COPILOT.md</font> is "
+    "manifest-WIDE: move it only after every adopted asset in that file has "
+    "been compared against the new revision and refreshed where it differs. "
+    "Refreshing a single file leaves the pin where it is and records that "
+    "asset's own commit beside its row — otherwise the pin attributes "
+    "untouched files to a revision whose bytes they may not match, which is "
+    "the one claim this report and that manifest both rest on.", BODY))
 rule(6)
 story.append(Paragraph(
     "Upstream content is authored by third-party contributors and carries the "
