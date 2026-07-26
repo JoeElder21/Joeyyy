@@ -1,6 +1,6 @@
 # Brain Cadence Runbook
 
-This runbook turns the two specialist manifests into repeatable daily, weekly, and monthly orchestration plans. It is a routing contract, not a claim that agents run continuously or on a background schedule. Agent 007 starts each cycle only in a verified runtime and supplies separate, schema-valid v2.1 packets for every specialist invocation.
+This runbook turns the two specialist manifests into repeatable daily, weekly, and monthly orchestration plans. It is a routing contract, not a claim that agents run continuously or on a background schedule. Agent 007 starts each cycle only in a verified runtime and supplies separate, schema-valid v2.1 packets for every specialist invocation. The machine-readable cadence source is `config/specialist_corps.toml`; `scripts/orchestration_contract.py` validates that every selected sequence stays in one brain and terminates with Agent 007.
 
 ## Universal cycle
 
@@ -50,3 +50,9 @@ JEOS routing precedence:
 The local validation harness proves only that manifests parse, v2.1 packets satisfy the contract, and opposite-brain probes fail closed. It does not invoke a named agent, call a connector, complete a real mission, or promote a specialist.
 
 Promotion requires one controlled real mission for every material mode, recorded accuracy and boundary evidence, verified runtime connector isolation, and readback for any mutation. A versioned native-agent change must remove `read-only` before a specialist may ever hold its own writer lease.
+
+## Runtime integration boundary
+
+The repository now exposes a runtime-neutral orchestration contract rather than bundling a framework runtime. It provides the smallest reusable parts of the requested patterns: deterministic cadence/group speaking plans, a terminal Agent 007 integration step, lifecycle state-transition guards, and an explicit checkpoint before a declared high-impact action. It **does not** instantiate AutoGen agents, run LangGraph, crewAI, or Prefect, call a memory provider, index private documents, or schedule background work.
+
+Any future adapter must validate each inbound and outbound packet with `PacketGuard`, preserve APEX/JEOS isolation, and treat `CadencePlan.checkpoint.required` as a stop until Joe has given task-level instruction. The planned order is an orchestration input, not evidence that any specialist was invoked or that an artifact was accepted.

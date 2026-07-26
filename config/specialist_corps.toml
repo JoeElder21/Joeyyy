@@ -26,6 +26,22 @@ packet_contract_version = "2.1"
 specialist_connector_policy = "packet_only_no_direct_connectors"
 hard_connector_isolation_required_for_active = true
 
+[orchestration]
+runtime_claim = "Declarative planning and validation only; this repository does not bundle or invoke an AutoGen, LangGraph, crewAI, or Prefect runtime."
+terminal_integrator = "apex_chief_of_staff"
+high_impact_actions = ["irreversible_bulk_delete", "financial_transaction", "credential_or_access_change", "professional_certification", "binding_legal_commitment", "public_publication"]
+approval_checkpoint = "Joe's explicit task-level instruction is required immediately before a high-impact action."
+
+[cadence.apex]
+daily = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine", "apex_chief_of_staff"]
+weekly = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine", "apex_war_architect", "apex_systems_blacksmith", "apex_chief_of_staff"]
+monthly = ["apex_intelligence_forge", "apex_delivery_commander", "apex_deal_engine", "apex_systems_blacksmith", "apex_war_architect", "apex_chief_of_staff"]
+
+[cadence.jeos]
+daily = ["jeos_life_architect", "jeos_energy_director", "jeos_momentum_engine", "apex_chief_of_staff"]
+weekly = ["jeos_reflection_forge", "jeos_energy_director", "jeos_life_architect", "jeos_momentum_engine", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
+monthly = ["jeos_reflection_forge", "jeos_energy_director", "jeos_lifestyle_systems_builder", "jeos_life_architect", "jeos_momentum_engine", "apex_chief_of_staff"]
+
 [routing]
 resolution_order = ["brain_boundary", "explicit_agent", "canonical_target_owner", "private_constraint_profile", "most_specific_intent", "cadence_route", "agent_007_fallback"]
 lower_precedence_wins = true

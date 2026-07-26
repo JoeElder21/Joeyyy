@@ -4,6 +4,16 @@ Capability-absorption record from the ecosystem repository analysis (`docs/ECOSY
 
 Each pattern below is merge-ready text with its source named. Patterns marked **candidate merge** propose changes to an existing governance doc; adopt them individually through normal change standards (small, reviewable, reversible, with a recurrence test where behavior changes). Until merged, this file is the canonical record.
 
+## 0. Runtime-contract implementation — 2026-07-24
+
+The requested AutoGen, LangGraph, crewAI, Prefect, mem0, LlamaIndex, LangChain, jsonschema, and Pydantic patterns were assessed as architectural inputs, not permission to claim those services are configured. The implemented subset is intentionally bounded and reversible:
+
+- `scripts/orchestration_contract.py` supplies a declarative cadence plan (the GroupChat/Crew sequencing analogue), same-brain enforcement, Agent 007 terminal reduction, lifecycle edge guards (the StateGraph analogue), and a human checkpoint for declared high-impact actions.
+- `config/specialist_corps.toml` is the canonical machine-readable cadence and checkpoint declaration. No code invokes specialists, connectors, third-party memory, indexes, or schedules.
+- `scripts/packet_guard.py` now delegates structural validation to the maintained `jsonschema` Draft 2020-12 validator and collects all violations before enforcing the existing domain relationships. `requirements.txt` and CI install that validator.
+
+Deferred deliberately: dynamic LLM speaker selection, actual specialist debate, sub-delegation, external memory persistence, RAG over private materials, scheduled execution, retries, artifact dashboards, and generated Pydantic models. Each needs a verified runtime, privacy review, packet-boundary adapter, and separate activation evidence; none is implied by these repository-only contracts.
+
 ## 1. Delegation and dispatch
 
 ### Ticket-as-control-plane (files decide, not chat) — from Git-on-my-level/codex-autorunner

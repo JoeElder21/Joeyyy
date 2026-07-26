@@ -56,6 +56,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `templates/specialist-handoff.md` — human-readable specialist packet.
 - `templates/weekly-agent-audit.md` — weekly ecosystem review.
 - `scripts/validate_specialist_corps.py` — honest static and synthetic v2.1 packet validation.
+- `scripts/orchestration_contract.py` — declarative cadence, lifecycle, and high-impact checkpoint validation; it does not invoke agents.
 - `tests/test_agent_contract.py` — contract validation.
 - `tests/test_specialist_corps.py` — roster, isolation, schema, privacy, and registry validation.
 - `tests/test_local_validation.py` — validates the harness result and its no-runtime claims.

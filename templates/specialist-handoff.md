@@ -27,10 +27,13 @@
 - `dependencies`:
 - `risk_flags`:
 - `approval_level`:
+- `orchestration_checkpoint`: if the planned action is high-impact, stop for Joe's explicit task-level instruction before execution; record the resolved checkpoint in the run evidence
 - `sensitivity`:
 - `return_schema`: `schemas/handoff_packet.schema.json`
 
 Validate with [delegation_packet.schema.json](../schemas/delegation_packet.schema.json) and `scripts/packet_guard.py`, including the live writer-lease and constraint ledgers. All new specialist missions use `2.1`; PacketGuard rejects `2.0` delegation and handoff packets. Version `2.0` is archival-only — validate archived packets by passing `--historical` (CLI) or `historical=True` (API), never for new work.
+
+For a declared cadence, build and validate the brain-locked speaker sequence with `scripts/orchestration_contract.py` before issuing packets. A cadence plan is not a runtime invocation claim.
 
 ## Specialist return
 

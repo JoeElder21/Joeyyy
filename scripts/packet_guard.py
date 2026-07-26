@@ -12,6 +12,8 @@ import tomllib
 from typing import Any, Iterable
 import unicodedata
 
+from jsonschema.validators import validator_for
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY = {"public": 0, "internal": 1, "confidential": 2, "restricted": 3}
@@ -23,56 +25,20 @@ ACTION_FIELDS = {
 BOUNDARY_BLOCKER = "BOUNDARY_SCOPE_REJECTED"
 
 
-def _matches_type(value: Any, expected: str | list[str]) -> bool:
-    if isinstance(expected, list):
-        return any(_matches_type(value, item) for item in expected)
-    mapping = {
-        "object": dict,
-        "array": list,
-        "string": str,
-        "boolean": bool,
-        "null": type(None),
-    }
-    return isinstance(value, mapping[expected])
-
-
-def _structural_errors(instance: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
-    errors: list[str] = []
-    if "type" in schema and not _matches_type(instance, schema["type"]):
-        return [f"{path}: expected {schema['type']}"]
-    if "const" in schema and instance != schema["const"]:
-        errors.append(f"{path}: expected const {schema['const']!r}")
-    if "enum" in schema and instance not in schema["enum"]:
-        errors.append(f"{path}: not in enum")
-    if isinstance(instance, str):
-        if len(instance) < schema.get("minLength", 0):
-            errors.append(f"{path}: string too short")
-        if "maxLength" in schema and len(instance) > schema["maxLength"]:
-            errors.append(f"{path}: string too long")
-        if "pattern" in schema and not re.fullmatch(schema["pattern"], instance):
-            errors.append(f"{path}: pattern mismatch")
-    if isinstance(instance, list):
-        if len(instance) < schema.get("minItems", 0):
-            errors.append(f"{path}: too few items")
-        if "maxItems" in schema and len(instance) > schema["maxItems"]:
-            errors.append(f"{path}: too many items")
-        for index, item in enumerate(instance):
-            if "items" in schema:
-                errors.extend(_structural_errors(item, schema["items"], f"{path}[{index}]"))
-    if isinstance(instance, dict):
-        required = set(schema.get("required", []))
-        missing = required - set(instance)
-        if missing:
-            errors.append(f"{path}: missing {sorted(missing)}")
-        properties = schema.get("properties", {})
-        if schema.get("additionalProperties") is False:
-            extras = set(instance) - set(properties)
-            if extras:
-                errors.append(f"{path}: extras {sorted(extras)}")
-        for key, value in instance.items():
-            if key in properties:
-                errors.extend(_structural_errors(value, properties[key], f"{path}.{key}"))
-    return errors
+def _jsonschema_errors(instance: Any, schema: dict[str, Any]) -> list[str]:
+    """Return all canonical JSON Schema violations in stable path order."""
+    validator_class = validator_for(schema)
+    validator_class.check_schema(schema)
+    validator = validator_class(schema)
+    errors = sorted(validator.iter_errors(instance), key=lambda error: list(error.absolute_path))
+    formatted: list[str] = []
+    for error in errors:
+        path = "$" + "".join(
+            f"[{part}]" if isinstance(part, int) else f".{part}"
+            for part in error.absolute_path
+        )
+        formatted.append(f"{path}: {error.message}")
+    return formatted
 
 
 class PacketGuard:
@@ -111,7 +77,7 @@ class PacketGuard:
     ) -> list[str]:
         if schema_name not in self.schemas:
             return [f"$: unknown schema {schema_name}"]
-        errors = _structural_errors(packet, self.schemas[schema_name])
+        errors = _jsonschema_errors(packet, self.schemas[schema_name])
         if errors:
             return errors
         errors.extend(self._identifier_errors(packet))
