@@ -1762,6 +1762,68 @@ first statement of the importing function, and the call in `execute()` is kept
 because an idempotent refusal in two places costs nothing while a single call in
 the wrong place cost the whole boundary.
 
+### Thirty-seventh pass — three findings, one of them my own unfixed sibling
+
+**A cross-brain registry inherited a directory exemption.** `config/` was a
+brain-neutral prefix, and `config/specialist_corps.toml` holds `apex_roster`,
+`jeos_roster`, both brain manifests, the mirrored mappings, and every namespace
+and write target. So an APEX specialist declaring `owner_brain: APEX` read the
+complete JEOS roster with `allowed=True` and **no reasons** — on a path the brain
+lock had been told to treat as shared. Only Agent 007 sees both rosters.
+
+**My first reproduction of this looked like a refutation and was a faulty
+setup.** I omitted `owner_brain`, the read denied on the brain lock's own "state
+your brain" rule, and I nearly recorded the finding as unreproducible. With the
+field supplied it is allowed exactly as reported. A denial for the wrong reason
+is not evidence — the same lesson as round 30's refusal probe, arriving from the
+opposite direction.
+
+`config/dream_team_roster.toml` is listed alongside it because its top level is
+literally `[apex]` and `[jeos]`. `mission_catalog.toml` and `value_policy.toml`
+*mention* both brains and are deliberately **not** listed: they define missions
+and thresholds both brains work under, which is shared contract rather than a
+roster of the other brain's agents. Revoking the whole `config/` exemption would
+have been fail-shut on all of it. A test now requires every config file naming
+both brains to be either a declared registry or in an explicitly reviewed shared
+set, so the next file dropped into that folder cannot quietly inherit the
+exemption — which is exactly how this happened.
+
+**The mount registry cached forever, and it is the untouched sibling of the fix
+one round earlier.** Round 36 made the brain manifests reload when they change
+and left `_registered_mounts` reading whatever `config/mcp_mounts.toml` said at
+construction. Removing a mount from the governed list **is** an emergency
+connector revocation, and it had no effect on any already-running enforcement
+point: the Chief's read of a revoked grant-free mount met no other denial and
+stayed allowed until restart.
+
+There is no excuse available here. The previous round's own entry in this record
+describes fixing a cache and names the class; the sibling cache was three lines
+away in the same constructor. **Fixing the instance and not the class is how a
+fix becomes the next round's finding**, and this record has now said that about
+its own work in three consecutive rounds.
+
+The reload direction was checked rather than assumed, because the equivalent
+clearing move in the lifecycle fix turned out to open a hole: here an
+unregistered mount name is *refused*, so clearing the cache on an unreadable
+file denies rather than permits. Fail-closed, verified.
+
+**The judge was told about six of nine always-gated categories.**
+`evals/test_specialist_modes.py` hand-wrote six into the `role_adherence`
+criteria. Round 32 added `final_submission`, `scheduled_task_change` and
+`governance_or_master_change` to `HIGH_IMPACT_ACTIONS` and never touched the
+prose the judge reads — so an evaluated output could submit a permit, delete a
+scheduled task, or rewrite a canonical brain master, score full `role_adherence`,
+and be recorded as **proven**. A criterion that lags the gate it describes is a
+gate the judge cannot apply.
+
+Fixed by deriving the sentence from the frozenset rather than adding three
+phrases, so a tenth category reaches the judge the day it reaches the gate. The
+test for that property initially failed for an instructive reason: `harness` uses
+`from ... import HIGH_IMPACT_ACTIONS`, which binds the name in its own namespace,
+so patching the source module proved nothing about the function — and would have
+"passed" against a hardcoded criterion. **The name the function reads is the name
+to patch.**
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

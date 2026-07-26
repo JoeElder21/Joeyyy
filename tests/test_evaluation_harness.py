@@ -1253,3 +1253,84 @@ class TelemetryOrderingTests(unittest.TestCase):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         ]
         self.assertIn("assert_telemetry_disabled", names)
+
+
+class HighImpactCriterionTests(unittest.TestCase):
+    """The judge must be told about every category the gate enforces.
+
+    `evals/test_specialist_modes.py` hand-listed SIX categories in the
+    `role_adherence` criteria while `HIGH_IMPACT_ACTIONS` gated NINE. Final
+    submission, scheduled-task change and governance-or-master change were added
+    to the frozenset in an earlier round and never reached the prose the judge
+    reads -- so an output could delete a scheduled task or rewrite a canonical
+    brain master, score full marks, and be recorded as proven.
+    """
+
+    def test_every_gated_category_reaches_the_judge(self):
+        from scripts.policy_enforcement import HIGH_IMPACT_ACTIONS
+
+        criterion = harness.high_impact_criterion().lower()
+        for category in HIGH_IMPACT_ACTIONS:
+            with self.subTest(category=category):
+                self.assertIn(
+                    category.replace("_", " "),
+                    criterion,
+                    f"{category} is always-gated but the judge is never told about it",
+                )
+
+    def test_the_criterion_is_derived_not_restated(self):
+        # The property that matters more than today's nine: a tenth category
+        # must reach the judge the day it reaches the gate. Asserted by adding
+        # one and watching the criterion grow, because a test that only counts
+        # today's categories passes forever after the list is hand-updated once.
+        # Patched on `harness`, not on `policy_enforcement`. `harness` uses
+        # `from ... import HIGH_IMPACT_ACTIONS`, which binds the name in its own
+        # namespace at import time, so patching the source module proves nothing
+        # about the function -- the first version of this test failed for exactly
+        # that reason and would have "passed" if the criterion were hardcoded.
+        # The name the function reads is the name to patch.
+        original = harness.HIGH_IMPACT_ACTIONS
+        harness.HIGH_IMPACT_ACTIONS = frozenset(original | {"invented_category"})
+        try:
+            self.assertIn("invented category", harness.high_impact_criterion())
+        finally:
+            harness.HIGH_IMPACT_ACTIONS = original
+        self.assertNotIn("invented category", harness.high_impact_criterion())
+
+    def test_the_criterion_lists_the_categories_in_a_stable_order(self):
+        # An unordered set would make the prompt differ between processes, which
+        # is a reproducibility defect in a file whose whole purpose is repeatable
+        # evidence. Compared against the sorted set rather than a copied string,
+        # so this does not become another hand-restated list.
+        criterion = harness.high_impact_criterion()
+        self.assertEqual(criterion, harness.high_impact_criterion())
+        expected = ", ".join(
+            sorted(category.replace("_", " ") for category in harness.HIGH_IMPACT_ACTIONS)
+        )
+        self.assertIn(expected, criterion)
+
+    def test_the_suite_file_uses_the_helper_rather_than_prose(self):
+        # The six-item list must not come back as literal text alongside the
+        # derived call. Parsed rather than substring-matched on the whole file:
+        # the explanatory comment naturally names the categories.
+        import ast
+
+        source = (ROOT / "evals" / "test_specialist_modes.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        called = {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertIn("high_impact_criterion", called)
+        literals = [
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        ]
+        for literal in literals:
+            self.assertNotIn(
+                "irreversible deletion, financial transaction",
+                literal,
+                "the hand-written six-category list is back in the criteria text",
+            )

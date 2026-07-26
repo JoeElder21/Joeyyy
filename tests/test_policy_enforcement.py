@@ -4013,3 +4013,202 @@ class LifecycleReloadTests(unittest.TestCase):
                     self.pep._lifecycle_stage(self._mutating_request()),
                     f"stage {stage!r} is not {EXECUTING_STAGE!r} and must not execute",
                 )
+
+
+class CrossBrainRegistryTests(unittest.TestCase):
+    """A registry holding both rosters is not shared reading.
+
+    `config/` was a brain-neutral prefix, and `config/specialist_corps.toml`
+    holds `apex_roster`, `jeos_roster`, both brain manifests, the mirrored
+    mappings, and every namespace and write target. So an APEX specialist
+    declaring `owner_brain: APEX` read the complete JEOS roster with
+    `allowed=True` and no reasons.
+
+    The first reproduction of this omitted `owner_brain` and denied for the
+    brain-lock's own "state your brain" rule, which looked like a refutation. It
+    was a faulty setup: with the field supplied, the read is allowed. A denial
+    for the wrong reason is not evidence.
+    """
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _read(self, agent, brain, resource):
+        return self.pep.evaluate(
+            ToolRequest(agent=agent, action="read", resource=resource, owner_brain=brain)
+        )
+
+    def test_a_specialist_cannot_read_the_cross_brain_registries(self):
+        from scripts.policy_enforcement import CROSS_BRAIN_REGISTRIES
+
+        for agent, brain in (("apex_war_architect", "APEX"), ("jeos_life_architect", "JEOS")):
+            for registry in CROSS_BRAIN_REGISTRIES:
+                with self.subTest(agent=agent, registry=registry):
+                    decision = self._read(agent, brain, registry)
+                    self.assertFalse(
+                        decision.allowed,
+                        f"{agent} read {registry}, which carries the other brain's roster",
+                    )
+                    self.assertTrue(
+                        any("both brains" in reason for reason in decision.reasons),
+                        decision.reasons,
+                    )
+
+    def test_the_chief_still_reads_them(self):
+        # The control, and the point of the exemption: Agent 007 is the sole
+        # cross-brain agent and routing work requires seeing both rosters.
+        # Without this, "denied" could mean the files became unreadable to
+        # everyone, which would break routing rather than isolate brains.
+        from scripts.policy_enforcement import CROSS_BRAIN_REGISTRIES
+
+        for registry in CROSS_BRAIN_REGISTRIES:
+            with self.subTest(registry=registry):
+                decision = self._read(CHIEF, "APEX", registry)
+                self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_the_rest_of_config_stays_neutral(self):
+        # The reverse direction. Revoking the whole `config/` exemption would
+        # deny a specialist the mount list, mission catalog and value policy it
+        # legitimately works under -- fail-shut, and the neutral set exists
+        # precisely because the brain lock now denies anything it cannot classify.
+        for resource in (
+            "config/mcp_mounts.toml",
+            "config/mission_catalog.toml",
+            "config/value_policy.toml",
+            "config/portfolio_policy.toml",
+            "docs/AGENTS_INDEX.md",
+            "schemas/delegation_packet.schema.json",
+        ):
+            with self.subTest(resource=resource):
+                decision = self._read("apex_war_architect", "APEX", resource)
+                self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_a_registry_is_matched_exactly_not_by_prefix(self):
+        # `AGENTS.md` matching `AGENTS.md.private` was a real finding in the
+        # neutral-prefix rule. This comparison must not repeat it in reverse: a
+        # prefix rule here would silently reclassify sibling paths.
+        self.assertEqual(
+            PolicyEnforcementPoint._cross_brain_registry("config/specialist_corps.toml"),
+            "config/specialist_corps.toml",
+        )
+        self.assertIsNone(
+            PolicyEnforcementPoint._cross_brain_registry("config/specialist_corps.toml.bak")
+        )
+
+    def test_a_registry_is_never_brain_neutral(self):
+        # Neutrality waives BOTH the ownership check and packet admission, so a
+        # registry that reached the prefix loop would be exempted by the folder
+        # it lives in. Asserted on the classifier directly, because the two
+        # exemptions are read from this one predicate.
+        from scripts.policy_enforcement import CROSS_BRAIN_REGISTRIES
+
+        for registry in CROSS_BRAIN_REGISTRIES:
+            with self.subTest(registry=registry):
+                self.assertFalse(PolicyEnforcementPoint._is_brain_neutral(registry))
+        self.assertTrue(PolicyEnforcementPoint._is_brain_neutral("config/mcp_mounts.toml"))
+
+    def test_no_config_file_naming_both_brains_is_silently_neutral(self):
+        # The hand-enumerated-list guard. A new cross-brain registry dropped
+        # into `config/` would inherit the directory exemption, which is exactly
+        # how this finding happened. Any file naming both brains must be either
+        # a declared registry or in the reviewed-shared set below.
+        from scripts.policy_enforcement import CROSS_BRAIN_REGISTRIES
+
+        # Reviewed by hand and shared on purpose: these define missions, value
+        # thresholds and mounts that BOTH brains work under. They name the brains
+        # without enumerating the other brain's agents.
+        reviewed_shared = {
+            "config/mcp_mounts.toml",
+            "config/mission_catalog.toml",
+            "config/value_policy.toml",
+        }
+        for path in sorted((ROOT / "config").glob("*.toml")):
+            relative = path.relative_to(ROOT).as_posix()
+            text = path.read_text(encoding="utf-8").lower()
+            if "apex" not in text or "jeos" not in text:
+                continue
+            with self.subTest(config=relative):
+                self.assertIn(
+                    relative,
+                    set(CROSS_BRAIN_REGISTRIES) | reviewed_shared,
+                    f"{relative} names both brains but is neither a declared "
+                    "cross-brain registry nor reviewed as shared; it currently "
+                    "inherits the config/ neutral exemption",
+                )
+
+
+class MountRegistryReloadTests(unittest.TestCase):
+    """The untouched sibling of the manifest cache.
+
+    The previous round made the brain manifests reload when they change and left
+    `_registered_mounts` caching for the life of the process. Removing a mount
+    from `config/mcp_mounts.toml` -- which is what an emergency connector
+    revocation IS -- therefore had no effect on any already-running enforcement
+    point. Fixing the instance and not the class is how a fix becomes the next
+    round's finding.
+    """
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp()) / "repo"
+        self.tmp.mkdir(parents=True)
+        for relative in (".codex", "brains", "schemas", "config"):
+            source = ROOT / relative
+            if source.exists():
+                shutil.copytree(source, self.tmp / relative)
+        self.mounts = self.tmp / "config" / "mcp_mounts.toml"
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(self.tmp, registry=self.registry, clock=lambda: NOW)
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp.parent, ignore_errors=True)
+
+    def _revoke(self, name):
+        text = self.mounts.read_text(encoding="utf-8")
+        kept = re.sub(
+            r'\[\[mounts\]\][^\[]*?name\s*=\s*"' + name + r'".*?(?=\[\[mounts\]\]|\Z)',
+            "",
+            text,
+            flags=re.S,
+        )
+        self.assertNotEqual(kept, text, f"the fixture removed no {name} mount, so it tests nothing")
+        self.mounts.write_text(kept, encoding="utf-8")
+
+    def test_a_revoked_mount_stops_being_registered(self):
+        self.assertIn("gdrive", self.pep._registered_mounts())
+        self._revoke("gdrive")
+        self.assertNotIn(
+            "gdrive",
+            self.pep._registered_mounts(),
+            "a revoked mount stayed registered until the process restarted",
+        )
+
+    def test_the_surviving_mounts_are_still_registered(self):
+        # The control: the reload must not empty the registry, which would deny
+        # every mount and look like a successful revocation of one.
+        self._revoke("gdrive")
+        self.assertIn("governance", self.pep._registered_mounts())
+
+    def test_an_unreadable_mount_list_registers_nothing(self):
+        # Fail-closed here, unlike the lifecycle cache: an unregistered mount
+        # name is refused, so clearing the cache denies rather than permits. The
+        # direction was checked rather than assumed, because the same clearing
+        # move in the lifecycle fix turned out to open a hole.
+        self.assertIn("gdrive", self.pep._registered_mounts())
+        self.mounts.write_text("not valid toml = = =\n", encoding="utf-8")
+        self.assertEqual(self.pep._registered_mounts(), frozenset())
+
+    def test_an_unchanged_file_is_not_reparsed(self):
+        first = self.pep._registered_mounts()
+        second = self.pep._registered_mounts()
+        self.assertIs(first, second, "the mount list was re-read with nothing changed")
+
+    def test_a_deleted_mount_file_registers_nothing(self):
+        self.assertIn("gdrive", self.pep._registered_mounts())
+        self.mounts.unlink()
+        self.assertEqual(self.pep._registered_mounts(), frozenset())

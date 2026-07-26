@@ -419,6 +419,32 @@ BRAIN_NEUTRAL_PREFIXES = (
     "CLAUDE.md",
 )
 
+# Files under a neutral prefix that are NOT neutral.
+#
+# `config/` was exempted wholesale, and `config/specialist_corps.toml` holds
+# BOTH brains' manifests and rosters -- `apex_roster`, `jeos_roster`,
+# `apex_brain_manifest`, `jeos_brain_manifest`, the mirrored mappings, every
+# namespace and write target. So an APEX specialist declaring `owner_brain:
+# APEX` read the complete JEOS roster with `allowed=True` and no reasons, on a
+# path the brain lock had been told to treat as shared. Only Agent 007 sees both
+# rosters; a directory-wide exemption is how a cross-brain registry ends up
+# inside a shared folder and inherits its exemption.
+#
+# `config/dream_team_roster.toml` is listed for the same structural reason: its
+# top level is literally `[apex]` and `[jeos]`.
+#
+# `mission_catalog.toml` and `value_policy.toml` MENTION both brains and are
+# deliberately not listed -- they define missions and value thresholds that both
+# brains work under, which is shared contract rather than a roster of the other
+# brain's agents. `tests/test_policy_enforcement.py` asserts that any config
+# file naming both brains is either listed here or named in that test's
+# reviewed-shared set, so a new cross-brain registry cannot quietly acquire the
+# `config/` exemption.
+CROSS_BRAIN_REGISTRIES = (
+    "config/specialist_corps.toml",
+    "config/dream_team_roster.toml",
+)
+
 # The only schemas that can authorize a tool invocation. `packet_schema` is a
 # caller-supplied string, so without this list a caller could point it at
 # `writer_lease.schema.json` (or any other schema in schemas/) and satisfy
@@ -810,6 +836,7 @@ class PolicyEnforcementPoint:
         # construction and the first authorization is still detected.
         self._manifest_signature_seen = self._manifest_signature()
         self._mounts_cache: frozenset[str] | None = None
+        self._mounts_signature_seen: tuple[int, int] | None = None
 
     def _manifest_signature(self) -> tuple[tuple[str, int, int], ...]:
         """(path, mtime_ns, size) for each brain manifest that exists.
@@ -1204,6 +1231,20 @@ class PolicyEnforcementPoint:
                 ]
             return []
         errors = []
+        # A cross-brain registry is not shared reading, whatever folder it is in.
+        #
+        # Placed here rather than after the ownership resolution below, because
+        # that resolution cannot classify these files -- they belong to BOTH
+        # brains -- so they fall to `_is_brain_neutral`, which says `config/` is
+        # shared and returns no objection. Ordering an exemption ahead of a check
+        # is the shape three fail-opens in this record already took; this is the
+        # same shape with the check missing entirely.
+        registry = self._cross_brain_registry(request.resource)
+        if registry:
+            errors.append(
+                f"brain lock: {registry!r} carries both brains' rosters and manifests; "
+                f"only {CHIEF} may read across the separation"
+            )
         # Refused before any prefix comparison. A resource that climbs out of
         # the tree cannot be classified as owned or neutral, and guessing is
         # how `scripts/../brains/jeos/agents.toml` read as neutral.
@@ -1305,6 +1346,12 @@ class PolicyEnforcementPoint:
         an exemption from packet admission rather than merely a classification.
         """
         canonical = PolicyEnforcementPoint._canonical_resource(resource)
+        # A cross-brain registry is never neutral, even though it sits under a
+        # neutral prefix. Checked FIRST: neutrality is what waives both the
+        # ownership check and packet admission, so a registry that reached the
+        # prefix loop would be exempted by the very folder it lives in.
+        if PolicyEnforcementPoint._cross_brain_registry(canonical):
+            return False
         for prefix in BRAIN_NEUTRAL_PREFIXES:
             if prefix.endswith("/"):
                 if canonical == prefix.rstrip("/") or canonical.startswith(prefix):
@@ -1312,6 +1359,23 @@ class PolicyEnforcementPoint:
             elif canonical == prefix:
                 return True
         return False
+
+    @staticmethod
+    def _cross_brain_registry(resource: str) -> str | None:
+        """The cross-brain registry this resource names, if any.
+
+        Exact match on the canonical path, never a prefix: a prefix rule would
+        make `config/specialist_corps.toml.bak` and
+        `config/specialist_corps.toml.notes` chief-only too, which is harmless,
+        but it would ALSO have to be kept in step with the neutral-prefix
+        matching that learned the opposite lesson (`AGENTS.md` matching
+        `AGENTS.md.private`). One comparison, stated once.
+        """
+        canonical = PolicyEnforcementPoint._canonical_resource(resource)
+        for registry in CROSS_BRAIN_REGISTRIES:
+            if canonical == registry:
+                return registry
+        return None
 
     def _resource_owner(self, resource: str) -> str | None:
         """Which brain owns this resource, by manifest-declared prefix or path."""
@@ -1329,16 +1393,47 @@ class PolicyEnforcementPoint:
         return None
 
     def _registered_mounts(self) -> frozenset[str]:
-        """Mount names declared in config/mcp_mounts.toml, the governed list."""
-        if getattr(self, "_mounts_cache", None) is None:
-            path = self.root / "config" / "mcp_mounts.toml"
-            names: set[str] = set()
-            if path.exists():
+        """Mount names declared in config/mcp_mounts.toml, the governed list.
+
+        Cached until the file changes, not for the life of the process.
+
+        **This is the untouched sibling of the manifest cache fixed one round
+        earlier, and it is the class this record keeps recording.** That round
+        made the brain manifests reload on change and left this cache reading
+        whatever `config/mcp_mounts.toml` said at construction — so removing a
+        mount from the governed list, which is what an emergency connector
+        revocation IS, had no effect on any already-running enforcement point.
+        The Chief's read of a revoked grant-free mount met no other denial and
+        stayed allowed until restart. Fixing the instance and not the class is
+        how a fix becomes the next round's finding.
+
+        Keyed on (mtime, size) through the same helper shape as the manifests,
+        so the two caches cannot disagree about what "changed" means. Like that
+        one, a file that becomes unreadable clears the cache rather than
+        preserving it: an unparseable mount list is not evidence that the
+        previous mounts are still governed. That direction is fail-CLOSED here,
+        because an unregistered mount name is refused -- the opposite of the
+        lifecycle case, where clearing the cache turned out to open a hole.
+        """
+        path = self.root / "config" / "mcp_mounts.toml"
+        try:
+            stat = path.stat()
+            signature: tuple[int, int] | None = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            signature = None
+        if self._mounts_cache is not None and signature == self._mounts_signature_seen:
+            return self._mounts_cache
+        names: set[str] = set()
+        if signature is not None:
+            try:
                 data = tomllib.loads(path.read_text(encoding="utf-8"))
                 names = {
                     str(mount["name"]) for mount in data.get("mounts", []) if mount.get("name")
                 }
-            self._mounts_cache = frozenset(names)
+            except (OSError, tomllib.TOMLDecodeError):
+                names = set()
+        self._mounts_cache = frozenset(names)
+        self._mounts_signature_seen = signature
         return self._mounts_cache
 
     def _guard_errors(self, request: ToolRequest) -> list[str]:
