@@ -201,6 +201,34 @@ became false when the scanned surface widened, without anything failing.
 
 ## Rollback
 
-Additive. Rolling back is deleting this file and the `dependency-audit` job in
-`.github/workflows/security.yml`. No dependency, pin, or governance rule was
-changed.
+Additive, but **not confined to this document and one CI job**, and the earlier
+wording here — "no dependency, pin, or governance rule was changed" — was false
+on its own page: this record states two sections above that the audit raised the
+evaluation manifest to `pytest>=9.0.3`. Deleting the file and the job would have
+left the raised floor, the triage config, three generated locks, and every step
+that depends on them in place, while claiming the dependency state had been
+restored.
+
+The same defect was found and fixed in `docs/EVALUATION_HARNESS.md` two rounds
+earlier and this sibling was left standing. A complete rollback removes, as one
+change:
+
+- this file, and the `dependency-audit` job in `.github/workflows/security.yml`;
+- `osv-scanner.toml` — the triage config with reasons and expiry, which the
+  scanner is pointed at by `--config` in every scan step;
+- `requirements/lock-runtime-root.txt`, `requirements/lock-runtime-contracts.txt`,
+  and `requirements/lock-runtime-evaluation.txt`;
+- the `locks` drift-check job in `.github/workflows/validate-agent.yml`, which
+  runs `uv pip compile` against each manifest and compares it to its lock;
+- the lock-based install steps in the same workflow — the contracts and root
+  tiers are installed FROM the locks, so deleting the locks alone breaks every
+  job that sets up a Python environment;
+- the `pytest>=9.0.3` floor in `requirements/runtime-evaluation.txt`, which this
+  audit raised and which is a real pin change;
+- the lock-based install commands in `README.md`, `CONTRIBUTING.md`, and
+  `evals/README.md`, which point operators at the resolved set rather than the
+  floating manifest.
+
+**A rollback procedure is only true of the change it was written against.** This
+one described the change as it stood before the lock generation and the triage
+config were added to it.

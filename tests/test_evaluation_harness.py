@@ -764,6 +764,14 @@ class DocumentedProcedureTests(unittest.TestCase):
             ROOT / "README.md",
             ROOT / "docs" / "README.md",
             *sorted((ROOT / ".github" / "workflows").glob("*.yml")),
+            # The evaluation tier's manifest and its lock exist only for this
+            # harness, so a rollback that leaves them behind leaves the
+            # dependency state changed. Added after mutation testing: dropping
+            # the lock from the rollback list was MISSED, because the candidate
+            # set enumerated CI wiring and documentation and stopped there --
+            # the same too-narrow scoping this test was written to catch, in
+            # the test itself.
+            *sorted((ROOT / "requirements").glob("*evaluation*.txt")),
         ]
         for path in candidates:
             body = path.read_text(encoding="utf-8")

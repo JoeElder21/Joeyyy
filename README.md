@@ -120,7 +120,10 @@ Repository validation and the optional AutoGen adapter require Python 3.11 or 3.
 # The install comes first: verify_runtime_stack.py catches the ImportError for
 # jsonschema and rtoml, reports zero schemas and zero TOML files checked, and
 # exits 0 -- so running it beforehand passes the audit while validating nothing.
-python -m pip install -r requirements/runtime-contracts.txt
+# The LOCK, not the manifest. CI installs the resolved lock and osv-scanner
+# audits it with --no-resolve, so installing the floating manifest here puts a
+# resolution on the workstation that nothing scanned and CI never tested.
+python -m pip install -r requirements/lock-runtime-contracts.txt
 # Ruff too: runtime-contracts.txt does not carry it, and installing
 # pre-commit builds Ruff an isolated hook environment whose executable is
 # not on PATH -- so this sequence reached `ruff check .` with no `ruff`
@@ -139,7 +142,7 @@ python -m unittest discover -s tests -v
 
 That distinction matters rather than being pedantry: the unit suite lets its JSON Schema check skip when `jsonschema` is absent, so a contributor relying on the hooks alone can pass locally and still fail CI on a malformed schema or a broken mount. Run the full sequence above before pushing. See `CONTRIBUTING.md`.
 
-For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements.txt`. The dependency uses Microsoft's official `autogen-agentchat` distribution and remains pinned to the legacy 0.2 API. This repository does not contain model configuration or connector credentials.
+For a verified Microsoft AutoGen 0.2 host runtime, install the optional adapter dependency with `python -m pip install -r requirements/lock-runtime-root.txt` (the lock, for the same reason as above — `requirements.txt` is the manifest it resolves). The dependency uses Microsoft's official `autogen-agentchat` distribution and remains pinned to the legacy 0.2 API. This repository does not contain model configuration or connector credentials.
 
 GitHub Actions validates Python 3.11 and 3.12, installs the pinned adapter dependency, and runs the same checks plus a no-model AutoGen lifecycle smoke test on pushes to `main` and pull requests. Separate jobs lint the Python tree and install the APS Node connector, and a scheduled zizmor job audits the workflows themselves. Every action is pinned to a full commit SHA, enforced by `tests/test_repo_hygiene.py` and kept current by Dependabot.
 

@@ -2973,5 +2973,72 @@ class TwentySeventhPassRegressionTests(unittest.TestCase):
         self.assertTrue(self.pep.evaluate(self._handoff_read(delegation, handoff)).allowed)
 
 
+class GovernanceMountAdmissionTests(unittest.TestCase):
+    """A deferred gap, recorded as a tripwire rather than left to be rediscovered.
+
+    `admit_delegation_packet` starts with the unrecognized verb `admit`, so it
+    classifies as a mutation. Full evaluation then demands a writer lease and a
+    packet whose write target covers `mount:governance` -- and `PacketGuard`
+    requires a write target registered to a brain unit, which a mount handle can
+    never be. A lease and a signed grant CAN both be minted for the mount; the
+    packet layer is what makes the path impossible.
+
+    Its real side effect is an append to a hash-chained audit ledger, not a
+    mutation of a canonical brain record, and modelling it as the latter is what
+    produces the dead end. Closing it means introducing an append-only audit
+    authorization path -- a new category of permitted action in the governance
+    model, which is Joe's decision and not a mechanical edit. `enforce()` has no
+    call sites, so nothing is broken today; the moment it is wired, this mount
+    bricks.
+
+    These tests assert the CURRENT state deliberately. That is not the
+    "asserting the defect it was written to prevent" pattern this record warns
+    about: nothing here claims the behaviour is correct. It is a tripwire, so
+    that adding the audit path fails loudly and forces this class and the record
+    to be updated together, instead of the gap being rediscovered by a
+    twenty-ninth review.
+    """
+
+    MOUNT = "mount:governance"
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def test_the_admission_verb_still_classifies_as_a_mutation(self):
+        self.assertTrue(
+            PolicyEnforcementPoint._is_mutating(
+                ToolRequest(agent=CHIEF, action="admit_delegation_packet", resource=self.MOUNT)
+            )
+        )
+
+    def test_a_read_only_governance_tool_is_still_reachable(self):
+        # The control. Without it, "admission is denied" says nothing about the
+        # mount -- it could be denied because the mount is unreachable for every
+        # tool, which would be a different and larger problem.
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF, action="validate_packet", resource=self.MOUNT, owner_brain="APEX"
+            )
+        )
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_admission_is_denied_for_want_of_an_audit_authorization_path(self):
+        decision = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF,
+                action="admit_delegation_packet",
+                resource=self.MOUNT,
+                owner_brain="APEX",
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(
+            any("writer lease" in reason for reason in decision.reasons),
+            "if this no longer demands a lease, the audit path was added -- update "
+            "this class and the record in docs/REPO_OPTIMIZATION_2026-07-25.md",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

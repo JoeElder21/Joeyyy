@@ -36,7 +36,10 @@ credential — publication is a connector action under the packet-only policy.
 python evals/run_evaluations.py --coverage
 
 # Full run — needs the evaluation stack and a judge model
-python -m pip install -r requirements/runtime-evaluation.txt
+# The LOCK, not the manifest. CI installs the resolved lock and osv-scanner
+# audits it with --no-resolve, so installing the floating manifest here puts a
+# resolution on the workstation that nothing scanned and CI never tested.
+python -m pip install -r requirements/lock-runtime-evaluation.txt
 python evals/run_evaluations.py --run-id <mission-id>
 ```
 

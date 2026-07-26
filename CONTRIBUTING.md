@@ -24,7 +24,10 @@ To run everything by hand:
 # and rtoml and then reports zero schemas and zero TOML files checked -- exiting
 # 0, so the audit passes while validating nothing. The install has to precede
 # the verifier, not follow it.
-python -m pip install -r requirements/runtime-contracts.txt  # jsonschema, rtoml, mcp
+# The LOCK, not the manifest. CI installs the resolved lock and osv-scanner
+# audits it with --no-resolve, so installing the floating manifest here puts a
+# resolution on the workstation that nothing scanned and CI never tested.
+python -m pip install -r requirements/lock-runtime-contracts.txt  # jsonschema, rtoml, mcp
 # Ruff too: runtime-contracts.txt does not carry it, and installing
 # pre-commit builds Ruff an isolated hook environment whose executable is
 # not on PATH -- so this sequence reached `ruff check .` with no `ruff`

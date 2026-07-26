@@ -1132,6 +1132,98 @@ is actually used, which covers the class rather than this round's two functions.
 The recurring-shape list gains: **(p) a component excluded from the mandatory
 suite has no test observing whether it is wired in — assert its structure.**
 
+### Automated review, twenty-eighth pass — three findings, two fixed, one deferred
+
+No P1s. All three correct.
+
+**The documented install and the audited environment were different environments.**
+CI installs `requirements/lock-runtime-*.txt` and osv-scanner audits exactly those
+with `--no-resolve`, while every documented command — `README.md`,
+`CONTRIBUTING.md`, `evals/README.md` — told a human to install the *floating
+manifest*. A dependency published after the last drift run therefore lands on the
+workstation without being the version CI tested or the scanner cleared. This is
+the aggregate-versus-hand-run divergence again, this time between CI and the
+documentation a person actually follows. All four documented installs now name
+their lock, and the root tier was swept in the same pass rather than waiting to be
+reported: the finding named three files and `README.md` had a fourth.
+`requirements/runtime-orchestration.txt` has no lock at all, so it is now labelled
+as unlocked and unscanned rather than quietly left looking equivalent.
+
+The test derives the manifest→lock pairs **from the `locks` drift-check job**, so
+a fourth tier locked in CI and left floating in the documentation fails here.
+Restating the pairs would have reproduced the same divergence one level up.
+
+**A rollback that claimed nothing changed, on a page that said otherwise.**
+`docs/DEPENDENCY_AUDIT_2026-07-25.md` ended with "No dependency, pin, or
+governance rule was changed" while the same record states two sections above that
+the audit raised the evaluation manifest to `pytest>=9.0.3`. Following it would
+also have left `osv-scanner.toml`, three generated locks, the drift-check job, and
+the lock-based install steps in place. **`docs/EVALUATION_HARNESS.md` had this
+exact defect corrected three rounds earlier and this sibling was left standing** —
+because the test written then was scoped to that one document. The check is now
+scoped to the property: every dated record carrying a `## Rollback` section, with
+a specific assertion against a rollback claiming no pin changed while its own body
+raises one.
+
+**Deferred: the governance mount has no lawful admission path.**
+`admit_delegation_packet` begins with the unrecognized verb `admit`, so it
+classifies as a mutation; full evaluation then requires a writer lease and a
+packet whose write target covers `mount:governance`. Verified rather than assumed
+in both directions: a lease **can** be issued for that target and a signed launch
+grant **can** be minted for the mount — `require_grant` is not consulted, since
+`_launch_grant` obliges a grant for every mutating mount request. `PacketGuard` is
+what closes the path, requiring a write target registered to a brain unit, which a
+mount handle can never be. A read-classified governance tool (`validate_packet`)
+evaluates cleanly, so the mount is not unreachable in general; only its mutating
+tool is.
+
+The tool's real side effect is an **append to a hash-chained audit ledger**, not a
+mutation of a canonical brain record, and modelling it as the latter is what
+produces the dead end. Closing it means introducing an append-only audit
+authorization path — a new category of permitted action in the governance model.
+That is a decision about what may write without a lease, and given how reliably
+fixes in this file have produced fail-opens, inventing a lease exemption
+unsupervised is the wrong risk to take. `enforce()` has no call sites, so nothing
+is broken today; **the moment it is wired, this mount bricks.** Recorded as a
+tripwire test class that asserts the current dead end and instructs the next
+author to update it and this record together — not an endorsement of the
+behaviour, but a guarantee it cannot be rediscovered by a twenty-ninth review.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Documented installs used floating manifests while CI scanned locks | **Correct — P2** | All four pointed at their locks; pairs derived from CI |
+| Dependency-audit rollback incomplete and self-contradicting | **Correct — P2** | Rewritten; the check now covers every dated record |
+| No lawful path to the governance mount's admission tool | **Correct — deferred** | Needs an append-only audit authorization path; Joe's decision |
+
+**A mutation left MISSED, deliberately.** Dropping the evaluation lock from one
+clause of the `EVALUATION_HARNESS.md` rollback is not caught, because the lock is
+still named in a different clause of the same section — so the property the test
+enforces ("the rollback names this artefact") genuinely still holds. Telling
+"named for deletion" apart from "named in another context" needs prose semantics,
+and a test that matched specific phrasing would be the prose-instead-of-property
+failure this record has logged three times. Recorded as a known limit of the check
+rather than papered over, because a MISSED mutant that is investigated and
+explained is a different thing from one that is not looked at.
+
+**The new rollback check found its own defect on first run.** It located the
+section with a substring search for `## Rollback`, and this record's prose
+mentions that string inline while describing the check — so it treated a sentence
+about rollbacks as the start of a rollback section, and reported a document that
+has no such section as having an incomplete one. Anchored to the heading now. It
+is the prose-versus-property failure again, this time in the *selection* of what
+to test rather than in the assertion: matching text that merely looks like the
+thing is not finding the thing.
+
+**Two further corrections were to existing tests, both hard-coded
+spellings.** The install-ordering tests indexed the literal manifest path and
+therefore **crashed with `ValueError`** — not failed with a message — the moment
+the documented command was pointed at the lock. A test that names an incidental
+spelling blocks a change it has no opinion about, and reports it as an error
+rather than a disagreement. And the harness rollback test's candidate set
+enumerated CI wiring and documentation and stopped, missing the requirements files
+the harness itself introduced: the same too-narrow scoping that test exists to
+catch, inside that test.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

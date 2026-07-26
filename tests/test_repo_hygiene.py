@@ -228,6 +228,137 @@ class AutomationClaimTests(unittest.TestCase):
                 )
 
 
+class RollbackCompletenessTests(unittest.TestCase):
+    """Every dated record's rollback must name the files its change touched.
+
+    Scoped to the PROPERTY, not to the one document where it was found.
+    `docs/EVALUATION_HARNESS.md` had its rollback corrected two rounds before
+    `docs/DEPENDENCY_AUDIT_2026-07-25.md` was found with the identical defect --
+    and worse, a closing sentence ("no dependency, pin, or governance rule was
+    changed") contradicted by that record's own body. A test written for one
+    file cannot catch the second file.
+    """
+
+    # Artefacts that make a change non-additive if the rollback ignores them.
+    # A record whose body mentions one of these has, by its own account,
+    # touched it -- so a rollback that never names it is incomplete.
+    TRACKED = (
+        "osv-scanner.toml",
+        "lock-runtime-root.txt",
+        "lock-runtime-contracts.txt",
+        "lock-runtime-evaluation.txt",
+    )
+
+    @staticmethod
+    def _split(text):
+        """(body, rollback section) for a record, anchored on the HEADING.
+
+        Matched line-anchored, not as a substring: this record's own prose
+        mentions `## Rollback` inline while describing this very check, and a
+        substring match treated that sentence as the start of a rollback
+        section. The test then reported a document that HAS no rollback as
+        having an incomplete one. Found by running it.
+        """
+        marker = "\n## Rollback"
+        if not text.startswith("## Rollback") and marker not in text:
+            return None
+        start = 0 if text.startswith("## Rollback") else text.index(marker) + 1
+        section = text[start:]
+        if "\n## " in section[1:]:
+            section = section[: section.index("\n## ", 1)]
+        return text[:start], section
+
+    def _records(self):
+        found = []
+        for path in sorted((ROOT / "docs").glob("*.md")):
+            split = self._split(path.read_text(encoding="utf-8"))
+            if split is not None:
+                found.append((path, *split))
+        return found
+
+    def test_dated_records_are_being_checked(self):
+        self.assertGreaterEqual(len(self._records()), 2, "no rollback sections found to check")
+
+    def test_a_rollback_names_the_artefacts_its_record_discusses(self):
+        for path, body, section in self._records():
+            for artefact in self.TRACKED:
+                if artefact not in body:
+                    continue
+                with self.subTest(record=path.name, artefact=artefact):
+                    self.assertIn(
+                        artefact,
+                        section,
+                        f"{path.name} discusses {artefact} but its rollback does not "
+                        "name it, so following the rollback leaves it behind",
+                    )
+
+    def test_no_rollback_claims_nothing_changed_while_naming_a_pin(self):
+        # The specific falsehood found here: a rollback asserting that no
+        # dependency or pin changed, in a record whose body raises one.
+        for path, body, section in self._records():
+            text = body + section
+            claims_nothing = "No dependency, pin, or governance rule was" in section
+            with self.subTest(record=path.name):
+                self.assertFalse(
+                    claims_nothing and bool(re.search(r"[a-z0-9_-]+>=\d", text)),
+                    f"{path.name} claims no pin changed while its body raises one",
+                )
+
+
+class DocumentedInstallTests(unittest.TestCase):
+    """What a human is told to install must be what CI tested and OSV scanned."""
+
+    VALIDATE = ROOT / ".github" / "workflows" / "validate-agent.yml"
+
+    def _locked_manifests(self):
+        """Manifest -> lock, derived from the drift-check job, never restated.
+
+        The `locks` job is the authority on which manifests have a resolved
+        form. Hard-coding the pairs here would let a fourth manifest be locked
+        in CI and stay floating in the documentation without anything failing --
+        which is the exact divergence this test exists to catch, one level up.
+        """
+        pairs = {}
+        for line in self.VALIDATE.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("check "):
+                continue
+            parts = stripped.split()
+            if len(parts) == 3:
+                pairs[parts[1]] = parts[2]
+        return pairs
+
+    def test_the_drift_check_declares_its_pairs(self):
+        # Guard against the derivation silently finding nothing, which would
+        # make every assertion below vacuous.
+        pairs = self._locked_manifests()
+        self.assertGreaterEqual(len(pairs), 3, f"expected the locked tiers, found {pairs}")
+
+    def test_documentation_installs_the_lock_not_the_manifest(self):
+        # CI installs `lock-runtime-*.txt` and osv-scanner audits those with
+        # `--no-resolve`, while every documented command named the floating
+        # manifest. A dependency released after the last drift run therefore
+        # lands on the workstation without being the version CI tested or the
+        # scanner cleared -- the aggregate and the hand-run sequence diverging
+        # again, this time between CI and the documentation a human follows.
+        docs = sorted(ROOT.glob("*.md")) + sorted(ROOT.glob("*/*.md"))
+        for manifest in self._locked_manifests():
+            command = f"pip install -r {manifest}"
+            for path in docs:
+                if not path.is_file():
+                    continue
+                for number, line in enumerate(
+                    path.read_text(encoding="utf-8").splitlines(), start=1
+                ):
+                    if command in line:
+                        with self.subTest(doc=path.name, line=number):
+                            self.fail(
+                                f"{path.relative_to(ROOT)}:{number} installs the floating "
+                                f"{manifest}; CI installs and scans its lock, so this "
+                                "documents an unaudited environment"
+                            )
+
+
 class IssueFormEnforceabilityTests(unittest.TestCase):
     """Issue forms cannot cross-validate, so each required answer must stand alone."""
 
@@ -475,6 +606,22 @@ class ContributorSurfaceTests(unittest.TestCase):
             with self.subTest(path=relative):
                 self.assertIn(f"pip install ruff=={pinned.group(1)}", text)
 
+    # The contracts tier in either spelling. Hard-coding the manifest path made
+    # this test CRASH with ValueError -- not fail with a message -- the moment
+    # the documented command was pointed at the lock, which is a supply-chain
+    # correction and not a reordering. A test that names an incidental spelling
+    # blocks a change it has no opinion about.
+    _CONTRACTS_INSTALL = re.compile(
+        r"pip install -r requirements/(?:lock-runtime-contracts|runtime-contracts)\.txt"
+    )
+
+    def _contracts_install_position(self, relative, text):
+        found = self._CONTRACTS_INSTALL.search(text)
+        self.assertIsNotNone(
+            found, f"{relative} documents no contracts-tier install for the verifiers to follow"
+        )
+        return found.start()
+
     def test_every_documented_gate_installs_validators_first(self):
         # Generalized from the CONTRIBUTING-only version below, which is how
         # README.md kept the defect after CONTRIBUTING.md was fixed: it ran
@@ -483,7 +630,7 @@ class ContributorSurfaceTests(unittest.TestCase):
         for relative in ("CONTRIBUTING.md", "README.md"):
             with self.subTest(path=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                install = text.index("pip install -r requirements/runtime-contracts.txt")
+                install = self._contracts_install_position(relative, text)
                 for verifier in (
                     "python scripts/verify_runtime_stack.py",
                     "python scripts/verify_mcp_mounts.py",
@@ -501,7 +648,7 @@ class ContributorSurfaceTests(unittest.TestCase):
         # so a contributor following the documented order passed the audit while
         # it validated nothing.
         text = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
-        install = text.index("pip install -r requirements/runtime-contracts.txt")
+        install = self._contracts_install_position("CONTRIBUTING.md", text)
         verifier = text.index("python scripts/verify_runtime_stack.py")
         self.assertLess(
             install, verifier, "the verifier's dependencies must be installed before it runs"
