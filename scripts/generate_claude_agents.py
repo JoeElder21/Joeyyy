@@ -56,28 +56,14 @@ SOURCE_HASH_PREFIX = "<!-- source-sha256: "
 # connector_policy = "packet_only_no_direct_connectors".
 SPECIALIST_TOOLS: list[str] = []
 
-# Agent 007 is the cross-brain governor and the only connector holder.
-#
-# An earlier version listed only built-in tools. That silently broke the whole
-# architecture in the subagent path: the runbook says Agent 007 retrieves
-# evidence from Gmail, Drive, Calendar, and Todoist, but a subagent whose
-# frontmatter omits those tools cannot reach them even when the parent session
-# is authorized. Every catalog mission would have had no evidence to package.
-#
-# `mcp__*` is a wildcard over the session's connected MCP servers: whatever Joe
-# has authorized is available, and nothing is invented if a connector is absent.
-# Specialists still receive an empty list, so isolation is unchanged.
+# Agent 007 may inspect the repository and delegate read-only analysis. Mutation,
+# network, and connector tools stay unavailable until an executable confirmation
+# gate can bind Joe's approval to an exact action; prompt text is not that gate.
 CHIEF_TOOLS = [
     "Read",
     "Glob",
     "Grep",
-    "Edit",
-    "Write",
-    "Bash",
     "Task",
-    "WebSearch",
-    "WebFetch",
-    "mcp__*",
 ]
 
 

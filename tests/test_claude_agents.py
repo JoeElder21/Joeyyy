@@ -95,10 +95,11 @@ class GeneratedCorpsTests(unittest.TestCase):
                 # that would expose the other brain's manifest.
                 self.assertEqual(tools, set())
 
-    def test_chief_of_staff_holds_the_connector_and_writer_surface(self):
+    def test_chief_of_staff_has_only_read_and_delegation_tools(self):
         content = self.expected[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
         tools = set(frontmatter(content)["tools"])
         self.assertEqual(tools, set(CHIEF_TOOLS))
+        self.assertTrue(tools.isdisjoint({"Edit", "Write", "Bash", "WebSearch", "WebFetch", "mcp__*"}))
         self.assertIn("Agent 007 activated. Awesome Copilot layer active.", content)
 
     def test_each_specialist_declares_its_brain_and_packet_only_policy(self):

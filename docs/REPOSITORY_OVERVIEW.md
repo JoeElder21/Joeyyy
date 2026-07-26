@@ -99,7 +99,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 
 ## 4. The agent roster
 
-Eleven agents are defined natively in `.codex/agents/`. Agent 007 is **active** and is the only agent with a `workspace-write` sandbox. All ten specialists are **shadow** stage and `read-only`.
+Eleven agents are defined natively in `.codex/agents/`. Agent 007 is **active** but has a `read-only` sandbox and read/delegation-only Claude tool surface. All ten specialists are **shadow** stage and `read-only`.
 
 ### 4.1 APEX unit — professional brain
 
@@ -520,7 +520,7 @@ Read that carefully: the system reports itself **valid** while simultaneously re
 
 | Component | State | Detail |
 | --- | --- | --- |
-| Agent 007 | **active** | The only agent with `workspace-write`. Holds every writer lease while specialists are in shadow. Known error on record: *no v2.1 named-specialist runtime evidence yet*. |
+| Agent 007 | **active** | Read-only; prepares exact mutation previews and requires Joe's explicit approval. Native mutation and connector tools are withheld pending an executable confirmation gate. Known error on record: *no v2.1 named-specialist runtime evidence yet*. |
 | All 10 specialists | **shadow** | Contracts and boundary rejections validated statically. No controlled real mission has run; named-agent behaviour and runtime connector isolation remain unproven. |
 | Packet contracts (v2.1) | **enforced** | 7 schemas, PacketGuard relational validation, 29 dedicated tests. This layer is genuinely done. |
 | Writer leases | **implemented** | Registry, admission, canonical-key collision rejection and Celery queue mapping all built and tested. |

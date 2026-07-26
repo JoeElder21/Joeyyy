@@ -20,7 +20,7 @@ Static and synthetic packet validation permit shadow operation. An agent becomes
 - Outputs: integrated plan, delegated work, verified actions, brain sync, registry changes, error learning, audit report
 - Tools/connectors/skills: only those verified in the active runtime; never assumed from configuration
 - Write targets: cross-brain governance plus owner-routed domain targets; one active writer lease per canonical brain/target/resource
-- Native sandbox: `workspace-write` — Agent 007 is the sole write-capable native agent and executes all mutations while specialists remain `read-only` (restored 2026-07-23 on Joe's instruction; the v2.1 hardening had left no configured writer)
+- Native sandbox: `read-only` — Agent 007 prepares exact mutation previews; no native agent receives mutation or connector tools until an executable confirmation gate binds Joe's approval to the exact action
 - Boundaries: sole cross-brain agent; preserve brain ownership; no unsupported access claims; no silent conflict merging; platform and professional controls remain in force
 - Handoff: `docs/AGENT_COMMUNITY_PROTOCOL.md` and `schemas/`
 - Validation: `scripts/validate_specialist_corps.py`, `tests/test_agent_contract.py`, `tests/test_specialist_corps.py`, and `tests/test_local_validation.py`
