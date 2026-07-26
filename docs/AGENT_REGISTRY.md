@@ -109,6 +109,16 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - Purpose: run queued agent work unattended with notify-when-stuck; see `docs/EXECUTION_LAYER_TRIAL.md`
 - Validation gate: bounded trial on non-production tasks (registry maintenance, doc audits) before any client-facing work
 
+### Framework integration set (nine requested upstream repositories)
+
+- Status: local contract integration active; external runtimes not installed or connected
+- Owner layer: Agent 007 governance
+- Record: `docs/FRAMEWORK_INTEGRATION.md`
+- Included: Microsoft AutoGen, LangGraph, crewAI, Prefect, mem0, LlamaIndex, LangChain, jsonschema, and Pydantic
+- Validation: `runtime/orchestration.py`, `runtime/contracts.py`, `tests/test_runtime_integration.py`, and the complete contract suite
+- Boundaries: no framework is a deployed agent or a verified Drive/memory/connector service until its target runtime, account, scope, and controlled mission are verified; Agent 007 remains the sole cross-brain integrator
+- Rollback: revert the framework-integration commit; this creates no external deployment or persistent external data
+
 ### Deferred / watch list
 
 - kentcdodds/kody — cross-brain memory/secrets/scheduler layer; absorb-only for now, revisit next quarter

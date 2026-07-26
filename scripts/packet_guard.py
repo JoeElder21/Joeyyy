@@ -12,6 +12,8 @@ import tomllib
 from typing import Any, Iterable
 import unicodedata
 
+from jsonschema import Draft202012Validator, FormatChecker
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY = {"public": 0, "internal": 1, "confidential": 2, "restricted": 3}
@@ -37,42 +39,13 @@ def _matches_type(value: Any, expected: str | list[str]) -> bool:
 
 
 def _structural_errors(instance: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
-    errors: list[str] = []
-    if "type" in schema and not _matches_type(instance, schema["type"]):
-        return [f"{path}: expected {schema['type']}"]
-    if "const" in schema and instance != schema["const"]:
-        errors.append(f"{path}: expected const {schema['const']!r}")
-    if "enum" in schema and instance not in schema["enum"]:
-        errors.append(f"{path}: not in enum")
-    if isinstance(instance, str):
-        if len(instance) < schema.get("minLength", 0):
-            errors.append(f"{path}: string too short")
-        if "maxLength" in schema and len(instance) > schema["maxLength"]:
-            errors.append(f"{path}: string too long")
-        if "pattern" in schema and not re.fullmatch(schema["pattern"], instance):
-            errors.append(f"{path}: pattern mismatch")
-    if isinstance(instance, list):
-        if len(instance) < schema.get("minItems", 0):
-            errors.append(f"{path}: too few items")
-        if "maxItems" in schema and len(instance) > schema["maxItems"]:
-            errors.append(f"{path}: too many items")
-        for index, item in enumerate(instance):
-            if "items" in schema:
-                errors.extend(_structural_errors(item, schema["items"], f"{path}[{index}]"))
-    if isinstance(instance, dict):
-        required = set(schema.get("required", []))
-        missing = required - set(instance)
-        if missing:
-            errors.append(f"{path}: missing {sorted(missing)}")
-        properties = schema.get("properties", {})
-        if schema.get("additionalProperties") is False:
-            extras = set(instance) - set(properties)
-            if extras:
-                errors.append(f"{path}: extras {sorted(extras)}")
-        for key, value in instance.items():
-            if key in properties:
-                errors.extend(_structural_errors(value, properties[key], f"{path}.{key}"))
-    return errors
+    """Collect every Draft 2020-12 structural violation before relational checks."""
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    return [
+        f"{error.json_path}: {error.message}"
+        for error in sorted(validator.iter_errors(instance), key=lambda item: list(item.path))
+    ]
 
 
 class PacketGuard:
