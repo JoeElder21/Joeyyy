@@ -203,8 +203,46 @@ class OverviewSnapshotTests(unittest.TestCase):
 
         published = re.findall(r"Head commit analysed \| `([0-9a-f]{7,40})`", self._overview())
         self.assertTrue(published, "the overview names no head commit")
+        # CI checks the test matrix out SHALLOW (`fetch-depth` is unset on that
+        # job; only the lock job sets 0), so a commit two rounds back is simply
+        # not in the object store there. That is not evidence the claim is wrong,
+        # and asserting against it would fail in CI while passing locally -- which
+        # is the divergence the pinned ruff version exists to prevent, in another
+        # dimension.
+        #
+        # So the two cases are DISTINGUISHED rather than one of them skipped:
+        # absent-and-shallow cannot be judged, absent-and-complete is a real
+        # failure. Establishing which repository this is, rather than inferring it
+        # from the lookup failing, is what keeps this from being the
+        # silently-degrading check this record has removed from three CI jobs.
+        shallow = (
+            subprocess.run(
+                ["git", "rev-parse", "--is-shallow-repository"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+            == "true"
+        )
         for commit in published:
             with self.subTest(commit=commit):
+                present = (
+                    subprocess.run(
+                        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+                        cwd=ROOT,
+                        capture_output=True,
+                        check=False,
+                    ).returncode
+                    == 0
+                )
+                if not present:
+                    self.assertTrue(
+                        shallow,
+                        f"the overview names head {commit}, which is not in this "
+                        "repository at all -- it describes a different history",
+                    )
+                    continue
                 # An ancestor, not necessarily HEAD: the document is written at a
                 # commit and the next commit is what adds this line, so exact
                 # equality can never hold. What must hold is that the named
