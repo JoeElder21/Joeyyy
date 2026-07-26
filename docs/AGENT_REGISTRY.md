@@ -213,6 +213,38 @@ Registered on Joe's direct instruction and refined the same day per his decision
 - Charter modes carry no write targets, connectors, or routes of their own; brain locks, writer leases, and specialist stages apply exactly as before.
 - Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the v2.1 specialists themselves; the other three v2.1 JEOS specialists remain rostered unchanged.
 
+## Vendored Copilot custom agents (2026-07-25)
+
+Third-party agents vendored from `github/awesome-copilot` into `.github/agents/`, pinned at upstream `aa280f28`. Manifest and provenance: `.github/AWESOME-COPILOT.md`.
+
+These are **editor-plane** agents: they are invoked by GitHub Copilot inside a session and hold no brain ownership, memory namespace, write target, writer lease, route, or cadence. They are not members of the mirrored corps, they cannot be delegated a typed packet, and they never execute a governed mutation. Agent 007 remains the sole write-capable native agent. They are registered here because `AGENTS.md` requires every new agent to be registered and validated before active use, and so registry-based audit can account for them.
+
+| Agent | Owner plane | Purpose | Tools | Status | Known limits |
+|---|---|---|---|---|---|
+| `prompt-engineer` | editor / cross-brain neutral | Treats every input as a prompt to analyse and rewrite | `tools: []` — **local override**, see below | candidate | Rewrites text only; no repository or connector effect |
+| `task-planner` | editor / APEX-leaning | Composes implementation plans destined for `.copilot-tracking/`; returns them for Agent 007 to persist | **Local, not upstream** — declared: `agent`, `read`, `changes`, `search/codebase`, `fetch`, `findTestFiles`, `githubRepo`, `problems`, `search`, `search/searchResults`, `usages`, `terraform`, `Microsoft Docs`, `azure_get_schema_for_Bicep`, `context7`. **Added:** `agent`, `read`. **Removed:** `edit/editFiles`, `runCommands`, terminal access, `runTests`, `runNotebooks`, `extensions`, `vscodeAPI`, `new`, `openSimpleBrowser` | candidate | No write tool, so it can mutate nothing; its artifacts are returned, not written. The `terraform`, `Microsoft Docs`, `azure_get_schema_for_Bicep` and `context7` names are **not** wired into any Copilot MCP configuration; unrecognized names are silently ignored, so those four are unavailable in a normal collaborator session. Requires `task-researcher`. |
+| `task-researcher` | editor / APEX-leaning | Companion research pass the planner mandates before planning; returns its document rather than writing it | **Local, not upstream** — same declared list as `task-planner` minus `agent`. **Added:** `read`. **Removed:** the same editing and execution tools | candidate | Same no-write-tool and unwired-tool limitations |
+
+Lifecycle: **all three are `candidate`.** An earlier version of this entry marked
+`prompt-engineer` active on the reasoning that it is self-contained. Review rejected that,
+correctly: `docs/AGENT_COMMUNITY_PROTOCOL.md` gates `active` on controlled real-mission
+evidence, realistic behaviour tests, boundary and accuracy evidence, and a runtime-isolation
+record. Being self-contained is not one of those gates, and the only tests naming this agent
+inspect its static `tools: []` override. Asserting a status the repository has not earned is
+exactly the unsupported-capability claim the contract forbids.
+
+`task-planner` and `task-researcher` additionally cannot leave candidate until their declared
+Terraform/Azure/Docs tool names are reachable in the invoking client, since until then the
+planner runs without the capabilities its instructions assume.
+
+### Local overrides (intentional divergence from upstream)
+
+`prompt-engineer.agent.md` adds `tools: []`, which upstream omits. Per `.github/instructions/agents.instructions.md`, an omitted `tools` field grants every available built-in and MCP tool. That agent consumes arbitrary user-supplied text, so leaving all tools enabled would let prompt injection reach the repository and connected systems. The override is deliberate and must be preserved. **Do not treat a drift report on this file as expected.** Each discovery skill normalizes the overrides recorded in `.github/AWESOME-COPILOT.md` out of both sides before comparing every remaining byte, so anything still reported after normalization is a genuine upstream or local change and must be investigated. Dismissing it wholesale is how a real upstream update hides behind a local override. Never "fix" the override itself by reverting to upstream.
+
+### Not installed, and why
+
+`meta-agentic-project-scaffold` was vendored and then removed. Its instructions direct the agent to pull upstream files and "do nothing else, just pull the files", copying them "as is". That bypasses the mandatory intake gates in `AGENTS.md` — full-file review, privacy-guard check, test update, rollback evidence — and its function is already covered by the three discovery skills, which route through intake per the `copilot_layer` contract block.
+
 ## Vendored reference corps — awesome-claude-agents (2026-07-25)
 
 Thirty-three third-party sub-agent prompts vendored from
@@ -234,10 +266,14 @@ unregistered prompt in the discovery path bypasses this registry by construction
   registered specialist.
 - Purpose: reference analysis and drafting for framework-specific work the ten-specialist
   corps does not cover. Treat output as a proposal for Agent 007, never as a verified result.
-- Tools: constrained on intake to read-only — `LS`, `Read`, `Grep`, `Glob`, and where the
-  upstream prompt declared them, `WebFetch`/`WebSearch`. Every `Write`, `WriteFile`,
-  `Edit`, `MultiEdit`, and `Bash` grant was stripped from all 16 prompts that declared one,
-  so the shared rule that Agent 007 alone executes mutations holds without exception.
+- Tools: every one of the 33 carries an explicit read-only allowlist — `LS`, `Read`,
+  `Grep`, `Glob`, plus `WebFetch` where the prompt's own instructions require fetching
+  documentation. Two separate problems were closed: 16 prompts declared write-capable
+  tools, which were stripped; the other 17 declared **no** `tools` field at all, which in
+  Claude Code grants every tool the main thread holds rather than none. The shared rule
+  that Agent 007 alone executes mutations now holds without exception, and
+  `tests/test_vendored_agents.py` asserts the field's presence separately from its
+  contents so an absent field cannot pass silently.
 - Write targets: none. No writer lease is ever issued to a vendored agent.
 - Communication: no cross-brain role. They carry no delegation or handoff packet schema and
   cannot participate in roundtables or challenge pairs.
@@ -251,14 +287,18 @@ unregistered prompt in the discovery path bypasses this registry by construction
 - Validation: `tests/test_vendored_agents.py` enforces the read-only tool constraint,
   unique kebab-case names, parseable frontmatter, and that every delegation target named in
   a vendored prompt resolves to an agent that exists.
+- Privacy: no pattern is disabled for these files. Their documentation placeholders are
+  pinned literal-by-literal in `PLACEHOLDER_LITERALS` in `scripts/privacy_guard.py`, the
+  same mechanism every other vendored tree uses, so a real credential added to any of
+  them is still reported. An upstream sync that alters a sample fails the guard until the
+  new literal is reviewed and pinned.
 - Rollback: delete `.claude/agents/awesome-claude-agents/`, remove **this registry
   section**, delete `tests/test_vendored_agents.py`, and remove the
-  `DOCUMENTATION_ONLY_PREFIXES` entry plus the vendored-value helpers in
-  `scripts/privacy_guard.py` and their mirror in `tests/test_privacy.py`. All five are
-  required: deleting only the prompt directory leaves this section asserting that 33
-  candidates are discoverable when none are, and the contract test skips itself when the
-  directory is absent, so validation would stay green over an inconsistent state.
-  Nothing else in the repository depends on them.
+  `.claude/agents/awesome-claude-agents/...` entries from `PLACEHOLDER_LITERALS`. All
+  four are required: deleting only the prompt directory leaves this section asserting
+  that 33 candidates are discoverable when none are, and the contract test skips itself
+  when the directory is absent, so validation would stay green over an inconsistent
+  state. Nothing else in the repository depends on them.
 
 ## Intake rule
 

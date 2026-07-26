@@ -6,7 +6,7 @@ The separately-approved manual test that follows the workstation build (`docs/CI
 
 1. **Build session** completes steps 1–3 of the build guide (plugin NETLOADed, `C3DMCPSTATUS` running, server registered).
 2. **Read-only proof** completes on copies (gate steps 2–4): `civil3d_skills` listing, `civil3d_query` results spot-checked against Civil 3D's own reports, sandbox probe confirming a blocked operation is rejected.
-3. **Grant**: Joe mints a one-time launch grant on the workstation — `python scripts/trusted_launcher.py grant --mount civil3d --minutes 30` — and launches the mount through `trusted_launcher.py launch`. No grant, no mount: the denial paths are proven by `tests/test_trusted_launcher.py`.
+3. **Grant**: Joe mints a one-time launch grant on the workstation — `python scripts/trusted_launcher.py grant --mount civil3d --minutes 30 --agent apex_chief_of_staff` — and launches the mount through `trusted_launcher.py launch`. No grant, no mount: the denial paths are proven by `tests/test_trusted_launcher.py`.
 4. **This test** is a *separate* approval from the grant: Joe states, in the session, that the first-write test is authorized before any `civil3d_execute` call is made.
 
 ## The synthetic disposable DWG

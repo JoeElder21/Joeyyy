@@ -101,6 +101,11 @@ Two distinct problems, both closed:
   step was impossible. `WebFetch` is granted to those 11 — it is read-only and does not
   weaken the constraint.
 
+Privacy: the repository's guard exempts no path. Each documentation placeholder in these
+files is pinned literal-by-literal in `PLACEHOLDER_LITERALS` in `scripts/privacy_guard.py`,
+so a real credential added to any of them is still reported, and a sync that changes a
+sample fails the guard until the new literal is reviewed and pinned.
+
 `tests/test_vendored_agents.py` asserts the presence of the field separately from its
 contents, because a missing field exposes no forbidden tool *names* to match on and
 would otherwise pass a check that only inspects what is declared.

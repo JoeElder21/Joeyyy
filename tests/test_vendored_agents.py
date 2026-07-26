@@ -70,7 +70,9 @@ class VendoredRegistryConsistencyTests(unittest.TestCase):
 
     The contract tests below skip when the prompt directory is gone, so a rollback that
     deleted the prompts but left the registry section would otherwise stay green while
-    the registry claimed 33 discoverable candidates that no longer exist.
+    the registry claimed 33 discoverable candidates that no longer exist. The pinned
+    PLACEHOLDER_LITERALS entries are covered separately by test_privacy, which requires
+    every pinned literal to appear verbatim in the file it names.
     """
 
     def test_registry_section_and_prompt_directory_agree(self):

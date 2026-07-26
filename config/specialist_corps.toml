@@ -34,6 +34,23 @@ ambiguous_policy = "Select one primary agent; add same-brain advisers only when 
 [lifecycle]
 stages = ["candidate", "shadow", "active", "value-proven", "restricted", "deprecated", "retired"]
 deployed_stage = "shadow"
+# The stages at which a specialist may hold a connector mount of its own.
+# Governance rules live in the configuration the runtime actually reads, per
+# .github/instructions/agent-safety.instructions.md; hardcoding this in
+# scripts/trusted_launcher.py meant a rename or addition in `stages` above
+# could be accepted by the registry and its validators while the launcher went
+# on enforcing a stale set -- denying the intended stage, or keeping authority
+# for one that had been removed.
+#
+# MEMBERSHIP, not ordering. Deliberately NOT "active or later in `stages`":
+# that ordinal reading treats every administrative exit -- restricted,
+# deprecated, retired -- as a promotion, including the `restricted` stage the
+# lifecycle graph assigns for writing outside a lease.
+#
+# The launcher fails closed if this key is missing or malformed. It does not
+# fall back to a built-in default, because a silent default is the exact
+# failure this key exists to remove.
+connector_stages = ["active", "value-proven"]
 active_gate = "Static contracts, typed 2.1 output, one controlled real mission per material mode, runtime connector-isolation evidence, readback, and a versioned lifecycle promotion; a separate sandbox promotion is required before any specialist may hold its own writer lease."
 value_gate = "Observed net value after review, correction, maintenance, and failure burden."
 
