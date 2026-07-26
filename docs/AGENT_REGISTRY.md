@@ -268,7 +268,10 @@ unregistered prompt in the discovery path bypasses this registry by construction
   corps does not cover. Treat output as a proposal for Agent 007, never as a verified result.
 - Tools: every one of the 33 carries an explicit read-only allowlist — `LS`, `Read`,
   `Grep`, `Glob`, plus `WebFetch` where the prompt's own instructions require fetching
-  documentation. Two separate problems were closed: 16 prompts declared write-capable
+  documentation, and `WebSearch` on the two universal agents that upstream granted it
+  (`api-architect`, `backend-developer`). Both are read-only network reads; they are
+  named here rather than folded into "plus WebFetch" so this entry states the complete
+  access surface and a future undeclared grant is visible against it. Two separate problems were closed: 16 prompts declared write-capable
   tools, which were stripped; the other 17 declared **no** `tools` field at all, which in
   Claude Code grants every tool the main thread holds rather than none. The shared rule
   that Agent 007 alone executes mutations now holds without exception, and

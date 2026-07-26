@@ -282,7 +282,7 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
     Path(".claude/agents/awesome-claude-agents/specialized/python/fastapi-expert.md"): (
         'P' + 'assword = Annotated[str',
         'user' + '@example.com"',
-        'p' + 'assword: Password',
+        'password: P' + 'assword = Field(description="Mot de passe (min 8 caractères)")',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/ml-data-expert.md"): (
         'ml' + '@example.com"',
@@ -932,10 +932,21 @@ def strip_known_placeholders(relative: Path, text: str) -> str:
     for literal in PLACEHOLDER_LITERALS.get(relative, ()):
         text = re.sub(
             rf"(?<!{_TOKEN_CHAR}){re.escape(literal)}(?!{_TOKEN_CHAR})"
-            # Not followed, after optional spacing, by anything that continues
-            # the expression: concatenation, formatting, a method call, a line
-            # continuation, or an adjacent string literal (implicit concat).
-            rf"(?![ \t]*(?:[+%*.\\]|['\"`]))",
+            # Not followed, after optional spacing, by anything that continues the
+            # expression. The original set named concatenation, formatting, a method
+            # call, a line continuation and an adjacent string literal, and a keyword
+            # operator walked straight through it: the pinned fixture followed by a
+            # conditional and a second, real value stripped cleanly, and what remained
+            # carried no credential-bearing key, so the real secret passed the gate.
+            # Comparison, logical and bitwise operators are covered for the same reason.
+            #
+            # `in`, `for` and `-` are deliberately NOT here. They are ordinary English
+            # as often as they are operators, and an approved placeholder cited in prose
+            # must still strip - which is what test_placeholder_stripping_requires_whole
+            # _token_boundaries pins. The residual risk is an assignment continued by
+            # one of those three specifically, which is far narrower than the hole this
+            # closes.
+            rf"(?![ \t]*(?:[+%*.\\/=<>!&|^~?]|['\"`]|(?:if|elif|else|or|and|not|is)\b))",
             "",
             text,
         )

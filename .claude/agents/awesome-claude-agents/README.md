@@ -140,8 +140,11 @@ Everything else is byte-identical to upstream.
 git clone https://github.com/vijaythecoder/awesome-claude-agents.git /tmp/aca
 rsync -a --delete --exclude README.md /tmp/aca/agents/ .claude/agents/awesome-claude-agents/
 cp /tmp/aca/LICENSE .claude/agents/awesome-claude-agents/LICENSE
-# Then re-apply EVERY local change documented above — 3 frontmatter, the tool
-# constraint across 16 files, and 9 agent-body fixes — and update the commit SHA here.
+# Then re-apply EVERY local change documented above — 3 frontmatter fixes, the tool
+# constraint across all 33 files (16 stripped, 17 given an allowlist they lacked, 11
+# granted WebFetch), and 15 agent-body fixes — and update the commit SHA here.
+# The counts above are asserted nowhere, so treat them as a checklist and re-read the
+# sections rather than trusting these numbers alone.
 python -m unittest tests.test_vendored_agents   # must pass before committing
 ```
 
