@@ -4,10 +4,11 @@
 #
 # Every entry here is an acknowledged finding with a stated reason and an expiry,
 # never a silenced one. The gate stays hard: any vulnerability not listed below
-# fails CI. These three are listed only because none of them can be resolved by a
-# version bump inside a dated lockfile snapshot, and blocking every unrelated
-# change on a pre-existing condition would convert a real gate into a nuisance
-# people learn to route around.
+# fails CI. Each is listed only because it cannot be resolved from inside this
+# repository -- a dated lockfile snapshot that must not be edited, an upstream
+# with no fix, or a published shrinkwrap that `overrides` cannot reach -- and
+# blocking every unrelated change on a pre-existing condition would convert a
+# real gate into a nuisance people learn to route around.
 #
 # `ignoreUntil` is the point. These expire and come back, so a triage decision
 # cannot quietly become permanent by being forgotten.
@@ -49,3 +50,67 @@ being internet-exposed.
 Kept as a triage rather than a blocker because no version resolves it, but the
 justification is now "no fix exists" alone, not "nothing installs it". Revisit at
 expiry, or sooner if deepeval drops the dependency."""
+
+# --- npm, connectors/relay ---
+#
+# These four surfaced the moment `connectors/relay/package-lock.json` was added
+# to the scan. They are NOT new exposures: the lock was committed earlier and
+# went unscanned because the OSV step and Dependabot both named only
+# connectors/aps. Adding the relay lock closed that gap, and the gap is what had
+# been hiding them.
+#
+# None of the four is fixable from this repository, and the reason is the same
+# for three of them: `@earendil-works/pi-coding-agent` ships its own
+# `npm-shrinkwrap.json`. npm honours a published shrinkwrap EXACTLY, and
+# `overrides` cannot reach inside it -- verified by adding both flat and nested
+# override forms and regenerating the lock from scratch with node_modules
+# removed. The pinned versions did not move. The parents' declared ranges would
+# accept the patched versions (minimatch asks for brace-expansion ^5.0.5,
+# @google/genai for protobufjs ^7.5.4); the shrinkwrap is what forbids it.
+#
+# npm's own `audit fix` proposes one remedy: downgrade `agent-relay` from 11.2.0
+# to 10.6.7, a semver-major move of the declared dependency. That is a
+# connector decision for Joe, not a patch, and it is recorded as open in
+# docs/REPO_OPTIMIZATION_2026-07-25.md.
+#
+# Mitigating context, not an excuse: connectors/relay is DECLARATION ONLY. Its
+# package.json says so and no relay server is configured, so nothing in this
+# repository executes this tree today. The day one does, these stop being
+# triage.
+#
+# Short expiry deliberately -- one month, not the three these would get if they
+# were unfixable in principle. They are fixable upstream, and the expiry is what
+# forces the recheck.
+
+[[IgnoredVulns]]
+id = "GHSA-3jxr-9vmj-r5cp"
+ignoreUntil = 2026-08-26
+reason = """brace-expansion 5.0.6, CVSS 7.7, fixed in 5.0.7. Transitive under
+@earendil-works/pi-coding-agent, whose published npm-shrinkwrap.json pins it and
+which `overrides` cannot penetrate. minimatch declares ^5.0.5, so the patched
+version is in range -- the shrinkwrap, not the range, is the blocker. Clears when
+pi-coding-agent republishes with a refreshed shrinkwrap, or if agent-relay is
+moved (a semver-major decision, recorded open)."""
+
+[[IgnoredVulns]]
+id = "GHSA-mh99-v99m-4gvg"
+ignoreUntil = 2026-08-26
+reason = """brace-expansion 5.0.6, CVSS 7.5, fixed in 5.0.8. Same package, same
+shrinkwrap, same blocker as GHSA-3jxr-9vmj-r5cp -- listed separately because a
+combined entry would silence one advisory the day the other is fixed."""
+
+[[IgnoredVulns]]
+id = "GHSA-j3f2-48v5-ccww"
+ignoreUntil = 2026-08-26
+reason = """protobufjs 7.6.4, CVSS 5.3, fixed in 7.6.5. Transitive under
+@earendil-works/pi-coding-agent via @google/genai, which declares ^7.5.4 -- the
+patched version is in range and the published shrinkwrap forbids it."""
+
+[[IgnoredVulns]]
+id = "GHSA-frvp-7c67-39w9"
+ignoreUntil = 2026-08-26
+reason = """@hono/node-server 1.19.15, CVSS 5.9, fixed in 2.0.5. Different
+blocker from the other three: this one is a genuine RANGE conflict, not a
+shrinkwrap. @modelcontextprotocol/sdk declares ^1.19.9, and 2.0.5 is a major
+outside it, so forcing it would violate a compatibility constraint the SDK
+states rather than merely inherits. Clears when the MCP SDK widens its range."""

@@ -187,6 +187,101 @@ class ValidationCoverageTests(unittest.TestCase):
         self.assertEqual(text.count("default-days:"), ecosystems)
 
 
+class VulnerabilityTriageTests(unittest.TestCase):
+    """A triage entry must stay a decision, not become a silence.
+
+    `osv-scanner.toml` says of itself that `ignoreUntil` "is the point. These
+    expire and come back, so a triage decision cannot quietly become permanent
+    by being forgotten." Nothing asserted that. An entry with no expiry, or one
+    dated far enough out to outlive anyone's memory of it, reads exactly like
+    the acknowledged findings around it — and the file's own claim about itself
+    is the kind of prose that stops being true without anything failing.
+    """
+
+    TRIAGE = ROOT / "osv-scanner.toml"
+    # A year is not a triage, it is a deletion with extra steps. Every entry
+    # here today sits at one month.
+    MAX_WINDOW_DAYS = 120
+
+    def _entries(self):
+        import tomllib
+
+        with self.TRIAGE.open("rb") as handle:
+            return tomllib.load(handle).get("IgnoredVulns", [])
+
+    def test_every_ignored_vulnerability_states_a_reason_and_an_expiry(self):
+        entries = self._entries()
+        self.assertTrue(entries, "no triage entries; this test would be vacuous")
+        for entry in entries:
+            with self.subTest(vuln=entry.get("id")):
+                self.assertTrue(entry.get("id"), "an entry with no id ignores nothing")
+                self.assertIn("ignoreUntil", entry, "an exemption with no expiry is permanent")
+                reason = entry.get("reason", "")
+                # Length is a crude proxy and deliberately low. It cannot judge
+                # whether a reason is GOOD; it only refuses "n/a" and "known
+                # issue", which is the failure mode that actually occurs.
+                self.assertGreater(
+                    len(reason.split()),
+                    12,
+                    f"{entry.get('id')}: a triage needs a reason someone can re-evaluate",
+                )
+
+    def test_no_exemption_outlives_the_memory_of_the_decision(self):
+        import datetime
+
+        for entry in self._entries():
+            expiry = entry["ignoreUntil"]
+            if isinstance(expiry, datetime.datetime):
+                expiry = expiry.date()
+            with self.subTest(vuln=entry["id"]):
+                self.assertIsInstance(
+                    expiry, datetime.date, "ignoreUntil must be a TOML date, not a string"
+                )
+                # Measured from the file's own newest entry rather than from
+                # today. Anchoring on `date.today()` would make this test start
+                # failing on a fixed calendar day for reasons unrelated to any
+                # change -- a time bomb in CI rather than a check. The property
+                # under test is the WINDOW an author granted, which is a
+                # property of the file.
+                newest = max(
+                    e["ignoreUntil"].date()
+                    if isinstance(e["ignoreUntil"], datetime.datetime)
+                    else e["ignoreUntil"]
+                    for e in self._entries()
+                )
+                self.assertLessEqual(
+                    (newest - expiry).days,
+                    self.MAX_WINDOW_DAYS,
+                    f"{entry['id']}: expires {(newest - expiry).days} days before the "
+                    "newest entry, which suggests a stale exemption nobody revisited",
+                )
+
+    def test_the_reasons_do_not_claim_a_fix_that_was_not_applied(self):
+        # The relay entries say the patched versions are "in range" and blocked
+        # by a published shrinkwrap. That is a checkable claim, and if a future
+        # edit drops the blocker while keeping the exemption, the entry becomes
+        # a fixable finding sitting behind a stale excuse.
+        for entry in self._entries():
+            reason = entry.get("reason", "").lower()
+            if "fixed in" not in reason:
+                continue
+            with self.subTest(vuln=entry["id"]):
+                self.assertTrue(
+                    any(
+                        blocker in reason
+                        for blocker in (
+                            "shrinkwrap",
+                            "out of range",
+                            "outside it",
+                            "dated evidence record",
+                            "no fix available",
+                            "semver-major",
+                        )
+                    ),
+                    f"{entry['id']}: names a fixed version but no reason it was not taken",
+                )
+
+
 class WorkflowYamlShapeTests(unittest.TestCase):
     """Two ways a YAML edit passes review and changes nothing, or everything.
 

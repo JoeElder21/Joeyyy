@@ -1472,6 +1472,61 @@ from **script** blocks: a `#` line in `run: |` is a correct shell comment, and
 the first version flagged every commented step script in the repository — a
 check that fires on correct code gets suppressed, and then it is not a check.
 
+#### What the relay scan found the moment it was switched on
+
+Four npm vulnerabilities, all in `connectors/relay/package-lock.json`, all
+**pre-existing** — the lock was committed earlier and went unscanned, and the
+coverage gap is what had been hiding them. That is the gate working, not a
+regression introduced by turning it on.
+
+| Advisory | Package | Have | Fixed in |
+| --- | --- | --- | --- |
+| `GHSA-3jxr-9vmj-r5cp` | brace-expansion | 5.0.6 | 5.0.7 (CVSS 7.7) |
+| `GHSA-mh99-v99m-4gvg` | brace-expansion | 5.0.6 | 5.0.8 (CVSS 7.5) |
+| `GHSA-j3f2-48v5-ccww` | protobufjs | 7.6.4 | 7.6.5 (CVSS 5.3) |
+| `GHSA-frvp-7c67-39w9` | @hono/node-server | 1.19.15 | 2.0.5 (CVSS 5.9) |
+
+**None is fixable from this repository, and the reason took some finding.**
+Three are transitive under `@earendil-works/pi-coding-agent`, which ships its
+own **`npm-shrinkwrap.json`**. npm honours a published shrinkwrap exactly, and
+`overrides` cannot reach inside it. This was established rather than assumed:
+both the flat and the nested override forms were added, `node_modules` was moved
+aside, and the lock was regenerated from scratch — 485 packages, 483 resolved,
+the pinned versions unmoved. The parents' declared ranges would have accepted
+the patches (`minimatch` asks for `brace-expansion ^5.0.5`, `@google/genai` for
+`protobufjs ^7.5.4`), so the range is not the blocker; the shrinkwrap is. The
+fourth is a genuine range conflict: `@modelcontextprotocol/sdk` declares
+`@hono/node-server ^1.19.9` and the fix is a major outside it.
+
+An intermediate regeneration produced a lock with **10 of 459 packages carrying
+`resolved`**, against 483 of 485 in the committed one. It was not committed:
+npm had rebuilt the tree from an existing `node_modules` instead of the
+registry, and shipping it would have dropped resolution and integrity metadata
+for 473 packages — a supply-chain regression sold as a security fix. The
+difference was visible only because the two locks were compared before
+committing.
+
+`npm audit fix` offers exactly one remedy: downgrade `agent-relay` from 11.2.0
+to **10.6.7**, a semver-major move of the declared dependency. That is Joe's
+call, not a patch, and it is in the open list below.
+
+So the four are triaged in `osv-scanner.toml` with a **one-month** expiry —
+shorter than the three-month windows on the findings that are unfixable in
+principle, because these are fixable upstream and the expiry is what forces the
+recheck. Mitigating but not excusing: `connectors/relay` is declaration-only and
+no relay server is configured, so nothing here executes that tree today.
+
+**The file claimed this property about itself and nothing enforced it.**
+`osv-scanner.toml` opens by saying `ignoreUntil` "is the point. These expire and
+come back, so a triage decision cannot quietly become permanent by being
+forgotten." No test asserted any of it. `VulnerabilityTriageTests` now requires
+every entry to carry an expiry and a reason substantial enough to re-evaluate,
+refuses an exemption dated far behind its siblings, and — where a reason names a
+fixed version — requires it to also name why that fix was not taken. The window
+check is anchored on the file's newest entry rather than on `date.today()`,
+because a check that starts failing on a fixed calendar day for reasons
+unrelated to any change is a time bomb in CI, not a check.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
@@ -1507,6 +1562,13 @@ Not a decision backlog — the actual work the harness exposed:
   unscanned and is now covered — this one has nothing to scan, so closing it
   means generating and committing a lock for a mount, which is a connector
   decision rather than a hygiene edit.
+- **Four npm advisories in the relay tree need an upstream move or a
+  downgrade.** Three are pinned by `@earendil-works/pi-coding-agent`'s published
+  `npm-shrinkwrap.json`, which `overrides` cannot penetrate; one is outside the
+  range `@modelcontextprotocol/sdk` declares. The only remedy available today is
+  `npm audit fix`'s: **downgrade `agent-relay` 11.2.0 → 10.6.7**, a semver-major
+  move of a declared dependency, which is a connector decision. Triaged for one
+  month; if nothing upstream moves by then, the downgrade is the question.
 - **Idempotency keys and expected versions are checked for presence, not
   honoured.** The gate now refuses a mutation that omits a control its packet
   demands, but nothing verifies the executor performs a compare-and-set or that
