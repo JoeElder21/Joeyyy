@@ -116,6 +116,12 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - max-sixty/worktrunk — install when multiple agents edit this repo concurrently
 - ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
 
+## Ecosystem runtime integration inventory
+
+The 15 repositories supplied for the AutoGen-first runtime expansion are recorded in `config/ecosystem_runtime.toml`, with a staged implementation sequence in `docs/ECOSYSTEM_RUNTIME_ROADMAP.md`. They are infrastructure records, not callable agents, and all are `planned` except the local Taskipy task definition (`configured`). No external service, credential, Google Drive folder, MCP server, or vendor SDK was verified in this runtime; none may be represented as available.
+
+The generated evidence packet is `docs/DRIVE_ECOSYSTEM_EVIDENCE_PACKET.md`. It is intentionally credential-free and has not been uploaded: uploads must use a verified Google Drive MCP server, and the external evidence reference must remain out of this public repository.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

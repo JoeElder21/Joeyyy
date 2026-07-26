@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-007-runtime"
+version = "0.1.0"
+description = "Fail-closed integration registry and packet-only execution boundary for Agent 007."
+requires-python = ">=3.11"
+
+[tool.taskipy.tasks]
+validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/validate_ecosystem_runtime.py"
+test = "python -m unittest discover -s tests -v"
+audit = "python scripts/build_drive_evidence_packet.py --check"
+pre_commit = "task validate"

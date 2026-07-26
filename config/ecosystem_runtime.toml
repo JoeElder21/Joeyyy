@@ -1,0 +1,113 @@
+version = "1.0.0"
+rollback_parent = "HEAD-before-ecosystem-runtime"
+connector_boundary = "mcp_packet_only"
+credential_policy = "environment_or_secret_manager_only"
+drive_evidence_target = "Google Drive/Agent 007/Ecosystem Integration Evidence"
+
+# These are integration records, not assertions that a vendor account, server, or
+# credential is available in this runtime.  `task validate` verifies their policy
+# shape without opening network connections.
+[[integrations]]
+id = "microsoft-autogen"
+repository = "microsoft/autogen"
+role = "specialist-team-runtime"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "mcp-python-sdk"
+repository = "modelcontextprotocol/python-sdk"
+role = "mcp-client-and-custom-server-sdk"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "openai-agents-python"
+repository = "openai/openai-agents-python"
+role = "typed-handoff-runtime"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "anthropic-sdk-python"
+repository = "anthropics/anthropic-sdk-python"
+role = "model-tool-use-runtime"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "phoenix"
+repository = "arize-ai/phoenix"
+role = "llm-observability"
+stage = "planned"
+requires_mcp_boundary = false
+
+[[integrations]]
+id = "langfuse"
+repository = "langfuse/langfuse"
+role = "prompt-versioning-and-evaluation"
+stage = "planned"
+requires_mcp_boundary = false
+
+[[integrations]]
+id = "opentelemetry-python"
+repository = "open-telemetry/opentelemetry-python"
+role = "distributed-tracing"
+stage = "planned"
+requires_mcp_boundary = false
+
+[[integrations]]
+id = "taskipy"
+repository = "taskipy/taskipy"
+role = "local-task-runner"
+stage = "configured"
+requires_mcp_boundary = false
+
+[[integrations]]
+id = "airflow"
+repository = "apache/airflow"
+role = "scheduled-dag-orchestration"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "celery"
+repository = "celery/celery"
+role = "serialized-mutation-queue"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "logseq"
+repository = "logseq/logseq"
+role = "jeos-knowledge-store"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "twenty"
+repository = "twenty-crm/twenty"
+role = "apex-opportunity-crm"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "plane"
+repository = "makeplane/plane"
+role = "apex-delivery-system"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "aps-sdk-node"
+repository = "autodesk-platform-services/aps-sdk-node"
+role = "civil3d-project-data"
+stage = "planned"
+requires_mcp_boundary = true
+
+[[integrations]]
+id = "mcp-servers"
+repository = "modelcontextprotocol/servers"
+role = "reference-mcp-connector-servers"
+stage = "planned"
+requires_mcp_boundary = true

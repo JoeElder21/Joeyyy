@@ -51,6 +51,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
+- `docs/ECOSYSTEM_RUNTIME_ROADMAP.md` — staged AutoGen-first plan for every newly supplied runtime, MCP connector, observability, workflow, and system-of-record repository.
+- `config/ecosystem_runtime.toml` — public, credential-free lifecycle inventory for the 15 newly supplied repository integrations.
+- `docs/DRIVE_ECOSYSTEM_EVIDENCE_PACKET.md` — generated, credential-free evidence packet to upload only through a verified Google Drive MCP server.
 - `schemas/` — delegation, handoff, and roundtable packet contracts.
 - `templates/agent-intake.md` — new-agent onboarding and validation.
 - `templates/specialist-handoff.md` — human-readable specialist packet.
@@ -67,6 +70,8 @@ Run:
 ```bash
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
+python scripts/validate_ecosystem_runtime.py
+python scripts/build_drive_evidence_packet.py --check
 python -m unittest discover -s tests -v
 ```
 
