@@ -40,3 +40,10 @@ An installed dependency that phones home is an outbound data flow, and it is sub
 - Shadow fixtures are synthetic. Runtime records are never copied into tests.
 
 Prompt contracts strengthen isolation, but hard connector isolation depends on runtime credentials, scopes, and write proxies. No specialist may become `active` until Agent 007 verifies that an opposite-brain connector request cannot reach a connector in the selected runtime.
+## Generated public reports
+
+Generated binary reports remain prohibited by default. The privacy guard may carry an
+exact-path exception only when the public, reviewable source is committed beside the
+artifact and a regression test proves that unrelated binaries remain rejected. An
+exception permits that named artifact; it does not make PDFs or a reports directory a
+trusted input surface.

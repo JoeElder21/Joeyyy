@@ -3,7 +3,11 @@ import re
 import tempfile
 import unittest
 
-from scripts.privacy_guard import repository_files, scan_repository
+from scripts.privacy_guard import (
+    ALLOWED_GENERATED_ARTIFACTS,
+    repository_files,
+    scan_repository,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,15 +24,25 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             and path.suffix.lower() in {".md", ".toml", ".json", ".py", ".yml", ".yaml"}
         ]
         prohibited = {
-            "secret key": re.compile(r"\b(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b"),
-            "private key block": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+            "secret key": re.compile(
+                r"\b(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b"
+            ),
+            "private key block": re.compile(
+                r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+            ),
             "cloud access key": re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
             "generic credential assignment": re.compile(
                 r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*[\"'][^\"']{8,}[\"']"
             ),
-            "email address": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
-            "phone number": re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"),
-            "raw Drive or Docs link": re.compile(r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE),
+            "email address": re.compile(
+                r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE
+            ),
+            "phone number": re.compile(
+                r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"
+            ),
+            "raw Drive or Docs link": re.compile(
+                r"https://(?:drive|docs)\.google\.com/", re.IGNORECASE
+            ),
             "street address": re.compile(
                 r"\b[1-9]\d{1,5}\s+(?:[A-Za-z0-9.'-]+\s+){1,6}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
                 re.IGNORECASE,
@@ -43,7 +57,9 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
     def test_dedicated_privacy_guard_scans_every_tracked_text_file(self):
         self.assertEqual(scan_repository(ROOT), [])
         scanned = set(repository_files(ROOT))
-        self.assertIn(ROOT / ".env.example", scanned) if (ROOT / ".env.example").exists() else None
+        self.assertIn(ROOT / ".env.example", scanned) if (
+            ROOT / ".env.example"
+        ).exists() else None
         self.assertIn(ROOT / "scripts" / "privacy_guard.py", scanned)
 
     def test_privacy_guard_fails_closed_on_binary_and_unquoted_secrets(self):
@@ -94,18 +110,30 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         self.assertTrue(
             any("binary file is not allowed" in finding for finding in findings)
         )
-        self.assertTrue(
-            any("secret token" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("credential assignment" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("bearer credential" in finding for finding in findings)
-        )
-        self.assertTrue(
-            any("Git LFS pointer" in finding for finding in findings)
-        )
+        self.assertTrue(any("secret token" in finding for finding in findings))
+        self.assertTrue(any("credential assignment" in finding for finding in findings))
+        self.assertTrue(any("bearer credential" in finding for finding in findings))
+        self.assertTrue(any("Git LFS pointer" in finding for finding in findings))
+
+    def test_generated_report_exception_is_exact_and_requires_source(self):
+        report, source = next(iter(ALLOWED_GENERATED_ARTIFACTS.items()))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / report
+            output.parent.mkdir(parents=True)
+            output.write_bytes(b"%PDF-1.4\n")
+            findings = scan_repository(root)
+            self.assertTrue(any("missing source" in item for item in findings))
+            source_path = root / source
+            source_path.write_text("# Public report source\n", encoding="utf-8")
+            self.assertEqual(scan_repository(root), [])
+            output.write_bytes(b"not really a PDF")
+            findings = scan_repository(root)
+            self.assertTrue(any("not a PDF" in item for item in findings))
+            unrelated = root / "docs" / "reports" / "unreviewed.pdf"
+            unrelated.write_bytes(b"%PDF-1.4\n")
+            findings = scan_repository(root)
+            self.assertTrue(any("non-source artifact" in item for item in findings))
 
     def test_private_runtime_and_secret_filenames_are_not_present(self):
         prohibited_names = {
@@ -145,7 +173,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         jeos = (ROOT / "brains" / "jeos" / "README.md").read_text(encoding="utf-8")
         self.assertIn("repository is public", apex)
         self.assertIn("repository is public", jeos)
-        self.assertIn("Private runtime memory", (ROOT / "docs" / "PRIVACY_AND_DATA_BOUNDARIES.md").read_text(encoding="utf-8"))
+        self.assertIn(
+            "Private runtime memory",
+            (ROOT / "docs" / "PRIVACY_AND_DATA_BOUNDARIES.md").read_text(
+                encoding="utf-8"
+            ),
+        )
 
 
 if __name__ == "__main__":

@@ -43,7 +43,12 @@ PROHIBITED_ARTIFACT_SUFFIXES = {
     ".xlsx",
     ".zip",
 }
-LFS_POINTER_PREFIX = "version https://git-lfs.github.com/" "spec/v1"
+ALLOWED_GENERATED_ARTIFACTS = {
+    Path("docs/reports/JOEYYY_ACTIVE_WORK_REPORT_2026-07-25.pdf"): Path(
+        "docs/reports/JOEYYY_ACTIVE_WORK_REPORT_2026-07-25.md"
+    ),
+}
+LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1"
 PATTERNS = {
     "secret token": re.compile(
         r"\b(?:(?:sk|gh[opusr]|github_pat|xox[baprs]|npm)[-_][A-Za-z0-9_-]{12,}"
@@ -95,7 +100,9 @@ def repository_files(root: Path = ROOT) -> list[Path]:
     return [
         path
         for path in root.rglob("*")
-        if path.is_file() and ".git" not in path.parts and "__pycache__" not in path.parts
+        if path.is_file()
+        and ".git" not in path.parts
+        and "__pycache__" not in path.parts
     ]
 
 
@@ -103,9 +110,13 @@ def scan_repository(root: Path = ROOT) -> list[str]:
     findings: list[str] = []
     for path in repository_files(root):
         relative = path.relative_to(root)
+        generated_source = ALLOWED_GENERATED_ARTIFACTS.get(relative)
         if path.name.lower() in PROHIBITED_FILENAMES:
             findings.append(f"{relative}: prohibited private filename")
-        if path.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES:
+        if (
+            path.suffix.lower() in PROHIBITED_ARTIFACT_SUFFIXES
+            and generated_source is None
+        ):
             findings.append(
                 f"{relative}: non-source artifact type is not allowed in this public repository"
             )
@@ -114,16 +125,30 @@ def scan_repository(root: Path = ROOT) -> list[str]:
         except OSError as exc:
             findings.append(f"{relative}: unreadable ({exc})")
             continue
+        if generated_source is not None:
+            if not (root / generated_source).is_file():
+                findings.append(
+                    f"{relative}: generated report is missing source {generated_source}"
+                )
+            if not raw.startswith(b"%PDF-"):
+                findings.append(f"{relative}: allowlisted report is not a PDF")
+            continue
         if b"\0" in raw:
-            findings.append(f"{relative}: binary file is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: binary file is not allowed in this public source tree"
+            )
             continue
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
-            findings.append(f"{relative}: non-UTF-8 file is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: non-UTF-8 file is not allowed in this public source tree"
+            )
             continue
         if text.startswith(LFS_POINTER_PREFIX):
-            findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: Git LFS pointer is not allowed in this public source tree"
+            )
         for label, pattern in PATTERNS.items():
             if pattern.search(text):
                 findings.append(f"{relative}: possible {label}")
