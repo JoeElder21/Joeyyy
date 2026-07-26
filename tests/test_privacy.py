@@ -1814,6 +1814,61 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                             f"{label}: a file that never claimed YAML must "
                             f"stay clean without the parser")
 
+    def test_every_exemption_in_every_pattern_rejects_a_continuation(self):
+        """Asserted across ALL patterns, because that is the miss.
+
+        Round 30 gave the endpoint pattern a continuation guard and left the
+        connector-identifier and organization patterns -- sitting directly
+        beneath it, with the same reserved-name exemptions -- without one. The
+        same value assembled from a reserved literal plus a second string
+        passed both. Fixing one instance of a class and not its siblings is the
+        error this whole review keeps finding, so this test enumerates the
+        exemption-bearing patterns rather than naming one."""
+        address, tenant = "TFE" + "_ADDRESS", "AZURE" + "_TENANT_ID"
+        organization, scheme = "TFE" + "_ORGANIZATION", "https"
+
+        # (pattern, exempt value that must stay clean alone, real suffix)
+        exemptions = [
+            ("private connector endpoint",
+             f'{address} = "{scheme}://example.com"', ".corp.com"),
+            ("private connector endpoint",
+             f'{address} = "{scheme}://tfe.invalid"', ".corp.com"),
+            ("private connector endpoint",
+             f'{address} = "{scheme}://localhost"', ".corp.com"),
+            ("connector identifier",
+             f'{tenant} = "tenant.example.com"', ".client.com"),
+            ("connector identifier",
+             f'{tenant} = "tenant.invalid"', ".client.com"),
+            ("connector organization",
+             f'{organization} = "your-org"', "-realclient"),
+            ("connector organization",
+             f'{organization} = "example-org"', "-realclient"),
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, (label, alone, suffix) in enumerate(exemptions):
+                clean_probe = root / f"alone{index}.py"
+                clean_probe.write_text(alone + "\n", encoding="utf-8")
+                with self.subTest(pattern=label, form="uncontinued"):
+                    self.assertEqual(
+                        scan_paths([clean_probe], root=root), [],
+                        f"{alone}: an exempt value standing alone must stay "
+                        f"clean")
+
+                # Every way the expression can continue past the exemption.
+                for style, continued in {
+                    "concatenated": f'{alone} + "{suffix}"',
+                    "adjacent literal": f'{alone} "{suffix}"',
+                    "formatted": f"{alone} % suffix",
+                }.items():
+                    probe = root / f"cont{index}_{style.split()[0]}.py"
+                    probe.write_text(continued + "\n", encoding="utf-8")
+                    with self.subTest(pattern=label, form=style):
+                        self.assertTrue(
+                            scan_paths([probe], root=root),
+                            f"{continued}: a continued expression must not "
+                            f"inherit the exemption")
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

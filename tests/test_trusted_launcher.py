@@ -340,6 +340,92 @@ class TrustedLauncherTests(unittest.TestCase):
             self.assertEqual(granted["detail"].get("agent"),
                              "apex_systems_blacksmith")
 
+    def test_a_grant_is_never_signed_without_a_readable_disclosure(self):
+        """The gate has to run on the path it guards, not beside it.
+
+        `grant_scope` was validated in verify_mcp_mounts.py only, so the
+        AUTHORIZATION path itself was unprotected: a runtime registry with a
+        missing, blank or non-string scope still produced a signed grant, and
+        the mint output showed an empty disclosure for a whole-server
+        authority. Joe signs at mint time, so mint time is where the disclosure
+        has to exist."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        unusable = {"missing": None, "empty": "", "blank": "   ",
+                    "integer": 1, "boolean": True}
+        for label, scope in unusable.items():
+            spec = {"name": "probe", "agents": ["apex_chief_of_staff"],
+                    "command": ["true"], "require_grant": True}
+            if scope is not None:
+                spec["grant_scope"] = scope
+            with tempfile.TemporaryDirectory() as tmp:
+                key, ledger = self._env(tmp)
+                with mock.patch.object(launcher, "_load_mounts",
+                                       lambda s=spec: {"probe": s}):
+                    with self.subTest(scope=label):
+                        with self.assertRaises(LaunchDenied) as caught:
+                            issue_grant("probe", 30, key_path=key,
+                                        out_dir=Path(tmp) / "grants",
+                                        agent="apex_chief_of_staff",
+                                        ledger=ledger)
+                        self.assertIn("grant_scope", str(caught.exception))
+                        events = [
+                            json.loads(line)["event"] for line
+                            in ledger.path.read_text(
+                                encoding="utf-8").splitlines() if line.strip()
+                        ]
+                        self.assertEqual(events, ["grant_denied"])
+                        self.assertFalse(
+                            list((Path(tmp) / "grants").glob("*.json")),
+                            "no grant file may exist after a refusal")
+
+        # The real registry still mints, so this refuses an unusable
+        # disclosure rather than refusing everything.
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            self.assertTrue(
+                issue_grant("terraform", 30, key_path=key,
+                            out_dir=Path(tmp) / "grants",
+                            agent="apex_chief_of_staff", ledger=ledger).exists())
+
+    def test_a_malformed_brain_manifest_table_is_denied(self):
+        """The corps roster got a shape check; the brain manifest did not.
+
+        `agents = 1` is valid TOML and raised a bare AttributeError from the
+        chained lookup. Both callers convert only ManifestUnavailable, so a
+        partial manifest update produced a traceback and no audited denial --
+        the same loud-but-unauditable failure, in the one loader that had not
+        yet been given the treatment."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        corps = {
+            "apex_roster": ["apex_probe"], "jeos_roster": [],
+            "apex_brain_manifest": "brains/apex/agents.toml",
+            "governance": {"designated_executor": "apex_chief_of_staff"},
+            "lifecycle": {"deployed_stage": "shadow",
+                          "connector_stages": ["active", "value-proven"]},
+        }
+        for label, agents in {"scalar": 1, "string": "x",
+                              "list": ["a"], "boolean": True}.items():
+            with mock.patch.object(
+                    launcher, "_brain_manifest",
+                    lambda path, a=agents: {"brain": "APEX", "agents": a}):
+                with self.subTest(agents=label):
+                    with self.assertRaises(ManifestUnavailable):
+                        specialist_stage("apex_probe", corps=corps)
+
+        # A well-formed table still resolves.
+        with mock.patch.object(
+                launcher, "_brain_manifest",
+                lambda path: {"brain": "APEX",
+                              "agents": {"apex_probe": {"status": "shadow"}}}):
+            self.assertEqual(specialist_stage("apex_probe", corps=corps),
+                             "shadow")
+
     def test_a_manifest_must_declare_the_brain_it_speaks_for(self):
         """Brain-locking is only real if the file is checked, not the path.
 

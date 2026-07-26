@@ -133,8 +133,13 @@ PATTERNS = {
         # company name is not one of them, and treating it as such would
         # excuse the exact form this pattern exists to catch.
         r"(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-        r"|(?!(?:[A-Za-z0-9-]+\.)*example\.(?:com|net|org)" + VALUE_END + r")"
-        r"(?!\S*\.(?:example|invalid|test)" + VALUE_END + r")(?!<)"
+        # The SAME continuation guard the endpoint pattern carries. Adding it
+        # there and not here left the identical hole one pattern down: a
+        # tenant domain assembled from a reserved literal plus a second
+        # string ends the reserved name at its closing quote and is excused,
+        # while the runtime value names a real tenant.
+        r"|(?!(?:[A-Za-z0-9-]+\.)*example\.(?:com|net|org)" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!\S*\.(?:example|invalid|test)" + VALUE_END + NOT_CONTINUED + r")(?!<)"
         r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
         r"|[A-Za-z0-9_-]{16,})[\"']?"
     ),
@@ -172,11 +177,15 @@ PATTERNS = {
         # to the hostname exemptions above. (Described rather than written out:
         # this file is scanned by its own patterns.)
         r"(?!(?:your|my|our|the|some|a)[-_.]?(?:org|organization|workspace|"
-        r"name|company|team|tenant|client)?" + VALUE_END + r")"
-        r"(?!example[-_.]?(?:org|organization|workspace|name)?" + VALUE_END + r")"
-        r"(?!<)(?!placeholder" + VALUE_END + r")"
-        r"(?!org" + VALUE_END + r")(?!organization" + VALUE_END + r")"
-        r"(?!workspace" + VALUE_END + r")(?!name" + VALUE_END + r")"
+        r"name|company|team|tenant|client)?" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!example[-_.]?(?:org|organization|workspace|name)?" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!<)(?!placeholder" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!org" + VALUE_END + NOT_CONTINUED + r")(?!organization" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!workspace" + VALUE_END + NOT_CONTINUED + r")(?!name" + VALUE_END + NOT_CONTINUED + r")"
+        # Each placeholder must also be an UNCONTINUED complete expression:
+        # a slug built from an approved placeholder plus a second literal is
+        # a real organization wearing a placeholder prefix, and the closing
+        # quote satisfied VALUE_END on its own.
         r"(?!\.\.\.)"
         r"[A-Za-z0-9][A-Za-z0-9_-]{2,}"
     ),

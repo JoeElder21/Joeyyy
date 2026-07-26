@@ -301,6 +301,90 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 with self.subTest(agent=name, tool=tool):
                     self.assertNotIn(tool, tools_line)
 
+    def test_every_prescribing_document_gives_the_same_scan_command(self):
+        """One document was fixed and the other kept teaching the blind form.
+
+        `.github/copilot-instructions.md` is the file Copilot loads on EVERY
+        request here, so it is the more consequential of the two -- and it
+        still prescribed the bare `privacy_guard.py`, which enumerates via
+        `git ls-files` and cannot see a file the session just created. Fixing
+        the template and not this one left the instruction that actually runs
+        unchanged. Any document that prescribes the command must prescribe the
+        same command."""
+        prescribing = [
+            ROOT / "templates" / "session-start.md",
+            ROOT / ".github" / "copilot-instructions.md",
+        ]
+        for path in prescribing:
+            text = " ".join(path.read_text(encoding="utf-8").split())
+            with self.subTest(document=path.name):
+                self.assertIn("python scripts/privacy_guard.py", text,
+                              "this document no longer prescribes the scan; "
+                              "drop it from the list deliberately")
+                for element in ("--diff-filter=d",
+                                "--others --exclude-standard",
+                                "xargs -0"):
+                    self.assertIn(
+                        element, text,
+                        f"{path.name} omits {element}, so it teaches a scan "
+                        f"that misses new files or breaks on a deletion")
+                # And the separator, so a filename cannot become an option.
+                self.assertIn("privacy_guard.py --", text)
+
+    def test_every_activation_document_states_the_same_response(self):
+        """A contract changed in one file and taught the old way in three.
+
+        Activation is bidirectional and the response line changed, but
+        `docs/APEX_CHIEF_OF_STAFF.md` and `docs/REPOSITORY_OVERVIEW.md` still
+        instructed the reader to emit the old reduced line -- so anyone
+        following those authoritative documents would skip the Awesome Copilot
+        layer entirely while believing they had activated correctly."""
+        expected = "Agent 007 activated. Awesome Copilot layer active."
+        documents = [
+            ROOT / "AGENTS.md",
+            ROOT / ".github" / "copilot-instructions.md",
+            ROOT / "templates" / "session-start.md",
+            ROOT / "docs" / "APEX_CHIEF_OF_STAFF.md",
+            ROOT / "docs" / "REPOSITORY_OVERVIEW.md",
+        ]
+        for path in documents:
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(document=path.name):
+                self.assertIn("Agent 007 activated", text,
+                              "this document no longer mentions activation; "
+                              "drop it from the list deliberately")
+                self.assertIn(expected, text)
+                # No surface may still teach the truncated response as the
+                # complete one.
+                import re
+
+                truncated = re.findall(
+                    r"Agent 007 activated\.(?! Awesome Copilot layer active\.)",
+                    text)
+                self.assertEqual(
+                    truncated, [],
+                    f"{path.name} still states the old reduced response")
+
+    def test_the_checklist_invents_no_exception_the_contract_lacks(self):
+        """A template may record a skip; it may not pre-authorise one.
+
+        The corps-staffing line named the solo-run case as an acceptable skip.
+        AGENTS.md grants no such exception, so the template was quietly
+        weakening the contract it exists to enforce -- and a session could
+        close with a complete-looking record on an exception nobody granted.
+        The general `[-]`-with-a-reason rule still applies to every line; what
+        is removed is the blessing."""
+        checklist = " ".join(
+            (ROOT / "templates" / "session-start.md").read_text(
+                encoding="utf-8").split())
+        self.assertIn("Mission staffed from the full registered corps",
+                      checklist)
+        self.assertNotIn("if Agent 007 ran it alone", checklist)
+        # The general convention must survive -- removing the exception must
+        # not remove the ability to record a genuine skip.
+        self.assertIn("`[-]` when deliberately skipped with a reason",
+                      checklist)
+
     def test_the_changed_file_scan_survives_an_ordinary_deletion(self):
         """A mandatory step that cannot pass gets skipped, not fixed.
 
@@ -441,8 +525,14 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
         # ...so the reusable checklist must be able to record it.
         self.assertIn("Mission staffed from the full registered corps", checklist)
         self.assertIn("one designated writer per shared resource", checklist)
-        # And the escape hatch has to be the recorded kind, not omission.
-        self.assertIn("`[-]` with the reason", checklist)
+        # The escape hatch is the template's GENERAL convention -- a recorded
+        # skip rather than an omission -- not a special permission attached to
+        # this line. The earlier version asserted the line named the solo-run
+        # case as acceptable, which pre-authorised an exception AGENTS.md does
+        # not grant: the template would have been quietly weakening the
+        # contract it exists to enforce.
+        self.assertIn("`[-]` when deliberately skipped with a reason", checklist)
+        self.assertNotIn("if Agent 007 ran it alone", checklist)
 
     def test_refresh_procedure_forbids_moving_a_collection_wide_pin_per_file(self):
         """The pin at the top of the manifest attributes the WHOLE collection.

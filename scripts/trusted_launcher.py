@@ -214,7 +214,17 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
             raise ManifestUnavailable(
                 f"{manifest_path} declares brain {declared_brain!r}, not "
                 f"{expected_brain!r}; it cannot speak for {agent!r}")
-        entry = manifest.get("agents", {}).get(agent)
+        agents = manifest.get("agents", {})
+        # Valid TOML, wrong shape: `agents = 1` raised a bare AttributeError,
+        # and both callers convert only ManifestUnavailable, so a partial
+        # manifest update produced a traceback and no audited denial. The corps
+        # roster got this treatment a round earlier; the separately loaded
+        # brain manifest did not.
+        if not isinstance(agents, dict):
+            raise ManifestUnavailable(
+                f"{manifest_path}: [agents] must be a table; the manifest "
+                "cannot say what stage any agent is at")
+        entry = agents.get(agent)
         if isinstance(entry, dict) and entry.get("status"):
             per_agent = entry["status"]
 
@@ -375,6 +385,20 @@ def issue_grant(
             "docs/AGENT_COMMUNITY_PROTOCOL.md first, or mint the grant for the "
             "designated executor."
         )
+
+    # The disclosure must exist BEFORE a signature does. Validating it only in
+    # verify_mcp_mounts.py left the authorization path itself unprotected: a
+    # runtime registry with a missing, blank or non-string grant_scope still
+    # produced a signed grant, and the mint output showed Joe an empty
+    # disclosure for a whole-server authority. A gate that runs beside the
+    # thing it guards is not guarding it.
+    if mounts[mount].get("require_grant"):
+        declared = mounts[mount].get("grant_scope", "")
+        if not isinstance(declared, str) or not declared.strip():
+            raise refuse(
+                "this mount declares no readable grant_scope, so the blast "
+                "radius of the signature cannot be shown; refusing to mint a "
+                "grant whose authority cannot be stated")
 
     now = now if now is not None else time.time()
     payload = {
