@@ -1,5 +1,11 @@
 # Agent 007 / Awesome Copilot — repository instructions
 
+> **Canonical policy:** the **JOEYYY Global Agent Engineering Constitution** in
+> the repository-root [`AGENTS.md`](../AGENTS.md) governs this repository. This
+> file is a Copilot runtime adapter: it carries invocation and environment
+> guidance only and may not amend, restate, or supersede the constitution.
+> Where the two disagree, the constitution wins.
+
 Always-loaded context for this repository. The full operating contract is
 `AGENTS.md` and `.codex/agents/apex_chief_of_staff.toml`; this file is the
 always-on entry point that keeps both layers in the daily workflow.
