@@ -33,7 +33,7 @@ On 2026-07-25 Joe delivered the **JOEYYY Global Agent Engineering Constitution**
 
 ## Known gaps recorded at adoption
 
-- **Value policy (section 17):** no machine-readable value policy exists in this repository, and no private-canon location is verified. The 35% threshold therefore has no enforcement surface yet; the annex records its status as `unknown`. Landing a `config/value_policy.toml` (or verifying the private-canon home) is an open item for Joe.
+- **Value policy (section 17):** ~~no machine-readable value policy exists~~ — **closed 2026-07-26** by `config/value_policy.toml` and `runtime/value_meter.py`. The 35% minimum is now binding and enforced. What remains open is data, not machinery: most per-mode baselines are `unset`, and a mode with no measured or Joe-declared baseline reports `no_baseline` rather than passing. Joe supplies baselines as missions run.
 - **Enforcement scope:** `tests/test_repository_policy.py` guards the canonical-copy rule, adapter thinness, and superseded-phrase reintroduction across tracked Markdown and TOML surfaces; it does not (and cannot) verify private-canon state.
 
 ## Enforcement

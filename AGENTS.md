@@ -302,7 +302,8 @@ Do not paste the constitution into any adapter or other surface.
 - `config/dream_team_roster.toml` — dream-team charter modes (roles-as-modes of the ten registered specialists).
 - `schemas/` — delegation, handoff, memory, writer-lease, mutation-result, cross-brain-constraint, and brain-private roundtable packet contracts.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status; register every new agent here and validate it before active use.
-- Value policy: no machine-readable value policy exists in this repository as of 2026-07-25, and no private-canon location for one is verified. Until one is landed or verified, section 17's 35% threshold has no enforcement surface here; treat its status as `unknown` rather than assuming compliance.
+- `config/value_policy.toml` — the machine-readable value policy required by section 17, enforced by `runtime/value_meter.py`. The 35% minimum is binding and mode-specific exceptions live only in that file's `[exceptions]` table (currently empty). Baselines marked `source = "unset"` or `"manifest_declared"` are not usable evidence: a mode with no measured or Joe-declared baseline reports `no_baseline`, never an assumed pass.
+- `runtime/mission_runner.py` — the controlled-mission harness. A mode's active-gate mission evidence comes from here; a mission with no completed evidence record does not count toward promotion.
 
 ### Validation surface
 

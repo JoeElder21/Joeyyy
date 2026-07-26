@@ -43,6 +43,10 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `CLAUDE.md` — thin Claude Code runtime adapter pointing to `AGENTS.md`.
 - `.github/copilot-instructions.md` — thin GitHub Copilot runtime adapter pointing to `AGENTS.md`.
 - `docs/CONSTITUTION_ADOPTION_2026-07-25.md` — constitution adoption record, staffing-rule supersession, and rollback point.
+- `docs/MONDAY_ACTIVATION_RUNBOOK.md` — how to actually run the corps, what each value verdict means, and what is honestly not ready.
+- `.claude/agents/` — the ten specialists and Agent 007 projected into Claude Code subagents from the canonical contracts; connector isolation enforced by the tool list. Regenerate with `python scripts/generate_claude_agents.py`.
+- `runtime/mission_runner.py` — controlled-mission harness: validated delegation, typed return, connector-isolation check, hash-chained evidence, per-mode promotion coverage.
+- `config/value_policy.toml` + `runtime/value_meter.py` — the section 17 value policy and its meter: net saving after review, correction, incident, and maintenance, against a binding 35% threshold.
 - `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
 - `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status.
