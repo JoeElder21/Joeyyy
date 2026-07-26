@@ -169,7 +169,16 @@ PATTERNS = {
         r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
         r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
         # As above: allow the closing quote of a JSON key before the delimiter.
-        r"[\"']?\s*[:=]\s*(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
+        # An f-string interpolation is not a literal secret. A test that probes
+        # this very pattern writes `"{secret}"`, which is exactly eight
+        # characters and so satisfied the 8+ value branch -- the guard flagged
+        # its own fixture and the whole scan failed. Excluded as narrowly as
+        # possible: the value must be a lone `{identifier}` and nothing else, so
+        # a real credential that merely contains a brace is still caught. This
+        # is a false-positive repair, not a relaxation; the test below proves a
+        # genuine secret in the identical shape still trips.
+        r"[\"']?\s*[:=]\s*(?!\s*[\"']\{[A-Za-z_][A-Za-z0-9_]*\}[\"'])"
+        r"(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
     ),
     # Organization and workspace slugs. These sit apart from "connector
     # identifier" because that pattern's opaque-value branch requires 16+

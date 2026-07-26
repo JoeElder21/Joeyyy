@@ -559,9 +559,20 @@ class ContributorSurfaceTests(unittest.TestCase):
 
     def test_claude_guidance_defers_to_the_single_contract(self):
         # Two copies of the operating contract is how the two runtimes drift apart.
+        # The PROPERTY is deference, not a particular word for it. This
+        # asserted the literal "authoritative"; the constitution merger replaced
+        # CLAUDE.md with a thin adapter saying "the constitution wins" -- more
+        # deferential, and it failed. Prose instead of property, again.
         text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
         self.assertIn("AGENTS.md", text)
-        self.assertIn("authoritative", text.lower())
+        lowered = text.lower()
+        self.assertTrue(
+            any(
+                phrase in lowered
+                for phrase in ("authoritative", "canonical", "constitution wins", "supersede")
+            ),
+            "CLAUDE.md must defer to AGENTS.md rather than restate it",
+        )
 
     def test_claude_guidance_agrees_with_the_enforced_formatter(self):
         # CLAUDE.md told Claude-based contributors that ruff-format was not
@@ -575,8 +586,13 @@ class ContributorSurfaceTests(unittest.TestCase):
         )
         formatter_enforced = "ruff format --check" in workflow
         self.assertTrue(formatter_enforced, "this test assumes CI enforces the formatter")
+        # The property is that the guidance must not CONTRADICT the gate. It
+        # additionally required CLAUDE.md to MENTION the formatter, which a thin
+        # runtime adapter forbidden from restating policy has no business doing.
+        # A file that says nothing about formatting contradicts nothing.
         self.assertNotIn("`ruff-format` is not enabled", text)
-        self.assertIn("ruff format", text)
+        if "ruff" in text.lower():
+            self.assertNotIn("ruff format is not", text.lower())
 
     def test_absorption_form_requires_provenance_before_execution(self):
         # The FakeGit finding is only enforced if the check cannot be skipped.
@@ -601,14 +617,26 @@ class ContributorSurfaceTests(unittest.TestCase):
         # only CONTRIBUTING.md would have left three copies of the same defect,
         # which is the failure mode this record keeps re-learning: an instance
         # is not a class.
-        for relative in ("CONTRIBUTING.md", "README.md", "CLAUDE.md", "pyproject.toml"):
-            with self.subTest(path=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("ruff check", text, f"{relative}: no lint step to compare against")
+        # Conditional on the document actually documenting the gate, and the
+        # candidate list is swept rather than hand-written. The fixed
+        # four-name list broke the moment CLAUDE.md became a thin runtime
+        # adapter that documents no commands at all: the test demanded a lint
+        # step from a file whose own contract forbids restating policy. The
+        # property was never "these four files mention ruff" -- it is "a
+        # surface that tells you to run `ruff check` must also tell you about
+        # the formatter CI enforces separately".
+        surfaces = [
+            path
+            for path in sorted(ROOT.glob("*.md")) + [ROOT / "pyproject.toml"]
+            if path.is_file() and "ruff check" in path.read_text(encoding="utf-8")
+        ]
+        self.assertTrue(surfaces, "no surface documents `ruff check`; this test is vacuous")
+        for path in surfaces:
+            with self.subTest(path=path.name):
                 self.assertIn(
                     "ruff format --check",
-                    text,
-                    f"{relative}: documents `ruff check` without the formatter CI also requires",
+                    path.read_text(encoding="utf-8"),
+                    f"{path.name}: documents `ruff check` without the formatter CI also requires",
                 )
 
     def test_every_documented_gate_installs_the_tools_it_invokes(self):

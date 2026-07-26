@@ -46,7 +46,7 @@ from scripts.policy_enforcement import (  # noqa: E402
     HIGH_IMPACT_ACTIONS,
     PolicyEnforcementPoint,
 )
-from scripts.trusted_launcher import DEFAULT_KEY_PATH, _load_or_create_key, _sign  # noqa: E402
+from scripts.trusted_launcher import DEFAULT_KEY_PATH, _sign  # noqa: E402
 
 # An instruction authorizes an irreversible act. A grant that outlives the
 # conversation it came from is a standing authorization, which is the thing the
@@ -123,7 +123,19 @@ def issue_instruction(
         # nonce consumption lands.
         "nonce": secrets.token_hex(16),
     }
-    grant = {**payload, "sig": _sign(_load_or_create_key(key_path), payload)}
+    # The key must ALREADY exist. `_load_or_create_key` would mint one on
+    # first use, which means any process that can write the key path could
+    # create a key and then sign grants the enforcement point accepts --
+    # bootstrapping Joe's authority out of nothing. `trusted_launcher.authorize`
+    # already takes this position for mount grants ("no signing key exists;
+    # only Joe's machine can mint grants") and the issuer must not undercut it.
+    if not key_path.exists():
+        raise InstructionRefused(
+            f"no signing key at {key_path}; an instruction cannot be minted on a "
+            "machine that holds none. Creating one here would manufacture Joe's "
+            "authority rather than exercise it."
+        )
+    grant = {**payload, "sig": _sign(key_path.read_bytes(), payload)}
 
     out_dir = out_dir or (key_path.parent / "instructions")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -147,7 +159,41 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--key", type=Path, default=DEFAULT_KEY_PATH)
     parser.add_argument("--out-dir", type=Path, default=None)
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the interactive confirmation. Refuses unless stdin is a TTY.",
+    )
     args = parser.parse_args(argv)
+
+    # A human at a terminal, by default. This does NOT prove the human is Joe
+    # -- nothing available in this repository can -- but it stops an unattended
+    # agent process from minting a publication or transaction grant simply
+    # because it runs under the same account. The check lives here in the CLI
+    # rather than in `issue_instruction()` on purpose: a `confirm=` parameter on
+    # the library function would be a caller-set boolean guarding an
+    # authorization, which is the exact defect this codebase removed three times
+    # (`mutating`, `launch_grant_verified`, `explicit_instruction`).
+    #
+    # THE REAL CONTROL IS KEY CUSTODY. Anything that can READ the signing key
+    # can mint a grant without going through this command at all, so where the
+    # key lives, and which processes can read it, is the decision that actually
+    # bounds this -- and it is Joe's, not the code's. Recorded as open in
+    # docs/REPO_OPTIMIZATION_2026-07-25.md.
+    if not sys.stdin.isatty():
+        print(
+            "refusing to issue: no terminal. An instruction authorizes an "
+            "irreversible act reserved to Joe, so it is not minted from an "
+            "unattended process.",
+            file=sys.stderr,
+        )
+        return 2
+    if not args.yes:
+        category = PolicyEnforcementPoint._boundary_category(args.action)
+        print(f"Authorize {category!r} on {args.resource!r}? Type the category to confirm: ")
+        if input().strip() != category:
+            print("refusing to issue: not confirmed", file=sys.stderr)
+            return 2
 
     try:
         path = issue_instruction(

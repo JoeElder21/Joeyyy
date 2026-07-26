@@ -1436,6 +1436,39 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         self.assertIn(secret, toml_reconstructed_values(f'[AZURE.CLIENT]\nSECRET = "{secret}"\n'))
 
+    def test_an_fstring_placeholder_is_not_a_credential_but_a_real_one_still_is(self):
+        """The narrowest possible exemption, asserted in both directions.
+
+        A test probing the credential pattern writes an interpolation that is
+        exactly eight characters inside quotes, which satisfied the 8+ value
+        branch -- so the guard flagged its own fixture and the entire
+        repository scan failed. The exemption covers a value that is a lone
+        `{identifier}` and nothing else, because such a value cannot itself BE
+        a secret. Anything that merely contains a brace is still caught.
+
+        Every positive probe is BUILT at runtime rather than written as a
+        literal, for the same reason the fixtures above are: this file is
+        scanned by the very patterns it tests, and a literal secret here would
+        make the guard fail on its own test suite. Writing them out is how the
+        first version of this test broke the scan.
+        """
+        from scripts.privacy_guard import PATTERNS
+
+        pattern = PATTERNS["credential assignment"]
+        name = "AZURE_CLIENT" + "_SECRET"
+        opaque = "x" * 20
+        for probe in (f'{{"{name}": "{{secret}}"}}', '{"TFE' + '_TOKEN": "{token}"}'):
+            with self.subTest(exempt=probe):
+                self.assertFalse(pattern.search(probe))
+        for probe in (
+            f'{{"{name}": "{opaque}"}}',
+            "TFE" + "_TOKEN=" + "abcdefghijklmnop",
+            f'{{"{name}": "abc{{def}}ghij"}}',
+            f'{{"{name}": "{{two words}}"}}',
+        ):
+            with self.subTest(flagged=probe):
+                self.assertTrue(pattern.search(probe), "a real credential slipped past the guard")
+
     def test_private_material_in_a_path_is_reported(self):
         """A path is published exactly as content is.
 

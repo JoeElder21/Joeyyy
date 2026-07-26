@@ -144,8 +144,15 @@ class RegistryImmutabilityTests(unittest.TestCase):
         _issue(registry, mission_id="m-expiry", now=later)
         expired = [item for item in registry._history if item["status"] == "expired"]
         self.assertTrue(expired, "no lease expired; this test would be vacuous")
+        # Compare OBJECT IDENTITY against the live records, not a lease_id
+        # string against a set of id() ints. The first version did the latter --
+        # a str is never in a set of ints, so it passed unconditionally and
+        # asserted nothing at all. Caught in review, and it is the same shape
+        # this record keeps logging: a test that cannot fail is not a test.
+        live = {id(record) for record in registry._active.values()}
         for record in expired:
-            self.assertNotIn(record["lease_id"], {id(x) for x in registry._active.values()})
+            self.assertNotIn(id(record), live)
+            self.assertEqual(record["status"], "expired")
 
 
 class MutationAdmissionTests(unittest.TestCase):

@@ -56,6 +56,12 @@ from scripts.packet_guard import PacketGuard  # noqa: E402
 from scripts.trusted_launcher import DEFAULT_KEY_PATH as DEFAULT_LAUNCH_KEY  # noqa: E402
 from scripts.trusted_launcher import _sign as _sign_grant  # noqa: E402
 
+# The exact fields `trusted_launcher.issue_grant` signs, in its order. An
+# HMAC is over the whole dict, so a verifier reconstructing a different set
+# rejects every valid grant -- which is what happened when the issuer gained
+# `agent` and this module kept rebuilding four keys.
+LAUNCH_GRANT_SIGNED_FIELDS = ("mount", "agent", "issued_at", "expires_at", "nonce")
+
 # AGENTS.md: explicit task-level instruction is required for each of these.
 # Kept as data so the boundary list is enumerable and testable rather than
 # scattered through prose and conditionals.
@@ -67,6 +73,20 @@ HIGH_IMPACT_ACTIONS = frozenset(
         "sign_or_certify_professional_work",
         "binding_legal_commitment",
         "public_publication",
+        # Added when the JOEYYY constitution superseded the six-item list.
+        # AGENTS.md section 9 now also reserves final permit or agency
+        # submission, scheduled-task creation or deletion, and modification of
+        # Separation governance or canonical brain masters and snapshots -- and
+        # its changelog says so explicitly: "Section 9's live-approval list
+        # supersedes the prior six-item explicit-instruction list."
+        #
+        # Keeping six while the contract said nine is the exact shape this
+        # record calls a control that has quietly stopped covering what it
+        # claims: `submit_permit` and `create_scheduled_task` reached the
+        # boundary and it raised no objection.
+        "final_submission",
+        "scheduled_task_change",
+        "governance_or_master_change",
     }
 )
 
@@ -99,7 +119,33 @@ HIGH_IMPACT_VERBS = {
     "grant": "credential_or_access_change",
     "rotate": "credential_or_access_change",
     "authorize": "credential_or_access_change",
+    # Section 9's three additions, mapped to the verbs a dispatcher emits.
+    # `submit` alone is deliberately NOT here: submitting a form to an internal
+    # queue is ordinary work, and only a FINAL permit or agency submission is
+    # reserved. The qualifier carries the meaning, so the compound is matched
+    # via SUBMISSION_QUALIFIERS below rather than by the bare verb.
+    "overwrite": "irreversible_bulk_deletion",
 }
+
+# `submit` is gated only when qualified as a final or external submission.
+# Gating every `submit` would demand Joe's signature for saving a draft, and a
+# boundary that fires on ordinary work is one an operator learns to wave
+# through -- the same reasoning that keeps `read` out of the issuer.
+SUBMISSION_QUALIFIERS = frozenset({"permit", "agency", "final", "submission"})
+
+# Scheduled-task creation or deletion. The noun is what makes it gated: a
+# `create` or `delete` of a SCHEDULE is reserved, while creating a record is
+# not, so both tokens must be present.
+SCHEDULE_NOUNS = frozenset({"schedule", "scheduled", "cron", "task"})
+SCHEDULE_VERBS = frozenset({"create", "delete", "remove", "add", "register", "unregister"})
+
+# Separation governance and canonical brain masters/snapshots.
+GOVERNANCE_NOUNS = frozenset(
+    {"separation", "governance", "master", "masters", "snapshot", "snapshots", "canonical"}
+)
+GOVERNANCE_VERBS = frozenset(
+    {"modify", "change", "update", "edit", "alter", "rewrite", "overwrite"}
+)
 
 # A destructive verb plus a wholesale qualifier is a bulk deletion, even though
 # neither token carries that meaning alone. `delete` is an ordinary mutation the
@@ -626,16 +672,31 @@ class PolicyEnforcementPoint:
         # string field was left alone, so this covers the whole class: each is
         # reported AND blanked, because rules downstream call `.startswith`,
         # `.strip`, and `.lower` on them and would raise in turn.
+        # `required` distinguishes the three fields every rule is a statement
+        # ABOUT from the optional ones. For the required three, `None` is
+        # malformed in the same way a list is: the `value is not None` guard
+        # below let a null `resource` through the type check and straight into
+        # `_canonical_resource`, which called `.startswith` on it and raised
+        # AttributeError before any rule could deny. The optional fields keep
+        # their None, because for them absence is a lawful state and blanking
+        # is exactly what the check does anyway.
         blanked: dict[str, Any] = {}
-        for name, value, empty in (
-            ("agent", request.agent, ""),
-            ("action", request.action, ""),
-            ("resource", request.resource, ""),
-            ("owner_brain", request.owner_brain, None),
-            ("resource_id", request.resource_id, None),
-            ("operation", request.operation, None),
-            ("mount", request.mount, None),
+        for name, value, empty, required in (
+            ("agent", request.agent, "", True),
+            ("action", request.action, "", True),
+            ("resource", request.resource, "", True),
+            ("owner_brain", request.owner_brain, None, False),
+            ("resource_id", request.resource_id, None, False),
+            ("operation", request.operation, None, False),
+            ("mount", request.mount, None, False),
         ):
+            if value is None and required:
+                errors.append(
+                    f"request declares no {name}; a decision cannot be made about an "
+                    "unstated principal, action, or resource"
+                )
+                blanked[name] = empty
+                continue
             if value is not None and not isinstance(value, str):
                 errors.append(
                     f"request {name} must be a string, got {type(value).__name__}; "
@@ -654,6 +715,24 @@ class PolicyEnforcementPoint:
         # A str or dict is rejected rather than accepted: `list("abc")` and
         # `list({"a": 1})` both succeed and yield something the caller plainly
         # did not mean, which is worse than raising because nothing reports it.
+        # The object-valued fields, for the same reason. `lease=7` reached
+        # `.get()` in the scope binding and raised AttributeError before
+        # `_writer_lease` could return its fail-closed denial. The string and
+        # collection fields were each covered in an earlier round and the
+        # dict-shaped ones were left -- the third slice of one property.
+        for name, value in (
+            ("lease", request.lease),
+            ("packet", request.packet),
+            ("instruction_grant", request.instruction_grant),
+            ("launch_grant", request.launch_grant),
+        ):
+            if value is not None and not isinstance(value, dict):
+                errors.append(
+                    f"request {name} must be an object, got {type(value).__name__}; "
+                    "a malformed request is refused, not evaluated"
+                )
+                blanked[name] = None
+
         for name, value in (
             ("delegations", request.delegations),
             ("constraint_packets", request.constraint_packets),
@@ -1867,6 +1946,27 @@ class PolicyEnforcementPoint:
             token in BULK_QUALIFIERS for token in tokens
         ):
             return "irreversible_bulk_deletion"
+
+        # The three compound categories the constitution added. Each needs BOTH
+        # a verb and its noun, because the bare verb is ordinary work: `submit`
+        # saves a draft, `create` makes a record, `modify` edits a field. It is
+        # the object that makes the act reserved, so requiring both keeps the
+        # boundary off routine mutations while still catching the real thing.
+        #
+        # Checked BEFORE the single-verb map so that `overwrite_all_originals`
+        # and `delete_scheduled_task` resolve to the category the contract
+        # names rather than to whichever bare verb happens to match first.
+        if "submit" in tokens and any(token in SUBMISSION_QUALIFIERS for token in tokens):
+            return "final_submission"
+        if any(token in SCHEDULE_VERBS for token in tokens) and any(
+            token in SCHEDULE_NOUNS for token in tokens
+        ):
+            return "scheduled_task_change"
+        if any(token in GOVERNANCE_VERBS for token in tokens) and any(
+            token in GOVERNANCE_NOUNS for token in tokens
+        ):
+            return "governance_or_master_change"
+
         for token in tokens:
             if token in HIGH_IMPACT_VERBS:
                 return HIGH_IMPACT_VERBS[token]
@@ -1987,9 +2087,27 @@ class PolicyEnforcementPoint:
                 f"write-capable mount {mount!r} requires a signed one-time "
                 "launch grant; none was presented"
             ]
-        payload = {key: grant.get(key) for key in ("mount", "issued_at", "expires_at", "nonce")}
+        # The issuer's EXACT payload, `agent` included. `trusted_launcher`
+        # gained agent-binding -- it signs five fields now -- and this
+        # reconstruction still built four, so the HMAC over a four-key dict
+        # could never match a five-key signature and every legitimately issued
+        # grant verified as "signature is invalid". Fail-SHUT, and invisible
+        # while `enforce()` has no call sites: the first symptom would have
+        # been every granted mount mutation denied on wiring day.
+        #
+        # Derived from the signed field list rather than restated, so the next
+        # field the issuer adds cannot silently desynchronize the two again.
+        payload = {key: grant.get(key) for key in LAUNCH_GRANT_SIGNED_FIELDS}
         if payload["mount"] != mount:
             return [f"grant is for mount {payload['mount']!r}, not {mount!r}"]
+        # The signed identity binds the grant to one agent. A grant minted for
+        # the Chief must not authorize a specialist's mutation just because the
+        # mount matches.
+        signed_agent = payload.get("agent")
+        if signed_agent is not None and signed_agent != request.agent:
+            return [
+                f"launch grant authorizes {signed_agent!r}, not the requesting {request.agent!r}"
+            ]
         key_path = self.launch_key_path
         if not key_path.exists():
             return ["no launch signing key is present, so the grant cannot be verified"]

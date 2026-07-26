@@ -21,6 +21,7 @@ from scripts.issue_instruction import (  # noqa: E402
     MAX_INSTRUCTION_MINUTES,
     InstructionRefused,
     issue_instruction,
+    main,
 )
 from scripts.policy_enforcement import (  # noqa: E402
     CHIEF,
@@ -40,6 +41,7 @@ class IssuedGrantSatisfiesTheBoundaryTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.key = Path(self.tmp.name) / "launch_key"
+        self.key.write_bytes(b"test-signing-key")
         self.out = Path(self.tmp.name) / "instructions"
         registry, _ = registry_and_lease()
         self.pep = PolicyEnforcementPoint(
@@ -104,6 +106,7 @@ class IssuedGrantSatisfiesTheBoundaryTests(unittest.TestCase):
         # holding a different key -- and, read the other way, a grant from
         # anyone else's key must not pass this gate.
         other = Path(self.tmp.name) / "other_key"
+        other.write_bytes(b"a-different-signing-key")
         grant, _ = self._issue("publishReport")
         foreign = issue_instruction(
             "publishReport",
@@ -131,6 +134,7 @@ class IssuanceRefusalTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.key = Path(self.tmp.name) / "launch_key"
+        self.key.write_bytes(b"test-signing-key")
         self.out = Path(self.tmp.name) / "instructions"
 
     def _issue(self, **kwargs):
@@ -183,6 +187,36 @@ class IssuanceRefusalTests(unittest.TestCase):
         self.assertGreater(DEFAULT_INSTRUCTION_MINUTES, 0)
 
 
+class KeyCustodyTests(unittest.TestCase):
+    """The issuer must exercise Joe's authority, never manufacture it."""
+
+    def test_a_missing_signing_key_refuses_rather_than_creating_one(self):
+        # `_load_or_create_key` mints a key on first use. Using it here meant
+        # any process able to WRITE the key path could create a key and then
+        # sign grants the enforcement point accepts -- bootstrapping the
+        # authority the boundary exists to reserve. `trusted_launcher.authorize`
+        # already refuses when no key exists; the issuer must not undercut it.
+        with tempfile.TemporaryDirectory() as tmp:
+            absent = Path(tmp) / "no_such_key"
+            with self.assertRaises(InstructionRefused) as raised:
+                issue_instruction(
+                    "publishReport", RESOURCE, key_path=absent, out_dir=Path(tmp) / "i"
+                )
+            self.assertIn("no signing key", str(raised.exception))
+            self.assertFalse(absent.exists(), "the issuer created a signing key")
+
+    def test_the_cli_refuses_without_a_terminal(self):
+        # An unattended agent process running under the same account must not
+        # be able to mint a publication or transaction grant. This does not
+        # prove the human is Joe -- nothing here can -- and the real bound is
+        # key custody, which is recorded as Joe's open decision.
+        self.assertEqual(
+            main(["--action", "publishReport", "--resource", RESOURCE]),
+            2,
+            "the CLI minted an instruction from a non-interactive process",
+        )
+
+
 class GrantFileTests(unittest.TestCase):
     """A written authorization is a credential on disk."""
 
@@ -190,6 +224,7 @@ class GrantFileTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.key = Path(self.tmp.name) / "launch_key"
+        self.key.write_bytes(b"test-signing-key")
         self.out = Path(self.tmp.name) / "instructions"
 
     def test_the_grant_file_is_not_world_readable(self):

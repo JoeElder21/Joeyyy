@@ -1495,18 +1495,27 @@ class BoundaryDataTests(unittest.TestCase):
     """The boundary list must match the contract it claims to implement."""
 
     def test_high_impact_list_matches_agents_md(self):
+        # Fragments from section 9 of the JOEYYY constitution, which explicitly
+        # superseded the earlier six-item list: "Section 9's live-approval list
+        # supersedes the prior six-item explicit-instruction list." The wording
+        # moved with it -- "credential or access-control change" became
+        # "access-control or credential changes" -- so matching the old phrasing
+        # failed against a contract that had grown STRICTER, not weaker.
         text = (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower()
         for fragment in (
             "irreversible bulk deletion",
             "financial transaction",
-            "credential or access-control change",
-            "signing or certifying professional work",
+            "access-control or credential change",
+            "signing, sealing, or certifying",
             "binding legal commitment",
             "public publication",
+            "permit or agency submission",
+            "scheduled-task creation or deletion",
+            "separation governance",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
-        self.assertEqual(len(HIGH_IMPACT_ACTIONS), 6)
+        self.assertEqual(len(HIGH_IMPACT_ACTIONS), 9)
 
 
 class FifteenthPassRegressionTests(unittest.TestCase):
