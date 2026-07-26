@@ -7,17 +7,16 @@ and records replay prevention in a local ledger.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-import hmac
 import hashlib
+import hmac
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
-
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = ROOT / ".state" / "trusted_launcher_ledger.json"
@@ -39,7 +38,7 @@ TRUSTED_BIN_DIRS = (
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _parse_timestamp(value: str, field: str) -> datetime:
@@ -47,7 +46,7 @@ def _parse_timestamp(value: str, field: str) -> datetime:
     parsed = datetime.fromisoformat(normalized)
     if parsed.tzinfo is None:
         raise ValueError(f"{field} must include timezone information")
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 class GrantDeniedError(ValueError):
@@ -78,7 +77,9 @@ def _require_secret(secret: str) -> str:
 
 def sign_claims(claims: dict[str, Any], secret: str) -> str:
     _require_secret(secret)
-    digest = hmac.new(secret.encode("utf-8"), _canonical_json(claims).encode("utf-8"), hashlib.sha256)
+    digest = hmac.new(
+        secret.encode("utf-8"), _canonical_json(claims).encode("utf-8"), hashlib.sha256
+    )
     return digest.hexdigest()
 
 
@@ -108,18 +109,25 @@ class TrustedLauncher:
     ):
         # `or` treated an explicitly empty catalog as absent and silently
         # restored the built-in tools, granting capabilities the caller removed.
-        self.tool_catalog = tool_catalog if tool_catalog is not None else {
-            "civil3d-mcp": {
-                "version": ("node", "--version"),
-                "manual_synthetic_dwg_trial": ("echo", "manual Civil 3D trial must run on workstation"),
-            },
-            "codex-autorunner": {
-                "version": ("car", "--version"),
-            },
-            "multica": {
-                "version": ("multica", "version"),
-            },
-        }
+        self.tool_catalog = (
+            tool_catalog
+            if tool_catalog is not None
+            else {
+                "civil3d-mcp": {
+                    "version": ("node", "--version"),
+                    "manual_synthetic_dwg_trial": (
+                        "echo",
+                        "manual Civil 3D trial must run on workstation",
+                    ),
+                },
+                "codex-autorunner": {
+                    "version": ("car", "--version"),
+                },
+                "multica": {
+                    "version": ("multica", "version"),
+                },
+            }
+        )
         self.ledger_path = ledger_path
         self.max_grant_lifetime = max_grant_lifetime
         self.expected_subject = expected_subject
@@ -200,7 +208,9 @@ class TrustedLauncher:
         if missing:
             raise GrantDeniedError(f"grant claims missing required fields: {missing}")
 
-        non_string_fields = sorted(f for f in required if f in claims and not isinstance(claims[f], str))
+        non_string_fields = sorted(
+            f for f in required if f in claims and not isinstance(claims[f], str)
+        )
         if non_string_fields:
             raise GrantDeniedError(f"grant claims fields must be strings: {non_string_fields}")
 
@@ -315,23 +325,24 @@ class TrustedLauncher:
         self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps({"used_grants": sorted(used)}, indent=2)
 
-        handle = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=self.ledger_path.parent,
-            prefix=f".{self.ledger_path.name}.",
-            suffix=".tmp",
-            delete=False,
-        )
-        temp_path = Path(handle.name)
+        temp_path: Path | None = None
         try:
-            with handle:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.ledger_path.parent,
+                prefix=f".{self.ledger_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temp_path = Path(handle.name)
                 handle.write(payload)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_path, self.ledger_path)
         except BaseException:
-            temp_path.unlink(missing_ok=True)
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
             raise
 
 

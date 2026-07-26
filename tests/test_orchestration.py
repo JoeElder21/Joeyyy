@@ -8,12 +8,12 @@ import datetime as dt
 import importlib.util
 import json
 import os
-from pathlib import Path
 import re
 import sys
 import tempfile
 import tomllib
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from scripts.agent_runtime import CHIEF, AuditLedger, load_roster
@@ -291,6 +291,7 @@ class McpMountRegistryTests(unittest.TestCase):
 
         mount = {"name": "filesystem", "expected_tools": ["read_text_file"]}
         self.assertEqual(_verdict(mount, ["read_text_file", "brand_new_tool"]), "verified")
+
     def test_infrastructure_mounts_are_apex_locked_and_grant_gated(self):
         """Terraform and Azure touch professional infrastructure, so they must
         never be reachable from a JEOS specialist and never launch ungranted.
@@ -334,23 +335,22 @@ class McpMountRegistryTests(unittest.TestCase):
             forwarded = {
                 command[index + 1]
                 for index, token in enumerate(command)
-                if token == "-e" and index + 1 < len(command)
-                and "=" not in command[index + 1]
+                if token == "-e" and index + 1 < len(command) and "=" not in command[index + 1]
             }
             # Drop file paths first: docs/CIVIL3D_MCP_BUILDOUT.md is shaped
             # exactly like a variable name and is not one.
             prose = re.sub(r"\S*/\S*\.\w+", " ", mount.get("activation", ""))
-            documented = set(
-                re.findall(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b", prose)
-            )
+            documented = set(re.findall(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b", prose))
             with self.subTest(mount=mount["name"]):
                 self.assertLessEqual(
-                    forwarded, declared,
+                    forwarded,
+                    declared,
                     f"{mount['name']} forwards {sorted(forwarded - declared)} "
                     "with -e but does not declare it in env",
                 )
                 self.assertLessEqual(
-                    documented, declared,
+                    documented,
+                    declared,
                     f"{mount['name']} documents "
                     f"{sorted(documented - declared)} in its activation note "
                     "but does not declare it in env",
@@ -367,11 +367,9 @@ class McpMountRegistryTests(unittest.TestCase):
         with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
             mounts = tomllib.load(source)["mounts"]
         probes = {
-            name: f"probe-{name.lower()}"
-            for mount in mounts for name in mount.get("env", [])
+            name: f"probe-{name.lower()}" for mount in mounts for name in mount.get("env", [])
         }
-        with mock.patch.dict(os.environ, {**probes, "UNRELATED_SECRET": "no"},
-                             clear=False):
+        with mock.patch.dict(os.environ, {**probes, "UNRELATED_SECRET": "no"}, clear=False):
             for mount in mounts:
                 passed = trusted_launcher.mount_env(mount)
                 with self.subTest(mount=mount["name"]):
@@ -397,8 +395,9 @@ class McpMountRegistryTests(unittest.TestCase):
         with (ROOT / "config" / "mcp_mounts.toml").open("rb") as source:
             mounts = tomllib.load(source)["mounts"]
 
-        transport = {name: f"http://proxy.invalid/{name.lower()}"
-                     for name in trusted_launcher.NETWORK_ENV}
+        transport = {
+            name: f"http://proxy.invalid/{name.lower()}" for name in trusted_launcher.NETWORK_ENV
+        }
         with mock.patch.dict(os.environ, transport, clear=False):
             for mount in mounts:
                 passed = trusted_launcher.mount_env(mount)
@@ -419,7 +418,8 @@ class McpMountRegistryTests(unittest.TestCase):
             fetches = mount["command"][0] in {"npx", "npm", "docker", "podman", "uvx"}
             with self.subTest(mount=mount["name"]):
                 self.assertEqual(
-                    bool(mount.get("network")), fetches,
+                    bool(mount.get("network")),
+                    fetches,
                     f"{mount['name']} runs {mount['command'][0]}; "
                     "network must be declared exactly when the mount fetches",
                 )
@@ -433,13 +433,14 @@ class McpMountRegistryTests(unittest.TestCase):
             ("task-planner", ("`agent`", "`read`", "`edit/editFiles`"), ()),
             ("task-researcher", ("`read`",), ()),
         ):
-            row = next((line for line in registry.splitlines()
-                        if line.startswith(f"| `{agent}`")), None)
+            row = next(
+                (line for line in registry.splitlines() if line.startswith(f"| `{agent}`")), None
+            )
             with self.subTest(agent=agent):
                 self.assertIsNotNone(row, f"no registry row for {agent}")
                 self.assertNotIn(
-                    "Upstream list", row,
-                    "the declared surface is a local override, not upstream")
+                    "Upstream list", row, "the declared surface is a local override, not upstream"
+                )
                 for token in must_appear:
                     self.assertIn(token, row)
                 for token in must_not:
@@ -466,7 +467,8 @@ class McpMountRegistryTests(unittest.TestCase):
                 tag = token.rsplit(separator, 1)[-1]
                 with self.subTest(mount=mount["name"], token=token):
                     self.assertNotIn(
-                        tag.lower(), floating,
+                        tag.lower(),
+                        floating,
                         f"{mount['name']} pins a mutable tag in {token!r}",
                     )
 
@@ -483,7 +485,6 @@ class McpMountRegistryTests(unittest.TestCase):
                 self.assertIn("@sha256:", command)
 
 
-
 class SelectionReportBaselineTests(unittest.TestCase):
     """The generator is change evidence, so a figure it cannot compute must
     read as unavailable rather than as a confident zero."""
@@ -491,8 +492,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
     def test_branch_point_has_no_moving_fallback(self):
         # The measurement logic lives in report_gates.py, not in the PDF
         # builder: that module imports reportlab, which CI does not install.
-        source = (ROOT / "scripts" / "report_gates.py").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "report_gates.py").read_text(encoding="utf-8")
         start = source.index("def _branch_point()")
         end = source.index("MARKDOWN_NOW =")
         body = source[start:end]
@@ -512,10 +512,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
                     continue
                 kept.append(token.string)
         except tokenize.TokenError:
-            kept = [body]   # unparseable slice: fall back to the raw text
+            kept = [body]  # unparseable slice: fall back to the raw text
         body = " ".join(kept)
         self.assertNotIn(
-            "merge-base", body,
+            "merge-base",
+            body,
             "a merge-base fallback recreates the moving baseline it replaced: "
             "once this work merges it resolves to the merged tip and the delta "
             "silently becomes zero",
@@ -540,8 +541,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
 
         def failing(cmd, **kwargs):
             if cmd[:2] == ["git", "ls-files"]:
-                return type("R", (), {"returncode": 128, "stdout": "",
-                                      "stderr": "fatal: not a git repository"})()
+                return type(
+                    "R",
+                    (),
+                    {"returncode": 128, "stdout": "", "stderr": "fatal: not a git repository"},
+                )()
             return real_run(cmd, **kwargs)
 
         with mock.patch.object(report_gates.subprocess, "run", failing):
@@ -574,24 +578,30 @@ class SelectionReportBaselineTests(unittest.TestCase):
 
         if not report_gates._known(report_gates.BRANCH_ROOT):
             self.assertEqual(
-                report_gates.MARKDOWN_ADDED, -1,
-                "with the anchor absent the delta must read unmeasurable, "
-                "never a number")
+                report_gates.MARKDOWN_ADDED,
+                -1,
+                "with the anchor absent the delta must read unmeasurable, never a number",
+            )
             self.skipTest("shallow clone: the branch anchor is not present")
 
         for tip in report_gates._merged_upstream_tips():
             with self.subTest(tip=tip[:10]):
                 self.assertIs(
-                    report_gates._contains(tip, report_gates.BRANCH_ROOT), False,
+                    report_gates._contains(tip, report_gates.BRANCH_ROOT),
+                    False,
                     "a commit containing this branch's first commit is this "
-                    "work, not an upstream tip")
+                    "work, not an upstream tip",
+                )
 
         self.assertIs(
-            report_gates._contains("HEAD", report_gates.BRANCH_ROOT), True,
-            "BRANCH_ROOT must be an ancestor of HEAD or the anchor is wrong")
+            report_gates._contains("HEAD", report_gates.BRANCH_ROOT),
+            True,
+            "BRANCH_ROOT must be an ancestor of HEAD or the anchor is wrong",
+        )
         self.assertIs(
-            report_gates._contains(report_gates.PRE_INSTALL_BASELINE,
-                                   report_gates.BRANCH_ROOT), False)
+            report_gates._contains(report_gates.PRE_INSTALL_BASELINE, report_gates.BRANCH_ROOT),
+            False,
+        )
         self.assertGreater(report_gates.MARKDOWN_ADDED, 0)
 
     def test_an_unanswerable_history_reports_no_delta_rather_than_a_wrong_one(self):
@@ -645,9 +655,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # fixed number that drifts with main.
         if tips:
             self.assertLess(
-                added, now - baseline,
+                added,
+                now - baseline,
                 "with upstream merges present, the delta must exclude the "
-                "files that arrived from main")
+                "files that arrived from main",
+            )
         self.assertLessEqual(added, now - baseline)
 
     def test_a_passing_gate_still_names_what_it_could_not_probe(self):
@@ -661,17 +673,17 @@ class SelectionReportBaselineTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
 
-        stalled = json.dumps({
-            "mounts": [
-                {"name": "governance",
-                 "status": "unverified (mcp package not installed)"},
-                {"name": "github", "status": "registered"},
-                {"name": "filesystem",
-                 "status": "unverified (mcp package not installed)"},
-                {"name": "reached-mount", "status": "verified (3 tools)"},
-            ],
-            "valid": True,
-        })
+        stalled = json.dumps(
+            {
+                "mounts": [
+                    {"name": "governance", "status": "unverified (mcp package not installed)"},
+                    {"name": "github", "status": "registered"},
+                    {"name": "filesystem", "status": "unverified (mcp package not installed)"},
+                    {"name": "reached-mount", "status": "verified (3 tools)"},
+                ],
+                "valid": True,
+            }
+        )
         note = unverified_note(stalled)
         self.assertIn("governance", note)
         self.assertIn("filesystem", note)
@@ -685,10 +697,12 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # of this assertion matched that and passed for the wrong reason.)
         self.assertNotIn("reached-mount", note)
 
-        clean = json.dumps({
-            "mounts": [{"name": "github", "status": "verified (12 tools)"}],
-            "valid": True,
-        })
+        clean = json.dumps(
+            {
+                "mounts": [{"name": "github", "status": "verified (12 tools)"}],
+                "valid": True,
+            }
+        )
         self.assertEqual(unverified_note(clean), "")
 
         # Non-JSON output must not be read as "nothing unverified".
@@ -706,9 +720,14 @@ class SelectionReportBaselineTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
 
-        empty = json.dumps({"valid": True, "installed_count": 0,
-                            "missing": [f"pkg{n}" for n in range(20)],
-                            "toml_files_checked": 18})
+        empty = json.dumps(
+            {
+                "valid": True,
+                "installed_count": 0,
+                "missing": [f"pkg{n}" for n in range(20)],
+                "toml_files_checked": 18,
+            }
+        )
         note = missing_dependency_note(empty)
         self.assertIn("20 of 20", note)
         self.assertIn("declarations only", note)
@@ -716,8 +735,9 @@ class SelectionReportBaselineTests(unittest.TestCase):
         full = json.dumps({"valid": True, "installed_count": 20, "missing": []})
         self.assertEqual(missing_dependency_note(full), "")
 
-        partial = json.dumps({"valid": True, "installed_count": 18,
-                              "missing": ["crewai", "prefect"]})
+        partial = json.dumps(
+            {"valid": True, "installed_count": 18, "missing": ["crewai", "prefect"]}
+        )
         self.assertIn("2 of 20", missing_dependency_note(partial))
 
     def test_a_grant_scope_must_be_readable_not_merely_truthy(self):
@@ -750,7 +770,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 registry.write_text("\n".join(lines) + "\n", encoding="utf-8")
                 completed = subprocess.run(
                     [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
-                    cwd=ROOT, capture_output=True, text=True, check=False)
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
                 with self.subTest(value=label):
                     self.assertNotEqual(completed.returncode, 0, label)
                     self.assertIn("undeclared grant scope", completed.stdout)
@@ -759,7 +783,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
 
         restored = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
-            cwd=ROOT, capture_output=True, text=True, check=False)
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(restored.returncode, 0, restored.stdout[-300:])
 
     def test_the_mount_verifier_fails_an_undeclared_grant_scope(self):
@@ -774,12 +802,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
 
         raw = (ROOT / "config" / "mcp_mounts.toml").read_text(encoding="utf-8")
         stripped = "\n".join(
-            line for line in raw.splitlines()
-            if not line.startswith("grant_scope"))
+            line for line in raw.splitlines() if not line.startswith("grant_scope")
+        )
         # Sanity: the strip must actually remove something, or the negative
         # case below proves nothing.
-        gated = [m for m in tomllib.loads(stripped)["mounts"]
-                 if m.get("require_grant")]
+        gated = [m for m in tomllib.loads(stripped)["mounts"] if m.get("require_grant")]
         self.assertTrue(gated)
         self.assertTrue(all("grant_scope" not in m for m in gated))
 
@@ -789,23 +816,30 @@ class SelectionReportBaselineTests(unittest.TestCase):
             registry.write_text(stripped, encoding="utf-8")
             completed = subprocess.run(
                 [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
-                cwd=ROOT, capture_output=True, text=True, check=False)
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
         finally:
             registry.write_text(backup, encoding="utf-8")
 
-        self.assertNotEqual(completed.returncode, 0,
-                            "an undeclared grant scope must fail the gate")
+        self.assertNotEqual(completed.returncode, 0, "an undeclared grant scope must fail the gate")
         payload = json.loads(completed.stdout)
         self.assertFalse(payload["valid"])
         self.assertIn(
-            "undeclared grant scope",
-            [entry.get("status") for entry in payload["mounts"]])
+            "undeclared grant scope", [entry.get("status") for entry in payload["mounts"]]
+        )
 
         # And the unmodified registry must still pass, so the check is a real
         # gate rather than a permanent failure.
         restored = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
-            cwd=ROOT, capture_output=True, text=True, check=False)
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(restored.returncode, 0, restored.stdout[-400:])
 
     def test_the_corps_row_discloses_that_nothing_live_ran(self):
@@ -823,25 +857,35 @@ class SelectionReportBaselineTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
 
-        payload = json.dumps({
-            "valid": True,
-            "connectors_called": False,
-            "named_agents_invoked": False,
-            "real_missions_completed": False,
-            "validation_mode": "static_contract_and_synthetic_packet",
-        })
+        payload = json.dumps(
+            {
+                "valid": True,
+                "connectors_called": False,
+                "named_agents_invoked": False,
+                "real_missions_completed": False,
+                "validation_mode": "static_contract_and_synthetic_packet",
+            }
+        )
         note = static_validation_note(payload)
-        for expected in ("no connector called", "no named agent invoked",
-                         "no real mission completed", "static contract"):
+        for expected in (
+            "no connector called",
+            "no named agent invoked",
+            "no real mission completed",
+            "static contract",
+        ):
             with self.subTest(disclosure=expected):
                 self.assertIn(expected, note)
 
         # A gate that DID exercise these must not carry the note, or it is
         # boilerplate rather than a measurement.
-        exercised = json.dumps({
-            "valid": True, "connectors_called": True,
-            "named_agents_invoked": True, "real_missions_completed": True,
-        })
+        exercised = json.dumps(
+            {
+                "valid": True,
+                "connectors_called": True,
+                "named_agents_invoked": True,
+                "real_missions_completed": True,
+            }
+        )
         self.assertEqual(static_validation_note(exercised), "")
         self.assertEqual(static_validation_note("not json"), "")
 
@@ -864,17 +908,19 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 self.stdout, self.stderr = stdout, stderr
 
         structured = Completed(
-            json.dumps({"valid": False,
-                        "errors": ["config/roster.toml: unknown key 'brian'"]},
-                       indent=2),
-            "")
+            json.dumps(
+                {"valid": False, "errors": ["config/roster.toml: unknown key 'brian'"]}, indent=2
+            ),
+            "",
+        )
         self.assertIn("unknown key", failure_detail(structured))
         self.assertNotEqual(failure_detail(structured).strip(), "{")
 
         crashed = Completed(
             "{\n}",
-            "Traceback (most recent call last):\n  File \"x\", line 1\n"
-            "ValueError: no pin in manifest\n")
+            'Traceback (most recent call last):\n  File "x", line 1\n'
+            "ValueError: no pin in manifest\n",
+        )
         self.assertEqual(failure_detail(crashed), "ValueError: no pin in manifest")
 
         self.assertEqual(failure_detail(Completed("", "")), "no output")
@@ -888,11 +934,18 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # has to reach the row.
         for section in ("mounts", "connectors", "servers"):
             nested = Completed(
-                json.dumps({"valid": False, section: [
-                    {"name": "governance", "status": "probe failed: no such file"},
-                    {"name": "github", "status": "registered"},
-                ]}, indent=2),
-                "")
+                json.dumps(
+                    {
+                        "valid": False,
+                        section: [
+                            {"name": "governance", "status": "probe failed: no such file"},
+                            {"name": "github", "status": "registered"},
+                        ],
+                    },
+                    indent=2,
+                ),
+                "",
+            )
             with self.subTest(section=section):
                 detail = failure_detail(nested)
                 self.assertIn("governance", detail)
@@ -902,9 +955,14 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 self.assertNotIn("github", detail)
 
         errored = Completed(
-            json.dumps({"valid": False, "mounts": [
-                {"name": "postgres", "status": "error: connection refused"}]}),
-            "")
+            json.dumps(
+                {
+                    "valid": False,
+                    "mounts": [{"name": "postgres", "status": "error: connection refused"}],
+                }
+            ),
+            "",
+        )
         self.assertIn("connection refused", failure_detail(errored))
 
         # Match by EXCLUSION, not by keyword. An allowlist of "fail"/"error"
@@ -912,14 +970,25 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # one added -- "undeclared grant scope" -- contains neither word, so
         # the row regressed to `FAILED (exit 1) — },`. Assert the property
         # across statuses that share no vocabulary at all.
-        for status in ("undeclared grant scope", "refused by policy",
-                       "timed out", "missing digest pin"):
+        for status in (
+            "undeclared grant scope",
+            "refused by policy",
+            "timed out",
+            "missing digest pin",
+        ):
             nameless = Completed(
-                json.dumps({"valid": False,
-                            "mounts": [{"name": "azure", "status": status},
-                                       {"name": "github",
-                                        "status": "registered"}]}, indent=2),
-                "")
+                json.dumps(
+                    {
+                        "valid": False,
+                        "mounts": [
+                            {"name": "azure", "status": status},
+                            {"name": "github", "status": "registered"},
+                        ],
+                    },
+                    indent=2,
+                ),
+                "",
+            )
             with self.subTest(status=status):
                 detail = failure_detail(nameless)
                 self.assertIn(status, detail)
@@ -929,10 +998,15 @@ class SelectionReportBaselineTests(unittest.TestCase):
 
         # A top-level error key still wins: it is the more specific signal.
         both = Completed(
-            json.dumps({"valid": False, "errors": ["registry is malformed"],
-                        "mounts": [{"name": "governance",
-                                    "status": "probe failed: no such file"}]}),
-            "")
+            json.dumps(
+                {
+                    "valid": False,
+                    "errors": ["registry is malformed"],
+                    "mounts": [{"name": "governance", "status": "probe failed: no such file"}],
+                }
+            ),
+            "",
+        )
         self.assertIn("registry is malformed", failure_detail(both))
 
     def test_report_refuses_to_publish_an_inventory_it_cannot_reconcile(self):
@@ -940,8 +1014,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
         misattributes repository-authored files to the pinned inventory, and
         lets a newly vendored file raise the total while the report's own
         rationale tables omit it."""
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(encoding="utf-8")
         self.assertIn("def reconcile_with_manifest()", source)
         self.assertIn("reconcile_with_manifest()\n", source)
         # It must run at generation time, not merely be defined.
@@ -957,23 +1030,25 @@ class SelectionReportBaselineTests(unittest.TestCase):
         and the manifest both rest on. Asserted as agreement between the two
         documents rather than against one sentence, because the failure mode is
         drift between them."""
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
-            encoding="utf-8")
-        manifest = (ROOT / ".github" / "AWESOME-COPILOT.md").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(encoding="utf-8")
+        manifest = (ROOT / ".github" / "AWESOME-COPILOT.md").read_text(encoding="utf-8")
         self.assertIn(
-            "manifest-WIDE", manifest,
+            "manifest-WIDE",
+            manifest,
             "the manifest must still state the pin's scope, or there is "
-            "nothing for the report to agree with")
-        recommendation = source[source.index("Standing recommendation"):]
+            "nothing for the report to agree with",
+        )
+        recommendation = source[source.index("Standing recommendation") :]
         self.assertIn(
-            "manifest-WIDE", recommendation,
-            "the report must carry the manifest's pin scope, not a rule of "
-            "its own")
+            "manifest-WIDE",
+            recommendation,
+            "the report must carry the manifest's pin scope, not a rule of its own",
+        )
         self.assertNotIn(
-            "whenever files are refreshed", recommendation,
-            "an unconditional bump instruction contradicts the manifest's "
-            "partial-refresh rule")
+            "whenever files are refreshed",
+            recommendation,
+            "an unconditional bump instruction contradicts the manifest's partial-refresh rule",
+        )
 
     def test_manifest_parsing_accepts_any_vendored_skill(self):
         """Reconciliation must not abort on a valid intake.
@@ -982,21 +1057,21 @@ class SelectionReportBaselineTests(unittest.TestCase):
         vendoring any other skill -- the ordinary outcome of a discovery pass --
         left it unparsed, so reconciliation saw a tracked skill the manifest
         "did not list" and refused to generate the report."""
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(encoding="utf-8")
         bullet = re.search(r'skills = re\.findall\(\s*r"([^"]+)"', source)
         self.assertIsNotNone(bullet, "skill bullet pattern not found")
         pattern = re.compile(bullet.group(1), re.MULTILINE)
 
-        manifest = (ROOT / ".github" / "AWESOME-COPILOT.md").read_text(
-            encoding="utf-8")
+        manifest = (ROOT / ".github" / "AWESOME-COPILOT.md").read_text(encoding="utf-8")
         self.assertEqual(
-            len(pattern.findall(manifest)), 3,
-            "the three discovery skills must still parse")
+            len(pattern.findall(manifest)), 3, "the three discovery skills must still parse"
+        )
         self.assertIn(
-            "gh-cli", pattern.findall(manifest + "\n- `gh-cli/`\n"),
+            "gh-cli",
+            pattern.findall(manifest + "\n- `gh-cli/`\n"),
             "a future vendored skill must parse too, or reconciliation "
-            "aborts generation on a valid intake")
+            "aborts generation on a valid intake",
+        )
 
     def test_planner_agents_scope_reads_to_one_brain(self):
         """These agents' output is returned for persistence, so anything they
@@ -1005,13 +1080,14 @@ class SelectionReportBaselineTests(unittest.TestCase):
         makes Agent 007 the sole cross-brain agent, and neither of these is
         that."""
         for name in ("task-planner", "task-researcher"):
-            body = (ROOT / ".github" / "agents" / f"{name}.agent.md").read_text(
-                encoding="utf-8")
+            body = (ROOT / ".github" / "agents" / f"{name}.agent.md").read_text(encoding="utf-8")
             with self.subTest(agent=name):
                 self.assertNotIn(
-                    "throughout the entire workspace", body,
+                    "throughout the entire workspace",
+                    body,
                     "an unscoped read grant lets this agent ingest the other "
-                    "brain's records into a persisted artifact")
+                    "brain's records into a persisted artifact",
+                )
                 self.assertNotIn("across the entire workspace", body)
                 self.assertIn("brain", body.lower())
                 self.assertIn("audit/*.jsonl", body)
@@ -1023,8 +1099,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
         tracked, listed in the manifest, and still absent from the report --
         counted in the totals but published with no row saying why it was
         selected."""
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(encoding="utf-8")
         self.assertIn("def rendered_names()", source)
         for token in ("INSTRUCTION_ROWS", "AGENT_ROWS", "SKILL_ROWS"):
             self.assertIn(token, source)
@@ -1039,7 +1114,8 @@ class SelectionReportBaselineTests(unittest.TestCase):
         and may not plan until the research is complete, so a comparative task
         deadlocked at its mandatory first step."""
         body = (ROOT / ".github" / "agents" / "task-researcher.agent.md").read_text(
-            encoding="utf-8")
+            encoding="utf-8"
+        )
         name = "task-researcher"
         self.assertIn("You WILL NOT ask the user questions", body)
         self.assertIn("Decisions for the invoker", body)
@@ -1056,11 +1132,15 @@ class SelectionReportBaselineTests(unittest.TestCase):
             r"|user doesn't want to iterate).*$"
         )
         offending = [
-            line for line in stalling.findall(body)
+            line
+            for line in stalling.findall(body)
             # The override paragraph explains why it must not happen; that is
             # the fix, not an instance of the defect.
-            if not _re.search(r"MUST NOT|WILL NOT|not to the user|stall"
-                              r"|deadlock|rather than ask", line)
+            if not _re.search(
+                r"MUST NOT|WILL NOT|not to the user|stall"
+                r"|deadlock|rather than ask",
+                line,
+            )
         ]
         self.assertEqual(offending, [], f"{name}: residual user dialogue")
 
@@ -1070,8 +1150,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
         resolving that contradiction drops either the research the invoker must
         persist or one of the planning artifacts -- and which one it drops is
         not predictable, which is worse than either."""
-        body = (ROOT / ".github" / "agents" / "task-planner.agent.md").read_text(
-            encoding="utf-8")
+        body = (ROOT / ".github" / "agents" / "task-planner.agent.md").read_text(encoding="utf-8")
         self.assertNotIn("exactly three artifacts", body)
         self.assertNotIn("three complete artifacts", body)
         self.assertIn("**four**", body)
@@ -1081,8 +1160,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 with self.subTest(line=line.strip()[:90]):
                     self.assertTrue(
                         "four" in line or "planning artifact" in line,
-                        "a bare three-artifact claim reintroduces the "
-                        "contradiction",
+                        "a bare three-artifact claim reintroduces the contradiction",
                     )
 
     def test_discovery_fetches_are_pinned_to_a_resolved_sha(self):
@@ -1109,23 +1187,24 @@ class SelectionReportBaselineTests(unittest.TestCase):
         manifest moves to an unknown SHA; these labels kept printing the
         previous pin's plugin/hook/workflow/extension figures beside it, so one
         regenerated report asserted both."""
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(encoding="utf-8")
         self.assertIn("def _count_label(", source)
-        for hardcoded in ("Plugins (71)", "Hooks (8) and workflows (8)",
-                          "Extensions (20)"):
+        for hardcoded in ("Plugins (71)", "Hooks (8) and workflows (8)", "Extensions (20)"):
             self.assertNotIn(hardcoded, source)
 
         # Behavioural: a known pin labels, an unknown pin says nothing.
-        inventory = source[source.index("UPSTREAM_INVENTORY_BY_PIN"):
-                           source.index("def manifest_pin()")]
-        label = source[source.index("def _count_label(kind: str) -> str:"):
-                       source.index("def _cell(value) -> str:")]
+        inventory = source[
+            source.index("UPSTREAM_INVENTORY_BY_PIN") : source.index("def manifest_pin()")
+        ]
+        label = source[
+            source.index("def _count_label(kind: str) -> str:") : source.index(
+                "def _cell(value) -> str:"
+            )
+        ]
         for pin, expect in (("aa280f28", " (71)"), ("zz000000", "")):
             namespace: dict = {}
             exec(inventory, namespace)  # noqa: S102 - reading this module's own source
-            namespace["UPSTREAM_INVENTORY"] = (
-                namespace["UPSTREAM_INVENTORY_BY_PIN"].get(pin, {}))
+            namespace["UPSTREAM_INVENTORY"] = namespace["UPSTREAM_INVENTORY_BY_PIN"].get(pin, {})
             exec(label, namespace)  # noqa: S102
             with self.subTest(pin=pin):
                 self.assertEqual(namespace["_count_label"]("plugins"), expect)
@@ -1134,8 +1213,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
         """The report builder runs its gates and writes the PDF at import time,
         so the helpers must live outside it or they cannot be tested without
         regenerating the document."""
-        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
-            encoding="utf-8")
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(encoding="utf-8")
         self.assertIn("from report_gates import", source)
         self.assertNotIn("def run_gate(", source)
 

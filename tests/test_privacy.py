@@ -9,15 +9,15 @@ from scripts.privacy_guard import (
     MAX_EMITTED_VALUES,
     MAX_PARSE_BYTES,
     PATTERNS,
-    TRUNCATION_MARKER,
     PLACEHOLDER_LITERALS,
+    TRUNCATION_MARKER,
     applicable_patterns,
     decode_source_escapes,
     fold_block_scalars,
     fold_toml_multiline,
-    path_findings,
     gitlink_paths,
     is_vendored,
+    path_findings,
     repository_files,
     scan_paths,
     scan_repository,
@@ -56,6 +56,7 @@ def _have_yaml() -> bool:
     except ImportError:
         return False
     return True
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / ".github" / "skills"
@@ -96,9 +97,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         }
         for path in text_paths:
             relative_path = path.relative_to(ROOT)
-            text = strip_known_placeholders(
-                relative_path, path.read_text(encoding="utf-8")
-            )
+            text = strip_known_placeholders(relative_path, path.read_text(encoding="utf-8"))
             for label, pattern in prohibited.items():
                 with self.subTest(path=relative_path, check=label):
                     self.assertIsNone(pattern.search(text))
@@ -121,9 +120,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         """Regression for the second rejected design. Relaxing a whole pattern
         for a whole file meant a real credential appended to that same file
         passed. Stripping only the exact known snippets does not."""
-        relaxed_file = Path(
-            ".github/instructions/security-and-owasp.instructions.md"
-        )
+        relaxed_file = Path(".github/instructions/security-and-owasp.instructions.md")
         self.assertIn(relaxed_file, PLACEHOLDER_LITERALS)
         secret = "an" + "ActualPrivateCredential"
         planted = "API" + "_KEY" + ' = "' + secret + '"'
@@ -144,9 +141,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             # inside a longer token -- exactly the case stripping must leave
             # alone -- and would disagree with the code for the wrong reason.
             expected = sum(
-                len(lit) * len(re.findall(
-                    rf"(?<![\w.@:/+-]){re.escape(lit)}(?![\w.@:/+-])",
-                    original))
+                len(lit)
+                * len(re.findall(rf"(?<![\w.@:/+-]){re.escape(lit)}(?![\w.@:/+-])", original))
                 for lit in literals
             )
             with self.subTest(path=path):
@@ -166,9 +162,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             (asset_dir / "SKILL.md").write_text("nothing notable\n", encoding="utf-8")
 
             findings = scan_paths([asset_dir], root=root)
-            self.assertTrue(
-                any("credential assignment" in f for f in findings), findings
-            )
+            self.assertTrue(any("credential assignment" in f for f in findings), findings)
             self.assertTrue(any("helper.py" in str(f) for f in findings))
             # The clean sibling must not be reported.
             self.assertFalse(any("SKILL.md" in str(f) for f in findings))
@@ -202,7 +196,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # own headless activation workflow names, went undetected. A tenant or
         # client id is not a secret but it still identifies Joe's real tenancy.
         credential_suffixes = (
-            "TOKEN", "SECRET", "KEY", "PASSWORD", "CREDENTIAL", "ID",
+            "TOKEN",
+            "SECRET",
+            "KEY",
+            "PASSWORD",
+            "CREDENTIAL",
+            "ID",
         )
         benign = {
             "GDRIVE_CREDENTIALS_PATH",  # a path to a file, not a secret
@@ -239,18 +238,18 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             candidate = Path(tmp) / "neutral.txt"
             candidate.write_text("harmless utf-8\n", encoding="utf-8")
-            for destination, why in [
+            for destination, _why in [
                 ("credentials.json", "prohibited filename"),
                 ("docs/report.pdf", "prohibited artifact suffix"),
             ]:
                 with self.subTest(destination=destination):
-                    findings = scan_paths(
-                        [candidate], destinations={candidate: Path(destination)})
+                    findings = scan_paths([candidate], destinations={candidate: Path(destination)})
                     self.assertTrue(findings, f"{destination} slipped past the gate")
                     self.assertIn(destination, " ".join(findings))
             allowed = scan_paths(
                 [candidate],
-                destinations={candidate: Path(".github/instructions/x.instructions.md")})
+                destinations={candidate: Path(".github/instructions/x.instructions.md")},
+            )
             self.assertEqual(allowed, [], allowed)
 
     def test_private_connector_endpoint_is_detected_but_public_one_is_not(self):
@@ -263,15 +262,19 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # this test file itself trip the pattern it is testing.
         name = "TFE" + "_ADDRESS"
         scheme = "https" + "://"
-        for host in ("terraform.client-company.com", "tfe.someorg.internal.net",
-                     "10.20.30.40", "terraform-internal",
-                     # An internal install on a ULA or site-local IPv6 address
-                     # is written bracketed in a URL, and identifies the network
-                     # just as precisely as the v4 literal above.
-                     "[fd00::1234]:443", "[2001:db8:85a3::8a2e:370:7334]"):
+        for host in (
+            "terraform.client-company.com",
+            "tfe.someorg.internal.net",
+            "10.20.30.40",
+            "terraform-internal",
+            # An internal install on a ULA or site-local IPv6 address
+            # is written bracketed in a URL, and identifies the network
+            # just as precisely as the v4 literal above.
+            "[fd00::1234]:443",
+            "[2001:db8:85a3::8a2e:370:7334]",
+        ):
             with self.subTest(host=host, expect="flagged"):
-                self.assertIsNotNone(
-                    pattern.search(f'{name} = "{scheme}{host}"'))
+                self.assertIsNotNone(pattern.search(f'{name} = "{scheme}{host}"'))
         for probe in (
             f'{name} = "{scheme}app.terraform.io"',
             f'{name} = "<your-tfe-host>"',
@@ -292,18 +295,25 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         pattern = PATTERNS["private connector endpoint"]
         name = "TFE" + "_ADDRESS"
         scheme = "https" + "://"
-        for host in ("localhost.corp", "app.terraform.io.corp",
-                     "127.0.0.1.corp", "localhost.client-company.net"):
+        for host in (
+            "localhost.corp",
+            "app.terraform.io.corp",
+            "127.0.0.1.corp",
+            "localhost.client-company.net",
+        ):
             with self.subTest(host=host, expect="flagged"):
-                self.assertIsNotNone(
-                    pattern.search(f'{name} = "{scheme}{host}"'))
+                self.assertIsNotNone(pattern.search(f'{name} = "{scheme}{host}"'))
         # The genuine exemptions must still hold, terminated by a port, a
         # path, a closing quote or end of input.
-        for host in ("localhost", "localhost:8080", "app.terraform.io",
-                     "app.terraform.io/app/acme", "127.0.0.1"):
+        for host in (
+            "localhost",
+            "localhost:8080",
+            "app.terraform.io",
+            "app.terraform.io/app/acme",
+            "127.0.0.1",
+        ):
             with self.subTest(host=host, expect="clean"):
-                self.assertIsNone(
-                    pattern.search(f'{name} = "{scheme}{host}"'))
+                self.assertIsNone(pattern.search(f'{name} = "{scheme}{host}"'))
 
     def test_short_organization_slugs_are_detected(self):
         """A Terraform organization is an ordinary short slug, not a GUID.
@@ -316,13 +326,17 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         pattern = PATTERNS["connector organization"]
         for value in ("client-prod", "acme", "northside-utilities"):
             with self.subTest(value=value, expect="flagged"):
-                self.assertIsNotNone(
-                    pattern.search(f'TFE_ORGANIZATION = "{value}"'))
-        for value in ("your-org", "<your-org>", "my-org", "example-org",
-                      "placeholder", "organization"):
+                self.assertIsNotNone(pattern.search(f'TFE_ORGANIZATION = "{value}"'))
+        for value in (
+            "your-org",
+            "<your-org>",
+            "my-org",
+            "example-org",
+            "placeholder",
+            "organization",
+        ):
             with self.subTest(value=value, expect="clean"):
-                self.assertIsNone(
-                    pattern.search(f'TFE_ORGANIZATION = "{value}"'))
+                self.assertIsNone(pattern.search(f'TFE_ORGANIZATION = "{value}"'))
 
     def test_json_formatted_connector_config_is_not_a_bypass(self):
         """The closing quote of a JSON key sits between name and delimiter.
@@ -333,10 +347,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
         secret = "x" * 20
         cases = (
-            ("connector identifier", '{"AZURE_TENANT_ID": "%s"}' % guid),
-            ("connector identifier", "{'AZURE_CLIENT_ID': '%s'}" % guid),
-            ("credential assignment", '{"AZURE_CLIENT_SECRET": "%s"}' % secret),
-            ("credential assignment", '{"TFE_TOKEN": "%s"}' % secret),
+            ("connector identifier", f'{{"AZURE_TENANT_ID": "{guid}"}}'),
+            ("connector identifier", f"{{'AZURE_CLIENT_ID': '{guid}'}}"),
+            ("credential assignment", f'{{"AZURE_CLIENT_SECRET": "{secret}"}}'),
+            ("credential assignment", f'{{"TFE_TOKEN": "{secret}"}}'),
         )
         for pattern_name, probe in cases:
             with self.subTest(pattern=pattern_name, probe=probe):
@@ -347,10 +361,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         domain. Requiring two dots caught only the *.onmicrosoft.com default and
         missed every custom one, in both the assignment and JSON forms."""
         pattern = PATTERNS["connector identifier"]
-        for value in ("northside-utilities.com", "acme.co.uk",
-                      "acme-eng.onmicrosoft.com"):
-            for probe in (f'AZURE_TENANT_ID = "{value}"',
-                          '{"AZURE_TENANT_ID": "%s"}' % value):
+        for value in ("northside-utilities.com", "acme.co.uk", "acme-eng.onmicrosoft.com"):
+            for probe in (f'AZURE_TENANT_ID = "{value}"', f'{{"AZURE_TENANT_ID": "{value}"}}'):
                 with self.subTest(value=value, probe=probe, expect="flagged"):
                     self.assertIsNotNone(pattern.search(probe))
         # RESERVED names stay excused -- and only those. `your-tenant.com` was
@@ -360,18 +372,27 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # is no lexical way to tell a placeholder `your-…` from a registrable
         # one, and this repository's own rule is that uncertain counts as real.
         # The unambiguous placeholder spelling -- angle brackets -- still is.
-        for value in ("your-tenant.com", "your-corp.internal",
-                      "example.customer.com", "corp.example.evil"):
+        for value in (
+            "your-tenant.com",
+            "your-corp.internal",
+            "example.customer.com",
+            "corp.example.evil",
+        ):
             with self.subTest(value=value, expect="flagged"):
                 self.assertIsNotNone(
                     pattern.search(f'AZURE_TENANT_ID = "{value}"'),
-                    "an unreserved host must not be excused by a placeholder "
-                    "prefix or infix")
-        for value in ("example.com", "tenant.example.com", "<your-tenant>",
-                      "tenant.example", "tenant.invalid", "tenant.test"):
+                    "an unreserved host must not be excused by a placeholder prefix or infix",
+                )
+        for value in (
+            "example.com",
+            "tenant.example.com",
+            "<your-tenant>",
+            "tenant.example",
+            "tenant.invalid",
+            "tenant.test",
+        ):
             with self.subTest(value=value, expect="clean"):
-                self.assertIsNone(
-                    pattern.search(f'AZURE_TENANT_ID = "{value}"'))
+                self.assertIsNone(pattern.search(f'AZURE_TENANT_ID = "{value}"'))
 
     def test_yaml_block_scalars_are_folded_before_scanning(self):
         """Every value pattern reads a key and its value from one line, so a
@@ -384,8 +405,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             ("credential assignment", "TFE_TOKEN: >-\n  atlasv1.abcdefghijklmnop\n"),
             ("connector identifier", f"AZURE_TENANT_ID: |\n  {guid}\n"),
             # Folded across multiple indented lines, as YAML allows.
-            ("credential assignment",
-             "TFE_TOKEN: |-\n  atlasv1.\n  abcdefghijklmnop\n"),
+            ("credential assignment", "TFE_TOKEN: |-\n  atlasv1.\n  abcdefghijklmnop\n"),
             # YAML allows the indentation and chomping indicators in either
             # order. Accepting only one left the other unfolded, which is the
             # same bypass with two extra characters.
@@ -400,8 +420,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     "probe must be one the raw patterns genuinely miss, "
                     "otherwise this asserts nothing about folding",
                 )
-                self.assertIsNotNone(
-                    PATTERNS[label].search(fold_block_scalars(probe)))
+                self.assertIsNotNone(PATTERNS[label].search(fold_block_scalars(probe)))
 
         # An ordinary prose block must not become a finding.
         prose = "description: |\n  Ordinary prose describing the mount.\n"
@@ -431,12 +450,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         cases = (
             ("credential assignment", f"{client_secret} = {dq}{secret}{dq}"),
             ("credential assignment", f"{client_secret} = {sq}{secret}{sq}"),
-            ("credential assignment",
-             f"{token} = {dq}atlasv1.abcdefghijklmnop{dq}"),
+            ("credential assignment", f"{token} = {dq}atlasv1.abcdefghijklmnop{dq}"),
             ("connector identifier", f"{tenant} = {dq}{guid}{dq}"),
             # Spanning several lines, as TOML allows.
-            ("credential assignment",
-             f"{client_secret} = {dq}\n  {secret}\n{dq}"),
+            ("credential assignment", f"{client_secret} = {dq}\n  {secret}\n{dq}"),
         )
         for label, probe in cases:
             with self.subTest(label=label, probe=probe):
@@ -445,8 +462,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     "probe must be one the raw patterns genuinely miss, "
                     "otherwise this asserts nothing about folding",
                 )
-                self.assertIsNotNone(
-                    PATTERNS[label].search(fold_toml_multiline(probe)))
+                self.assertIsNotNone(PATTERNS[label].search(fold_toml_multiline(probe)))
 
         # Ordinary multiline prose -- every mount purpose in the registry could
         # be written this way -- must not become a finding.
@@ -466,11 +482,9 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             toml_file = root / "connector.toml"
-            toml_file.write_text(
-                f"{name} = {dq}{secret}{dq}\n", encoding="utf-8")
+            toml_file.write_text(f"{name} = {dq}{secret}{dq}\n", encoding="utf-8")
             yaml_file = root / "connector.yaml"
-            yaml_file.write_text(
-                f"{name}: |2-\n  {secret}\n", encoding="utf-8")
+            yaml_file.write_text(f"{name}: |2-\n  {secret}\n", encoding="utf-8")
             for path in (toml_file, yaml_file):
                 with self.subTest(path=path.name):
                     findings = scan_paths([path], root=root)
@@ -501,9 +515,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # key style x YAML block-scalar indicator
         for key in (cred, f'"{cred}"', f"'{cred}'"):
             for indicator in ("|", "|-", ">", ">-", "|2-", "|-2", ">2+"):
-                cases.append(
-                    ("credential assignment",
-                     f"{key}: {indicator}\n  {secret}\n"))
+                cases.append(("credential assignment", f"{key}: {indicator}\n  {secret}\n"))
         # key style x TOML multiline delimiter, for both value classes
         for key_name, label, value in (
             (cred, "credential assignment", secret),
@@ -528,10 +540,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # Quoting a key must not turn ordinary prose into a finding either.
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for index, body in enumerate((
-                '"description": |\n  Ordinary prose about a mount.\n',
-                f"'purpose' = {dq}\nOrdinary prose about a mount.\n{dq}\n",
-            )):
+            for index, body in enumerate(
+                (
+                    '"description": |\n  Ordinary prose about a mount.\n',
+                    f"'purpose' = {dq}\nOrdinary prose about a mount.\n{dq}\n",
+                )
+            ):
                 clean = root / f"clean{index}.conf"
                 clean.write_text(body, encoding="utf-8")
                 with self.subTest(clean=body):
@@ -579,9 +593,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     )
 
             clean = root / "clean.yaml"
-            clean.write_text(
-                "description: !!str Ordinary prose about a mount.\n",
-                encoding="utf-8")
+            clean.write_text("description: !!str Ordinary prose about a mount.\n", encoding="utf-8")
             self.assertEqual(scan_paths([clean], root=root), [])
 
     def test_sequence_entries_are_normalised_like_plain_mappings(self):
@@ -659,8 +671,14 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         cred = "AZURE" + "_CLIENT_SECRET"
         ident = "AZURE" + "_TENANT_ID"
 
-        properties = ("!!str", "&anchor", "&anchor !!str", "!!str &anchor",
-                      "!secret", "!<tag:example.invalid,2026:s>")
+        properties = (
+            "!!str",
+            "&anchor",
+            "&anchor !!str",
+            "!!str &anchor",
+            "!secret",
+            "!<tag:example.invalid,2026:s>",
+        )
         cases = []
         for prop in properties:
             cases.append(("credential assignment", f"{cred}: {prop} {secret}\n"))
@@ -689,8 +707,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
             clean = root / "clean.yaml"
             clean.write_text(
-                "description: &d Ordinary prose about a mount.\nother: *d\n",
-                encoding="utf-8")
+                "description: &d Ordinary prose about a mount.\nother: *d\n", encoding="utf-8"
+            )
             self.assertEqual(scan_paths([clean], root=root), [])
 
         # The old name stays exported: the pipeline and earlier tests called
@@ -712,14 +730,16 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         cred = "AZURE" + "_CLIENT_SECRET"
         ident = "AZURE" + "_TENANT_ID"
         cases = [
-            ("credential assignment", '{"%s": !!str %s}\n' % (cred, secret)),
-            ("credential assignment", '{"%s": &a %s}\n' % (cred, secret)),
-            ("credential assignment", '{outer: {"%s": !secret %s}}\n' % (cred, secret)),
-            ("credential assignment", "%s: [!!str %s]\n" % (cred, secret)),
+            ("credential assignment", f'{{"{cred}": !!str {secret}}}\n'),
+            ("credential assignment", f'{{"{cred}": &a {secret}}}\n'),
+            ("credential assignment", f'{{outer: {{"{cred}": !secret {secret}}}}}\n'),
+            ("credential assignment", f"{cred}: [!!str {secret}]\n"),
             # Anchor defined on a sequence scalar, referenced by a credential key.
             ("credential assignment", f"defaults:\n  - &cred {secret}\n{cred}: *cred\n"),
-            ("connector identifier",
-             f"a:\n  b:\n    c:\n      {ident}: &t {guid}\n      other: *t\n"),
+            (
+                "connector identifier",
+                f"a:\n  b:\n    c:\n      {ident}: &t {guid}\n      other: *t\n",
+            ),
         ]
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -735,9 +755,9 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
             clean = root / "clean.yaml"
             clean.write_text(
-                "description: &d Ordinary prose about a mount.\n"
-                "other: *d\nlist: [a, b]\n",
-                encoding="utf-8")
+                "description: &d Ordinary prose about a mount.\nother: *d\nlist: [a, b]\n",
+                encoding="utf-8",
+            )
             self.assertEqual(scan_paths([clean], root=root), [])
 
     @needs_yaml
@@ -751,18 +771,22 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # is what let a credential sitting above a syntax error fall through to
         # regexes that cannot decode it. Whether it matters is the caller's
         # decision -- asserted below, through scan_paths.
-        self.assertEqual(
-            yaml_reconstructed_values("{a: [1, 2}\n"), TRUNCATION_MARKER)
+        self.assertEqual(yaml_reconstructed_values("{a: [1, 2}\n"), TRUNCATION_MARKER)
         # Oversized input is not parsed -- but it is REPORTED, not skipped
         # silently. The earlier version of this line asserted "" here, which
         # encoded the defect: padding a file past the cap dropped the parser
         # and the scan still read clean.
-        self.assertEqual(
-            yaml_reconstructed_values("x" * 3_000_000), TRUNCATION_MARKER)
+        self.assertEqual(yaml_reconstructed_values("x" * 3_000_000), TRUNCATION_MARKER)
         # The property that matters for every other input: never raise, always
         # return a string. Python source, markdown and JSON all reach this.
-        for probe in ("def f(:\n  not yaml [", "# heading\n\ntext\n",
-                      '{"a": 1}', "", "\x00\x01", "a: *undefined_alias\n"):
+        for probe in (
+            "def f(:\n  not yaml [",
+            "# heading\n\ntext\n",
+            '{"a": 1}',
+            "",
+            "\x00\x01",
+            "a: *undefined_alias\n",
+        ):
             with self.subTest(probe=probe[:20]):
                 self.assertIsInstance(yaml_reconstructed_values(probe), str)
         # A document using a tag no constructor knows must still yield values,
@@ -785,9 +809,11 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             broken_yaml = root / "config.yaml"
             broken_yaml.write_text("{a: [1, 2}\n", encoding="utf-8")
             self.assertTrue(
-                any("incomplete scan" in finding for finding
-                    in scan_paths([broken_yaml], root=root)),
-                "a file that declares YAML and does not parse is unscanned")
+                any(
+                    "incomplete scan" in finding for finding in scan_paths([broken_yaml], root=root)
+                ),
+                "a file that declares YAML and does not parse is unscanned",
+            )
 
     def test_toml_escapes_are_decoded_by_a_parser_not_by_the_fold(self):
         """The parser argument, one format over.
@@ -807,16 +833,14 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # Written as escapes so this file does not carry the credential name.
         escaped_key = '"AZURE\\u005fCLIENT\\u005fSECRET"'
         cases = {
-            "escaped key": '%s = "%s"\n' % (escaped_key, secret),
+            "escaped key": f'{escaped_key} = "{secret}"\n',
             # The prefix before the escaped delimiter is deliberately too short
             # to match anything on its own. The fold emits exactly that prefix,
             # so a longer one lets this case report a finding for the remnant
             # while the credential after it is still never scanned -- passing
             # for the wrong reason, which is the failure mode this round keeps
             # producing.
-            "escaped delimiter":
-                "%s = %s\nok \\%s %s\n%s\n"
-                % (cred, quotes, quotes, secret, quotes),
+            "escaped delimiter": f"{cred} = {quotes}\nok \\{quotes} {secret}\n{quotes}\n",
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -826,8 +850,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 with self.subTest(case=label):
                     findings = scan_paths([probe], root=root)
                     self.assertTrue(
-                        any("credential assignment" in finding
-                            for finding in findings),
+                        any("credential assignment" in finding for finding in findings),
                         f"{label}: {body!r} produced {findings}",
                     )
                     # And it must be flagged BECAUSE the credential reached the
@@ -839,13 +862,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     # terminate the scanned line early -- emitting values bare
                     # was how the escaped delimiter kept hiding even once the
                     # parser was reading it.
-                    self.assertEqual(line.count('"'), 2,
-                                     f"{label}: unbalanced emission {line!r}")
+                    self.assertEqual(line.count('"'), 2, f"{label}: unbalanced emission {line!r}")
 
             clean = root / "clean.toml"
             clean.write_text(
-                'name = "governance"\npurpose = "read only registry"\n',
-                encoding="utf-8")
+                'name = "governance"\npurpose = "read only registry"\n', encoding="utf-8"
+            )
             self.assertEqual(scan_paths([clean], root=root), [])
 
     def test_organization_exclusions_must_consume_the_whole_value(self):
@@ -860,22 +882,39 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         pattern = PATTERNS["connector organization"]
         key = "TFE" + "_ORGANIZATION"
         # Real slugs that happen to start with an approved placeholder word.
-        for value in ("my-client-prod", "your-real-client",
-                      "example-client-prod", "our-northside-utilities"):
+        for value in (
+            "my-client-prod",
+            "your-real-client",
+            "example-client-prod",
+            "our-northside-utilities",
+        ):
             with self.subTest(value=value, expect="flagged"):
                 self.assertIsNotNone(
-                    pattern.search('%s = "%s"' % (key, value)),
+                    pattern.search(f'{key} = "{value}"'),
                     "a placeholder prefix must not exempt the value it prefixes",
                 )
         # Every exclusion must still hold for the whole-value form, including
         # the determiners the prefix repair introduced.
-        for value in ("your-org", "my-org", "our-org", "the-org", "some-org",
-                      "example-org", "your_organization", "my-workspace",
-                      "example", "placeholder", "organization", "workspace",
-                      "name", "<your-org>", "..."):
+        for value in (
+            "your-org",
+            "my-org",
+            "our-org",
+            "the-org",
+            "some-org",
+            "example-org",
+            "your_organization",
+            "my-workspace",
+            "example",
+            "placeholder",
+            "organization",
+            "workspace",
+            "name",
+            "<your-org>",
+            "...",
+        ):
             with self.subTest(value=value, expect="clean"):
                 self.assertIsNone(
-                    pattern.search('%s = "%s"' % (key, value)),
+                    pattern.search(f'{key} = "{value}"'),
                     "an approved whole-value placeholder must stay clean",
                 )
 
@@ -897,7 +936,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
         emitted = yaml_reconstructed_values(bomb)
         self.assertLess(
-            len(emitted.splitlines()), MAX_EMITTED_VALUES + 1,
+            len(emitted.splitlines()),
+            MAX_EMITTED_VALUES + 1,
             "the emission budget must cap a shared-reference expansion",
         )
         self.assertLess(len(emitted), 100_000)
@@ -905,10 +945,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # still has to give up its value.
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
-        self.assertIn(
-            secret,
-            yaml_reconstructed_values(
-                f"defaults: &d {secret}\n{cred}: *d\n"))
+        self.assertIn(secret, yaml_reconstructed_values(f"defaults: &d {secret}\n{cred}: *d\n"))
 
     @needs_yaml
     def test_an_exhausted_reconstruction_budget_fails_the_scan(self):
@@ -923,16 +960,15 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         that an unfinished check is reported, never passed."""
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
-        filler_yaml = "".join(
-            f"k{index}: v{index}\n" for index in range(MAX_EMITTED_VALUES + 50))
+        filler_yaml = "".join(f"k{index}: v{index}\n" for index in range(MAX_EMITTED_VALUES + 50))
         filler_toml = "".join(
-            f'k{index} = "v{index}"\n'
-            for index in range(MAX_EMITTED_VALUES + 50))
+            f'k{index} = "v{index}"\n' for index in range(MAX_EMITTED_VALUES + 50)
+        )
         # Both formats, and in each the credential sits in a construct only the
         # parser normalises -- so the fallback genuinely cannot cover for it.
         cases = {
-            "padded.yaml": filler_yaml + 'tail: {"%s": !!str %s}\n' % (cred, secret),
-            "padded.toml": filler_toml + '"AZURE\\u005fCLIENT\\u005fSECRET" = "%s"\n' % secret,
+            "padded.yaml": filler_yaml + f'tail: {{"{cred}": !!str {secret}}}\n',
+            "padded.toml": filler_toml + f'"AZURE\\u005fCLIENT\\u005fSECRET" = "{secret}"\n',
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -949,8 +985,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             # The marker must not leak into the report as a pattern hit, and a
             # file that fits inside the budget must stay silent.
             ordinary = root / "ordinary.yaml"
-            ordinary.write_text("name: governance\npurpose: read only\n",
-                                encoding="utf-8")
+            ordinary.write_text("name: governance\npurpose: read only\n", encoding="utf-8")
             self.assertEqual(scan_paths([ordinary], root=root), [])
 
         # And the bound it was added for still holds: the alias bomb is walked
@@ -974,7 +1009,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
         pad = "# " + "p" * 200 + "\n"
-        tail = 'tail: {"%s": !!str %s}\n' % (cred, secret)
+        tail = f'tail: {{"{cred}": !!str {secret}}}\n'
         oversized = pad * (MAX_PARSE_BYTES // len(pad) + 5) + tail
         self.assertGreater(len(oversized.encode("utf-8")), MAX_PARSE_BYTES)
 
@@ -985,17 +1020,16 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             findings = scan_paths([probe], root=root)
             self.assertTrue(
                 any("incomplete scan" in finding for finding in findings),
-                f"an oversized file reported clean -- {findings}")
+                f"an oversized file reported clean -- {findings}",
+            )
 
             # The TOML side has the same cap and needs the same answer.
-            big_toml = "".join(
-                f'# {"p" * 200}\n'
-                for _ in range(MAX_PARSE_BYTES // 203 + 5))
+            big_toml = "".join(f"# {'p' * 200}\n" for _ in range(MAX_PARSE_BYTES // 203 + 5))
             toml_probe = root / "oversized.toml"
             toml_probe.write_text(big_toml, encoding="utf-8")
             self.assertTrue(
-                any("incomplete scan" in finding
-                    for finding in scan_paths([toml_probe], root=root)))
+                any("incomplete scan" in finding for finding in scan_paths([toml_probe], root=root))
+            )
 
             # An ordinary file must stay silent, or every scan is "incomplete".
             small = root / "small.yaml"
@@ -1012,8 +1046,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         the overview must name every installed requirement, and the parser
         tests must degrade the way the scanner does so stdlib-only survives."""
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-        overview = (ROOT / "docs" / "REPOSITORY_OVERVIEW.md").read_text(
-            encoding="utf-8")
+        overview = (ROOT / "docs" / "REPOSITORY_OVERVIEW.md").read_text(encoding="utf-8")
 
         declared = [
             line.split(";")[0].strip()
@@ -1025,19 +1058,21 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             name = re.split(r"[<>=!~\[]", entry, maxsplit=1)[0].strip()
             with self.subTest(package=name):
                 self.assertIn(
-                    name, overview,
-                    "the overview's dependency section must name every "
-                    "package CI installs")
+                    name,
+                    overview,
+                    "the overview's dependency section must name every package CI installs",
+                )
         # The stale count claim in particular.
         self.assertNotIn("exactly one dependency", overview)
 
         # And the suite must still be runnable without the optional package,
         # which is what makes the "stdlib-only" claim true rather than aspirational.
-        self.assertIn("needs_yaml", (ROOT / "tests" / "test_privacy.py").read_text(
-            encoding="utf-8"))
+        self.assertIn(
+            "needs_yaml", (ROOT / "tests" / "test_privacy.py").read_text(encoding="utf-8")
+        )
 
     def test_only_reserved_names_are_excused_as_example_hosts(self):
-        """"Looks like a placeholder" is not a reservation.
+        """ "Looks like a placeholder" is not a reservation.
 
         `example.`/`your-`/`.example` were written as unbounded prefixes and
         infixes, so a real customer host beginning with one, or carrying
@@ -1067,15 +1102,17 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for group, cases, expected in (("flag", must_flag, True),
-                                           ("clean", must_be_clean, False)):
+            for group, cases, expected in (
+                ("flag", must_flag, True),
+                ("clean", must_be_clean, False),
+            ):
                 for index, (label, body) in enumerate(cases.items()):
                     probe = root / f"{group}{index}.toml"
                     probe.write_text(body + "\n", encoding="utf-8")
                     with self.subTest(case=label, expect=group):
                         self.assertEqual(
-                            bool(scan_paths([probe], root=root)), expected,
-                            f"{label}: {body}")
+                            bool(scan_paths([probe], root=root)), expected, f"{label}: {body}"
+                        )
 
     def test_a_nested_credential_name_is_reconstructed_whole(self):
         """A credential name is routinely split across tables.
@@ -1090,26 +1127,26 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
         cases = {
-            "toml table": ("t0.toml", '[AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
-            "toml inline table":
-                ("t1.toml", 'AZURE = { CLIENT = { SECRET = "%s" } }\n' % secret),
-            "toml nested two deep":
-                ("t2.toml", '[a.b.AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
-            "toml nested four deep":
-                ("t3.toml", '[w.x.y.z.AZURE.CLIENT]\nSECRET = "%s"\n' % secret),
+            "toml table": ("t0.toml", f'[AZURE.CLIENT]\nSECRET = "{secret}"\n'),
+            "toml inline table": ("t1.toml", f'AZURE = {{ CLIENT = {{ SECRET = "{secret}" }} }}\n'),
+            "toml nested two deep": ("t2.toml", f'[a.b.AZURE.CLIENT]\nSECRET = "{secret}"\n'),
+            "toml nested four deep": ("t3.toml", f'[w.x.y.z.AZURE.CLIENT]\nSECRET = "{secret}"\n'),
             # YAML cases are parser-only, so they carry the same gate every
             # other parser test carries. Gating four tests and then adding a
             # fifth with ungated YAML subtests reintroduced the stdlib-only
             # failure the gate exists to prevent -- in the same round.
-            **({} if not _have_yaml() else {
-                "yaml nested":
-                    ("y0.yaml",
-                     "AZURE:\n  CLIENT:\n    SECRET: %s\n" % secret),
-                "yaml nested flow":
-                    ("y1.yaml",
-                     "a: {b: {AZURE: {CLIENT: {SECRET: %s}}}}\n" % secret),
-            }),
-            "flat control": ("t4.toml", '%s = "%s"\n' % (cred, secret)),
+            **(
+                {}
+                if not _have_yaml()
+                else {
+                    "yaml nested": ("y0.yaml", f"AZURE:\n  CLIENT:\n    SECRET: {secret}\n"),
+                    "yaml nested flow": (
+                        "y1.yaml",
+                        f"a: {{b: {{AZURE: {{CLIENT: {{SECRET: {secret}}}}}}}}}\n",
+                    ),
+                }
+            ),
+            "flat control": ("t4.toml", f'{cred} = "{secret}"\n'),
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1119,16 +1156,17 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 with self.subTest(case=label):
                     findings = scan_paths([probe], root=root)
                     self.assertTrue(
-                        any("credential assignment" in finding
-                            for finding in findings),
-                        f"{label}: {body!r} produced {findings}")
+                        any("credential assignment" in finding for finding in findings),
+                        f"{label}: {body!r} produced {findings}",
+                    )
 
             # Nesting must not invent findings: a registry of ordinary nested
             # tables has to stay silent, or every config file reports.
             clean = root / "clean.toml"
             clean.write_text(
-                '[mount.governance]\nname = "governance"\n'
-                'purpose = "read only registry"\n', encoding="utf-8")
+                '[mount.governance]\nname = "governance"\npurpose = "read only registry"\n',
+                encoding="utf-8",
+            )
             self.assertEqual(scan_paths([clean], root=root), [])
 
     @needs_yaml
@@ -1143,14 +1181,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         boring, alias it where it counts. The key is now (identity, path)."""
         secret = "Xy7Q" + "secretValue0192"
         cases = {
-            "anchored elsewhere, aliased at the credential key":
-                "payload: &shared\n  SECRET: %s\nAZURE_CLIENT: *shared\n" % secret,
-            "aliased at the credential key only":
-                "AZURE_CLIENT: &s\n  SECRET: %s\n" % secret,
-            "two aliases, one of them credential-forming":
-                "a: &s\n  SECRET: %s\nb: *s\nAZURE_CLIENT: *s\n" % secret,
-            "alias nested under a further key":
-                "payload: &s\n  SECRET: %s\nouter:\n  AZURE_CLIENT: *s\n" % secret,
+            "anchored elsewhere, aliased at the credential key": f"payload: &shared\n  SECRET: {secret}\nAZURE_CLIENT: *shared\n",
+            "aliased at the credential key only": f"AZURE_CLIENT: &s\n  SECRET: {secret}\n",
+            "two aliases, one of them credential-forming": f"a: &s\n  SECRET: {secret}\nb: *s\nAZURE_CLIENT: *s\n",
+            "alias nested under a further key": f"payload: &s\n  SECRET: {secret}\nouter:\n  AZURE_CLIENT: *s\n",
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1160,9 +1194,9 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 with self.subTest(case=label):
                     findings = scan_paths([probe], root=root)
                     self.assertTrue(
-                        any("credential assignment" in finding
-                            for finding in findings),
-                        f"{label}: {body!r} produced {findings}")
+                        any("credential assignment" in finding for finding in findings),
+                        f"{label}: {body!r} produced {findings}",
+                    )
 
         # The bound this visited set exists for must survive the change: a wide
         # alias graph is still walked once per distinct path, not exponentially.
@@ -1175,8 +1209,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         self.assertNotIn(TRUNCATION_MARKER, emitted)
         # And a self-referential document must still terminate rather than
         # recurse forever now that the visit key includes the path.
-        self.assertIsInstance(
-            yaml_reconstructed_values("a: &a\n  self: *a\n"), str)
+        self.assertIsInstance(yaml_reconstructed_values("a: &a\n  self: *a\n"), str)
 
     def test_every_parser_dependent_test_carries_the_dependency_gate(self):
         """Gating four tests and then adding a fifth is how this recurs.
@@ -1199,14 +1232,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             if ".yaml" not in body and "yaml_reconstructed_values" not in body:
                 continue
             gated = any(
-                getattr(decorator, "id", getattr(decorator, "attr", ""))
-                == "needs_yaml"
-                for decorator in node.decorator_list)
+                getattr(decorator, "id", getattr(decorator, "attr", "")) == "needs_yaml"
+                for decorator in node.decorator_list
+            )
             if not gated:
                 candidates.append(node.name)
 
-        self.assertTrue(candidates,
-                        "no ungated YAML-touching tests found; test is vacuous")
+        self.assertTrue(candidates, "no ungated YAML-touching tests found; test is vacuous")
 
         # A source heuristic cannot tell which of these actually NEED the
         # parser -- most are satisfied by the regex normalisers, which is why a
@@ -1225,16 +1257,18 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 # as needing a gate it does not need.
                 with mock.patch.dict(sys.modules, {"yaml": None}):
                     result = unittest.TextTestRunner(
-                        stream=quiet, verbosity=0,
-                    ).run(unittest.TestLoader().loadTestsFromName(
-                        name, type(self)))
+                        stream=quiet,
+                        verbosity=0,
+                    ).run(unittest.TestLoader().loadTestsFromName(name, type(self)))
                 if not result.wasSuccessful():
                     failures.append(name)
 
         self.assertEqual(
-            failures, [],
+            failures,
+            [],
             "these tests need the YAML parser but carry no PyYAML gate, so a "
-            "stdlib-only run fails instead of skipping")
+            "stdlib-only run fails instead of skipping",
+        )
 
     def test_an_extended_placeholder_loses_its_exemption(self):
         """An approved snippet is exempt only where it stands ALONE.
@@ -1246,8 +1280,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         key, the secret-token pattern needs a vendor prefix, and the file
         reported clean. Whitespace before the operator satisfied the existing
         boundary check, so nothing caught it."""
-        relative = Path(
-            ".github/instructions/security-and-owasp.instructions.md")
+        relative = Path(".github/instructions/security-and-owasp.instructions.md")
         placeholder = PLACEHOLDER_LITERALS[relative][0]
         real = "real" + "OpaqueCredentialValue123"
 
@@ -1264,10 +1297,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             stripped = strip_known_placeholders(relative, line)
             with self.subTest(extension=label):
                 self.assertTrue(
-                    any(pattern.search(stripped)
-                        for pattern in PATTERNS.values()),
+                    any(pattern.search(stripped) for pattern in PATTERNS.values()),
                     f"{label}: an extended approved snippet must not stay "
-                    f"exempt -- stripped to {stripped!r}")
+                    f"exempt -- stripped to {stripped!r}",
+                )
 
         # The approved snippet standing alone must still be exempt, in every
         # context it actually appears in: statement terminator, end of line,
@@ -1279,9 +1312,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         }.items():
             with self.subTest(standalone=label):
                 self.assertFalse(
-                    any(pattern.search(strip_known_placeholders(relative, line))
-                        for pattern in PATTERNS.values()),
-                    f"{label}: the approved snippet itself must stay exempt")
+                    any(
+                        pattern.search(strip_known_placeholders(relative, line))
+                        for pattern in PATTERNS.values()
+                    ),
+                    f"{label}: the approved snippet itself must stay exempt",
+                )
 
         # And the real tracked files must still pass, which is what stops this
         # from being fixed by simply refusing to strip anything.
@@ -1304,22 +1340,20 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
         cases = {
-            "flow mapping, credential first":
-                '{"%s": !!str %s, "%s": harmless}\n' % (cred, secret, cred),
-            "block mapping, credential first":
-                "%s: %s\n%s: harmless\n" % (cred, secret, cred),
-            "duplicate under a shared parent":
-                "outer:\n  %s: %s\n  %s: harmless\n" % (cred, secret, cred),
+            "flow mapping, credential first": f'{{"{cred}": !!str {secret}, "{cred}": harmless}}\n',
+            "block mapping, credential first": f"{cred}: {secret}\n{cred}: harmless\n",
+            "duplicate under a shared parent": f"outer:\n  {cred}: {secret}\n  {cred}: harmless\n",
         }
         for label, body in cases.items():
             with self.subTest(case=label):
                 emitted = yaml_reconstructed_values(body)
                 self.assertIn(
-                    secret, emitted,
+                    secret,
+                    emitted,
                     f"{label}: the earlier entry was discarded by the "
-                    f"constructor -- emitted {emitted!r}")
-                self.assertIn("harmless", emitted,
-                              "the later entry must survive too")
+                    f"constructor -- emitted {emitted!r}",
+                )
+                self.assertIn("harmless", emitted, "the later entry must survive too")
 
     @needs_yaml
     def test_an_unfinished_reconstruction_is_reported_only_where_it_matters(self):
@@ -1336,16 +1370,22 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         oversized = "# " + ("x" * 200 + "\n# ") * (MAX_PARSE_BYTES // 203 + 5)
 
         must_report = {
-            "toml syntax error below a credential":
-                ("a.toml", '%s = "%s"\nbroken = [\n' % (escaped_key, secret)),
+            "toml syntax error below a credential": (
+                "a.toml",
+                f'{escaped_key} = "{secret}"\nbroken = [\n',
+            ),
             "toml unparseable outright": ("b.toml", "= = =\n"),
             # YAML cases need the parser to produce the marker; the TOML and
             # size paths do not, so gate only these and keep the rest running
             # in a stdlib-only environment.
-            **({} if not _have_yaml() else {
-                "yaml unparseable": ("c.yaml", "{a: [1, 2}\n"),
-                "oversized yaml": ("d.yaml", "k: v\n" * 200_000),
-            }),
+            **(
+                {}
+                if not _have_yaml()
+                else {
+                    "yaml unparseable": ("c.yaml", "{a: [1, 2}\n"),
+                    "oversized yaml": ("d.yaml", "k: v\n" * 200_000),
+                }
+            ),
             "oversized toml": ("e.toml", oversized),
         }
         must_stay_clean = {
@@ -1357,15 +1397,15 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for group, cases, expected in (("report", must_report, True),
-                                           ("clean", must_stay_clean, False)):
+            for group, cases, expected in (
+                ("report", must_report, True),
+                ("clean", must_stay_clean, False),
+            ):
                 for label, (name, body) in cases.items():
                     probe = root / name
                     probe.write_text(body, encoding="utf-8")
                     with self.subTest(case=label, expect=group):
-                        self.assertEqual(
-                            bool(scan_paths([probe], root=root)), expected,
-                            f"{label}")
+                        self.assertEqual(bool(scan_paths([probe], root=root)), expected, f"{label}")
 
     def test_reconstruction_is_bounded_by_depth_not_by_the_stack(self):
         """A deeply nested document must yield a finding, never a crash.
@@ -1387,18 +1427,14 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 self.assertLess(time.time() - started, 10)
 
         if _have_yaml():
-            deep_yaml = "".join("  " * level + f"k{level}:\n"
-                                for level in range(1_200))
+            deep_yaml = "".join("  " * level + f"k{level}:\n" for level in range(1_200))
             deep_yaml += "  " * 1_200 + "leaf: value\n"
-            self.assertIn(TRUNCATION_MARKER,
-                          yaml_reconstructed_values(deep_yaml))
+            self.assertIn(TRUNCATION_MARKER, yaml_reconstructed_values(deep_yaml))
 
         # Ordinary nesting must still reconstruct, or the cap has swallowed the
         # feature it is protecting.
         secret = "Xy7Q" + "secretValue0192"
-        self.assertIn(
-            secret,
-            toml_reconstructed_values('[AZURE.CLIENT]\nSECRET = "%s"\n' % secret))
+        self.assertIn(secret, toml_reconstructed_values(f'[AZURE.CLIENT]\nSECRET = "{secret}"\n'))
 
     def test_private_material_in_a_path_is_reported(self):
         """A path is published exactly as content is.
@@ -1422,8 +1458,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for group, cases, expected in (("flag", flagged, True),
-                                           ("clean", clean, False)):
+            for group, cases, expected in (("flag", flagged, True), ("clean", clean, False)):
                 for label, name in cases.items():
                     probe = root / "docs" / name
                     probe.parent.mkdir(parents=True, exist_ok=True)
@@ -1433,9 +1468,9 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                         self.assertEqual(bool(findings), expected, f"{label}")
                         if expected:
                             self.assertTrue(
-                                any("in the file path" in finding
-                                    for finding in findings),
-                                "the finding must say the PATH is the problem")
+                                any("in the file path" in finding for finding in findings),
+                                "the finding must say the PATH is the problem",
+                            )
 
         # And the tracked tree must still pass, so this cannot be satisfied by
         # a rule that flags ordinary repository paths.
@@ -1464,15 +1499,15 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             started = time.time()
             emitted = yaml_reconstructed_values(body)
             with self.subTest(case=label):
-                self.assertLess(time.time() - started, 15,
-                                f"{label}: the walk did not terminate promptly")
+                self.assertLess(
+                    time.time() - started, 15, f"{label}: the walk did not terminate promptly"
+                )
                 self.assertIsInstance(emitted, str)
 
         # Bounding must not have cost ordinary reconstruction.
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
-        self.assertIn(secret, yaml_reconstructed_values(
-            "payload: &s %s\n%s: *s\n" % (secret, cred)))
+        self.assertIn(secret, yaml_reconstructed_values(f"payload: &s {secret}\n{cred}: *s\n"))
 
     @needs_yaml
     def test_an_unexpected_node_shape_degrades_instead_of_raising(self):
@@ -1488,10 +1523,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         shapes = {
             "complex sequence key": "? [a, b]\n: {x: y}\n",
             "complex mapping key": "? {a: b}\n: value\n",
-            "complex key beside a credential":
-                "outer:\n  ? [a, b]\n  : {%s: %s}\n" % (cred, secret),
-            "complex key at the root with an alias":
-                "? &k [a, b]\n: *k\n",
+            "complex key beside a credential": f"outer:\n  ? [a, b]\n  : {{{cred}: {secret}}}\n",
+            "complex key at the root with an alias": "? &k [a, b]\n: *k\n",
         }
         for label, body in shapes.items():
             with self.subTest(case=label):
@@ -1501,12 +1534,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             probe = root / "complex.yaml"
-            probe.write_text(shapes["complex key beside a credential"],
-                             encoding="utf-8")
+            probe.write_text(shapes["complex key beside a credential"], encoding="utf-8")
             # And a credential sitting next to the odd shape is still found.
             self.assertTrue(
-                any("credential assignment" in finding
-                    for finding in scan_paths([probe], root=root)))
+                any(
+                    "credential assignment" in finding for finding in scan_paths([probe], root=root)
+                )
+            )
 
     @needs_yaml
     def test_json_is_covered_by_the_completeness_check(self):
@@ -1521,10 +1555,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         escaped = '"AZURE\\u005fCLIENT\\u005fSECRET"'
         cases = {
-            "escaped key plus trailing garbage":
-                ("a.json", '{%s:"%s"} garbage\n' % (escaped, secret), True),
-            "escaped key, valid json":
-                ("b.json", '{%s:"%s"}\n' % (escaped, secret), True),
+            "escaped key plus trailing garbage": (
+                "a.json",
+                f'{{{escaped}:"{secret}"}} garbage\n',
+                True,
+            ),
+            "escaped key, valid json": ("b.json", f'{{{escaped}:"{secret}"}}\n', True),
             "unparseable json": ("c.json", "{not json\n", True),
             "ordinary json": ("d.json", '{"name":"governance"}\n', False),
         }
@@ -1534,8 +1570,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 probe = root / name
                 probe.write_text(body, encoding="utf-8")
                 with self.subTest(case=label):
-                    self.assertEqual(
-                        bool(scan_paths([probe], root=root)), expected, label)
+                    self.assertEqual(bool(scan_paths([probe], root=root)), expected, label)
 
     def test_a_filename_cannot_become_a_scanner_option(self):
         """A path argument must be a path, whatever it is named.
@@ -1568,14 +1603,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
             captured = io.StringIO()
             with contextlib.redirect_stdout(captured):
-                code = guard.main(
-                    ["--", str(root / "--help"), str(root / "leaky.toml")])
+                code = guard.main(["--", str(root / "--help"), str(root / "leaky.toml")])
             report = captured.getvalue()
 
-            self.assertEqual(code, 1,
-                             "the scan must fail, not print usage and exit 0")
-            self.assertIn("credential assignment", report,
-                          "the planted credential must be reported")
+            self.assertEqual(code, 1, "the scan must fail, not print usage and exit 0")
+            self.assertIn(
+                "credential assignment", report, "the planted credential must be reported"
+            )
             self.assertIn("leaky.toml", report)
             self.assertNotIn("usage: privacy_guard.py", report)
             # `--` must have been consumed as the separator, never scanned as a
@@ -1604,8 +1638,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             started = time.time()
             fold_toml_multiline(probe)
             timings[size] = time.time() - started
-        self.assertLess(timings[64_000], 2.0,
-                        f"64k of one line took {timings[64_000]:.2f}s")
+        self.assertLess(timings[64_000], 2.0, f"64k of one line took {timings[64_000]:.2f}s")
 
         # A realistic hostile file: many long non-assignment lines.
         bulk = ("b" * 4_000 + "\n") * 200
@@ -1618,10 +1651,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         cred = "AZURE" + "_CLIENT_SECRET"
         quotes = '"' * 3
         for label, body in {
-            "bare key": "%s = %s\n%s\n%s\n" % (cred, quotes, secret, quotes),
-            "quoted key": '"%s" = %s\n%s\n%s\n' % (cred, quotes, secret, quotes),
-            "indented": "  %s = %s\n%s\n%s\n" % (cred, quotes, secret, quotes),
-            "literal delimiter": "%s = '''\n%s\n'''\n" % (cred, secret),
+            "bare key": f"{cred} = {quotes}\n{secret}\n{quotes}\n",
+            "quoted key": f'"{cred}" = {quotes}\n{secret}\n{quotes}\n',
+            "indented": f"  {cred} = {quotes}\n{secret}\n{quotes}\n",
+            "literal delimiter": f"{cred} = '''\n{secret}\n'''\n",
         }.items():
             with self.subTest(form=label):
                 self.assertIn(secret, fold_toml_multiline(body))
@@ -1639,10 +1672,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         akia = "AKIA" + "ABCDEFGHIJKLMNOP"
         token = "gh" + "p_abcdefghijklmnop"
         hidden_in_metadata = {
-            "anchor name": "key: &%s benign\n" % akia,
-            "tag name": "key: !%s benign\n" % akia,
-            "anchor on a sequence entry": "- &%s benign\n" % akia,
-            "token as an anchor": "key: &%s benign\n" % token,
+            "anchor name": f"key: &{akia} benign\n",
+            "tag name": f"key: !{akia} benign\n",
+            "anchor on a sequence entry": f"- &{akia} benign\n",
+            "token as an anchor": f"key: &{token} benign\n",
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1650,14 +1683,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 probe = root / f"meta{index}.yaml"
                 probe.write_text(body, encoding="utf-8")
                 with self.subTest(case=label):
-                    self.assertTrue(scan_paths([probe], root=root),
-                                    f"{label}: {body!r}")
+                    self.assertTrue(scan_paths([probe], root=root), f"{label}: {body!r}")
 
             # An ordinary anchor is still not a finding, so this is not simply
             # "flag every anchor".
             clean = root / "clean.yaml"
-            clean.write_text("key: &shared benign\nother: *shared\n",
-                             encoding="utf-8")
+            clean.write_text("key: &shared benign\nother: *shared\n", encoding="utf-8")
             self.assertEqual(scan_paths([clean], root=root), [])
 
     @needs_yaml
@@ -1683,8 +1714,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 with self.subTest(case=label):
                     self.assertTrue(scan_paths([probe], root=root), label)
 
-            for name, body in (("ok.json", '"an ordinary string"\n'),
-                               ("ok.yaml", "- just a list entry\n")):
+            for name, body in (
+                ("ok.json", '"an ordinary string"\n'),
+                ("ok.yaml", "- just a list entry\n"),
+            ):
                 probe = root / name
                 probe.write_text(body, encoding="utf-8")
                 with self.subTest(clean=name):
@@ -1704,8 +1737,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "adjacent literal": f'{address} = "{scheme}://example.com" ".corp.com"',
             "formatted": f'{address} = "{scheme}://example.com" %% suffix',
             "loopback continued": f'{address} = "{scheme}://localhost" + ".corp"',
-            "saas continued":
-                f'{address} = "{scheme}://app.terraform.io" + ".corp"',
+            "saas continued": f'{address} = "{scheme}://app.terraform.io" + ".corp"',
             "plain private host": f'{address} = "{scheme}://tfe.clientcorp.com"',
         }
         must_be_clean = {
@@ -1718,15 +1750,17 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for group, cases, expected in (("flag", must_flag, True),
-                                           ("clean", must_be_clean, False)):
+            for group, cases, expected in (
+                ("flag", must_flag, True),
+                ("clean", must_be_clean, False),
+            ):
                 for index, (label, body) in enumerate(cases.items()):
                     probe = root / f"{group}{index}.py"
                     probe.write_text(body + "\n", encoding="utf-8")
                     with self.subTest(case=label, expect=group):
                         self.assertEqual(
-                            bool(scan_paths([probe], root=root)), expected,
-                            f"{label}: {body}")
+                            bool(scan_paths([probe], root=root)), expected, f"{label}: {body}"
+                        )
 
     def test_the_option_separator_keeps_the_options_before_it(self):
         """`--` ends option PARSING; it does not discard the options.
@@ -1747,15 +1781,16 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             benign.write_text('{"ok": 1}\n', encoding="utf-8")
 
             # The destination check must apply with and without the separator.
-            for argv in (["--as", "credentials.json", str(benign)],
-                         ["--as", "credentials.json", "--", str(benign)]):
+            for argv in (
+                ["--as", "credentials.json", str(benign)],
+                ["--as", "credentials.json", "--", str(benign)],
+            ):
                 captured = io.StringIO()
                 with contextlib.redirect_stdout(captured):
                     code = guard.main(argv)
                 with self.subTest(argv=" ".join(argv)):
                     self.assertEqual(code, 1)
-                    self.assertIn("prohibited private filename",
-                                  captured.getvalue())
+                    self.assertIn("prohibited private filename", captured.getvalue())
 
             # And the round-28 property must still hold.
             (root / "--help").write_text("harmless\n", encoding="utf-8")
@@ -1763,8 +1798,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             (root / "leaky.toml").write_text(planted + "\n", encoding="utf-8")
             captured = io.StringIO()
             with contextlib.redirect_stdout(captured):
-                code = guard.main(
-                    ["--", str(root / "--help"), str(root / "leaky.toml")])
+                code = guard.main(["--", str(root / "--help"), str(root / "leaky.toml")])
             self.assertEqual(code, 1)
             self.assertIn("credential assignment", captured.getvalue())
             self.assertNotIn("usage: privacy_guard.py", captured.getvalue())
@@ -1781,14 +1815,12 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         happens before the commit."""
         from unittest import mock
 
-        import scripts.privacy_guard as guard
-
         secret = "Xy7Q" + "secretValue0192"
         escaped = '"AZURE\\u005fCLIENT_SECRET"'
         declared = {
-            "yaml": ("p.yaml", "%s: \"%s\"\n" % (escaped, secret)),
-            "yml": ("q.yml", "%s: \"%s\"\n" % (escaped, secret)),
-            "json": ("r.json", "{%s: \"%s\"}\n" % (escaped, secret)),
+            "yaml": ("p.yaml", f'{escaped}: "{secret}"\n'),
+            "yml": ("q.yml", f'{escaped}: "{secret}"\n'),
+            "json": ("r.json", f'{{{escaped}: "{secret}"}}\n'),
         }
         undeclared = {
             "markdown": ("s.md", "ordinary prose\n"),
@@ -1806,15 +1838,18 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                         self.assertTrue(
                             scan_paths([probe], root=root),
                             f"{label}: a declared format with no parser must "
-                            f"report an incomplete scan")
+                            f"report an incomplete scan",
+                        )
                 for label, (name, body) in undeclared.items():
                     probe = root / name
                     probe.write_text(body, encoding="utf-8")
                     with self.subTest(undeclared=label):
                         self.assertEqual(
-                            scan_paths([probe], root=root), [],
+                            scan_paths([probe], root=root),
+                            [],
                             f"{label}: a file that never claimed YAML must "
-                            f"stay clean without the parser")
+                            f"stay clean without the parser",
+                        )
 
     def test_every_exemption_in_every_pattern_rejects_a_continuation(self):
         """Asserted across ALL patterns, because that is the miss.
@@ -1831,20 +1866,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
         # (pattern, exempt value that must stay clean alone, real suffix)
         exemptions = [
-            ("private connector endpoint",
-             f'{address} = "{scheme}://example.com"', ".corp.com"),
-            ("private connector endpoint",
-             f'{address} = "{scheme}://tfe.invalid"', ".corp.com"),
-            ("private connector endpoint",
-             f'{address} = "{scheme}://localhost"', ".corp.com"),
-            ("connector identifier",
-             f'{tenant} = "tenant.example.com"', ".client.com"),
-            ("connector identifier",
-             f'{tenant} = "tenant.invalid"', ".client.com"),
-            ("connector organization",
-             f'{organization} = "your-org"', "-realclient"),
-            ("connector organization",
-             f'{organization} = "example-org"', "-realclient"),
+            ("private connector endpoint", f'{address} = "{scheme}://example.com"', ".corp.com"),
+            ("private connector endpoint", f'{address} = "{scheme}://tfe.invalid"', ".corp.com"),
+            ("private connector endpoint", f'{address} = "{scheme}://localhost"', ".corp.com"),
+            ("connector identifier", f'{tenant} = "tenant.example.com"', ".client.com"),
+            ("connector identifier", f'{tenant} = "tenant.invalid"', ".client.com"),
+            ("connector organization", f'{organization} = "your-org"', "-realclient"),
+            ("connector organization", f'{organization} = "example-org"', "-realclient"),
         ]
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1853,9 +1881,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 clean_probe.write_text(alone + "\n", encoding="utf-8")
                 with self.subTest(pattern=label, form="uncontinued"):
                     self.assertEqual(
-                        scan_paths([clean_probe], root=root), [],
-                        f"{alone}: an exempt value standing alone must stay "
-                        f"clean")
+                        scan_paths([clean_probe], root=root),
+                        [],
+                        f"{alone}: an exempt value standing alone must stay clean",
+                    )
 
                 # Every way the expression can continue past the exemption.
                 # The method-call forms are here rather than in a test of
@@ -1876,8 +1905,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     with self.subTest(pattern=label, form=style):
                         self.assertTrue(
                             scan_paths([probe], root=root),
-                            f"{continued}: a continued expression must not "
-                            f"inherit the exemption")
+                            f"{continued}: a continued expression must not inherit the exemption",
+                        )
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
@@ -1885,8 +1914,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         Plain substring removal deleted an approved literal wherever it
         appeared, including as the prefix of a longer real value -- which left
         a residue that matched nothing and reported the file clean."""
-        relative = Path(
-            ".github/instructions/self-explanatory-code-commenting.instructions.md")
+        relative = Path(".github/instructions/self-explanatory-code-commenting.instructions.md")
         # Assembled at runtime so this file does not carry the address itself.
         placeholder = "username" + "@" + "domain.extension"
         real = placeholder + ".client-corp.com"
@@ -1898,7 +1926,8 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "survive stripping and still be reported",
         )
         stripped_placeholder = strip_known_placeholders(
-            relative, f"write {placeholder} in the sample")
+            relative, f"write {placeholder} in the sample"
+        )
         self.assertIsNone(
             PATTERNS["email address"].search(stripped_placeholder),
             "the approved placeholder itself must still be stripped",
@@ -1914,10 +1943,11 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # long opaque token and was therefore invisible.
         domain = "customer" + ".onmicrosoft.com"
         with self.subTest(form="tenant domain", expect="flagged"):
-            self.assertIsNotNone(
-                pattern.search(f'{"AZURE" + "_TENANT_ID"} = "{domain}"'))
-        for probe in (f'{"AZURE" + "_TENANT_ID"} = "<your-tenant-id>"',
-                      f'{"TFE" + "_ADDRESS"} = "{"https" + "://"}app.terraform.io"'):
+            self.assertIsNotNone(pattern.search(f'{"AZURE" + "_TENANT_ID"} = "{domain}"'))
+        for probe in (
+            f'{"AZURE" + "_TENANT_ID"} = "<your-tenant-id>"',
+            f'{"TFE" + "_ADDRESS"} = "{"https" + "://"}app.terraform.io"',
+        ):
             with self.subTest(probe=probe, expect="clean"):
                 self.assertIsNone(pattern.search(probe))
 
@@ -1944,10 +1974,10 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 self.assertNotIn(
                     "upstream's public documentation, is obviously fabricated",
                     text,
-                    "publication is being treated as proof of synthesis")
+                    "publication is being treated as proof of synthesis",
+                )
                 self.assertIn("Publication upstream is not proof", text)
-                for criterion in ("RFC 2606", "RFC 5737",
-                                  "structurally impossible", "revoked"):
+                for criterion in ("RFC 2606", "RFC 5737", "structurally impossible", "revoked"):
                     with self.subTest(criterion=criterion):
                         self.assertIn(criterion, text)
 
@@ -2085,28 +2115,32 @@ class ReconstructionFidelityTest(unittest.TestCase):
         for label, document in {
             "sequence key": f"? [{name}]\n: {secret}\n",
             "multi-element sequence key": f"? [{name.split('_')[0]}, "
-                                          f"{'_'.join(name.split('_')[1:])}]\n"
-                                          f": {secret}\n",
+            f"{'_'.join(name.split('_')[1:])}]\n"
+            f": {secret}\n",
             "mapping key": f"? {{{name}: x}}\n: {secret}\n",
         }.items():
             with self.subTest(shape=label):
                 reconstructed = yaml_reconstructed_values(document)
                 self.assertNotIn(
-                    TRUNCATION_MARKER, reconstructed,
+                    TRUNCATION_MARKER,
+                    reconstructed,
                     "a key whose scalars ARE readable must be reconstructed, "
-                    "not written off as incomplete")
+                    "not written off as incomplete",
+                )
                 self.assertIn(
-                    name, reconstructed,
+                    name,
+                    reconstructed,
                     "the credential name in a complex key must reach the "
-                    "reconstruction, or the patterns never see it")
+                    "reconstruction, or the patterns never see it",
+                )
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             probe = root / "connector.yaml"
             probe.write_text(f"? [{name}]\n: {secret}\n", encoding="utf-8")
             self.assertTrue(
-                scan_paths([probe], root=root),
-                "a credential under a complex key must be reported")
+                scan_paths([probe], root=root), "a credential under a complex key must be reported"
+            )
 
 
 class SourceEscapeTest(unittest.TestCase):
@@ -2137,19 +2171,21 @@ class SourceEscapeTest(unittest.TestCase):
             spelled = f"{head}{escape}{tail}"
             with self.subTest(escape=label):
                 self.assertIn(
-                    f"{head}_{tail}", decode_source_escapes(spelled),
-                    "the decoder must resolve this escape to the name a "
-                    "consumer reads")
+                    f"{head}_{tail}",
+                    decode_source_escapes(spelled),
+                    "the decoder must resolve this escape to the name a consumer reads",
+                )
                 with tempfile.TemporaryDirectory() as temp:
                     root = Path(temp)
                     probe = root / "config.js"
                     probe.write_text(
-                        'const cfg = {"%s": "%s"};\n' % (spelled, secret),
-                        encoding="utf-8")
+                        f'const cfg = {{"{spelled}": "{secret}"}};\n', encoding="utf-8"
+                    )
                     self.assertTrue(
                         scan_paths([probe], root=root),
                         f"an escaped credential name ({label}) in executable "
-                        f"source must still be reported")
+                        f"source must still be reported",
+                    )
 
     def test_decoding_never_removes_a_reading_the_raw_text_carried(self):
         """This normaliser is additive or it is a bypass.
@@ -2163,8 +2199,8 @@ class SourceEscapeTest(unittest.TestCase):
                 self.assertEqual(
                     decode_source_escapes(f"KEY={escape}VALUE"),
                     f"KEY={escape}VALUE",
-                    "an escape resolving to whitespace or a control character "
-                    "must be left alone")
+                    "an escape resolving to whitespace or a control character must be left alone",
+                )
 
 
 class PathRelationshipTest(unittest.TestCase):
@@ -2172,21 +2208,21 @@ class PathRelationshipTest(unittest.TestCase):
 
     def test_adjacent_path_components_are_read_as_a_key_and_its_value(self):
         secret = "Xy7Q" + "secretValue" + "0192"
-        for name in ("AZURE" + "_CLIENT_SECRET", "TFE" + "_TOKEN",
-                     "GITHUB" + "_TOKEN"):
+        for name in ("AZURE" + "_CLIENT_SECRET", "TFE" + "_TOKEN", "GITHUB" + "_TOKEN"):
             with self.subTest(name=name):
                 self.assertTrue(
                     path_findings(Path(name) / f"{secret}.txt"),
                     "a credential name and its value split across a directory "
-                    "boundary must be reported")
+                    "boundary must be reported",
+                )
                 self.assertTrue(
                     path_findings(Path("intake") / name / f"{secret}.txt"),
-                    "nesting the pair deeper must not hide it either")
+                    "nesting the pair deeper must not hide it either",
+                )
 
     def test_unrelated_components_are_still_not_run_together(self):
         """The space-joined reading is why this stays true, and it must stay."""
-        self.assertEqual(
-            path_findings(Path("docs") / "architecture" / "overview.md"), [])
+        self.assertEqual(path_findings(Path("docs") / "architecture" / "overview.md"), [])
 
 
 class IntakeSelectionTest(unittest.TestCase):
@@ -2207,17 +2243,17 @@ class IntakeSelectionTest(unittest.TestCase):
             "ancestor of the selection": ("__pycache__", "bundle"),
             "git-named ancestor": (".git", "bundle"),
         }.items():
-            with self.subTest(placement=label), \
-                    tempfile.TemporaryDirectory() as temp:
+            with self.subTest(placement=label), tempfile.TemporaryDirectory() as temp:
                 bundle = Path(temp).joinpath(*parts)
                 bundle.mkdir(parents=True)
-                (bundle / "payload.toml").write_text(
-                    f'{token} = "{secret}"\n', encoding="utf-8")
+                (bundle / "payload.toml").write_text(f'{token} = "{secret}"\n', encoding="utf-8")
                 self.assertTrue(
-                    scan_paths([bundle], root=Path(temp),
-                               destinations={bundle: Path("vendor/new")}),
+                    scan_paths(
+                        [bundle], root=Path(temp), destinations={bundle: Path("vendor/new")}
+                    ),
                     "a directory the caller selected must be scanned whatever "
-                    "its ancestors are named")
+                    "its ancestors are named",
+                )
 
     def test_cache_directories_beneath_a_selection_are_still_skipped(self):
         """The exclusion has to keep working where it was aimed."""
@@ -2226,13 +2262,13 @@ class IntakeSelectionTest(unittest.TestCase):
             bundle = root / "bundle"
             (bundle / "__pycache__").mkdir(parents=True)
             (bundle / "__pycache__" / "payload.toml").write_text(
-                'TFE' + '_TOKEN = "Xy7Q' + 'secretValue' + '0192"\n',
-                encoding="utf-8")
+                "TFE" + '_TOKEN = "Xy7Q' + "secretValue" + '0192"\n', encoding="utf-8"
+            )
             (bundle / "readme.md").write_text("nothing here\n", encoding="utf-8")
             self.assertEqual(scan_paths([bundle], root=root), [])
 
     def test_a_selection_that_yields_no_targets_is_not_a_pass(self):
-        """"Zero targets" and "everything checked out" print identically on a
+        """ "Zero targets" and "everything checked out" print identically on a
         green gate, and the bundle whose contents were all filtered away is
         exactly the one worth looking at."""
         with tempfile.TemporaryDirectory() as temp:
@@ -2241,8 +2277,8 @@ class IntakeSelectionTest(unittest.TestCase):
             empty.mkdir()
             findings = scan_paths([empty], root=root)
             self.assertTrue(
-                findings, "an intake directory yielding nothing scannable "
-                          "must not report clean")
+                findings, "an intake directory yielding nothing scannable must not report clean"
+            )
             self.assertIn("nothing scannable", " ".join(findings))
 
 

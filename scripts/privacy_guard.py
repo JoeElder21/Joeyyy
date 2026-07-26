@@ -70,9 +70,11 @@ HOST_END = r"(?=[:/?#\s\"']|$)"
 # a bare dot class would have. The placeholder-stripping guard below has
 # treated a dot as a continuation since it was written, so leaving it out here
 # was an inconsistency inside one file, not a judgement about the shape.
-NOT_CONTINUED = (r"(?![\"']?[ \t]*[+%*\\])"
-                 r"(?![\"'][ \t]*[\"'`])"
-                 r"(?![\"']?[ \t]*\.[A-Za-z_])")
+NOT_CONTINUED = (
+    r"(?![\"']?[ \t]*[+%*\\])"
+    r"(?![\"'][ \t]*[\"'`])"
+    r"(?![\"']?[ \t]*\.[A-Za-z_])"
+)
 # The same idea for a quoted or bare VALUE: an exclusion is only safe when it
 # covers the entire value, not a prefix of one.
 VALUE_END = r"(?=[\s\"',}\]#]|$)"
@@ -191,7 +193,13 @@ PATTERNS = {
         r"name|company|team|tenant|client)?" + VALUE_END + NOT_CONTINUED + r")"
         r"(?!example[-_.]?(?:org|organization|workspace|name)?" + VALUE_END + NOT_CONTINUED + r")"
         r"(?!<)(?!placeholder" + VALUE_END + NOT_CONTINUED + r")"
-        r"(?!org" + VALUE_END + NOT_CONTINUED + r")(?!organization" + VALUE_END + NOT_CONTINUED + r")"
+        r"(?!org"
+        + VALUE_END
+        + NOT_CONTINUED
+        + r")(?!organization"
+        + VALUE_END
+        + NOT_CONTINUED
+        + r")"
         r"(?!workspace" + VALUE_END + NOT_CONTINUED + r")(?!name" + VALUE_END + NOT_CONTINUED + r")"
         # Each placeholder must also be an UNCONTINUED complete expression:
         # a slug built from an approved placeholder plus a second literal is
@@ -260,72 +268,73 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
     # that alters a sample fails the guard until the new literal is reviewed and pinned
     # here. That cost is the point.
     Path(".claude/agents/awesome-claude-agents/specialized/django/django-api-developer.md"): (
-        'a' + "pi_key = request.META.get('HTTP_X_API_KEY')",
-        'p' + "assword='testpass123'",
+        "a" + "pi_key = request.META.get('HTTP_X_API_KEY')",
+        "p" + "assword='testpass123'",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/django/django-backend-expert.md"): (
-        'test' + "@example.com'",
+        "test" + "@example.com'",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md"): (
-        'p' + 'assword = var.database_password',
+        "p" + "assword = var.database_password",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/django-expert.md"): (
-        'P' + "ASSWORD': get_env_variable('DB_PASSWORD'),",
-        'P' + "ASSWORD': get_env_variable('DB_READ_PASSWORD', default=get_env_variable('DB_PASSWORD')),",
+        "P" + "ASSWORD': get_env_variable('DB_PASSWORD'),",
+        "P"
+        + "ASSWORD': get_env_variable('DB_READ_PASSWORD', default=get_env_variable('DB_PASSWORD')),",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/fastapi-expert.md"): (
-        'P' + 'assword = Annotated[str',
-        'user' + '@example.com"',
-        'password: P' + 'assword = Field(description="Mot de passe (min 8 caractères)")',
+        "P" + "assword = Annotated[str",
+        "user" + '@example.com"',
+        "password: P" + 'assword = Field(description="Mot de passe (min 8 caractères)")',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/ml-data-expert.md"): (
-        'ml' + '@example.com"',
+        "ml" + '@example.com"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/python-expert.md"): (
-        'email' + '@example.com"',
-        'test' + '@example.com"',
-        'test' + '@example.com)>"',
-        'p' + 'assword="testpassword123"',
-        'nonexistent' + '@example.com"',
-        'newuser' + '@example.com"',
-        'p' + 'assword": "password123"',
+        "email" + '@example.com"',
+        "test" + '@example.com"',
+        "test" + '@example.com)>"',
+        "p" + 'assword="testpassword123"',
+        "nonexistent" + '@example.com"',
+        "newuser" + '@example.com"',
+        "p" + 'assword": "password123"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/security-expert.md"): (
-        'a' + 'ccess_token = self.jwt_manager.create_access_token(user)',
-        'a' + "ccess_token': access_token",
-        'user' + '@example.com"',
+        "a" + "ccess_token = self.jwt_manager.create_access_token(user)",
+        "a" + "ccess_token': access_token",
+        "user" + '@example.com"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/testing-expert.md"): (
-        'john' + '@example.com"',
-        'jane' + '@example.com"',
-        'admin' + '@example.com"',
-        'test' + '@example.com"',
-        'new' + '@example.com"',
-        'p' + 'assword": "secure_password"',
-        'wrong' + '@example.com"',
-        'p' + 'assword="password"',
-        'recipient' + '@example.com"',
-        'user1' + '@example.com"',
-        'user2' + '@example.com"',
-        'user3' + '@example.com"',
-        'a' + 'pi_key="sk_test_123"',
-        'c' + 'lient_secret": "pi_123456_secret_abc"',
-        'newuser' + '@example.com"',
-        'p' + 'assword": "secure_password123"',
-        'auth' + '@example.com"',
-        'update' + '@example.com"',
-        'customer' + '@example.com"',
-        '12' + '3 Main St"',
-        'unique' + '@example.com"',
-        'p' + 'assword": "password123"',
-        'p' + 'assword": "valid_password123"',
+        "john" + '@example.com"',
+        "jane" + '@example.com"',
+        "admin" + '@example.com"',
+        "test" + '@example.com"',
+        "new" + '@example.com"',
+        "p" + 'assword": "secure_password"',
+        "wrong" + '@example.com"',
+        "p" + 'assword="password"',
+        "recipient" + '@example.com"',
+        "user1" + '@example.com"',
+        "user2" + '@example.com"',
+        "user3" + '@example.com"',
+        "a" + 'pi_key="sk_test_123"',
+        "c" + 'lient_secret": "pi_123456_secret_abc"',
+        "newuser" + '@example.com"',
+        "p" + 'assword": "secure_password123"',
+        "auth" + '@example.com"',
+        "update" + '@example.com"',
+        "customer" + '@example.com"',
+        "12" + '3 Main St"',
+        "unique" + '@example.com"',
+        "p" + 'assword": "password123"',
+        "p" + 'assword": "valid_password123"',
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/rails/rails-api-developer.md"): (
-        'a' + 'ccess_token: tokens[:access_token]',
-        'a' + 'ccess_token: encode_token(',
+        "a" + "ccess_token: tokens[:access_token]",
+        "a" + "ccess_token: encode_token(",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/rails/rails-backend-expert.md"): (
-        'p' + 'assword: password',
+        "p" + "assword: password",
     ),
 }
 
@@ -446,9 +455,11 @@ def _yaml_loader():
         pass
 
     _Tolerant.add_multi_constructor(
-        "", lambda loader, suffix, node: _construct_unknown(loader, node))
+        "", lambda loader, suffix, node: _construct_unknown(loader, node)
+    )
     _Tolerant.add_multi_constructor(
-        "tag:", lambda loader, suffix, node: _construct_unknown(loader, node))
+        "tag:", lambda loader, suffix, node: _construct_unknown(loader, node)
+    )
     return _Tolerant
 
 
@@ -729,13 +740,13 @@ def toml_reconstructed_values(text: str) -> str:
 
 
 _ESCAPED_CHAR = re.compile(
-    r"\\u\{([0-9A-Fa-f]{1,6})\}"      # ES6 \u{5f}
-    r"|\\[uU]([0-9A-Fa-f]{4,8})"      # \u005f, \U0000005f
-    r"|\\x([0-9A-Fa-f]{2})"           # \x5f
-    r"|\\([0-7]{1,3})"                # \137
-    r"|%([0-9A-Fa-f]{2})"             # %5F
-    r"|&#x([0-9A-Fa-f]{1,6});"        # &#x5f;
-    r"|&#([0-9]{1,7});"               # &#95;
+    r"\\u\{([0-9A-Fa-f]{1,6})\}"  # ES6 \u{5f}
+    r"|\\[uU]([0-9A-Fa-f]{4,8})"  # \u005f, \U0000005f
+    r"|\\x([0-9A-Fa-f]{2})"  # \x5f
+    r"|\\([0-7]{1,3})"  # \137
+    r"|%([0-9A-Fa-f]{2})"  # %5F
+    r"|&#x([0-9A-Fa-f]{1,6});"  # &#x5f;
+    r"|&#([0-9]{1,7});"  # &#95;
 )
 
 
@@ -749,8 +760,10 @@ def _decoded_char(match: re.Match[str]) -> str:
         elif ent_dec is not None:
             code = int(ent_dec, 10)
         else:
-            code = int(next(g for g in (hex_braced, hex_esc, hex_byte,
-                                        percent, ent_hex) if g is not None), 16)
+            code = int(
+                next(g for g in (hex_braced, hex_esc, hex_byte, percent, ent_hex) if g is not None),
+                16,
+            )
         char = chr(code)
     except (ValueError, OverflowError):
         return match.group(0)
@@ -808,8 +821,7 @@ def strip_yaml_node_properties(text: str) -> str:
     anchor AND the value together.
     """
     anchors = {
-        match.group("name"): match.group("value")
-        for match in _YAML_ANCHOR_DEF.finditer(text)
+        match.group("name"): match.group("value") for match in _YAML_ANCHOR_DEF.finditer(text)
     }
     if anchors:
         text = _YAML_ALIAS.sub(
@@ -982,10 +994,11 @@ def path_findings(relative: Path) -> list[str]:
     """
     parts = str(relative).replace("\\", "/").split("/")
     probes = (" ".join(parts), "=".join(parts))
-    return [f"{relative}: possible {label} in the file path"
-            for label, pattern in applicable_patterns(relative).items()
-            if any(pattern.search(probe) for probe in probes)]
-
+    return [
+        f"{relative}: possible {label} in the file path"
+        for label, pattern in applicable_patterns(relative).items()
+        if any(pattern.search(probe) for probe in probes)
+    ]
 
 
 def submodule_paths(root: Path = ROOT) -> frozenset[str]:
@@ -1211,7 +1224,8 @@ def scan_repository(root: Path = ROOT) -> list[str]:
 
 
 def _scan_files(
-    paths: list[Path], root: Path = ROOT,
+    paths: list[Path],
+    root: Path = ROOT,
     destinations: dict[Path, Path] | None = None,
 ) -> list[str]:
     """Scan `paths`. `destinations` maps a scanned path to the repo-relative
@@ -1268,7 +1282,9 @@ def _scan_files(
             findings.append(f"{relative}: non-UTF-8 file is not allowed in this public source tree")
             continue
         if text.startswith(LFS_POINTER_PREFIX):
-            findings.append(f"{relative}: Git LFS pointer is not allowed in this public source tree")
+            findings.append(
+                f"{relative}: Git LFS pointer is not allowed in this public source tree"
+            )
         # Parser output FIRST, regex normalisation underneath. The parser is
         # authoritative where it works; the normalisers stay so a missing
         # PyYAML, a non-YAML file, or an oversized document degrades to partial
@@ -1296,13 +1312,12 @@ def _scan_files(
         # escapes, and read clean. The scanner has explicit JSON support in its
         # patterns; the completeness check has to cover the same formats the
         # patterns claim.
-        declared = (
-            (suffix in {".yaml", ".yml", ".json"}
-             and TRUNCATION_MARKER in yaml_values)
-            or (suffix == ".toml" and TRUNCATION_MARKER in toml_values)
+        declared = (suffix in {".yaml", ".yml", ".json"} and TRUNCATION_MARKER in yaml_values) or (
+            suffix == ".toml" and TRUNCATION_MARKER in toml_values
         )
-        reconstructions = [value.replace(TRUNCATION_MARKER, "")
-                           for value in (yaml_values, toml_values)]
+        reconstructions = [
+            value.replace(TRUNCATION_MARKER, "") for value in (yaml_values, toml_values)
+        ]
         # The RAW text is scanned alongside every normalised copy. Each
         # normaliser is destructive by design -- strip_yaml_node_properties
         # deletes anchors and tags so the value beneath them can be read -- and
@@ -1313,13 +1328,15 @@ def _scan_files(
         # readings, never remove one.
         scannable = strip_known_placeholders(
             relative,
-            "\n".join([
-                text,
-                fold_toml_multiline(
-                    fold_block_scalars(strip_yaml_node_properties(text))),
-                decode_source_escapes(text),
-                *reconstructions,
-            ]))
+            "\n".join(
+                [
+                    text,
+                    fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text))),
+                    decode_source_escapes(text),
+                    *reconstructions,
+                ]
+            ),
+        )
         # A file that declares a parseable format and could not be parsed, or
         # was cut short, has had part of itself matched against nothing. Report
         # that rather than letting the patterns that did run stand in for the
@@ -1332,7 +1349,8 @@ def _scan_files(
                 "reconstruction could not be completed (unparseable, too "
                 "large, too deeply nested, or past the value budget), so part "
                 "of this file was never matched. Fix the syntax, split the "
-                "file, or review it by hand.")
+                "file, or review it by hand."
+            )
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")
@@ -1340,7 +1358,8 @@ def _scan_files(
 
 
 def scan_paths(
-    paths: list[Path], root: Path = ROOT,
+    paths: list[Path],
+    root: Path = ROOT,
     destinations: dict[Path, Path] | None = None,
 ) -> list[str]:
     """Scan exactly these paths, tracked or not, recursing into directories.
@@ -1435,7 +1454,7 @@ def main(argv: list[str] | None = None) -> int:
     separated = "--" in argv
     if separated:
         marker = argv.index("--")
-        argv, literal_paths = argv[:marker], argv[marker + 1:]
+        argv, literal_paths = argv[:marker], argv[marker + 1 :]
 
     if not separated and argv and argv[0] in ("-h", "--help"):
         print(
@@ -1460,7 +1479,7 @@ def main(argv: list[str] | None = None) -> int:
             print("--as requires a repo-relative destination path")
             return 2
         destination = Path(argv[marker + 1])
-        argv = argv[:marker] + argv[marker + 2:]
+        argv = argv[:marker] + argv[marker + 2 :]
 
     given = argv + literal_paths
     if destination is not None:
@@ -1470,8 +1489,7 @@ def main(argv: list[str] | None = None) -> int:
         destinations[Path(given[0])] = destination
 
     if given:
-        findings = scan_paths([Path(arg) for arg in given],
-                              destinations=destinations)
+        findings = scan_paths([Path(arg) for arg in given], destinations=destinations)
         label = f"Privacy guard passed for {len(given)} given path(s)."
     else:
         findings = scan_repository()

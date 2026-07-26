@@ -35,22 +35,23 @@ import json
 import re
 import tomllib
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from scripts.agent_runtime import (
-    AuditLedger,
-    HandoffRejected,
-    admit_delegation,
-    validate_specialist_return,
-)
 from runtime.value_meter import (
     ObservationRejected,
     ValueLedger,
     ValuePolicy,
     build_observation,
+)
+from scripts.agent_runtime import (
+    AuditLedger,
+    HandoffRejected,
+    admit_delegation,
+    validate_specialist_return,
 )
 from scripts.packet_guard import PacketGuard
 
@@ -182,9 +183,7 @@ class MissionSpec:
         if not self.definition_of_done:
             raise MissionRejected(f"{self.agent}: mission has no definition of done")
         if len(self.definition_of_done_ids) != len(self.definition_of_done):
-            raise MissionRejected(
-                f"{self.agent}: every definition-of-done entry needs a stable id"
-            )
+            raise MissionRejected(f"{self.agent}: every definition-of-done entry needs a stable id")
         if not self.evidence:
             raise MissionRejected(
                 f"{self.agent}: a controlled mission needs at least one evidence record; "
@@ -337,15 +336,11 @@ class MissionRunner:
         # Lifecycle evidence and value evidence are written by the same call, so
         # a mission cannot land in the promotion record while leaving no trace of
         # what it cost Joe.
-        self.value_ledger = ValueLedger(
-            value_ledger_path or (root / "audit" / "value.jsonl")
-        )
+        self.value_ledger = ValueLedger(value_ledger_path or (root / "audit" / "value.jsonl"))
         # Load the policy from *this* runner's root. Using the module-global
         # default meant a runner pointed at a staged or temporary checkout was
         # measured against the policy of a different repository.
-        self.value_policy = value_policy or ValuePolicy.load(
-            root / "config" / "value_policy.toml"
-        )
+        self.value_policy = value_policy or ValuePolicy.load(root / "config" / "value_policy.toml")
 
     # ---------------------------------------------------------------- prepare
 
@@ -413,15 +408,15 @@ class MissionRunner:
 
         errors = self.guard.validate(DELEGATION_SCHEMA, delegation)
         if errors:
-            raise MissionRejected(
-                f"{spec.agent}: delegation packet failed PacketGuard: {errors}"
-            )
+            raise MissionRejected(f"{spec.agent}: delegation packet failed PacketGuard: {errors}")
 
         # Fail-closed admission: schema, addressee match, and the brain lock.
         try:
             admit_delegation(delegation, spec.agent, self._agent_runtime_roster(), self.guard)
         except HandoffRejected as rejection:
-            raise MissionRejected(f"{spec.agent}: delegation refused admission: {rejection}")
+            raise MissionRejected(
+                f"{spec.agent}: delegation refused admission: {rejection}"
+            ) from rejection
 
         self.ledger.append(
             "mission_prepared",
@@ -439,7 +434,7 @@ class MissionRunner:
             spec=spec,
             meta=meta,
             delegation=delegation,
-            prepared_at=datetime.now(timezone.utc).isoformat(),
+            prepared_at=datetime.now(UTC).isoformat(),
             contract_sha=self.contract_sha(spec.agent),
         )
 
@@ -479,17 +474,13 @@ class MissionRunner:
             )
 
         # 1. The return must be a schema-valid 2.1 handoff bound to this delegation.
-        schema_errors = self.guard.validate(
-            HANDOFF_SCHEMA, handoff, delegations=[delegation]
-        )
+        schema_errors = self.guard.validate(HANDOFF_SCHEMA, handoff, delegations=[delegation])
         errors.extend(schema_errors)
 
         # 2. It must survive the runtime's own return validation.
         errors.extend(
             f"return: {error}"
-            for error in validate_specialist_return(
-                handoff, self.guard, delegations=[delegation]
-            )
+            for error in validate_specialist_return(handoff, self.guard, delegations=[delegation])
         )
 
         # 3. Connector isolation: the specialist must not claim external action,
@@ -534,9 +525,7 @@ class MissionRunner:
         if handoff.get("proposed_writes") and prepared.meta.get("status") == "shadow":
             for write in handoff["proposed_writes"]:
                 if isinstance(write, dict) and write.get("performed"):
-                    errors.append(
-                        "lifecycle: shadow-stage specialist reported a performed write"
-                    )
+                    errors.append("lifecycle: shadow-stage specialist reported a performed write")
 
         status = str(handoff.get("status", "unknown"))
         typed_return_valid = not schema_errors
@@ -548,9 +537,7 @@ class MissionRunner:
         # performed write, is a boundary incident — not merely a failed run that
         # ages out of the window.
         boundary_markers = ("owner_brain", "sensitivity", "brain", "lifecycle:")
-        if any(
-            marker in error.lower() for error in errors for marker in boundary_markers
-        ):
+        if any(marker in error.lower() for error in errors for marker in boundary_markers):
             connector_isolation_verified = False
 
         mission_sound = status == "completed" and not errors
@@ -558,7 +545,7 @@ class MissionRunner:
             accepted_first_pass = False
             output_rejected = True
 
-        completed_at = datetime.now(timezone.utc).isoformat()
+        completed_at = datetime.now(UTC).isoformat()
         value_observation = {
             "mode": delegation["mode"],
             "agent": delegation["agent"],
@@ -615,9 +602,7 @@ class MissionRunner:
         # evidence never qualifies. So the flag is set to what the write is
         # about to achieve, the mission record lands first, and a failure to
         # record value emits a compensating entry that revokes the claim.
-        evidence.real_evidence = all(
-            record.source_type != "synthetic" for record in spec.evidence
-        )
+        evidence.real_evidence = all(record.source_type != "synthetic" for record in spec.evidence)
         evidence.value_recorded = pending_observation is not None
         evidence.ledger_entry = self.ledger.append("mission_completed", evidence.to_json())
 
@@ -707,9 +692,7 @@ class MissionRunner:
                     brain=detail.get("brain", ""),
                     status=detail.get("status", "unknown"),
                     typed_return_valid=bool(detail.get("typed_return_valid")),
-                    connector_isolation_verified=bool(
-                        detail.get("connector_isolation_verified")
-                    ),
+                    connector_isolation_verified=bool(detail.get("connector_isolation_verified")),
                     readback_performed=bool(detail.get("readback_performed")),
                     errors=list(detail.get("errors", [])),
                     ledger_entry=entry,
@@ -721,9 +704,7 @@ class MissionRunner:
                 )
             )
         # Drop missions whose value record was later revoked by a compensation.
-        surviving = [
-            evidence for evidence in recovered if evidence.delegation_id not in revoked
-        ]
+        surviving = [evidence for evidence in recovered if evidence.delegation_id not in revoked]
 
         # Read-time reconciliation. A crash between the mission append and the
         # value append (or while writing the compensation) leaves a record
@@ -752,9 +733,7 @@ class MissionRunner:
 
     def _agent_runtime_roster(self) -> dict[str, dict[str, Any]]:
         """Roster shape expected by scripts.agent_runtime.admit_delegation."""
-        return {
-            name: {"brain": meta["brain"]} for name, meta in self.roster.items()
-        }
+        return {name: {"brain": meta["brain"]} for name, meta in self.roster.items()}
 
     @staticmethod
     def _cited_source_refs(handoff: dict[str, Any]) -> set[str]:
@@ -953,9 +932,7 @@ class CatalogEntry:
 
 def load_mission_catalog(root: Path = ROOT) -> dict[str, CatalogEntry]:
     """Load the prepared missions from ``config/mission_catalog.toml``."""
-    raw = tomllib.loads(
-        (root / "config" / "mission_catalog.toml").read_text(encoding="utf-8")
-    )
+    raw = tomllib.loads((root / "config" / "mission_catalog.toml").read_text(encoding="utf-8"))
     catalog: dict[str, CatalogEntry] = {}
     for entry in raw.get("mission", []):
         catalog[entry["key"]] = CatalogEntry(

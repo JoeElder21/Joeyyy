@@ -126,7 +126,10 @@ class OverviewMeasurementTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         completed = subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
-            cwd=root, capture_output=True, text=True, check=False,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
             env={**os.environ, "JOEYYY_SUITE_SELFCHECK": "1"},
         )
         output = completed.stderr + completed.stdout
@@ -135,13 +138,14 @@ class OverviewMeasurementTests(unittest.TestCase):
         measured = int(ran.group(1))
         modules = len(list((root / "tests").glob("test_*.py")))
 
-        overview = (root / "docs" / "REPOSITORY_OVERVIEW.md").read_text(
-            encoding="utf-8")
+        overview = (root / "docs" / "REPOSITORY_OVERVIEW.md").read_text(encoding="utf-8")
         # Every asserted suite size in the document must be the measured one.
         published = set(re.findall(r"(\d{3,4}) tests", overview))
         self.assertTrue(published, "the overview states no suite size")
         self.assertEqual(
-            published, {str(measured)},
+            published,
+            {str(measured)},
             f"the overview publishes {sorted(published)} but the mandated "
-            f"command reports {measured}")
+            f"command reports {measured}",
+        )
         self.assertIn(f"{modules} unittest modules", overview)
