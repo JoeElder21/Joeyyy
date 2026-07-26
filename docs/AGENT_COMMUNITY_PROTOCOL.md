@@ -111,6 +111,12 @@ Before changing 007:
 
 Never absorb credentials, secrets, private content, unsupported access claims, another agent's identity, or weaker safeguards.
 
+## Framework adapters and checkpoints
+
+Frameworks may supply runtime mechanics, not governance authority. Any AutoGen-style conversation manager, LangGraph-style state graph, crew-style role/task wrapper, Prefect-style flow, memory/retrieval layer, or tool abstraction must consume and return the existing PacketGuard-valid packet contracts. Agent 007 remains the only cross-brain coordinator and final integrator; APEX and JEOS sessions, memories, indexes, checkpoints, and artifact stores remain separate.
+
+Before a runtime adapter sends a delegation, resumes a checkpoint, or executes a mutation, it validates the current packet, brain ownership, active lease, approval scope, and connector isolation. A manager cannot select a participant outside the owner brain, change a registered mode or artifact requirement, or declare completion when the typed handoff has not validated. High-impact actions pause in `awaiting_approval`; a timeout, restart, or checkpoint never implies approval. The staged implementation and rollback evidence are in `docs/FRAMEWORK_ABSORPTION_PLAN.md`.
+
 ## Error learning
 
 Log material failures as:

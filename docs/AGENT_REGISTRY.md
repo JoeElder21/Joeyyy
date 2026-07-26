@@ -91,6 +91,11 @@ See `docs/ROSTER_MIGRATION_2026-07-23.md` for the reversible migration record.
 
 ## Candidate infrastructure and tools
 
+| Infrastructure | Status | Owner layer | Evidence | Scope and boundary |
+|---|---|---|---|---|
+| JSON Schema structural validator | adopted contract dependency | `scripts/packet_guard.py` | `requirements.txt`; `docs/FRAMEWORK_ABSORPTION_PLAN.md` | Validates Draft 2020-12 packet shape before Agent 007 relational checks; no runtime agent, connector, memory, or scheduler is enabled. |
+| Multi-agent/runtime framework adapters | candidate | Agent 007 only | `docs/FRAMEWORK_ABSORPTION_PLAN.md` | AutoGen, LangGraph, crewAI, Prefect, Mem0, LlamaIndex, LangChain, and Pydantic are staged patterns only; each requires a bounded, evidence-led trial before use. |
+
 External tools under evaluation for the ecosystem. These are not agents; they are infrastructure that agents would use. None may be treated as available until validated in its target environment. Source analysis: `docs/ECOSYSTEM_REPO_ANALYSIS.md` (2026-07-23).
 
 ### Civil 3D MCP connector (barbosaihan/civil3d-mcp)

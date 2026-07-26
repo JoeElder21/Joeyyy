@@ -1,0 +1,2 @@
+# Runtime-independent validation dependency for the Agent 007 packet contracts.
+jsonschema>=4.23,<5

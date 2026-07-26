@@ -185,6 +185,19 @@ class PacketContractTests(unittest.TestCase):
         )
         return delegation, handoff
 
+    def test_jsonschema_collects_multiple_structural_errors(self):
+        malformed = deepcopy(self.delegation)
+        malformed.pop("mission")
+        malformed["owner_brain"] = "OTHER"
+        malformed["unexpected"] = True
+        errors = self.guard.validate(
+            "delegation_packet.schema.json", malformed, [self.lease], historical=True
+        )
+        self.assertGreaterEqual(len(errors), 3)
+        self.assertTrue(any("required property" in error for error in errors), errors)
+        self.assertTrue(any("not one of" in error for error in errors), errors)
+        self.assertTrue(any("unexpected" in error for error in errors), errors)
+
     def test_valid_delegation_and_handoff_are_bound_to_lease_and_origin(self):
         self.assertValid("delegation_packet.schema.json", self.delegation, [self.lease])
         self.assertValid(

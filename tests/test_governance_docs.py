@@ -9,6 +9,7 @@ BUILDOUT_PATH = ROOT / "docs" / "CIVIL3D_MCP_BUILDOUT.md"
 TRIAL_PATH = ROOT / "docs" / "EXECUTION_LAYER_TRIAL.md"
 REGISTRY_PATH = ROOT / "docs" / "AGENT_REGISTRY.md"
 README_PATH = ROOT / "README.md"
+FRAMEWORK_PLAN_PATH = ROOT / "docs" / "FRAMEWORK_ABSORPTION_PLAN.md"
 
 
 class EcosystemGovernanceDocTests(unittest.TestCase):
@@ -69,6 +70,19 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
             "Civil 3D MCP connector",
             "docs/CIVIL3D_MCP_BUILDOUT.md",
             "docs/EXECUTION_LAYER_TRIAL.md",
+            "docs/FRAMEWORK_ABSORPTION_PLAN.md",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+    def test_framework_plan_keeps_runtime_honesty_and_guardrails(self):
+        text = FRAMEWORK_PLAN_PATH.read_text(encoding="utf-8")
+        for phrase in [
+            "No orchestration, memory, retrieval, scheduler, or LLM framework is installed or invoked",
+            "jsonschema",
+            "Agent 007 is the sole cross-brain coordinator",
+            "awaiting_approval",
+            "## Acceptance evidence and rollback",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
@@ -80,6 +94,7 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
             "docs/ABSORBED_PATTERNS.md",
             "docs/CIVIL3D_MCP_BUILDOUT.md",
             "docs/EXECUTION_LAYER_TRIAL.md",
+            "docs/FRAMEWORK_ABSORPTION_PLAN.md",
         ]:
             with self.subTest(doc=name):
                 self.assertIn(name, text)

@@ -12,6 +12,9 @@ import tomllib
 from typing import Any, Iterable
 import unicodedata
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY = {"public": 0, "internal": 1, "confidential": 2, "restricted": 3}
@@ -23,56 +26,27 @@ ACTION_FIELDS = {
 BOUNDARY_BLOCKER = "BOUNDARY_SCOPE_REJECTED"
 
 
-def _matches_type(value: Any, expected: str | list[str]) -> bool:
-    if isinstance(expected, list):
-        return any(_matches_type(value, item) for item in expected)
-    mapping = {
-        "object": dict,
-        "array": list,
-        "string": str,
-        "boolean": bool,
-        "null": type(None),
-    }
-    return isinstance(value, mapping[expected])
+def _json_path(error_path: Iterable[Any]) -> str:
+    """Render a jsonschema error path in the established PacketGuard style."""
+    result = "$"
+    for component in error_path:
+        result += f"[{component}]" if isinstance(component, int) else f".{component}"
+    return result
 
 
-def _structural_errors(instance: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
-    errors: list[str] = []
-    if "type" in schema and not _matches_type(instance, schema["type"]):
-        return [f"{path}: expected {schema['type']}"]
-    if "const" in schema and instance != schema["const"]:
-        errors.append(f"{path}: expected const {schema['const']!r}")
-    if "enum" in schema and instance not in schema["enum"]:
-        errors.append(f"{path}: not in enum")
-    if isinstance(instance, str):
-        if len(instance) < schema.get("minLength", 0):
-            errors.append(f"{path}: string too short")
-        if "maxLength" in schema and len(instance) > schema["maxLength"]:
-            errors.append(f"{path}: string too long")
-        if "pattern" in schema and not re.fullmatch(schema["pattern"], instance):
-            errors.append(f"{path}: pattern mismatch")
-    if isinstance(instance, list):
-        if len(instance) < schema.get("minItems", 0):
-            errors.append(f"{path}: too few items")
-        if "maxItems" in schema and len(instance) > schema["maxItems"]:
-            errors.append(f"{path}: too many items")
-        for index, item in enumerate(instance):
-            if "items" in schema:
-                errors.extend(_structural_errors(item, schema["items"], f"{path}[{index}]"))
-    if isinstance(instance, dict):
-        required = set(schema.get("required", []))
-        missing = required - set(instance)
-        if missing:
-            errors.append(f"{path}: missing {sorted(missing)}")
-        properties = schema.get("properties", {})
-        if schema.get("additionalProperties") is False:
-            extras = set(instance) - set(properties)
-            if extras:
-                errors.append(f"{path}: extras {sorted(extras)}")
-        for key, value in instance.items():
-            if key in properties:
-                errors.extend(_structural_errors(value, properties[key], f"{path}.{key}"))
-    return errors
+def _structural_errors(instance: Any, validator: Draft202012Validator) -> list[str]:
+    """Collect every JSON Schema violation before relational validation.
+
+    PacketGuard owns deployment-specific relationships (brain isolation, leases,
+    and delegation provenance). The canonical jsonschema implementation owns
+    draft-2020-12 structural semantics so schema behavior is identical in CI
+    and at a future runtime boundary.
+    """
+    errors = sorted(
+        validator.iter_errors(instance),
+        key=lambda error: (tuple(map(str, error.absolute_path)), error.message),
+    )
+    return [f"{_json_path(error.absolute_path)}: {error.message}" for error in errors]
 
 
 class PacketGuard:
@@ -96,6 +70,13 @@ class PacketGuard:
             path.name: json.loads(path.read_text(encoding="utf-8"))
             for path in (root / "schemas").glob("*.schema.json")
         }
+        try:
+            self.validators = {}
+            for name, schema in self.schemas.items():
+                Draft202012Validator.check_schema(schema)
+                self.validators[name] = Draft202012Validator(schema)
+        except SchemaError as error:
+            raise ValueError(f"invalid PacketGuard JSON Schema: {error.message}") from error
 
     def validate(
         self,
@@ -111,7 +92,7 @@ class PacketGuard:
     ) -> list[str]:
         if schema_name not in self.schemas:
             return [f"$: unknown schema {schema_name}"]
-        errors = _structural_errors(packet, self.schemas[schema_name])
+        errors = _structural_errors(packet, self.validators[schema_name])
         if errors:
             return errors
         errors.extend(self._identifier_errors(packet))
