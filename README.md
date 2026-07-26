@@ -65,6 +65,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `vendor/` — external repositories installed as pinned git submodules; provenance, declared dependencies, and boundaries in `vendor/README.md`. Fetch with `git submodule update --init --recursive`.
 - `connectors/relay/` — declared `agent-relay` dependency for the vendored Agent Relay transport; a declaration only, with no relay server configured.
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
+- `.opencodereview/rule.json` + `scripts/open_code_review.sh` — pinned, fail-closed Open Code Review integration for deterministic APEX review selection and governed Claude/Codex delegation; see `docs/OPEN_CODE_REVIEW_INTEGRATION.md`.
 - `scripts/agent_runtime.py` — governed-handoff runtime bridge on the OpenAI Agents SDK: fail-closed packet admission, brain-locked topology, hash-chained audit ledger.
 - `docs/AGENT_RUNTIME_BRIDGE.md` — runtime-bridge record: contract-to-runtime mapping, measured dispatch-overhead reduction, boundaries, and rollback.
 - `scripts/claude_runtime.py` — Claude-native governed dispatch: typed Anthropic tool definitions, fail-closed ToolUseBlock handling, mission streaming.
