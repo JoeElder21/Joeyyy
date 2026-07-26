@@ -1177,3 +1177,79 @@ class DirtyTreeEvidenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TelemetryOrderingTests(unittest.TestCase):
+    """The opt-out must precede the import that probes for the SDK.
+
+    `coverage_report()` calls `deepeval_available()`, whose probe IS
+    `import deepeval`, and `execute()` called `assert_telemetry_disabled()` only
+    after the report was built. So the package was imported -- and any hosted
+    logging client it constructs from environment or persisted login state at
+    import time was constructed -- while telemetry was still enabled. The later
+    check could refuse the run; the boundary it exists to establish had already
+    been crossed.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "evals"))
+        import run_evaluations
+
+        self.module = run_evaluations
+
+    def test_a_logged_in_workstation_is_refused_before_the_probe(self):
+        # Behavioural rather than structural: if the refusal happens at all
+        # inside `coverage_report()`, it happens before that function's own
+        # import probe, because the call is its first statement. Setting the key
+        # is the one input that makes the refusal observable.
+        import os
+
+        original = os.environ.get("CONFIDENT_API_KEY")
+        os.environ["CONFIDENT_API_KEY"] = "test-not-a-real-key"
+        try:
+            with self.assertRaises(self.module.UnsafeRun):
+                self.module.coverage_report()
+        finally:
+            if original is None:
+                os.environ.pop("CONFIDENT_API_KEY", None)
+            else:
+                os.environ["CONFIDENT_API_KEY"] = original
+
+    def test_the_opt_out_precedes_the_availability_probe(self):
+        # And structurally, because the behavioural test above would still pass
+        # if the call were merely somewhere in the function while the probe ran
+        # first. Parsed, not grepped: a mention in a comment must not satisfy it.
+        import ast
+        import inspect
+
+        tree = ast.parse(inspect.getsource(self.module.coverage_report).lstrip())
+        calls = [
+            (node.lineno, node.func.id)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        ]
+        telemetry = [line for line, name in calls if name == "assert_telemetry_disabled"]
+        probe = [line for line, name in calls if name == "deepeval_available"]
+        self.assertTrue(telemetry, "coverage_report no longer locks telemetry")
+        self.assertTrue(probe, "coverage_report no longer probes for the runtime")
+        self.assertLess(
+            max(telemetry),
+            min(probe),
+            "the availability probe imports deepeval; locking telemetry after it is "
+            "too late to establish the boundary",
+        )
+
+    def test_the_execution_path_still_refuses_independently(self):
+        # The second call in `execute()` is kept on purpose. This asserts it is
+        # still there, so a later refactor cannot leave the refusal in only one
+        # place and rely on call order nobody re-checks.
+        import ast
+        import inspect
+
+        tree = ast.parse(inspect.getsource(self.module.execute).lstrip())
+        names = [
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        ]
+        self.assertIn("assert_telemetry_disabled", names)

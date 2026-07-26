@@ -35,7 +35,9 @@ carries its reasons, and callers with a ledger get both outcomes recorded.
 from __future__ import annotations
 
 import datetime
+import functools
 import hmac
+import json
 import posixpath
 import re
 import sys
@@ -127,6 +129,109 @@ HIGH_IMPACT_VERBS = {
     "overwrite": "irreversible_bulk_deletion",
 }
 
+# Four keys above are NOUNS as much as verbs, and the map is named for verbs.
+# Because the classifier scanned every token, `read_invoice`, `view_post`,
+# `get_purchase` and `inspect_transfer` were classified as financial
+# transactions and public publications -- so INSPECTING a high-impact record
+# demanded Joe's personally signed instruction. Reading an invoice is not paying
+# it.
+#
+# Listed explicitly rather than fixed by matching only the leading token,
+# which was the first attempt and is a fail-open: `force_publish` and
+# `admin_grant_access` lead with a token that is in no map, and a leading-only
+# rule waves both through. The linguistic fact is narrow -- these four words,
+# and only these, name a thing as well as an act -- so the exemption is narrow
+# too. `publish`, `send`, `pay`, `revoke` and the rest gate from any position,
+# which is what keeps `read_and_publish_report` gated.
+NOUN_CAPABLE_HIGH_IMPACT = frozenset({"post", "purchase", "invoice", "transfer"})
+# Verbs that inspect rather than act. A read LEADING the action means the mapped
+# noun after it is the object being read, not the act being performed.
+READ_VERBS = frozenset(
+    {
+        "read",
+        "view",
+        "get",
+        "list",
+        "inspect",
+        "show",
+        "describe",
+        "fetch",
+        "preview",
+        "search",
+        "query",
+        "find",
+        "count",
+        "summarize",
+    }
+)
+
+# Credential and access-control changes. `AGENTS.md` §9 reserves
+# "access-control or credential changes", and only four bare verbs were mapped
+# -- `revoke`, `grant`, `rotate`, `authorize`. The spellings a dispatcher
+# actually emits (`reset_password`, `change_credentials`,
+# `update_access_control`, `delete_api_key`, `set_permissions`, `disable_mfa`)
+# matched none of them and required no instruction at all.
+#
+# Compound verb+noun, like the legal, schedule, and governance rules, and for
+# the reason learned three times: the bare verbs here are the most generic in
+# the vocabulary. Mapping `update`, `change`, `set` or `delete` on their own
+# would gate nearly every mutation in the repository.
+CREDENTIAL_VERBS = frozenset(
+    {
+        "reset",
+        "change",
+        "update",
+        "delete",
+        "remove",
+        "add",
+        "set",
+        "disable",
+        "enable",
+        "modify",
+        "rotate",
+        "revoke",
+        "grant",
+        "issue",
+        "generate",
+        "regenerate",
+        "replace",
+    }
+)
+CREDENTIAL_NOUNS = frozenset(
+    {
+        "password",
+        "passwd",
+        "credential",
+        "credentials",
+        "secret",
+        "secrets",
+        "token",
+        "tokens",
+        "apikey",
+        "key",
+        "keys",
+        "keypair",
+        "mfa",
+        "2fa",
+        "totp",
+        "permission",
+        "permissions",
+        "acl",
+        "access",
+        "role",
+        "roles",
+        "scope",
+        "scopes",
+        "collaborator",
+        "collaborators",
+        "membership",
+        "privilege",
+        "privileges",
+        "grant",
+        "grants",
+    }
+)
+
 # `binding_legal_commitment` was in HIGH_IMPACT_ACTIONS from the start with NO
 # verb mapped to it, so it fired only when a caller volunteered the category
 # name as its own action -- the "controls that ask the caller to incriminate
@@ -192,7 +297,32 @@ SUBMISSION_QUALIFIERS = frozenset({"permit", "agency", "final", "submission"})
 # boundaries survive -- `unschedule` and `rescheduled` carry the marker while
 # `multitasking` does not acquire one.
 SCHEDULE_MARKERS = ("schedul", "cron", "crontab", "timer")
-SCHEDULE_VERBS = frozenset({"create", "delete", "remove", "add", "register", "unregister"})
+# Constructive and destructive alike. The list held only `create`/`delete`/
+# `remove`/`add`/`register`/`unregister`, so `destroy_schedule`, `erase_cron`,
+# `cancel_scheduled_task`, `disable_cron` and `clear_timer` carried the marker,
+# named a deletion, and skipped the boundary entirely -- the same
+# alternate-vocabulary gap as the credential verbs below, in the category this
+# round had just narrowed. Narrowing a rule is exactly when its verb list needs
+# re-reading: the previous round removed `task` and did not ask what other
+# spellings the remaining verbs missed.
+SCHEDULE_VERBS = frozenset(
+    {
+        "create",
+        "delete",
+        "remove",
+        "add",
+        "register",
+        "unregister",
+        "destroy",
+        "erase",
+        "cancel",
+        "disable",
+        "clear",
+        "drop",
+        "purge",
+        "wipe",
+    }
+)
 # Verb forms OF scheduling, which need no separate change verb because they are
 # one. Checked only in leading position.
 SCHEDULE_ACT_VERBS = frozenset({"schedule", "unschedule", "reschedule"})
@@ -306,6 +436,13 @@ AUTHORIZATION_SCHEMAS = frozenset(
 # AGENTS.md, while specialists are in shadow, Agent 007 alone executes and
 # verifies mutations.
 NON_EXECUTING_STAGES = frozenset({"candidate", "shadow", "restricted", "deprecated", "retired"})
+# The allowlist the lifecycle gate actually reads. `NON_EXECUTING_STAGES` is kept
+# because `evals/harness.py` imports it to describe which stages a proposed
+# write may come from, but a DENYLIST is the wrong shape for an authorization
+# decision: it has to enumerate every stage that will ever exist, and the one it
+# misses is permitted. `None` was that one -- an agent with no `status` in the
+# brain manifest matched no entry and was allowed to mutate.
+EXECUTING_STAGE = "active"
 
 CHIEF = "apex_chief_of_staff"
 
@@ -667,10 +804,80 @@ class PolicyEnforcementPoint:
         # this enforcement point exists to eliminate. Found by running it.
         self.manifest = _load_brain_manifests(root)
         self.brain_prefixes = _load_brain_prefixes(root)
+        # Stamped so `_refresh_lifecycle_source` can tell "unchanged since I
+        # loaded it" from "never loaded". Recorded AFTER the load above, and
+        # from the same helper the refresh uses, so a manifest edited between
+        # construction and the first authorization is still detected.
+        self._manifest_signature_seen = self._manifest_signature()
         self._mounts_cache: frozenset[str] | None = None
+
+    def _manifest_signature(self) -> tuple[tuple[str, int, int], ...]:
+        """(path, mtime_ns, size) for each brain manifest that exists.
+
+        Size as well as mtime: a filesystem with coarse mtime granularity can
+        record two writes in the same tick, and a lifecycle demotion that lands
+        inside that tick must not be the one change this misses. Neither field
+        is a content hash, so this is a staleness detector, not an integrity
+        check -- an edit that preserves both is invisible to it. Hashing every
+        authorization was the alternative and is a per-call read of both files
+        for a property that mtime already answers.
+        """
+        signature = []
+        for brain in ("apex", "jeos"):
+            path = self.root / "brains" / brain / "agents.toml"
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            signature.append((str(path), stat.st_mtime_ns, stat.st_size))
+        return tuple(signature)
+
+    def _refresh_lifecycle_source(self) -> None:
+        """Re-read the brain manifests when they have changed on disk.
+
+        `__init__` read them once, so a long-lived enforcement point kept
+        whatever lifecycle stage was current when it was constructed. A
+        specialist demoted to `restricted` or `retired` in the canonical
+        manifest went on being authorized as `active` by every already-running
+        process -- authority surviving its own revocation, which is the one
+        thing a lifecycle gate exists to prevent. Reproduced by rewriting the
+        manifest after construction and watching `_spec()` still return the old
+        stage.
+
+        Reloaded on CHANGE rather than on every call: re-parsing two TOML files
+        per authorization is a cost paid on the hot path for a fact that only
+        changes when Joe edits a manifest. `brain_prefixes` is refreshed in the
+        same breath, because it is derived from the same files and a rule
+        reading a stale prefix while its sibling reads a fresh stage is worse
+        than both being stale.
+
+        Failure to reload is deliberately NOT swallowed into "keep the old
+        values". A manifest that has become unreadable is not evidence that
+        everyone keeps their previous authority, so the cached copy is dropped
+        and `_spec()` returns the roster alone, which carries no `status`.
+
+        The first version of this note claimed the call site already failed
+        closed on an absent status. **It did not** -- `_lifecycle_stage` tested
+        membership of a denylist, and `None` is in no frozenset, so dropping the
+        cache handed every agent unrestricted authority. The test written for
+        this reload is what caught it; the comment was asserting an intention
+        rather than a checked fact. `_lifecycle_stage` now names the one stage
+        that may execute.
+        """
+        signature = self._manifest_signature()
+        if signature == self._manifest_signature_seen:
+            return
+        try:
+            self.manifest = _load_brain_manifests(self.root)
+            self.brain_prefixes = _load_brain_prefixes(self.root)
+        except (OSError, tomllib.TOMLDecodeError):
+            self.manifest = {}
+            self.brain_prefixes = {}
+        self._manifest_signature_seen = signature
 
     def _spec(self, agent: str) -> dict[str, Any]:
         """Merged view: brain manifest wins, roster fills the rest."""
+        self._refresh_lifecycle_source()
         merged = dict(self.roster.get(agent) or {})
         merged.update(self.manifest.get(agent) or {})
         return merged
@@ -1734,6 +1941,7 @@ class PolicyEnforcementPoint:
         errors.extend(self._packet_namespace_errors(request, packet))
         errors.extend(self._packet_operation_errors(request, packet))
         errors.extend(self._packet_concurrency_errors(request, packet))
+        errors.extend(self._packet_action_errors(request, packet))
         return errors
 
     def _prohibited_scope_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
@@ -1976,6 +2184,73 @@ class PolicyEnforcementPoint:
                 )
         return errors
 
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def _delegation_action_vocabulary() -> frozenset[str]:
+        """The six actions `allowed_actions` can name, read from the schema.
+
+        Read rather than restated. A hand-copied list here and an `enum` there
+        are two enforceable answers to one question, and this module has already
+        paid for that twice -- once with the launch-grant field list, once with
+        the boundary categories. If the schema grows a seventh action, this rule
+        sees it without an edit.
+        """
+        schema = json.loads(
+            (ROOT / "schemas" / "delegation_packet.schema.json").read_text(encoding="utf-8")
+        )
+        return frozenset(schema["properties"]["allowed_actions"]["items"]["enum"])
+
+    def _packet_action_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
+        """An action the delegation withheld is not authorized by holding it.
+
+        `allowed_actions` is a REQUIRED field of the delegation schema and no
+        rule read it -- the same shape as the concurrency controls two rounds
+        ago: the issuer states a bound and the gate ignores it. A delegation
+        permitting only `analyze` raised no objection to a `handoff`.
+
+        **What this binds, and what it deliberately does not.** The schema's
+        `allowed_actions` is a six-value enum of COLLABORATION actions
+        (`analyze`, `draft`, `propose`, `challenge`, `handoff`,
+        `read_packet_evidence`), while `ToolRequest.action` carries dispatcher
+        verbs (`read`, `write`, `list`, `read_record`). The two are different
+        vocabularies. So this refuses an action that IS in the packet's
+        vocabulary and was not granted, and leaves dispatcher verbs to the
+        namespace, target, operation and lease bindings that already govern them.
+
+        A stricter rule -- deny anything not literally listed -- was written
+        first and reverted: it denied every `read` and `write` in the suite,
+        because no dispatcher verb is a member of that enum. That is fail-shut
+        on the entire lawful path, which this record has produced three times by
+        tightening a comparison across two vocabularies.
+
+        **The residual gap is real and is Joe's to close.** A request naming
+        `list` against a delegated namespace is still admitted on the strength
+        of `allowed_read_namespaces`, because nothing maps `list` onto the
+        collaboration vocabulary. Closing it needs either a dispatcher-verb
+        mapping in the packet contract or a widened enum -- a change to
+        `schemas/`, which this branch does not touch. Recorded in
+        docs/REPO_OPTIMIZATION_2026-07-25.md with the other narrower-binding
+        decisions.
+        """
+        declared = packet.get("allowed_actions")
+        if not isinstance(declared, list):
+            # A validated packet always carries the list. Treated as absent
+            # rather than raising, matching how the sibling packet rules handle
+            # a malformed field.
+            return []
+        vocabulary = self._delegation_action_vocabulary()
+        action = request.action.strip().lower()
+        if action not in vocabulary:
+            return []
+        permitted = {str(entry).strip().lower() for entry in declared}
+        if action not in permitted:
+            return [
+                f"packet permits actions {sorted(permitted)}; {action!r} is a delegation "
+                "action it withheld, and holding a delegation does not grant what its "
+                "issuer declined to delegate"
+            ]
+        return []
+
     def _packet_namespace_errors(self, request: ToolRequest, packet: dict[str, Any]) -> list[str]:
         """The packet must authorize *this* resource, not merely exist.
 
@@ -2152,6 +2427,27 @@ class PolicyEnforcementPoint:
             token in LEGAL_COMMITMENT_NOUNS for token in tokens
         ):
             return "binding_legal_commitment"
+        if any(token in CREDENTIAL_VERBS for token in tokens) and any(
+            token in CREDENTIAL_NOUNS for token in tokens
+        ):
+            return "credential_or_access_change"
+
+        # A read of a high-impact NOUN is not the high-impact act.
+        #
+        # The map below is keyed by verb, but four of its keys -- post,
+        # purchase, invoice, transfer -- are nouns too, and this loop scanned
+        # every token. So `read_invoice`, `view_post`, `get_purchase` and
+        # `inspect_transfer` were financial transactions and public
+        # publications requiring Joe's signature to LOOK at a record.
+        #
+        # Scoped as narrowly as the fact it encodes: the leading token must be a
+        # read verb AND every mapped token present must be one of the four
+        # noun-capable words. `read_and_publish_report` still gates, because
+        # `publish` is a verb and nothing else.
+        if tokens and tokens[0] in READ_VERBS:
+            mapped = [token for token in tokens if token in HIGH_IMPACT_VERBS]
+            if mapped and all(token in NOUN_CAPABLE_HIGH_IMPACT for token in mapped):
+                return folded
 
         for token in tokens:
             if token in HIGH_IMPACT_VERBS:
@@ -2159,15 +2455,36 @@ class PolicyEnforcementPoint:
         return folded
 
     def _lifecycle_stage(self, request: ToolRequest) -> list[str]:
+        """Only `active` executes. An UNKNOWN stage is not an active one.
+
+        The rule was `if stage in NON_EXECUTING_STAGES`, and `None` is in no
+        frozenset -- so an agent whose brain manifest carries no `status`, or
+        which is absent from the manifests entirely while present in the roster,
+        raised no objection and could mutate. Absence of a stage read as
+        permission, which is the defect this module has removed from scope,
+        operations, and packets and had left in the lifecycle gate.
+
+        Found by a test written for the reload above: dropping the manifest cache
+        when it becomes unreadable produced exactly this state, and the comment
+        I wrote claimed the call site already failed closed. It did not. The
+        claim was checked only because the test asserted the behaviour rather
+        than the intention.
+
+        Inverted to an allowlist for the same reason the mutating-verb list was
+        inverted in round 7: a denylist of non-executing stages must enumerate
+        every stage that ever exists, and the one it misses is permitted. Only
+        `active` executes, so `active` is what this names.
+        """
         if not request.mutating or request.agent == CHIEF:
             return []
         stage = self._spec(request.agent).get("status")
-        if stage in NON_EXECUTING_STAGES:
-            return [
-                f"{request.agent!r} is in {stage!r}; only {CHIEF} executes and verifies "
-                "mutations while specialists are pre-active"
-            ]
-        return []
+        if stage == EXECUTING_STAGE:
+            return []
+        described = repr(stage) if stage else "unknown (no status in the brain manifest)"
+        return [
+            f"{request.agent!r} is in {described}; only {CHIEF} executes and verifies "
+            f"mutations while specialists are not {EXECUTING_STAGE!r}"
+        ]
 
     def _high_impact_boundary(self, request: ToolRequest) -> list[str]:
         """The boundary AGENTS.md reserves for Joe, verified rather than asserted.

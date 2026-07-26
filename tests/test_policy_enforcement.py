@@ -16,11 +16,13 @@ actually executed.
 import dataclasses
 import datetime
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 from runtime.writer_lease import LeaseRegistry
+from scripts import policy_enforcement  # noqa: E402
 from scripts.agent_runtime import AuditLedger
 from scripts.policy_enforcement import (
     AUTHORIZATION_SCHEMAS,
@@ -3590,3 +3592,424 @@ class ThirtyFifthPassRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThirtySixthPassRegressionTests(unittest.TestCase):
+    """Four classifier findings and the delegation action allowlist.
+
+    Two of the four are consequences of the previous round's own narrowing, and
+    one is the general case of a defect that round fixed only for schedules.
+    """
+
+    # F1: credential and access-control changes. Only `revoke`, `grant`,
+    # `rotate` and `authorize` were mapped, so the spellings a dispatcher emits
+    # required no instruction at all.
+    CREDENTIAL_GATED = (
+        "reset_password",
+        "change_credentials",
+        "update_access_control",
+        "delete_api_key",
+        "set_permissions",
+        "disable_mfa",
+        "add_collaborator",
+        "change_password",
+        "update_acl",
+        "regenerate_secret",
+        "remove_role",
+        "issue_credentials",
+        "enable_2fa",
+        "replace_keypair",
+        "resetPassword",
+        "deleteApiKey",
+    )
+    # The reverse direction. These verbs are the most generic in the vocabulary,
+    # so a bare-verb map would have gated most of the repository's mutations.
+    CREDENTIAL_UNGATED = (
+        "read_password",
+        "view_permissions",
+        "list_roles",
+        "get_token",
+        "inspect_acl",
+        "describe_access",
+        "update_record",
+        "create_document",
+        "generate_report",
+        "update_title",
+        "set_status",
+        "add_comment",
+        "remove_draft",
+    )
+    # F4: destructive schedule vocabulary, missing because the PREVIOUS round
+    # narrowed this rule without re-reading its verb list.
+    SCHEDULE_GATED = (
+        "destroy_schedule",
+        "erase_cron",
+        "cancel_scheduled_task",
+        "disable_cron",
+        "clear_timer",
+        "cancel_cron",
+        "purge_crontab",
+        "drop_schedule",
+        "wipe_scheduled_task",
+        "cancelScheduledTask",
+    )
+    SCHEDULE_UNGATED = ("cancel_task", "disable_agent", "clear_cache", "cancel_meeting")
+    # F6: reading a high-impact NOUN is not the act. `post`, `purchase`,
+    # `invoice` and `transfer` are nouns sitting in a map named for verbs.
+    READ_UNGATED = (
+        "read_invoice",
+        "view_post",
+        "get_purchase",
+        "inspect_transfer",
+        "list_transfers",
+        "show_invoice",
+        "describe_post",
+        "find_purchase",
+        "count_invoices",
+        "summarize_transfers",
+        "fetch_post",
+        "query_purchase",
+    )
+    # The fail-open a leading-token-only fix would have opened. Each of these
+    # leads with a token in no map, or leads with a read verb while naming a
+    # pure high-impact VERB later.
+    STILL_GATED = (
+        "publish_report",
+        "post_update",
+        "send_email",
+        "transfer_funds",
+        "pay_invoice",
+        "purchase_license",
+        "invoice_client",
+        "read_and_publish_report",
+        "read_then_send_email",
+        # These two exist because two mutants survived without them.
+        #
+        # `transfer_and_get_receipt` separates "the LEADING token is a read verb"
+        # from "a read verb appears anywhere": the act leads, and a read verb
+        # follows. Matching anywhere exempts it and lets a funds transfer
+        # through.
+        "transfer_and_get_receipt",
+        "post_and_list_updates",
+        # And these separate ALL mapped tokens being noun-capable from ANY of
+        # them being so. Both carry a noun-capable token AND a pure act verb, so
+        # `any` grants the exemption while `all` correctly withholds it.
+        "read_invoice_and_publish_it",
+        "view_post_and_send_email",
+        "force_publish",
+        "admin_grant_access",
+        "broadcast_notice",
+        "sign_contract",
+        "purge_originals",
+    )
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _gated(self, action):
+        return PolicyEnforcementPoint._boundary_category(action) in HIGH_IMPACT_ACTIONS
+
+    def test_credential_and_access_changes_reach_the_boundary(self):
+        for action in self.CREDENTIAL_GATED:
+            with self.subTest(action=action):
+                self.assertEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "credential_or_access_change",
+                    f"{action} changes credentials or access and AGENTS.md reserves it",
+                )
+
+    def test_ordinary_mutations_are_not_credential_changes(self):
+        for action in self.CREDENTIAL_UNGATED:
+            with self.subTest(action=action):
+                self.assertFalse(
+                    self._gated(action),
+                    f"{action} is ordinary work; the credential verbs are generic enough "
+                    "that a bare-verb map would gate most of this repository",
+                )
+
+    def test_destructive_schedule_vocabulary_is_recognised(self):
+        for action in self.SCHEDULE_GATED:
+            with self.subTest(action=action):
+                self.assertEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "scheduled_task_change",
+                    f"{action} deletes a schedule under a different verb",
+                )
+
+    def test_destruction_without_a_schedule_marker_is_not_gated(self):
+        for action in self.SCHEDULE_UNGATED:
+            with self.subTest(action=action):
+                self.assertNotEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "scheduled_task_change",
+                    f"{action} names no schedule",
+                )
+
+    def test_reading_a_high_impact_record_is_not_the_act(self):
+        for action in self.READ_UNGATED:
+            with self.subTest(action=action):
+                self.assertFalse(
+                    self._gated(action),
+                    f"{action} inspects a record; requiring Joe's signature to LOOK at "
+                    "an invoice is the over-gate this fixes",
+                )
+
+    def test_the_acts_themselves_are_still_gated(self):
+        for action in self.STILL_GATED:
+            with self.subTest(action=action):
+                self.assertTrue(
+                    self._gated(action),
+                    f"{action} performs a reserved act; a leading-token-only exemption "
+                    "would have waved it through",
+                )
+
+    def test_only_noun_capable_verbs_get_the_read_exemption(self):
+        # The exemption's whole scope. If a pure verb ever joins this set, every
+        # `read_*` spelling of that verb stops being gated.
+        from scripts.policy_enforcement import NOUN_CAPABLE_HIGH_IMPACT
+
+        self.assertEqual(NOUN_CAPABLE_HIGH_IMPACT, {"post", "purchase", "invoice", "transfer"})
+        for verb in ("publish", "send", "pay", "revoke", "purge", "sign"):
+            with self.subTest(verb=verb):
+                self.assertNotIn(verb, NOUN_CAPABLE_HIGH_IMPACT)
+                self.assertTrue(self._gated(f"read_{verb}_thing"))
+
+    def test_every_mapped_category_is_a_declared_boundary(self):
+        # A category the classifier can return but HIGH_IMPACT_ACTIONS does not
+        # list is a gate that never fires -- the round-32 finding, re-asserted
+        # because this round added a fifth compound rule.
+        from scripts.policy_enforcement import HIGH_IMPACT_VERBS
+
+        for category in set(HIGH_IMPACT_VERBS.values()) | {
+            "credential_or_access_change",
+            "scheduled_task_change",
+        }:
+            with self.subTest(category=category):
+                self.assertIn(category, HIGH_IMPACT_ACTIONS)
+
+
+class DelegationActionAllowlistTests(unittest.TestCase):
+    """`allowed_actions` is required by the schema and no rule read it.
+
+    The same shape as the concurrency controls two rounds earlier: the issuer
+    states a bound and the gate ignores it.
+    """
+
+    def setUp(self):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        base, _ = PacketContractTests().v21_readonly_pair()
+        self.base = json.loads(json.dumps(base))
+        # Evidence emptied deliberately. `PacketGuard` requires
+        # `read_packet_evidence` in `allowed_actions` whenever a delegation
+        # carries evidence, so with evidence present the action cannot be
+        # withheld and this rule has nothing to refuse. Establishing that was
+        # the difference between a demonstrable control and dead code.
+        self.base["allowed_evidence"] = []
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _decide(self, allowed_actions, action="read_packet_evidence"):
+        packet = json.loads(json.dumps(self.base))
+        packet["allowed_actions"] = allowed_actions
+        return self.pep.evaluate(
+            ToolRequest(
+                agent=self.base["agent"],
+                action=action,
+                resource=self.base["memory_namespace"],
+                owner_brain=self.base["owner_brain"],
+                packet=packet,
+                resource_id=self.base["resource_id"],
+            )
+        )
+
+    def test_a_withheld_delegation_action_is_refused(self):
+        decision = self._decide(["analyze"])
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("withheld" in reason for reason in decision.reasons), decision.reasons)
+
+    def test_a_granted_delegation_action_is_allowed(self):
+        # The control. Differs from the case above in `allowed_actions` ALONE,
+        # which is what attributes the denial to the action rule rather than to
+        # the namespace, lease, or operation bindings that also run.
+        decision = self._decide(["read_packet_evidence", "analyze"])
+        self.assertTrue(decision.allowed, decision.reasons)
+
+    def test_dispatcher_verbs_are_left_to_the_other_bindings(self):
+        # A stricter rule -- deny anything not literally listed -- denies every
+        # `read` and `write`, because no dispatcher verb is a member of the
+        # schema's six-value enum. That is fail-shut on the whole lawful path.
+        for action in ("read", "read_record", "list"):
+            with self.subTest(action=action):
+                decision = self._decide(["analyze"], action=action)
+                self.assertFalse(
+                    any("withheld" in reason for reason in decision.reasons),
+                    f"{action} is dispatcher vocabulary, not a delegation action: "
+                    f"{decision.reasons}",
+                )
+
+    def test_the_vocabulary_comes_from_the_schema(self):
+        # Restating the enum here and in the schema is two enforceable answers
+        # to one question. If the schema grows a seventh action, the rule must
+        # see it without an edit.
+        schema = json.loads(
+            (ROOT / "schemas" / "delegation_packet.schema.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            PolicyEnforcementPoint._delegation_action_vocabulary(),
+            frozenset(schema["properties"]["allowed_actions"]["items"]["enum"]),
+        )
+
+
+class LifecycleReloadTests(unittest.TestCase):
+    """A demoted specialist must not keep authority in a running process.
+
+    `__init__` read the brain manifests once, so a long-lived enforcement point
+    kept whatever stage was current when it was constructed. A specialist
+    demoted to `restricted` or `retired` in the canonical manifest went on being
+    authorized as `active` by every already-running process -- authority
+    surviving its own revocation, which is precisely what a lifecycle gate
+    exists to prevent.
+    """
+
+    AGENT = "apex_war_architect"
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp()) / "repo"
+        # Only what construction reads: the roster, the brain manifests, the
+        # schemas PacketGuard compiles, and the mount config. Copying the whole
+        # tree pulled in node_modules and made this the slowest test in the
+        # suite for no added coverage.
+        self.tmp.mkdir(parents=True)
+        for relative in (".codex", "brains", "schemas", "config"):
+            source = ROOT / relative
+            if source.exists():
+                shutil.copytree(source, self.tmp / relative)
+        self.manifest = self.tmp / "brains" / "apex" / "agents.toml"
+        self.original = self.manifest.read_text(encoding="utf-8")
+        self.pep = PolicyEnforcementPoint(self.tmp, clock=lambda: NOW)
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp.parent, ignore_errors=True)
+
+    def _set_status(self, status):
+        lines, current = [], None
+        for line in self.original.splitlines():
+            match = re.match(r"\[agents\.([a-z0-9_]+)\]", line.strip())
+            if match:
+                current = match.group(1)
+            if current == self.AGENT and line.strip().startswith("status"):
+                line = f'status = "{status}"'
+            lines.append(line)
+        self.manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _mutating_request(self):
+        return ToolRequest(
+            agent=self.AGENT,
+            action="write",
+            resource="APEX/Strategy-Campaigns",
+            owner_brain="APEX",
+            mutating=True,
+        )
+
+    def test_a_promotion_after_construction_is_seen(self):
+        # The direction that proves the reload is real rather than the cache
+        # merely being cleared: an agent PROMOTED to active stops being refused
+        # by the lifecycle rule. Without this, "still denied" would be
+        # indistinguishable from "reload broken and everything denies".
+        self._set_status("active")
+        self.assertEqual(self.pep._spec(self.AGENT).get("status"), "active")
+        self.assertEqual(self.pep._lifecycle_stage(self._mutating_request()), [])
+
+    def test_a_demotion_after_construction_revokes_authority(self):
+        self._set_status("active")
+        self.assertEqual(self.pep._lifecycle_stage(self._mutating_request()), [])
+        self._set_status("retired")
+        reasons = self.pep._lifecycle_stage(self._mutating_request())
+        self.assertTrue(reasons, "a retired specialist kept the authority it was demoted out of")
+        self.assertIn("retired", reasons[0])
+
+    def test_an_unreadable_manifest_does_not_preserve_authority(self):
+        # Failure to reload must not mean "everyone keeps what they had". A
+        # manifest that has become unparseable is not evidence of anyone's
+        # stage, so the cache is dropped rather than retained.
+        self._set_status("active")
+        self.assertEqual(self.pep._lifecycle_stage(self._mutating_request()), [])
+        self.manifest.write_text("this is not valid toml = = =\n", encoding="utf-8")
+        self.assertTrue(
+            self.pep._lifecycle_stage(self._mutating_request()),
+            "an unreadable manifest left the previous 'active' stage in force",
+        )
+
+    def test_an_unchanged_manifest_is_not_reparsed(self):
+        # The reload is keyed on a change signature so the hot path does not
+        # re-parse two TOML files per authorization. If this ever reloads
+        # unconditionally, the cost is paid on every call.
+        calls = []
+        original = policy_enforcement._load_brain_manifests
+
+        def counted(root):
+            calls.append(root)
+            return original(root)
+
+        policy_enforcement._load_brain_manifests = counted
+        try:
+            for _ in range(5):
+                self.pep._spec(self.AGENT)
+            self.assertEqual(calls, [], "unchanged manifests were re-parsed")
+            self._set_status("active")
+            self.pep._spec(self.AGENT)
+            self.assertEqual(len(calls), 1, "a changed manifest was not re-parsed exactly once")
+        finally:
+            policy_enforcement._load_brain_manifests = original
+
+    def test_the_signature_notices_a_same_size_edit(self):
+        # mtime AND size, because either alone misses a case: a status swapped
+        # between two equal-length words leaves the size identical.
+        before = self.pep._manifest_signature()
+        self._set_status("active")
+        self.assertNotEqual(before, self.pep._manifest_signature())
+
+    def test_an_agent_with_no_status_may_not_mutate(self):
+        # The fail-open the reload test surfaced, asserted on its own terms
+        # rather than only through the unreadable-manifest path. `None` is in no
+        # frozenset, so a denylist of non-executing stages permitted it.
+        # Drop the status line inside THIS agent's table only, so every other
+        # agent keeps its stage and the denial is attributable to this one.
+        lines, current, removed = [], None, 0
+        for line in self.original.splitlines():
+            match = re.match(r"\[agents\.([a-z0-9_]+)\]", line.strip())
+            if match:
+                current = match.group(1)
+            if current == self.AGENT and line.strip().startswith("status"):
+                removed += 1
+                continue
+            lines.append(line)
+        self.assertEqual(removed, 1, "the fixture removed no status line, so it tests nothing")
+        self.manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.assertIsNone(self.pep._spec(self.AGENT).get("status"))
+        reasons = self.pep._lifecycle_stage(self._mutating_request())
+        self.assertTrue(reasons, "an agent with no lifecycle stage was allowed to mutate")
+        self.assertIn("unknown", reasons[0])
+
+    def test_only_the_active_stage_executes(self):
+        # Every stage the manifests can carry, plus the absent case. A denylist
+        # would have to enumerate all of them; this asserts the allowlist.
+        from scripts.policy_enforcement import EXECUTING_STAGE, NON_EXECUTING_STAGES
+
+        self._set_status(EXECUTING_STAGE)
+        self.assertEqual(self.pep._lifecycle_stage(self._mutating_request()), [])
+        for stage in sorted(NON_EXECUTING_STAGES) + ["invented_stage", ""]:
+            with self.subTest(stage=stage):
+                self._set_status(stage)
+                self.assertTrue(
+                    self.pep._lifecycle_stage(self._mutating_request()),
+                    f"stage {stage!r} is not {EXECUTING_STAGE!r} and must not execute",
+                )

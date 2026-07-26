@@ -270,6 +270,21 @@ def provenance() -> dict:
 
 
 def coverage_report() -> dict:
+    # The opt-out is established BEFORE anything imports the SDK.
+    #
+    # `deepeval_available()` at the end of this function imports `deepeval` as
+    # its probe, and `execute()` called `assert_telemetry_disabled()` only after
+    # `coverage_report()` returned. So the package was imported -- and any
+    # hosted-logging client it initializes from environment or persisted login
+    # state at import time was constructed -- while telemetry was still enabled.
+    # The later check could refuse the RUN, but the boundary it exists to
+    # establish was already crossed by the probe.
+    #
+    # Called here rather than only in `execute()` because this function is the
+    # one that imports, and a control placed anywhere other than before the
+    # import is documentation. It is idempotent: `setdefault` on the variables,
+    # and the refusals raise on the same inputs every time.
+    assert_telemetry_disabled()
     coverage = build_coverage()
     cases = load_cases()
     report = coverage.summary()
@@ -312,6 +327,13 @@ def execute(stamp: str | None) -> int:
     # Both of these raise rather than warn. A run that uploads private mission
     # context, or one that overwrites the previous run's evidence, is worse than
     # no run at all — and neither is recoverable after the fact.
+    #
+    # Kept here as well as in `coverage_report()`, deliberately. The call there
+    # is the load-bearing one because it precedes the import; this one keeps the
+    # refusal on the execution path even if `execute()` is ever changed to build
+    # its report differently, and it re-raises for an environment mutated
+    # between the two. Two calls to an idempotent refusal cost nothing; a single
+    # call in the wrong place cost the whole boundary.
     assert_telemetry_disabled()
     identifier = run_id(stamp)
 

@@ -1664,6 +1664,104 @@ read. Thirty-eight probes, both directions, exhaustive rather than sampled
 because every previous round of this rule was correct in one direction and wrong
 in the other. Four mutants killed, including the two intermediate states above.
 
+### Thirty-sixth pass — six findings, and a fail-open inside one of the fixes
+
+Two of the six are consequences of the previous round's own narrowing, and one
+is the general case of a defect that round fixed only for schedules. That is the
+dominant pattern of this whole record, arriving again.
+
+**Credential and access-control changes were not gated.** `AGENTS.md` §9
+reserves "access-control or credential changes" and only four bare verbs were
+mapped — `revoke`, `grant`, `rotate`, `authorize`. The spellings a dispatcher
+actually emits matched none: `reset_password`, `change_credentials`,
+`update_access_control`, `delete_api_key`, `set_permissions`, `disable_mfa`.
+Now a compound verb+noun rule, like the legal, schedule, and governance rules,
+because the verbs here (`update`, `change`, `set`, `delete`) are the most
+generic in the vocabulary and mapping them bare would gate nearly every
+mutation in the repository.
+
+**The destructive half of the schedule vocabulary was missing —** and it went
+missing *because of round 35*. `destroy_schedule`, `erase_cron`,
+`cancel_scheduled_task`, `disable_cron` and `clear_timer` all carried the
+scheduling marker, named a deletion, and skipped the boundary. Narrowing a rule
+is precisely when its verb list needs re-reading; the previous round removed
+`task` and never asked what the remaining verbs missed.
+
+**Reading a high-impact record demanded Joe's signature.** `post`, `purchase`,
+`invoice` and `transfer` are **nouns** sitting in a map named
+`HIGH_IMPACT_VERBS`, and the classifier scanned every token — so `read_invoice`,
+`view_post`, `get_purchase` and `inspect_transfer` were financial transactions
+and public publications. This is the general case of the `read_schedule`
+over-gate fixed one round earlier for schedules alone: **the instance was fixed
+and the class was left.**
+
+The obvious repair — match only the leading token — is a fail-open, and it was
+written and reverted: `force_publish` and `admin_grant_access` lead with a token
+in no map. The exemption is instead scoped to the linguistic fact it encodes:
+the leading token must be a read verb **and** every mapped token present must be
+one of those four noun-capable words. `read_and_publish_report` still gates.
+
+**`allowed_actions` was a required schema field no rule read** — the same shape
+as the concurrency controls three rounds earlier. Now bound, with a limit worth
+stating plainly: the schema's `allowed_actions` is a six-value enum of
+*collaboration* actions while `ToolRequest.action` carries *dispatcher* verbs,
+and they are different vocabularies. So the rule refuses an action that is in
+the packet's vocabulary and was withheld, and leaves dispatcher verbs to the
+namespace, target, operation and lease bindings. The stricter rule — deny
+anything not literally listed — was tried and reverted because it denied every
+`read` and `write` in the suite. **The residual gap is real and is Joe's:** a
+request naming `list` against a delegated namespace is still admitted, and
+closing it needs a dispatcher-verb mapping or a widened enum in `schemas/`,
+which this branch does not touch.
+
+Establishing that the new rule is *reachable at all* took a third attempt.
+Every collaboration action except `read_packet_evidence` classifies as a
+mutation and is denied earlier on write scope, and `PacketGuard` requires
+`read_packet_evidence` in `allowed_actions` whenever a delegation carries
+evidence — so with evidence present the action cannot be withheld and the rule
+has nothing to refuse. It is demonstrable only for a delegation with empty
+`allowed_evidence`. A control that cannot fire is the "unsatisfiable gate"
+defect, and the difference between shipping one and not was checking.
+
+**A demoted specialist kept its authority in a running process.** `__init__`
+read the brain manifests once, so a long-lived enforcement point held whatever
+lifecycle stage was current at construction; an agent demoted to `restricted` or
+`retired` went on being authorized as `active`. The manifests are now re-read
+when their (path, mtime, size) signature changes — on change rather than every
+call, because re-parsing two TOML files per authorization is a cost on the hot
+path for a fact that only changes when Joe edits a file.
+
+**And the fix for that contained a fail-open, in the exact shape this record
+exists to document.** Dropping the cache when a manifest becomes unreadable left
+`_spec()` returning the roster alone, which carries no `status`. The gate read
+`if stage in NON_EXECUTING_STAGES`, and **`None` is in no frozenset** — so an
+unreadable manifest handed every agent unrestricted authority. Worse, the
+comment I wrote for the reload *claimed* the call site already failed closed on
+an absent status. It did not. The claim was asserting an intention.
+
+It was caught because the test asserted the behaviour rather than the comment,
+and it turned out to be a **pre-existing** fail-open as well: any roster agent
+missing from the brain manifests could already mutate. The gate now names the one
+stage that may execute (`active`) instead of enumerating those that may not —
+the round-7 denylist inversion, in the lifecycle dimension.
+
+**Two mutants survived the first pass** and produced the four probes that kill
+them. `transfer_and_get_receipt` separates "the leading token is a read verb"
+from "a read verb appears anywhere"; `read_invoice_and_publish_it` separates
+*all* mapped tokens being noun-capable from *any* being so. Without those
+shapes, both weakenings passed a 78-probe suite.
+
+**The DeepEval telemetry lock ran after the import it was protecting.**
+`coverage_report()` calls `deepeval_available()`, whose probe *is*
+`import deepeval`, and `execute()` called `assert_telemetry_disabled()` only
+after the report was built. Any hosted-logging client the SDK constructs from
+environment or persisted login state at import time was therefore constructed
+while telemetry was still enabled: the later check could refuse the run, but the
+boundary it exists to establish had already been crossed. The lock is now the
+first statement of the importing function, and the call in `execute()` is kept
+because an idempotent refusal in two places costs nothing while a single call in
+the wrong place cost the whole boundary.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
@@ -1706,6 +1804,14 @@ Not a decision backlog — the actual work the harness exposed:
   `npm audit fix`'s: **downgrade `agent-relay` 11.2.0 → 10.6.7**, a semver-major
   move of a declared dependency, which is a connector decision. Triaged for one
   month; if nothing upstream moves by then, the downgrade is the question.
+- **Dispatcher verbs are not bound to the delegation's `allowed_actions`.** The
+  gate now refuses an action that is in the packet's six-value collaboration
+  vocabulary and was withheld, but `list`, `read_record` and every other
+  dispatcher verb sit outside that enum and are governed only by the namespace
+  and target bindings. Closing it needs either a dispatcher-verb mapping in the
+  packet contract or a widened enum — a change to `schemas/`, which this branch
+  deliberately does not touch. Same family as the operation-from-tool-metadata
+  item already on this list.
 - **Idempotency keys and expected versions are checked for presence, not
   honoured.** The gate now refuses a mutation that omits a control its packet
   demands, but nothing verifies the executor performs a compare-and-set or that
