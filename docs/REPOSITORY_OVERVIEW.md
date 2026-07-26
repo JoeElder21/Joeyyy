@@ -80,7 +80,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 | `schemas/` | The seven canonical JSON Schemas. Single source of truth for packet structure; Pydantic models are generated from these at import time. | 7 |
 | `runtime/` | **Contract enforcement logic.** Stdlib-pure, CI-provable: lifecycle gates, cadence engine, writer-lease registry, mutation admission. Optional graph/queue/flow layers import lazily. | 10 |
 | `scripts/` | **SDK and service integration.** Governed dispatch bridges, PacketGuard, privacy guard, memory/evidence gateways, MCP server, observability, trusted launcher, validators. | 20 |
-| `tests/` | 26 unittest modules, 611 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 27 |
+| `tests/` | 30 unittest modules, 611 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 27 |
 | `docs/` | Architectural records: protocols, registries, absorption records, build-out guides, migration and reconciliation records. This is where *why* lives. | 29 |
 | `connectors/` | `aps/` — a Node 18+ harness running the Autodesk Platform Services validation gate, with a synthetic DXF test model and its generator. | 7 |
 | `templates/` | Human-readable operating templates: agent intake, project intake, specialist handoff, daily brief, weekly agent audit. | 5 |
@@ -360,7 +360,7 @@ The lock file pins `autogen-agentchat==0.7.5` and `autogen-core==0.7.5`, while `
 
 ## 11. Testing and CI
 
-**611 tests across 26 modules; 0 failures; 31 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent the run reports 48 skips and 5 failures, which is the guard refusing to certify a tree it could not fully read. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
+**611 tests across 30 modules; 0 failures; 31 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent the run reports 48 skips and 5 failures, which is the guard refusing to certify a tree it could not fully read. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
 
 | Module | Tests | Coverage focus |
 | --- | --- | --- |
