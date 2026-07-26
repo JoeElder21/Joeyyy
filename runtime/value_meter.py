@@ -520,6 +520,11 @@ class ValueLedger:
             except json.JSONDecodeError:
                 errors.append(f"line {index}: not valid JSON")
                 continue
+            if not isinstance(record, dict):
+                # `[]` is valid JSON. Calling .get() on it raised AttributeError
+                # and crashed the report that exists to fail closed.
+                errors.append(f"line {index}: record is not a JSON object")
+                continue
             recorded = record.get("_digest")
             if not recorded:
                 errors.append(f"line {index}: no integrity digest")

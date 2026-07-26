@@ -442,3 +442,17 @@ class ContradictoryFlagTests(unittest.TestCase):
         policy = ValuePolicy.load()
         with self.assertRaises(ObservationRejected):
             build_observation(policy, payload(agent_minutes="bad"))
+
+
+class LedgerStructuralIntegrityTests(unittest.TestCase):
+    def test_a_non_object_line_is_reported_not_crashed(self):
+        """`[]` is valid JSON; .get() on it used to raise AttributeError."""
+        policy = ValuePolicy.load()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "value.jsonl"
+            path.write_text("[]\n", encoding="utf-8")
+            ledger = ValueLedger(path)
+            errors = ledger.integrity_errors()
+            self.assertTrue(errors)
+            report = ledger.report(policy, now=NOW)
+            self.assertFalse(report["ledger_trustworthy"])

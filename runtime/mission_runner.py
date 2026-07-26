@@ -330,11 +330,16 @@ class MissionRunner:
         self.root = root
         self.roster = load_brain_roster(root)
         self.guard = guard or PacketGuard(root)
-        self.ledger = AuditLedger(ledger_path or DEFAULT_LEDGER)
+        # Derive from *this* runner's root. The module-level defaults point at
+        # the checkout that imported the module, so a runner aimed at a staged
+        # or temporary tree would contaminate this one's evidence.
+        self.ledger = AuditLedger(ledger_path or (root / "audit" / "missions.jsonl"))
         # Lifecycle evidence and value evidence are written by the same call, so
         # a mission cannot land in the promotion record while leaving no trace of
         # what it cost Joe.
-        self.value_ledger = ValueLedger(value_ledger_path or DEFAULT_VALUE_LEDGER)
+        self.value_ledger = ValueLedger(
+            value_ledger_path or (root / "audit" / "value.jsonl")
+        )
         # Load the policy from *this* runner's root. Using the module-global
         # default meant a runner pointed at a staged or temporary checkout was
         # measured against the policy of a different repository.

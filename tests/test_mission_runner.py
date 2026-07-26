@@ -728,3 +728,30 @@ class EvidenceOwnershipTests(RunnerHarness):
                 )
             )
         self.assertIn("constraint packet", str(caught.exception))
+
+
+class LedgerRootTests(unittest.TestCase):
+    def test_default_ledgers_follow_the_runner_root(self):
+        """A staged checkout must not write into this checkout's evidence."""
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = Path(tmp) / "checkout"
+            staged.mkdir()
+            for relative in ("brains/apex", "brains/jeos", "config", "schemas"):
+                (staged / relative).mkdir(parents=True, exist_ok=True)
+            real = Path(__file__).resolve().parents[1]
+            for relative in (
+                "brains/apex/agents.toml",
+                "brains/jeos/agents.toml",
+                "config/specialist_corps.toml",
+                "config/value_policy.toml",
+            ):
+                (staged / relative).write_text(
+                    (real / relative).read_text(encoding="utf-8"), encoding="utf-8"
+                )
+            for schema in (real / "schemas").glob("*.json"):
+                (staged / "schemas" / schema.name).write_text(
+                    schema.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+            runner = MissionRunner(root=staged)
+            self.assertTrue(str(runner.ledger.path).startswith(str(staged)))
+            self.assertTrue(str(runner.value_ledger.path).startswith(str(staged)))
