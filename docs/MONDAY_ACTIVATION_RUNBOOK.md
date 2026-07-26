@@ -30,7 +30,7 @@ before — they existed only as Codex TOML prompts with nothing to execute them.
 | Before | Now |
 | --- | --- |
 | Specialists were `.codex/agents/*.toml` prompts; nothing invoked them in Claude Code | `.claude/agents/*.md` projections generated from the same canonical contracts, callable via the `Task` tool |
-| Connector isolation was prose ("never call a connector directly") | Enforced by the tool list: specialists have `Read, Glob, Grep` and no connector, shell, or writer |
+| Connector isolation was prose ("never call a connector directly") | Enforced by the tool list: specialists have **no tools at all** — no connector, no shell, no writer, not even a filesystem read (which would have let a JEOS specialist open `brains/apex/**`) |
 | No controlled-mission machinery | `runtime/mission_runner.py` brackets each mission and writes evidence |
 | Section 17's 35% value threshold had no policy file | `config/value_policy.toml` + `runtime/value_meter.py` |
 
