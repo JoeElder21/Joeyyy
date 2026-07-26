@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import sys
 import time
@@ -139,11 +140,36 @@ def issue_instruction(
 
     out_dir = out_dir or (key_path.parent / "instructions")
     out_dir.mkdir(parents=True, exist_ok=True)
+    # The directory too, and for an EXISTING one as well. `mkdir(exist_ok=True)`
+    # leaves the mode of a directory it did not create, so a folder made once
+    # under a 0022 umask stays 0755 forever while every grant written into it is
+    # 0600. Listing the directory then reveals the category and nonce prefix of
+    # every live authorization, which is enumeration of Joe's outstanding
+    # instructions even when the contents are unreadable.
+    out_dir.chmod(0o700)
+
     path = out_dir / f"instruction-{category}-{payload['nonce'][:8]}.json"
-    path.write_text(json.dumps(grant, indent=1, sort_keys=True), encoding="utf-8")
-    # Same posture as the signing key and the mount grants: a world-readable
-    # authorization is one anything on the box can present.
-    path.chmod(0o600)
+    # Opened 0600 at the CREATING syscall, not chmod'ed after writing.
+    #
+    # `write_text()` creates with 0666 & ~umask -- 0644 under the common 0022 --
+    # and the following `chmod(0o600)` closed that window only after the signed
+    # bearer grant was already on disk and readable by every local user. The
+    # window is short but the failure is total: another user reads a signed
+    # high-impact authorization and can present it until it expires. And if the
+    # process dies between the write and the chmod, the grant stays 0644
+    # permanently, which is the state a crash leaves behind rather than a race
+    # to lose.
+    #
+    # `os.open` with the mode argument is the only way to get the permission
+    # right at creation; `Path.write_text` has no mode parameter. O_EXCL because
+    # a nonce collision, or a pre-planted symlink at this path, must fail rather
+    # than silently write Joe's authority somewhere else -- the same reason
+    # `evals/run_evaluations.py` creates its run directory with `exist_ok=False`.
+    #
+    # The umask cannot loosen this: 0600 & ~umask only ever removes bits.
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(grant, indent=1, sort_keys=True))
     return path
 
 

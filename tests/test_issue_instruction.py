@@ -8,6 +8,8 @@ that the action is permitted.
 """
 
 import json
+import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -242,6 +244,76 @@ class GrantFileTests(unittest.TestCase):
             "publishReport", RESOURCE, key_path=self.key, out_dir=self.out, now=NOW.timestamp()
         )
         self.assertEqual(path.stat().st_mode & 0o077, 0, "the grant is readable by other users")
+
+    def test_the_grant_is_created_private_not_tightened_afterwards(self):
+        # `write_text()` creates with 0666 & ~umask -- 0644 under the common 0022
+        # -- and the old `chmod(0o600)` closed that window only after the signed
+        # bearer grant was already on disk and world-readable. A crash between
+        # the write and the chmod left it 0644 permanently.
+        #
+        # Asserted under an explicit permissive umask, because the process umask
+        # is what made the old code look correct in a 0077 environment. Restored
+        # in a finally: umask is process-global and leaking it would silently
+        # change how every later test's files are created.
+        original = os.umask(0o022)
+        try:
+            path = issue_instruction(
+                "publishReport",
+                RESOURCE,
+                key_path=self.key,
+                out_dir=self.out,
+                now=NOW.timestamp(),
+            )
+        finally:
+            os.umask(original)
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        # And the directory, which `mkdir(exist_ok=True)` would otherwise leave
+        # at 0755: listing it enumerates the category and nonce prefix of every
+        # live authorization even when the contents are unreadable.
+        self.assertEqual(stat.S_IMODE(self.out.stat().st_mode), 0o700)
+
+    def test_an_existing_permissive_directory_is_tightened(self):
+        # `mkdir(exist_ok=True)` does not change the mode of a directory it did
+        # not create, so a folder made once under a permissive umask stays that
+        # way for every grant afterwards.
+        self.out.mkdir(mode=0o755)
+        self.assertEqual(stat.S_IMODE(self.out.stat().st_mode), 0o755)
+        issue_instruction(
+            "publishReport", RESOURCE, key_path=self.key, out_dir=self.out, now=NOW.timestamp()
+        )
+        self.assertEqual(stat.S_IMODE(self.out.stat().st_mode), 0o700)
+
+    def test_the_grant_write_refuses_to_clobber_an_existing_path(self):
+        # O_EXCL. A nonce collision, or a symlink pre-planted at the predictable
+        # path, must fail rather than write Joe's authority through it.
+        #
+        # The first version of this test called `os.open` on the path ITSELF and
+        # asserted FileExistsError -- which tests the standard library, not this
+        # module, and passed with O_EXCL removed from the issuer. Pinning the
+        # nonce so two issuances collide is what actually exercises the flag.
+        from scripts import issue_instruction as module
+
+        original = module.secrets.token_hex
+        module.secrets.token_hex = lambda _n: "f" * 32
+        try:
+            first = issue_instruction(
+                "publishReport",
+                RESOURCE,
+                key_path=self.key,
+                out_dir=self.out,
+                now=NOW.timestamp(),
+            )
+            self.assertTrue(first.exists())
+            with self.assertRaises(FileExistsError):
+                issue_instruction(
+                    "publishReport",
+                    RESOURCE,
+                    key_path=self.key,
+                    out_dir=self.out,
+                    now=NOW.timestamp(),
+                )
+        finally:
+            module.secrets.token_hex = original
 
     def test_two_grants_do_not_collide_or_share_a_nonce(self):
         # The nonce is what single-use enforcement will key on once it exists,

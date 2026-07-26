@@ -1824,6 +1824,75 @@ so patching the source module proved nothing about the function — and would ha
 "passed" against a hardcoded criterion. **The name the function reads is the name
 to patch.**
 
+### Thirty-eighth pass — two findings fixed, and the gitleaks claim refuted a third time
+
+**The refutation first, with better evidence than last time.** The
+`.gitleaksignore` history entry was raised again, now asserting that "the squash
+commit changed the relevant fingerprint again to `d689daf…` and line 362" and
+that "the history scan still blocks the PR". Checked against the reviewed commit:
+
+- `git merge-base --is-ancestor 03cb443… HEAD` → **yes**, still an ancestor.
+- `d689daf` **does not exist** in this repository — `git cat-file`: not a valid
+  object name, and no commit in `git rev-list --all` has that prefix.
+- **CI's own job log**, not just its green tick: `no leaks found` for the tree
+  scan and `60 commits scanned` / `no leaks found` for the history scan, on this
+  exact head.
+
+Reading the log rather than trusting the conclusion is the point. A green check
+can mean a scan that examined nothing — this record documents three CI jobs that
+did exactly that — so "the check passed" and "the check ran and passed" are
+different claims. The log settles which one this is.
+
+Why the fingerprint has not moved despite the fixture shifting to line 362:
+`gitleaks git` scans **diffs**, and reports a secret in the commit that ADDED the
+line. Round 34 rewrote the docstring *above* the fixture, so the fixture line is
+in no later diff and remains fingerprinted at `03cb443…:321`, exactly as
+suppressed. The working-tree form is line-pinned and did move, which is the half
+that genuinely bit in round 35 and is now guarded by
+`GitleaksSuppressionTests`.
+
+**The residual gap, stated rather than glossed:** if a future commit re-adds the
+fixture line, a NEW history fingerprint appears and nothing local catches it
+before CI, because history fingerprints cannot be checked against a present-day
+file. The drift detector covers the form that actually failed; this one is
+unguarded and known.
+
+**A malformed mount registry crashed authorization instead of denying it.** Valid
+TOML can carry the wrong SHAPE: `mounts = 1` raised `TypeError: 'int' object is
+not iterable`, `mounts = ["gdrive"]` raised `AttributeError: 'str' object has no
+attribute 'get'`. The round-37 reload caught `OSError` and `TOMLDecodeError` and
+neither of these, so an ordinary authorization **unwound out of `evaluate()`** —
+and because `enforce()` records its decision only after evaluation returns, the
+request got **no fail-closed denial and no audit event**. A half-finished edit to
+the registry could crash every authorization through a long-lived enforcement
+point.
+
+This is the type-check-before-the-typed-operation class that `ToolRequest` had
+fixed three times over, applied to a file on disk rather than a caller's
+argument. Nine shapes now deny with a reason; the guard is silent because
+`scripts/verify_mcp_mounts.py` is what tells an operator their file is wrong —
+the authorization path's only job is to not become the crash that hides the
+denial.
+
+**The instruction grant was world-readable between its write and its chmod.**
+`write_text()` creates with `0666 & ~umask` — 0644 under the common 0022 — and
+the following `chmod(0o600)` closed that window only after the signed bearer
+grant was already on disk. Worse than a race: a crash between the two leaves the
+grant 0644 **permanently**. Now opened `0600` at the creating syscall via
+`os.open`, with `O_EXCL` so a nonce collision or a pre-planted symlink fails
+rather than writing Joe's authority through it. The containing directory is
+chmod'ed 0700 including when it already existed, since
+`mkdir(exist_ok=True)` leaves the mode of a directory it did not create and
+listing it enumerates the category and nonce prefix of every live authorization.
+
+**Two mutants survived and both exposed weak tests rather than weak code.**
+Replacing `isinstance(name, str) and name.strip()` with `if name:` survived,
+because every malformed shape denies under both spellings — only a
+whitespace-only or non-string name distinguishes them, and neither was in the
+probe list. And my O_EXCL test called `os.open` on the path *itself*, which tests
+the standard library and passed with the flag removed from the issuer; pinning
+the nonce so two issuances collide is what actually exercises it.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

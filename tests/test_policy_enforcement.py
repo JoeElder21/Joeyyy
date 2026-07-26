@@ -4212,3 +4212,113 @@ class MountRegistryReloadTests(unittest.TestCase):
         self.assertIn("gdrive", self.pep._registered_mounts())
         self.mounts.unlink()
         self.assertEqual(self.pep._registered_mounts(), frozenset())
+
+
+class MalformedMountRegistryTests(unittest.TestCase):
+    """Valid TOML with the wrong SHAPE must deny, not crash.
+
+    The round-37 reload caught `OSError` and `TOMLDecodeError` and neither
+    `TypeError` nor `AttributeError`. `mounts = 1` raised
+    `'int' object is not iterable` and `mounts = ["gdrive"]` raised
+    `'str' object has no attribute 'get'`, so an ordinary authorization UNWOUND
+    out of `evaluate()` -- and because `enforce()` records its decision only
+    after evaluation returns, the request got neither a fail-closed denial nor an
+    audit event.
+
+    The same class this module fixed for `ToolRequest` fields three times over:
+    type-check before the typed operation. Here the untrusted input is a file on
+    disk rather than a caller's argument.
+    """
+
+    SHAPES = (
+        ("mounts = 1\n", "a scalar where the array belongs"),
+        ('mounts = ["gdrive"]\n', "an array of strings, not tables"),
+        ("mounts = {name = 'x'}\n", "a table where the array belongs"),
+        ("[[mounts]]\nname = 42\n", "a non-string name"),
+        ("[[mounts]]\nname = ''\n", "a blank name"),
+        ("[[mounts]]\nother = 'x'\n", "an entry with no name at all"),
+        ("nothing = true\n", "no mounts key"),
+        ("= = broken\n", "not TOML at all"),
+        ("", "an empty file"),
+    )
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp()) / "repo"
+        self.tmp.mkdir(parents=True)
+        for relative in (".codex", "brains", "schemas", "config"):
+            source = ROOT / relative
+            if source.exists():
+                shutil.copytree(source, self.tmp / relative)
+        self.mounts = self.tmp / "config" / "mcp_mounts.toml"
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(self.tmp, registry=self.registry, clock=lambda: NOW)
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp.parent, ignore_errors=True)
+
+    def _read_a_mount(self):
+        return self.pep.evaluate(
+            ToolRequest(agent=CHIEF, action="read", resource="mount:gdrive", owner_brain="APEX")
+        )
+
+    def test_a_well_formed_registry_still_allows_a_mount_read(self):
+        # The control. Without it, "denied for every shape" is indistinguishable
+        # from "mount reads are denied outright", which would be an outage rather
+        # than a guard.
+        self.assertTrue(self._read_a_mount().allowed, "a lawful mount read must pass")
+
+    def test_every_malformed_shape_denies_rather_than_raising(self):
+        for content, description in self.SHAPES:
+            with self.subTest(shape=description):
+                self.mounts.write_text(content, encoding="utf-8")
+                try:
+                    decision = self._read_a_mount()
+                except Exception as error:  # noqa: BLE001 - the defect IS the raise
+                    self.fail(
+                        f"{description} raised {type(error).__name__} out of evaluate(), so "
+                        "the request got no denial and no audit event"
+                    )
+                self.assertFalse(
+                    decision.allowed,
+                    f"{description} was treated as a registry authorizing the mount",
+                )
+                self.assertTrue(decision.reasons, "a denial must say why")
+
+    def test_the_shape_guard_yields_nothing_for_a_malformed_registry(self):
+        # Asserted on the helper too, because the decision above could deny for
+        # an unrelated reason and still look correct.
+        from scripts.policy_enforcement import _mount_names
+
+        for value in (
+            1,
+            "gdrive",
+            None,
+            [],
+            {},
+            {"mounts": 1},
+            {"mounts": ["x"]},
+            # A non-string and a whitespace-only name. These two are what
+            # separate `isinstance(name, str) and name.strip()` from a bare
+            # `if name:` -- the truthiness mutant survived until they were here,
+            # because every other malformed shape denies under both spellings.
+            {"mounts": [{"name": 42}]},
+            {"mounts": [{"name": "   "}]},
+            {"mounts": [{"name": True}]},
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(_mount_names(value), set())
+
+    def test_the_shape_guard_reads_a_well_formed_registry(self):
+        # And the reverse: a guard that returned an empty set unconditionally
+        # would pass every test above while denying every mount.
+        from scripts.policy_enforcement import _mount_names
+
+        self.assertEqual(
+            _mount_names({"mounts": [{"name": "gdrive"}, {"name": "governance"}]}),
+            {"gdrive", "governance"},
+        )

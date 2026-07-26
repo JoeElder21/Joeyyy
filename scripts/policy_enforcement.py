@@ -641,6 +641,45 @@ MUTATING_ACTION_VERBS = (
 )
 
 
+def _mount_names(data: Any) -> set[str]:
+    """Mount names from a parsed `mcp_mounts.toml`, tolerating any shape.
+
+    The previous version was a comprehension over `data.get("mounts", [])`
+    calling `.get("name")` on each entry. Valid TOML can carry the wrong SHAPE:
+    `mounts = 1` raised `TypeError: 'int' object is not iterable`, and
+    `mounts = ["gdrive"]` raised `AttributeError: 'str' object has no attribute
+    'get'`. The round-37 reload caught `OSError` and `TOMLDecodeError` and
+    neither of these, so an ordinary authorization UNWOUND out of `evaluate()`
+    -- and because `enforce()` records its decision only after evaluation
+    returns, the request got no fail-closed denial AND no audit event. A
+    half-finished edit to the registry could crash every authorization through a
+    long-lived enforcement point.
+
+    Exactly the class this module fixed for `ToolRequest` fields in three
+    separate rounds -- type-check before the typed operation -- applied to a file
+    on disk rather than to a caller's argument. A malformed registry is refused
+    by yielding NO names, which denies every mount, rather than by raising.
+
+    Reported nowhere and silent on purpose: this is a shape guard, not a
+    validator. `scripts/verify_mcp_mounts.py` is what tells an operator their
+    mount file is wrong; the authorization path's only job is to not become the
+    crash that hides the denial.
+    """
+    if not isinstance(data, dict):
+        return set()
+    mounts = data.get("mounts")
+    if not isinstance(mounts, list):
+        return set()
+    names: set[str] = set()
+    for mount in mounts:
+        if not isinstance(mount, dict):
+            continue
+        name = mount.get("name")
+        if isinstance(name, str) and name.strip():
+            names.add(name)
+    return names
+
+
 def _load_brain_manifests(root: Path = ROOT) -> dict[str, dict[str, Any]]:
     """Status, connector policy, and write targets, from the brain-owned files."""
     merged: dict[str, dict[str, Any]] = {}
@@ -1427,9 +1466,7 @@ class PolicyEnforcementPoint:
         if signature is not None:
             try:
                 data = tomllib.loads(path.read_text(encoding="utf-8"))
-                names = {
-                    str(mount["name"]) for mount in data.get("mounts", []) if mount.get("name")
-                }
+                names = _mount_names(data)
             except (OSError, tomllib.TOMLDecodeError):
                 names = set()
         self._mounts_cache = frozenset(names)
