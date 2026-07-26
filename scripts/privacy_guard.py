@@ -56,12 +56,23 @@ HOST_END = r"(?=[:/?#\s\"']|$)"
 # allowlist, one pattern over. An exemption may only apply to a value that
 # nothing continues. (Described rather than written out: this file is scanned
 # by its own patterns, which have now caught eight of my own additions.)
-# Two separate shapes, because a single alternation let the value's OWN
+# Three separate shapes, because a single alternation let the value's OWN
 # closing quote count as a continuation and un-exempted every legitimate
-# reserved host: an operator after an optional closing quote, or a second
-# string literal immediately after this one (implicit concatenation).
+# reserved host: an operator after an optional closing quote, a second
+# string literal immediately after this one (implicit concatenation), or a
+# METHOD CALL on the literal.
+#
+# The method call is the same trick spelled the way the languages this
+# repository actually configures spell it -- the string builds the real value
+# through a call rather than an operator, and the closing quote still ends the
+# exempt name. Requiring an identifier character after the dot is what keeps a
+# sentence-ending period in prose from un-exempting a documented placeholder;
+# a bare dot class would have. The placeholder-stripping guard below has
+# treated a dot as a continuation since it was written, so leaving it out here
+# was an inconsistency inside one file, not a judgement about the shape.
 NOT_CONTINUED = (r"(?![\"']?[ \t]*[+%*\\])"
-                 r"(?![\"'][ \t]*[\"'`])")
+                 r"(?![\"'][ \t]*[\"'`])"
+                 r"(?![\"']?[ \t]*\.[A-Za-z_])")
 # The same idea for a quoted or bare VALUE: an exclusion is only safe when it
 # covers the entire value, not a prefix of one.
 VALUE_END = r"(?=[\s\"',}\]#]|$)"
@@ -472,7 +483,13 @@ def yaml_reconstructed_values(text: str) -> str:
                 # node.value is a LIST of (key, value) pairs, so duplicate keys
                 # are all present here.
                 for key_node, value_node in node.value:
-                    stack.append((value_node, path + (_path_part(key_node),)))
+                    part, faithful = _path_part(key_node)
+                    # A key this walker could not read is a key the patterns
+                    # never saw. Reporting the file as fully reconstructed
+                    # anyway is the failure this marker exists to prevent.
+                    if not faithful:
+                        truncated[0] = True
+                    stack.append((value_node, path + (part,)))
             elif isinstance(node, yaml.SequenceNode):
                 for item in node.value:
                     stack.append((item, path))
@@ -488,17 +505,53 @@ def yaml_reconstructed_values(text: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def _path_part(key_node) -> str:
-    """A hashable, bounded path component for any YAML key node.
+def _path_part(key_node) -> tuple[str, bool]:
+    """A hashable, bounded path component for any YAML key node, and whether
+    it is faithful.
 
     A complex key -- `? [a, b]` -- composes to a SequenceNode, and putting it
     straight into the path made the tuple unhashable, so the visited-set lookup
-    raised TypeError out of the gate. Keys like this carry no credential name,
-    so a stable placeholder preserves the path shape without pretending to
-    reconstruct them.
+    raised TypeError out of the gate. The first repair replaced every such key
+    with a fixed placeholder, on the reasoning that keys like this carry no
+    credential name. That reasoning was wrong twice over: YAML permits the name
+    inside a complex key, and the walker never descends into key nodes, so the
+    name was not merely unread -- it was DELETED, and the value beneath it was
+    then emitted under a placeholder that matches nothing. The scan reported no
+    findings over a reconstructed credential and set no truncation marker, so
+    nothing downstream could tell that a key had been dropped.
+
+    So: flatten the key's scalar leaves into one component, and report
+    faithfully whether that succeeded. An unflattenable key marks the
+    reconstruction incomplete rather than passing as read.
     """
     value = getattr(key_node, "value", None)
-    return value if isinstance(value, str) else "?"
+    if isinstance(value, str):
+        return value, True
+    # A collection key. Its scalar leaves are the only part that can name
+    # anything; join them the way nested keys are joined elsewhere here.
+    leaves: list[str] = []
+    # A QUEUE, not a stack: popping from the end reverses a multi-element key,
+    # and a credential name split across one is only matchable in the order it
+    # was written.
+    queue = [key_node]
+    index = 0
+    visits = 64
+    while index < len(queue) and visits > 0 and len(leaves) < MAX_KEY_FORMS:
+        visits -= 1
+        current = queue[index]
+        index += 1
+        inner = getattr(current, "value", None)
+        if isinstance(inner, str):
+            if inner:
+                leaves.append(inner)
+        elif isinstance(inner, list):
+            for item in inner:
+                # A mapping's value is a list of (key, value) pairs; a
+                # sequence's is a list of nodes. Both reach the leaves.
+                queue.extend(item if isinstance(item, tuple) else [item])
+    if not leaves:
+        return "?", False
+    return "_".join(leaves), True
 
 
 def _key_forms(path) -> list[str]:
@@ -599,6 +652,65 @@ def toml_reconstructed_values(text: str) -> str:
     if truncated or budget[0] <= 0:
         lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
+
+
+_ESCAPED_CHAR = re.compile(
+    r"\\u\{([0-9A-Fa-f]{1,6})\}"      # ES6 \u{5f}
+    r"|\\[uU]([0-9A-Fa-f]{4,8})"      # \u005f, \U0000005f
+    r"|\\x([0-9A-Fa-f]{2})"           # \x5f
+    r"|\\([0-7]{1,3})"                # \137
+    r"|%([0-9A-Fa-f]{2})"             # %5F
+    r"|&#x([0-9A-Fa-f]{1,6});"        # &#x5f;
+    r"|&#([0-9]{1,7});"               # &#95;
+)
+
+
+def _decoded_char(match: re.Match[str]) -> str:
+    """One escape's character, or the escape verbatim when it decodes to nothing
+    a name can be spelled with."""
+    hex_braced, hex_esc, hex_byte, octal, percent, ent_hex, ent_dec = match.groups()
+    try:
+        if octal is not None:
+            code = int(octal, 8)
+        elif ent_dec is not None:
+            code = int(ent_dec, 10)
+        else:
+            code = int(next(g for g in (hex_braced, hex_esc, hex_byte,
+                                        percent, ent_hex) if g is not None), 16)
+        char = chr(code)
+    except (ValueError, OverflowError):
+        return match.group(0)
+    # Only printable, non-space characters may replace an escape. A decoded
+    # newline or NUL would SPLIT a value the raw copy already carries whole,
+    # and this normaliser is only ever allowed to add readings.
+    return char if char.isprintable() and not char.isspace() else match.group(0)
+
+
+def decode_source_escapes(text: str) -> str:
+    """Decode the escaped spellings of a name that a consumer resolves.
+
+    A credential name in executable source need not be spelled the way the
+    patterns spell it. `{"TFE\\u005fTOKEN": "<secret>"}` is read by JavaScript
+    as an ordinary underscore-separated name, and by Python, and by every JSON
+    reader -- but the raw bytes hold a backslash, a `u` and four hex digits
+    between `TFE` and `TOKEN`, so no key-name pattern can match it.
+
+    The parser reconstructions decode this, and for `.json`, `.yaml` and
+    `.toml` an unparseable file fails the scan closed. Executable source
+    declares none of those formats, so it reaches neither: the reconstructions
+    return incomplete markers that the completeness gate correctly ignores for
+    a `.js` file, and the raw patterns cannot decode anything. That leaves the
+    ONE class of file where a credential is most likely to be hard-coded with
+    no decoding step at all.
+
+    So decode the common source-string escapes -- and the URL and HTML entity
+    forms, which are the same substitution in a different alphabet -- into an
+    extra copy of the text. Purely additive: the raw text is scanned too, so a
+    name that was never escaped is unaffected.
+    """
+    if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
+        return ""
+    return _ESCAPED_CHAR.sub(_decoded_char, text)
 
 
 def strip_yaml_node_properties(text: str) -> str:
@@ -771,13 +883,23 @@ def path_findings(relative: Path) -> list[str]:
     the adjacent gitlink handling already ran every pattern over a published
     path string, which is the same string in a different code path.
 
-    Separators are replaced with spaces so a directory boundary cannot hide a
-    match, and so a legitimate path segment cannot run into the next one.
+    TWO representations are scanned, because one cannot serve both jobs.
+    Space-joined keeps a legitimate segment from running into the next one and
+    creating a match out of two innocent components. But every assignment
+    pattern here needs a `:` or an `=` between the name and the value, and a
+    directory boundary is exactly where private data gets SPLIT --
+    `<credential-name>/<the-value>.txt` publishes the pair as plainly as
+    `<credential-name>=<the-value>.txt` does, and space-joining alone erased
+    the relationship the docstring claimed it preserved. Delimiter-joining
+    restores it. A finding from either representation is a finding: this gate
+    reports, and a directory named for a credential is worth a look whichever
+    way it reads.
     """
-    probe = " ".join(str(relative).replace("\\", "/").split("/"))
+    parts = str(relative).replace("\\", "/").split("/")
+    probes = (" ".join(parts), "=".join(parts))
     return [f"{relative}: possible {label} in the file path"
             for label, pattern in applicable_patterns(relative).items()
-            if pattern.search(probe)]
+            if any(pattern.search(probe) for probe in probes)]
 
 
 
@@ -1116,6 +1238,7 @@ def _scan_files(
                 text,
                 fold_toml_multiline(
                     fold_block_scalars(strip_yaml_node_properties(text))),
+                decode_source_escapes(text),
                 *reconstructions,
             ]))
         # A file that declares a parseable format and could not be parsed, or
@@ -1150,21 +1273,44 @@ def scan_paths(
     they are added.
     """
     targets: list[Path] = []
+    empty: list[Path] = []
     for given in paths:
         candidate = given if given.is_absolute() else (root / given)
         if candidate.is_dir() and not candidate.is_symlink():
-            targets.extend(
-                child for child in sorted(candidate.rglob("*"))
+            found: list[Path] = []
+            for child in sorted(candidate.rglob("*")):
                 # is_symlink() as well as is_file(): a DANGLING link answers
                 # False to is_file(), so the recursion dropped exactly the
                 # entry _scan_files() knows how to handle -- it scans a link's
                 # target string, which is what git publishes. A bundle holding
                 # `notes -> /home/<client>/private` passed the pre-install gate
                 # while scanning that same link directly reported it.
-                if (child.is_file() or child.is_symlink())
-                and ".git" not in child.parts
-                and "__pycache__" not in child.parts
-            )
+                if not (child.is_file() or child.is_symlink()):
+                    continue
+                # Cache exclusions apply BENEATH the selection, never above
+                # it. Testing the absolute path's parts meant the caller's own
+                # directory names decided what got scanned: a bundle unpacked
+                # under any `__pycache__` ancestor -- or a directory the caller
+                # explicitly NAMED `__pycache__` and mapped to an ordinary
+                # publishable destination -- had every child filtered out and
+                # reported clean, while the same file handed over directly was
+                # reported. An exclusion the caller cannot see is not an
+                # exclusion, it is a blind spot at a path anyone can choose.
+                try:
+                    inner = child.relative_to(candidate).parts[:-1]
+                except ValueError:  # pragma: no cover - rglob stays under root
+                    inner = child.parts[:-1]
+                if ".git" in inner or "__pycache__" in inner:
+                    continue
+                found.append(child)
+            # A directory the caller explicitly handed over and that yielded
+            # nothing scannable must not read as a pass. "Zero targets" and
+            # "everything checked out" print the same on a green gate, and the
+            # bundle whose contents were all filtered away is exactly the one
+            # worth looking at.
+            if not found:
+                empty.append(candidate)
+            targets.extend(found)
         elif candidate.is_file() or candidate.is_symlink():
             targets.append(candidate)
         else:
@@ -1185,7 +1331,14 @@ def scan_paths(
                 except ValueError:
                     continue
                 resolved[child] = dest / suffix
-    return _scan_files(targets, root, resolved)
+    barren = [
+        f"{directory}: nothing scannable under a directory given to this "
+        "scanner — an intake bundle that yields no targets has not been "
+        "checked, and reporting it as clean is how an empty or wholly "
+        "filtered selection passes a gate."
+        for directory in empty
+    ]
+    return barren + _scan_files(targets, root, resolved)
 
 
 def main(argv: list[str] | None = None) -> int:

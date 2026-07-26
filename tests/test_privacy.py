@@ -12,8 +12,10 @@ from scripts.privacy_guard import (
     TRUNCATION_MARKER,
     PLACEHOLDER_LITERALS,
     applicable_patterns,
+    decode_source_escapes,
     fold_block_scalars,
     fold_toml_multiline,
+    path_findings,
     gitlink_paths,
     is_vendored,
     repository_files,
@@ -1856,10 +1858,18 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                         f"clean")
 
                 # Every way the expression can continue past the exemption.
+                # The method-call forms are here rather than in a test of
+                # their own for the reason the docstring gives: the grid is
+                # the assertion. A continuation style added to this dict is
+                # checked against every exemption in every pattern at once,
+                # which is the only shape that stops the next round finding
+                # the same miss one pattern down.
                 for style, continued in {
                     "concatenated": f'{alone} + "{suffix}"',
                     "adjacent literal": f'{alone} "{suffix}"',
                     "formatted": f"{alone} % suffix",
+                    "method call": f'{alone}.concat("{suffix}")',
+                    "spaced method call": f'{alone} .format("{suffix}")',
                 }.items():
                     probe = root / f"cont{index}_{style.split()[0]}.py"
                     probe.write_text(continued + "\n", encoding="utf-8")
@@ -2052,6 +2062,188 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "Private runtime memory",
             (ROOT / "docs" / "PRIVACY_AND_DATA_BOUNDARIES.md").read_text(encoding="utf-8"),
         )
+
+
+class ReconstructionFidelityTest(unittest.TestCase):
+    """A reading the walker cannot make must be reported, never erased."""
+
+    @needs_yaml
+    def test_a_complex_key_is_reconstructed_or_marked_incomplete(self):
+        """The credential name may live in the KEY, and YAML lets a key be a
+        collection.
+
+        The first complex-key repair replaced every such key with a fixed
+        placeholder to keep the visited-set tuple hashable. That silently
+        DELETED the name: the walker never descends into key nodes, so
+        `? [<credential-name>]` / `: <secret>` reconstructed to a placeholder
+        and a value, matched nothing, and set no truncation marker. A scan that
+        cannot read a key has to say so."""
+        secret = "Xy7Q" + "secretValue" + "0192"
+        name = "AZURE" + "_CLIENT_SECRET"
+
+        # Every complex-key shape, not just the reported sequence form.
+        for label, document in {
+            "sequence key": f"? [{name}]\n: {secret}\n",
+            "multi-element sequence key": f"? [{name.split('_')[0]}, "
+                                          f"{'_'.join(name.split('_')[1:])}]\n"
+                                          f": {secret}\n",
+            "mapping key": f"? {{{name}: x}}\n: {secret}\n",
+        }.items():
+            with self.subTest(shape=label):
+                reconstructed = yaml_reconstructed_values(document)
+                self.assertNotIn(
+                    TRUNCATION_MARKER, reconstructed,
+                    "a key whose scalars ARE readable must be reconstructed, "
+                    "not written off as incomplete")
+                self.assertIn(
+                    name, reconstructed,
+                    "the credential name in a complex key must reach the "
+                    "reconstruction, or the patterns never see it")
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            probe = root / "connector.yaml"
+            probe.write_text(f"? [{name}]\n: {secret}\n", encoding="utf-8")
+            self.assertTrue(
+                scan_paths([probe], root=root),
+                "a credential under a complex key must be reported")
+
+
+class SourceEscapeTest(unittest.TestCase):
+    """Executable source reaches neither the parsers nor the fail-closed gate."""
+
+    def test_an_escaped_credential_name_is_decoded_before_matching(self):
+        """A name a consumer decodes is a name this gate has to decode.
+
+        `.js`, `.py` and `.sh` declare none of the formats whose unparseable
+        state fails the scan closed, so an escaped key name in executable
+        source reached only the raw patterns -- which cannot decode anything.
+        Enumerated over the escape alphabets rather than the one reported,
+        because a decoder that handles `\\u` and not `%` is the same miss one
+        spelling down."""
+        secret = "Xy7Q" + "secretValue" + "0192"
+        head, tail = "TFE", "TOKEN"
+
+        # Every spelling of the underscore a consumer resolves to `_` (0x5f).
+        for label, escape in {
+            "js unicode": r"\u005f",
+            "es6 braced": r"\u{5f}",
+            "hex byte": r"\x5f",
+            "octal": r"\137",
+            "url encoded": "%5F",
+            "html entity decimal": "&#95;",
+            "html entity hex": "&#x5f;",
+        }.items():
+            spelled = f"{head}{escape}{tail}"
+            with self.subTest(escape=label):
+                self.assertIn(
+                    f"{head}_{tail}", decode_source_escapes(spelled),
+                    "the decoder must resolve this escape to the name a "
+                    "consumer reads")
+                with tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    probe = root / "config.js"
+                    probe.write_text(
+                        'const cfg = {"%s": "%s"};\n' % (spelled, secret),
+                        encoding="utf-8")
+                    self.assertTrue(
+                        scan_paths([probe], root=root),
+                        f"an escaped credential name ({label}) in executable "
+                        f"source must still be reported")
+
+    def test_decoding_never_removes_a_reading_the_raw_text_carried(self):
+        """This normaliser is additive or it is a bypass.
+
+        A decoded newline or NUL would split a value the raw copy carries
+        whole, so an escape that resolves to whitespace is left spelled out."""
+        # Each of these IS recognised by the decoder and each resolves to
+        # whitespace or a control character, so each must be left spelled out.
+        for escape in (r"\u000a", r"\x00", "%20", "&#10;"):
+            with self.subTest(escape=escape):
+                self.assertEqual(
+                    decode_source_escapes(f"KEY={escape}VALUE"),
+                    f"KEY={escape}VALUE",
+                    "an escape resolving to whitespace or a control character "
+                    "must be left alone")
+
+
+class PathRelationshipTest(unittest.TestCase):
+    """A directory boundary publishes a pair as plainly as a delimiter does."""
+
+    def test_adjacent_path_components_are_read_as_a_key_and_its_value(self):
+        secret = "Xy7Q" + "secretValue" + "0192"
+        for name in ("AZURE" + "_CLIENT_SECRET", "TFE" + "_TOKEN",
+                     "GITHUB" + "_TOKEN"):
+            with self.subTest(name=name):
+                self.assertTrue(
+                    path_findings(Path(name) / f"{secret}.txt"),
+                    "a credential name and its value split across a directory "
+                    "boundary must be reported")
+                self.assertTrue(
+                    path_findings(Path("intake") / name / f"{secret}.txt"),
+                    "nesting the pair deeper must not hide it either")
+
+    def test_unrelated_components_are_still_not_run_together(self):
+        """The space-joined reading is why this stays true, and it must stay."""
+        self.assertEqual(
+            path_findings(Path("docs") / "architecture" / "overview.md"), [])
+
+
+class IntakeSelectionTest(unittest.TestCase):
+    """What the caller selects is what gets scanned."""
+
+    def test_a_selected_directory_is_never_filtered_by_its_own_ancestors(self):
+        """Cache exclusions applied to the ABSOLUTE path, so the caller's own
+        directory names decided coverage.
+
+        A bundle unpacked anywhere beneath a `__pycache__` component -- or one
+        the caller explicitly named that and mapped to an ordinary publishable
+        destination -- had every child filtered out and reported clean, while
+        the same file handed over directly was reported."""
+        secret = "Xy7Q" + "secretValue" + "0192"
+        token = "TFE" + "_TOKEN"
+        for label, parts in {
+            "selection itself": ("__pycache__",),
+            "ancestor of the selection": ("__pycache__", "bundle"),
+            "git-named ancestor": (".git", "bundle"),
+        }.items():
+            with self.subTest(placement=label), \
+                    tempfile.TemporaryDirectory() as temp:
+                bundle = Path(temp).joinpath(*parts)
+                bundle.mkdir(parents=True)
+                (bundle / "payload.toml").write_text(
+                    f'{token} = "{secret}"\n', encoding="utf-8")
+                self.assertTrue(
+                    scan_paths([bundle], root=Path(temp),
+                               destinations={bundle: Path("vendor/new")}),
+                    "a directory the caller selected must be scanned whatever "
+                    "its ancestors are named")
+
+    def test_cache_directories_beneath_a_selection_are_still_skipped(self):
+        """The exclusion has to keep working where it was aimed."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            bundle = root / "bundle"
+            (bundle / "__pycache__").mkdir(parents=True)
+            (bundle / "__pycache__" / "payload.toml").write_text(
+                'TFE' + '_TOKEN = "Xy7Q' + 'secretValue' + '0192"\n',
+                encoding="utf-8")
+            (bundle / "readme.md").write_text("nothing here\n", encoding="utf-8")
+            self.assertEqual(scan_paths([bundle], root=root), [])
+
+    def test_a_selection_that_yields_no_targets_is_not_a_pass(self):
+        """"Zero targets" and "everything checked out" print identically on a
+        green gate, and the bundle whose contents were all filtered away is
+        exactly the one worth looking at."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            empty = root / "bundle"
+            empty.mkdir()
+            findings = scan_paths([empty], root=root)
+            self.assertTrue(
+                findings, "an intake directory yielding nothing scannable "
+                          "must not report clean")
+            self.assertIn("nothing scannable", " ".join(findings))
 
 
 if __name__ == "__main__":

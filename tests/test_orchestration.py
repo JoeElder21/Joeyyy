@@ -902,6 +902,34 @@ class SelectionReportBaselineTests(unittest.TestCase):
         # It must run at generation time, not merely be defined.
         self.assertIn("raise SystemExit", source)
 
+    def test_the_report_never_contradicts_the_manifest_it_reports_on(self):
+        """The report's standing recommendation told the maintainer to bump the
+        pin whenever files are refreshed; the manifest requires the opposite
+        for a partial refresh.
+
+        Following the generated report therefore attributed untouched files to
+        a commit whose bytes they may not match -- the single claim the report
+        and the manifest both rest on. Asserted as agreement between the two
+        documents rather than against one sentence, because the failure mode is
+        drift between them."""
+        source = (ROOT / "scripts" / "build_awesome_copilot_report.py").read_text(
+            encoding="utf-8")
+        manifest = (ROOT / ".github" / "AWESOME-COPILOT.md").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "manifest-WIDE", manifest,
+            "the manifest must still state the pin's scope, or there is "
+            "nothing for the report to agree with")
+        recommendation = source[source.index("Standing recommendation"):]
+        self.assertIn(
+            "manifest-WIDE", recommendation,
+            "the report must carry the manifest's pin scope, not a rule of "
+            "its own")
+        self.assertNotIn(
+            "whenever files are refreshed", recommendation,
+            "an unconditional bump instruction contradicts the manifest's "
+            "partial-refresh rule")
+
     def test_manifest_parsing_accepts_any_vendored_skill(self):
         """Reconciliation must not abort on a valid intake.
 

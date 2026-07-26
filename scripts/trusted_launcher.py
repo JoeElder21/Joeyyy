@@ -553,9 +553,27 @@ def authorize(
         raise deny("mount is not registered; unlisted mounts are unreachable")
 
     if not spec.get("require_grant"):
-        # Only wildcard mounts may skip a grant, so there is no unauthenticated
-        # identity to trust here. test_agent_scoped_mounts_all_require_a_grant
-        # keeps that invariant true.
+        # Only WILDCARD mounts may skip a grant, and that is now enforced here
+        # rather than left to a test over the committed registry. The test
+        # proves today's file is consistent; it cannot speak for a registry
+        # edited between releases, half-applied, or merged from two branches.
+        # An agent-scoped mount that declares no grant requirement is exactly
+        # that ambiguity, and the old code resolved it the wrong way: it
+        # accepted the caller's own --agent, filed it as `agent_authenticated:
+        # false`, and started a write-capable mount with nothing Joe had
+        # signed. Runtime authorization refuses an ambiguous registry.
+        try:
+            declared = mount_allowlist(spec, mount)
+        except ManifestUnavailable as error:
+            raise deny(
+                f"cannot read the allowlist: {error}. A malformed allowlist "
+                "is an authorization failure, not a wildcard.")
+        if "*" not in declared:
+            raise deny(
+                "mount is agent-scoped but declares no grant requirement "
+                f"(allowed: {', '.join(declared) or 'none'}). Only a wildcard "
+                "mount may start without a Joe-signed grant; set "
+                "`require_grant = true` or open the allowlist deliberately.")
         check_agent(spec, agent)
         authorized["agent"] = agent
         authorized["agent_source"] = "caller-supplied" if agent else "not-required"

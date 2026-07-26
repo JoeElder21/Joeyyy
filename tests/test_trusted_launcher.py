@@ -956,6 +956,43 @@ class TrustedLauncherTests(unittest.TestCase):
                         "identity would be unauthenticated",
                     )
 
+    def test_an_agent_scoped_mount_without_grant_gating_is_denied(self):
+        """The invariant above is enforced at RUNTIME, not only over the
+        committed file.
+
+        `test_agent_scoped_mounts_all_require_a_grant` proves today's registry
+        is consistent. It cannot speak for a registry edited between releases,
+        half-applied, or merged from two branches -- and on that path the old
+        code resolved the ambiguity the wrong way: it accepted the caller's own
+        --agent, filed it as `agent_authenticated: false`, and started a
+        write-capable mount with nothing Joe had signed. An ambiguous registry
+        is an authorization failure."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        for label, spec in {
+            "require_grant absent": {
+                "name": "probe", "agents": ["apex_chief_of_staff"],
+                "command": ["true"], "write": True},
+            "require_grant false": {
+                "name": "probe", "agents": ["apex_chief_of_staff"],
+                "command": ["true"], "require_grant": False},
+        }.items():
+            with tempfile.TemporaryDirectory() as tmp:
+                key, ledger = self._env(tmp)
+                with mock.patch.object(launcher, "_load_mounts",
+                                       lambda s=spec: {"probe": s}), \
+                        mock.patch.object(launcher, "specialist_stage",
+                                          lambda agent, corps=None: "active"):
+                    with self.subTest(registry=label):
+                        with self.assertRaises(LaunchDenied) as caught:
+                            authorize("probe", None, key_path=key,
+                                      ledger=ledger,
+                                      agent="apex_chief_of_staff")
+                        self.assertIn("agent-scoped", str(caught.exception))
+                        self.assertIn("grant", str(caught.exception))
+
     def test_wildcard_mount_still_launches_without_an_agent(self):
         """governance is agents = ["*"]; requiring an identity there would break
         the read-only path that needs no grant."""
