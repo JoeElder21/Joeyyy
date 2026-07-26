@@ -37,3 +37,9 @@ node_modules/
 *.docx
 *.pptx
 *.xlsx
+
+# Mission and value ledgers hold live operational evidence: mission ids, free-form
+# notes, error text, and measured value. AGENTS.md sections 4 and 12 keep private
+# evaluation inputs, transcripts, and results out of public Git, so the ledgers
+# are machine-local and never tracked.
+audit/

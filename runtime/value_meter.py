@@ -123,6 +123,11 @@ class Observation:
     output_rejected: bool = False
     boundary_incident: bool = False
     notes: str = ""
+    # Appending a clearance record is how a reviewed incident is resolved.
+    # Blocking forever on any historical incident, with no way to clear it,
+    # would force a rewrite of an append-only ledger to ever recover.
+    clears_incident_for_mission: str = ""
+    cleared_by: str = ""
 
     @property
     def total_cost_minutes(self) -> float:
@@ -162,6 +167,8 @@ class Observation:
             "output_rejected": self.output_rejected,
             "boundary_incident": self.boundary_incident,
             "notes": self.notes,
+            "clears_incident_for_mission": self.clears_incident_for_mission,
+            "cleared_by": self.cleared_by,
         }
 
 
@@ -222,6 +229,8 @@ def build_observation(policy: ValuePolicy, payload: dict[str, Any]) -> Observati
         output_rejected=bool(payload.get("output_rejected", False)),
         boundary_incident=bool(payload.get("boundary_incident", False)),
         notes=str(payload.get("notes", "")),
+        clears_incident_for_mission=str(payload.get("clears_incident_for_mission", "")),
+        cleared_by=str(payload.get("cleared_by", "")),
     )
 
 
@@ -317,10 +326,18 @@ def evaluate_mode(
         )
         return verdict
 
-    # An incident blocks until reviewed and cleared, so it is checked against
-    # every observation for the mode rather than only the recent window. Scoping
-    # it to the window let an unreviewed incident clear itself on day 91.
-    if policy.boundary_incident_blocks_verdict and any(o.boundary_incident for o in for_mode):
+    # An incident blocks until reviewed and cleared. Checking every observation
+    # (not just the window) stops it ageing itself out; honouring explicit
+    # clearance records stops it blocking forever with no route to recovery.
+    cleared = {
+        obs.clears_incident_for_mission
+        for obs in for_mode
+        if obs.clears_incident_for_mission and obs.cleared_by
+    }
+    unresolved = [
+        obs for obs in for_mode if obs.boundary_incident and obs.mission_id not in cleared
+    ]
+    if policy.boundary_incident_blocks_verdict and unresolved:
         verdict.verdict = VERDICT_BLOCKED
         verdict.reasons.append(
             "A boundary incident was recorded for this mode; no value verdict until reviewed."
@@ -398,6 +415,41 @@ def evaluate_mode(
     return verdict
 
 
+def _previously_met(
+    mode: str,
+    observations: Iterable[Observation],
+    policy: ValuePolicy,
+    now: datetime | None,
+) -> bool:
+    """Did this mode ever meet the threshold over an earlier window?
+
+    Reconstructed from the ledger rather than stored, so it survives a fresh
+    process and cannot drift from the observations it summarises.
+    """
+    now = now or datetime.now(timezone.utc)
+    history = sorted(
+        (obs for obs in observations if obs.mode == mode),
+        key=lambda obs: obs.observed_at,
+    )
+    if len(history) <= policy.min_observations:
+        return False
+    # Walk earlier prefixes; if any complete prefix met the threshold, the mode
+    # reached a stage it can now be demoted from.
+    for end in range(policy.min_observations, len(history)):
+        prefix = history[:end]
+        stamps = [obs.observed_at for obs in prefix]
+        try:
+            as_of = datetime.fromisoformat(max(stamps))
+        except ValueError:
+            continue
+        if as_of.tzinfo is None:
+            as_of = as_of.replace(tzinfo=timezone.utc)
+        earlier = evaluate_mode(mode, prefix, policy, now=as_of)
+        if earlier.verdict == VERDICT_MEETS:
+            return True
+    return False
+
+
 class ValueLedger:
     """Append-only JSONL store of observations."""
 
@@ -434,10 +486,20 @@ class ValueLedger:
             if modes
             else {o.mode for o in observations} | set(policy.baselines)
         )
-        verdicts = [
-            evaluate_mode(mode, observations, policy, now=now).to_json()
-            for mode in target_modes
-        ]
+        verdicts = []
+        for mode in target_modes:
+            # Demotion is only reachable when the mode previously passed, so the
+            # report has to reconstruct that instead of always passing False —
+            # which made `demote` unreachable from the documented path.
+            verdicts.append(
+                evaluate_mode(
+                    mode,
+                    observations,
+                    policy,
+                    now=now,
+                    previously_met=_previously_met(mode, observations, policy, now),
+                ).to_json()
+            )
         return {
             "policy_version": "config/value_policy.toml",
             "threshold": policy.min_net_time_saved_ratio,

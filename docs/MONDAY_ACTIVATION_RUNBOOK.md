@@ -192,7 +192,18 @@ touches professional liability.
    bare `gmail://` locator is unusable to them. Agent 007 puts the minimized
    excerpt in the packet; a real-connector evidence record with no content is
    refused at prepare time.
-8. **The JEOS Executive Chief of Staff does not exist as an agent.** Section 5
+8. **The harness cannot prove a specialist actually ran.** `complete()` accepts
+   the returned packet and validates its shape, correlation, isolation, and
+   definition-of-done coverage — but a caller who fabricated a clean packet
+   would pass those checks. Synthetic evidence is excluded from coverage, the
+   ledger is hash-chained, and hand-supplied evidence is cross-checked against
+   it, which raises the cost; none of it is proof of execution. Treat coverage
+   as "a well-formed mission was recorded", not "a specialist demonstrably ran".
+9. **Value evidence and mission ledgers are machine-local.** `audit/` is
+   git-ignored: it holds mission ids, notes, errors, and measured value, which
+   `AGENTS.md` sections 4 and 12 keep out of public Git. Back it up yourself if
+   you want it to survive this machine.
+10. **The JEOS Executive Chief of Staff does not exist as an agent.** Section 5
    names it as JEOS's front door, but no such identity is registered. JEOS work
    currently routes through Agent 007. This is a real gap between the
    constitution and the roster, and it needs your decision (see below).

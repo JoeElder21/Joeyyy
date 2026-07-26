@@ -250,6 +250,10 @@ class MissionEvidence:
     value_recorded: bool = False
     contract_sha: str = ""
     completed_at: str = ""
+    # True only when every evidence record came from a real source. The active
+    # gate says "controlled real mission"; a schema-valid synthetic fixture must
+    # never satisfy it, and the test suite is full of such fixtures.
+    real_evidence: bool = False
 
     @property
     def qualifies_mode(self) -> bool:
@@ -265,6 +269,7 @@ class MissionEvidence:
             and self.connector_isolation_verified
             and self.readback_performed
             and self.value_recorded
+            and self.real_evidence
             and not self.errors
         )
 
@@ -280,6 +285,7 @@ class MissionEvidence:
             "connector_isolation_verified": self.connector_isolation_verified,
             "readback_performed": self.readback_performed,
             "value_recorded": self.value_recorded,
+            "real_evidence": self.real_evidence,
             "contract_sha": self.contract_sha,
             "completed_at": self.completed_at,
             "errors": self.errors,
@@ -368,6 +374,16 @@ class MissionRunner:
             },
         }
 
+        established = self._established_baseline(spec.mode)
+        if established is not None and established != spec.baseline_minutes:
+            # A baseline that moves per run lets the same mode reach 35% by
+            # inflating the comparison rather than by saving time.
+            raise MissionRejected(
+                f"{spec.agent}: mode {spec.mode!r} already has an established baseline of "
+                f"{established} minutes; this mission supplied {spec.baseline_minutes}. "
+                "Change it deliberately in config/value_policy.toml, not per mission"
+            )
+
         errors = self.guard.validate(DELEGATION_SCHEMA, delegation)
         if errors:
             raise MissionRejected(
@@ -412,7 +428,9 @@ class MissionRunner:
         correction_minutes: float,
         maintenance_share_minutes: float,
         incident_minutes: float = 0.0,
-        accepted_first_pass: bool = True,
+        # Fail closed. Defaulting to True recorded acceptance Joe never gave, and
+        # five such calls satisfy the 70% quality gate on unmeasured acceptance.
+        accepted_first_pass: bool = False,
         output_rejected: bool = False,
         readback_performed: bool = False,
         notes: str = "",
@@ -544,6 +562,9 @@ class MissionRunner:
         # evidence never qualifies. So the flag is set to what the write is
         # about to achieve, the mission record lands first, and a failure to
         # record value emits a compensating entry that revokes the claim.
+        evidence.real_evidence = all(
+            record.source_type != "synthetic" for record in spec.evidence
+        )
         evidence.value_recorded = pending_observation is not None
         evidence.ledger_entry = self.ledger.append("mission_completed", evidence.to_json())
 
@@ -563,6 +584,26 @@ class MissionRunner:
                     },
                 )
         return evidence
+
+    def _established_baseline(self, mode: str) -> int | None:
+        """The baseline this mode has already been measured against, if any.
+
+        Prefers the reviewed policy file, then the most recent recorded
+        observation, so a baseline is set once rather than per run.
+        """
+        from_policy = self.value_policy.usable_baseline(mode)
+        if from_policy is not None:
+            return from_policy
+        if not self.value_ledger.path.exists():
+            return None
+        try:
+            observations = self.value_ledger.observations(self.value_policy)
+        except ObservationRejected:
+            return None
+        for observation in reversed(observations):
+            if observation.mode == mode:
+                return observation.baseline_minutes
+        return None
 
     def contract_sha(self, agent: str) -> str:
         """Fingerprint of the exact contract + manifest entry a mission ran under.
@@ -621,6 +662,7 @@ class MissionRunner:
                     ledger_entry=entry,
                     value_observation=detail.get("value_observation"),
                     value_recorded=bool(detail.get("value_recorded")),
+                    real_evidence=bool(detail.get("real_evidence")),
                     contract_sha=detail.get("contract_sha", ""),
                     completed_at=detail.get("completed_at", ""),
                 )
@@ -692,6 +734,7 @@ class MissionRunner:
         uncovered, not omitted. Silence about missing coverage reads as coverage.
         """
         ledger_errors: list[str] = []
+        supplied = evidences is not None
         if evidences is None:
             # A broken hash chain means the evidence store has been rewritten.
             # Granting coverage from it would let an edited record promote a
@@ -699,10 +742,24 @@ class MissionRunner:
             ledger_errors = self.ledger.verify()
             evidences = [] if ledger_errors else self.evidence_from_ledger()
 
+        # Supplied evidence is convenient for tests but must not be a way to
+        # hand-construct coverage. Cross-check each record against the ledger.
+        recorded_ids: set[str] = set()
+        if supplied:
+            ledger_errors = self.ledger.verify()
+            if not ledger_errors:
+                recorded_ids = {
+                    entry.delegation_id for entry in self.evidence_from_ledger()
+                }
+
         qualifying: dict[str, list[str]] = {}
         stale: list[str] = []
+        unrecorded: list[str] = []
         for evidence in evidences:
             if not evidence.qualifies_mode:
+                continue
+            if supplied and evidence.delegation_id not in recorded_ids:
+                unrecorded.append(f"{evidence.agent}:{evidence.mode}")
                 continue
             current = self.contract_sha(evidence.agent) if evidence.agent in self.roster else ""
             # An absent hash is stale, not exempt. Defaulting it to "" and then
@@ -733,6 +790,7 @@ class MissionRunner:
             name for name, entry in report["agents"].items() if entry["all_modes_covered"]
         )
         report["stale_contract_evidence"] = sorted(set(stale))
+        report["unrecorded_evidence"] = sorted(set(unrecorded))
         report["ledger_verification_errors"] = ledger_errors
         report["ledger_trustworthy"] = not ledger_errors
         return report

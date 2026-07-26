@@ -28,7 +28,13 @@ def spec(**overrides) -> MissionSpec:
         objective="Produce one capacity map from the supplied calendar evidence.",
         definition_of_done=["Return one source-linked capacity map."],
         definition_of_done_ids=["capacity-map"],
-        evidence=[EvidenceRecord(source_ref=SOURCE, source_type="synthetic")],
+        evidence=[
+            EvidenceRecord(
+                source_ref=SOURCE,
+                source_type="connector_record",
+                content="09:00-10:30 site walk; 13:00-14:00 review call",
+            )
+        ],
         baseline_minutes=20,
         baseline_source="joe_declared",
         required_artifact_types=["capacity_map"],
@@ -103,6 +109,7 @@ COSTS = dict(
     correction_minutes=0.0,
     maintenance_share_minutes=0.5,
     readback_performed=True,
+    accepted_first_pass=True,
 )
 
 
@@ -477,7 +484,11 @@ class GateIntegrityTests(RunnerHarness):
                 objective="Review the supplied sheet set for grading risk.",
                 definition_of_done=["Return one QA risk packet."],
                 definition_of_done_ids=["qa-packet"],
-                evidence=[EvidenceRecord("fixture/apex/sheets-1", "synthetic")],
+                evidence=[
+                    EvidenceRecord(
+                        "fixture/apex/sheets-1", "connector_record", content="sheet set"
+                    )
+                ],
                 baseline_minutes=45,
                 baseline_source="joe_declared",
                 required_artifact_types=["qa_risk_packet"],
@@ -521,3 +532,89 @@ class LedgerBackedPromotionTests(RunnerHarness):
         report = self.runner.promotion_status([evidence])
         self.assertEqual(report["covered_modes"], 0)
         self.assertIn(f"{AGENT}:{MODE}", report["stale_contract_evidence"])
+
+
+class RealMissionProvenanceTests(RunnerHarness):
+    """A fixture must never satisfy a "controlled real mission" gate."""
+
+    def test_synthetic_evidence_does_not_qualify_a_mode(self):
+        prepared = self.runner.prepare(
+            spec(evidence=[EvidenceRecord(SOURCE, "synthetic")])
+        )
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        self.assertEqual(evidence.errors, [])
+        self.assertFalse(evidence.real_evidence)
+        self.assertFalse(evidence.qualifies_mode)
+        self.assertEqual(self.runner.promotion_status([evidence])["covered_modes"], 0)
+
+    def test_real_connector_evidence_qualifies(self):
+        prepared = self.runner.prepare(spec())
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        self.assertTrue(evidence.real_evidence)
+        self.assertTrue(evidence.qualifies_mode)
+
+    def test_one_synthetic_record_taints_the_whole_mission(self):
+        prepared = self.runner.prepare(
+            spec(
+                evidence=[
+                    EvidenceRecord(SOURCE, "connector_record", content="real"),
+                    EvidenceRecord("fixture/synthetic-1", "synthetic"),
+                ]
+            )
+        )
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        self.assertFalse(evidence.real_evidence)
+        self.assertFalse(evidence.qualifies_mode)
+
+
+class AcceptanceDefaultTests(RunnerHarness):
+    def test_acceptance_defaults_to_false(self):
+        """Never record acceptance Joe may not have given."""
+        prepared = self.runner.prepare(spec())
+        costs = {k: v for k, v in COSTS.items() if k != "accepted_first_pass"}
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **costs)
+        self.assertFalse(evidence.value_observation["accepted_first_pass"])
+
+
+class BaselineConsistencyTests(RunnerHarness):
+    def test_a_mode_cannot_change_its_baseline_between_runs(self):
+        """A moving baseline reaches 35% by inflation rather than by saving time."""
+        prepared = self.runner.prepare(spec())
+        self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+
+        with self.assertRaises(MissionRejected) as caught:
+            self.runner.prepare(spec(baseline_minutes=200))
+        self.assertIn("established baseline", str(caught.exception))
+
+    def test_the_same_baseline_is_accepted_again(self):
+        prepared = self.runner.prepare(spec())
+        self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        self.runner.prepare(spec())
+
+
+class SuppliedEvidenceVerificationTests(RunnerHarness):
+    def test_hand_constructed_evidence_does_not_grant_coverage(self):
+        """A caller must not be able to fabricate promotion coverage."""
+        from runtime.mission_runner import MissionEvidence
+
+        forged = MissionEvidence(
+            delegation_id="delegation:forged:0000",
+            mission_id="mission:forged",
+            agent=AGENT,
+            mode=MODE,
+            brain="JEOS",
+            status="completed",
+            typed_return_valid=True,
+            connector_isolation_verified=True,
+            readback_performed=True,
+            errors=[],
+            ledger_entry=None,
+            value_observation=None,
+            value_recorded=True,
+            real_evidence=True,
+            contract_sha=self.runner.contract_sha(AGENT),
+        )
+        self.assertTrue(forged.qualifies_mode)
+        report = self.runner.promotion_status([forged])
+        self.assertEqual(report["covered_modes"], 0)
+        self.assertIn(f"{AGENT}:{MODE}", report["unrecorded_evidence"])

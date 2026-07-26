@@ -316,3 +316,110 @@ class ReportCoverageTests(unittest.TestCase):
             self.assertTrue(reported)
             self.assertTrue(set(policy.baselines).issubset(reported))
             self.assertEqual(report["value_proven_modes"], [])
+
+
+class IncidentClearanceTests(unittest.TestCase):
+    """An incident must block until reviewed — and be clearable without a rewrite."""
+
+    def setUp(self):
+        self.policy = ValuePolicy.load()
+
+    def _good(self, count):
+        return [
+            build_observation(self.policy, payload(mission_id=f"M-{i}"))
+            for i in range(count)
+        ]
+
+    def test_an_unresolved_incident_blocks(self):
+        obs = self._good(self.policy.min_observations)
+        obs.append(
+            build_observation(
+                self.policy, payload(mission_id="M-BAD", boundary_incident=True)
+            )
+        )
+        verdict = evaluate_mode("delivery_control", obs, self.policy, now=NOW)
+        self.assertEqual(verdict.verdict, VERDICT_BLOCKED)
+
+    def test_an_appended_clearance_record_resolves_it(self):
+        obs = self._good(self.policy.min_observations)
+        obs.append(
+            build_observation(
+                self.policy, payload(mission_id="M-BAD", boundary_incident=True)
+            )
+        )
+        obs.append(
+            build_observation(
+                self.policy,
+                payload(
+                    mission_id="M-CLEAR",
+                    clears_incident_for_mission="M-BAD",
+                    cleared_by="joe",
+                ),
+            )
+        )
+        verdict = evaluate_mode("delivery_control", obs, self.policy, now=NOW)
+        self.assertNotEqual(verdict.verdict, VERDICT_BLOCKED)
+
+    def test_a_clearance_without_an_approver_does_not_count(self):
+        obs = self._good(self.policy.min_observations)
+        obs.append(
+            build_observation(
+                self.policy, payload(mission_id="M-BAD", boundary_incident=True)
+            )
+        )
+        obs.append(
+            build_observation(
+                self.policy,
+                payload(mission_id="M-CLEAR", clears_incident_for_mission="M-BAD"),
+            )
+        )
+        verdict = evaluate_mode("delivery_control", obs, self.policy, now=NOW)
+        self.assertEqual(verdict.verdict, VERDICT_BLOCKED)
+
+
+class DemotionIsReachableFromTheReportTests(unittest.TestCase):
+    """`demote` must be reachable from the documented report path.
+
+    Note a real property this exposes: ``evaluate_mode`` averages every
+    observation still inside the window, so a run of strong early results
+    dilutes recent degradation. Demotion therefore needs sustained weakness,
+    not a bad week. That is a deliberate trade (it resists noise) but it does
+    mean the signal lags; recorded here rather than left for someone to
+    discover from a verdict that seemed slow to react.
+    """
+
+    def test_a_mode_that_passed_then_degraded_is_demoted_in_the_report(self):
+        from datetime import timedelta as _td
+
+        policy = ValuePolicy.load()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ValueLedger(Path(tmp) / "value.jsonl")
+            start = NOW - _td(days=30)
+            # A stretch of strong runs establishes that the mode once passed...
+            for i in range(policy.min_observations):
+                ledger.record(
+                    build_observation(
+                        policy,
+                        payload(
+                            mission_id=f"GOOD-{i}",
+                            observed_at=(start + _td(hours=i)).isoformat(),
+                        ),
+                    )
+                )
+            # ...then it degrades, and stays degraded long enough to outweigh
+            # the earlier run. Acceptance stays high so the quality gate is not
+            # what trips: this is specifically the demotion path.
+            for i in range(15):
+                ledger.record(
+                    build_observation(
+                        policy,
+                        payload(
+                            mission_id=f"BAD-{i}",
+                            review_minutes=58,
+                            accepted_first_pass=True,
+                            observed_at=(NOW - _td(hours=i + 1)).isoformat(),
+                        ),
+                    )
+                )
+            report = ledger.report(policy, modes=["delivery_control"], now=NOW)
+            self.assertEqual(report["modes"][0]["verdict"], VERDICT_DEMOTE)
