@@ -114,7 +114,18 @@ class LeaseRegistry:
         return dict(lease) if lease is not None else None
 
     def release(self, lease_id: str, *, readback_confirmed: bool) -> dict:
-        """Close a lease. ``verified`` requires confirmed readback (gate 14)."""
+        """Close a lease. ``verified`` requires confirmed readback (gate 14).
+
+        Returns a copy, and stores a SEPARATE copy in history -- the untouched
+        sibling of the fix applied to `issue()` and `active_lease()`. This
+        method appended the live object to `_history` and handed the caller the
+        same object, so setting `status` or `writer_agent` on the returned dict
+        rewrote the registry's recorded history. That history is the audit
+        evidence for a completed mutation, which makes it the one record a
+        caller must not be able to edit after the fact: a closed lease saying
+        `verified` when the readback was never confirmed is exactly the claim
+        gate 14 exists to prevent. Reproduced before fixing.
+        """
         for key, lease in list(self._active.items()):
             if lease["lease_id"] == lease_id:
                 lease["status"] = "verified" if readback_confirmed else "released_unverified"
@@ -122,8 +133,12 @@ class LeaseRegistry:
                     "confirmed" if readback_confirmed else "not_confirmed"
                 )
                 del self._active[key]
-                self._history.append(lease)
-                return lease
+                # Two independent copies: one for the record, one for the
+                # caller. Appending `lease` and returning `dict(lease)` would
+                # still leave the stored object reachable by anything else
+                # holding it, and `_expire` also appends here.
+                self._history.append(dict(lease))
+                return dict(lease)
         raise LeaseError(f"no active lease with id {lease_id}")
 
     def _expire(self, now: _dt.datetime) -> None:
@@ -131,7 +146,12 @@ class LeaseRegistry:
             if _dt.datetime.fromisoformat(lease["expires_at"]) <= now:
                 lease["status"] = "expired"
                 del self._active[key]
-                self._history.append(lease)
+                # A copy here too. Nothing outside currently holds this object,
+                # so this path is not reachable today -- but "history stores
+                # its own copy" is the invariant, and an invariant that holds
+                # on two of three paths is the shape every sibling finding in
+                # this record has taken.
+                self._history.append(dict(lease))
 
 
 @dataclass

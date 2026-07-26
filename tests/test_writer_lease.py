@@ -91,6 +91,63 @@ class LeaseRegistryTests(unittest.TestCase):
             self.assertIn(field_name, lease)
 
 
+class RegistryImmutabilityTests(unittest.TestCase):
+    """No caller may edit the registry's own records by holding a handle.
+
+    `issue()` and `active_lease()` were fixed to return copies; `release()` was
+    the untouched sibling, and it was the worse one -- it appended the LIVE
+    object to `_history` and returned that same object, so a caller could
+    rewrite recorded audit evidence after the fact. A closed lease reading
+    `verified` when the readback was never confirmed is precisely the claim the
+    readback gate exists to prevent.
+    """
+
+    def test_the_returned_lease_cannot_rewrite_history(self):
+        registry = LeaseRegistry()
+        lease = _issue(registry)
+        closed = registry.release(lease["lease_id"], readback_confirmed=False)
+        closed["status"] = "verified"
+        closed["validation_readback"] = "confirmed"
+        closed["writer_agent"] = "someone_else"
+        recorded = registry._history[-1]
+        self.assertEqual(recorded["status"], "released_unverified")
+        self.assertEqual(recorded["validation_readback"], "not_confirmed")
+        self.assertEqual(recorded["writer_agent"], lease["writer_agent"])
+
+    def test_history_is_not_aliased_to_the_returned_object(self):
+        registry = LeaseRegistry()
+        lease = _issue(registry)
+        closed = registry.release(lease["lease_id"], readback_confirmed=True)
+        self.assertIsNot(closed, registry._history[-1])
+
+    def test_issue_and_lookup_also_return_copies(self):
+        # Asserted alongside, because the property is "the registry never hands
+        # out a handle to its own state" -- checking only the method that was
+        # reported is how this one survived the first fix.
+        registry = LeaseRegistry()
+        lease = _issue(registry)
+        lease["writer_agent"] = "someone_else"
+        key = canonical_key(lease["owner_brain"], lease["write_target"], lease["resource_id"])
+        looked_up = registry.active_lease(key)
+        self.assertNotEqual(looked_up["writer_agent"], "someone_else")
+        looked_up["status"] = "released"
+        self.assertEqual(registry.active_lease(key)["status"], "active")
+
+    def test_an_expired_lease_is_recorded_independently(self):
+        # The third path into `_history`. Nothing outside holds that object
+        # today, so this is the invariant rather than a live hole -- and an
+        # invariant that holds on two of three paths is how the next finding
+        # arrives.
+        registry = LeaseRegistry()
+        _issue(registry, hours=1)
+        later = NOW + datetime.timedelta(hours=2)
+        _issue(registry, mission_id="m-expiry", now=later)
+        expired = [item for item in registry._history if item["status"] == "expired"]
+        self.assertTrue(expired, "no lease expired; this test would be vacuous")
+        for record in expired:
+            self.assertNotIn(record["lease_id"], {id(x) for x in registry._active.values()})
+
+
 class MutationAdmissionTests(unittest.TestCase):
     def test_mutation_requires_matching_active_lease_and_serializes(self):
         registry = LeaseRegistry()

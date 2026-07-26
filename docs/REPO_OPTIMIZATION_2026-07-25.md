@@ -1308,6 +1308,83 @@ equivalent weakness one round earlier was recorded as unfixable — this one was
 fixable, and the difference is that "the steps that run the suite" is
 mechanically identifiable while "named for deletion" is not.
 
+### Thirtieth pass — the instruction issuer, built on Joe's direction
+
+Joe marked four findings **Fix** on the twenty-ninth round. Three were already
+fixed in `3f8851b` (the prohibition containment, the `active_leases` type check,
+and the CONTRIBUTING install sequence — his markers landed on the corrected
+lines). The fourth was `_high_impact_boundary`'s grant requirement, which this
+record had **deferred to him**: marking it Fix is the decision, so the issuer is
+built.
+
+**`scripts/issue_instruction.py` mints the grant the boundary demands.** Before
+it, the control was not merely strict — it was **unsatisfiable**. Nothing in the
+repository could produce an instruction grant: the launcher issues mount-shaped
+grants, and the only constructor was a test helper calling the private `_sign`.
+An action Joe had expressly authorized had no path through the gate.
+
+Four decisions worth stating, because each was a place this could have gone
+wrong:
+
+- **A separate command from `trusted_launcher.py`.** Launching a mount and
+  minting Joe's personal authority for the six reserved actions are different
+  privileges, and the second must not be a subcommand of the first. It is also
+  forced: the enforcement point already imports the launcher's `_sign`, so
+  putting the issuer there and importing the classifier back would be circular.
+- **The signing primitive is imported, never reimplemented.** Two definitions of
+  "what a valid grant looks like" is how an issuer and its verifier drift apart,
+  and the operator would be the one holding the rejected authorization.
+- **The grant records the boundary CATEGORY, derived with the enforcement
+  point's own classifier.** An issuer storing the raw verb would mint grants
+  that never match, and the reasonable conclusion would be that the gate is
+  broken. This does mean an instruction is scoped to the category rather than
+  the literal verb — `publishReport` and `sendEmail` are both
+  `public_publication`, so one authorizes the other **on the same resource**.
+  That is the boundary's own granularity, not a widening introduced here, and it
+  is the right one: verb spellings are not stable, which is what the twenty-sixth
+  pass was about. The resource binding is exact.
+- **The window is capped at 60 minutes and defaults to 15.** An instruction that
+  outlives the conversation it came from is a standing authorization, which is
+  the thing a per-action boundary exists to prevent.
+
+The issuer also refuses to mint for a non-boundary action. Issuing a meaningless
+grant for `read` would teach the operator that minting instructions is routine,
+and the entire value of this control is that it is not.
+
+**What it does not do, stated in the module and printed on every issue:** the
+grant is replayable until it expires. Single-use enforcement needs the nonce
+consumed at an execution boundary, and a policy evaluation deliberately has no
+side effects — otherwise *asking* whether an action is permitted would burn the
+grant. `trusted_launcher` consumes mount-grant nonces because it *is* an
+execution boundary; there is no equivalent for instructions until `enforce()`
+has call sites. **Nonce consumption remains an open decision, and the short
+window is a mitigation rather than a fix.**
+
+The binding test is end-to-end: issue a grant, hand it to
+`_high_impact_boundary`, require the action permitted — with a control proving
+the same request is refused without one. Every category in `HIGH_IMPACT_ACTIONS`
+is exercised, derived from the set rather than sampled, because one category
+left unissuable is one act Joe cannot authorize and it would be discovered only
+when he tried.
+
+**A Copilot finding arrived mid-round and is fixed here too.**
+`LeaseRegistry.release()` appended the **live** lease object to `_history` and
+returned that same object, so a caller could rewrite recorded audit evidence
+after the fact — setting `status` to `verified` on a lease whose readback was
+never confirmed is exactly the claim the readback gate exists to prevent.
+Reproduced, then fixed with two independent copies. `issue()` and
+`active_lease()` were given copies in an earlier round and `release()` was the
+untouched sibling; it was also the worst of the three, because it is the one
+that writes history. `_expire()` — the third path into `_history` — was
+corrected in the same change even though nothing outside currently holds that
+object: an invariant that holds on two of three paths is the shape every sibling
+finding in this record has taken.
+
+**One mutation left MISSED and recorded.** Storing the live object in `_history`
+while returning a copy is not detectable: after `del self._active[key]` nothing
+outside holds a reference, so no behavioural test can distinguish it from the
+copy. It is kept as defence in depth against a future path that retains one.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

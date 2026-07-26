@@ -1,0 +1,173 @@
+"""Mint a signed task-level instruction for one high-impact boundary action.
+
+`AGENTS.md` reserves six actions to Joe personally, and
+`PolicyEnforcementPoint._high_impact_boundary` refuses every one of them unless
+the request carries a signed grant bound to *that* action and *that* resource.
+Nothing in the repository could produce such a grant: `trusted_launcher.py`
+issues MOUNT-shaped grants, and the only instruction-grant constructor was a
+test helper calling the private `_sign`. So an action Joe had expressly
+authorized had no supported path through the boundary once `enforce()` was
+wired -- the control was not merely strict, it was unsatisfiable.
+
+This is deliberately a separate command from `trusted_launcher.py`. Launching a
+mount and minting Joe's personal authority are different privileges, and the
+second should not be a subcommand of the first. It is also why this module
+imports the launcher's signing primitive rather than defining one: two
+implementations of "what a valid grant looks like" is how the issuer and the
+verifier drift apart, and the enforcement point already imports the same
+`_sign`.
+
+**What this does not do.** The grant is replayable within its expiry window.
+Single-use enforcement requires consuming the nonce at the execution boundary,
+and a policy evaluation deliberately has no side effects -- otherwise merely
+*asking* whether an action is permitted would burn the grant. `trusted_launcher`
+consumes mount-grant nonces because it *is* an execution boundary; there is no
+equivalent for instructions until `enforce()` has call sites. Nonce consumption
+is a recorded open decision in `docs/REPO_OPTIMIZATION_2026-07-25.md`, and the
+short default expiry is the mitigation, not a fix.
+
+Usage:
+    python scripts/issue_instruction.py --action publish_report \\
+        --resource APEX/Strategy-Campaigns/launch-brief --minutes 15
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import secrets
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.policy_enforcement import (  # noqa: E402
+    HIGH_IMPACT_ACTIONS,
+    PolicyEnforcementPoint,
+)
+from scripts.trusted_launcher import DEFAULT_KEY_PATH, _load_or_create_key, _sign  # noqa: E402
+
+# An instruction authorizes an irreversible act. A grant that outlives the
+# conversation it came from is a standing authorization, which is the thing the
+# per-action boundary exists to prevent, so the ceiling is deliberately low.
+MAX_INSTRUCTION_MINUTES = 60
+DEFAULT_INSTRUCTION_MINUTES = 15
+
+
+class InstructionRefused(Exception):
+    """The instruction cannot be issued as stated."""
+
+
+def issue_instruction(
+    action: str,
+    resource: str,
+    minutes: int = DEFAULT_INSTRUCTION_MINUTES,
+    key_path: Path = DEFAULT_KEY_PATH,
+    out_dir: Path | None = None,
+    now: float | None = None,
+) -> Path:
+    """Write a signed instruction grant and return its path.
+
+    The `action` recorded in the grant is the boundary CATEGORY, derived with
+    the enforcement point's own classifier rather than restated here. The rule
+    compares the grant against `_boundary_category(request.action)`, so an
+    issuer that stored the raw verb would mint grants that never match: the
+    operator would hold a signed authorization the gate rejects, and would
+    reasonably conclude the gate was broken.
+
+    **The grant is therefore scoped to the category, not to the literal verb.**
+    `publishReport` and `sendEmail` are both `public_publication`, so an
+    instruction issued for one authorizes the other *on the same resource*.
+    That is the boundary's own granularity rather than a widening introduced
+    here, and it is the correct one: verb spellings are not stable -- the same
+    act arrives as `publish_report`, `publishReport`, or `publish` depending on
+    the dispatcher -- so binding to a literal string would produce grants that
+    fail for the act they were issued for. The resource binding is exact.
+    """
+    if not isinstance(action, str) or not action.strip():
+        raise InstructionRefused("an instruction must name an action")
+    if not isinstance(resource, str) or not resource.strip():
+        raise InstructionRefused("an instruction must name a resource")
+    if not isinstance(minutes, int) or isinstance(minutes, bool):
+        raise InstructionRefused("minutes must be an integer")
+    if not 0 < minutes <= MAX_INSTRUCTION_MINUTES:
+        raise InstructionRefused(
+            f"minutes must be within (0, {MAX_INSTRUCTION_MINUTES}]; an instruction "
+            "that outlives its conversation is a standing authorization"
+        )
+
+    category = PolicyEnforcementPoint._boundary_category(action)
+    if category not in HIGH_IMPACT_ACTIONS:
+        # Refused rather than issued-and-ignored. A grant for `read` authorizes
+        # nothing the gate consults, so issuing one teaches the operator that
+        # minting instructions is routine -- and the whole value of this
+        # boundary is that it is not.
+        raise InstructionRefused(
+            f"{action!r} is not a high-impact boundary action, so it needs no "
+            f"instruction; the boundary categories are {sorted(HIGH_IMPACT_ACTIONS)}"
+        )
+    if PolicyEnforcementPoint._escapes_the_tree(resource):
+        raise InstructionRefused(
+            f"{resource!r} resolves outside the repository; an instruction cannot "
+            "authorize a target the gate refuses to classify"
+        )
+
+    now = now if now is not None else time.time()
+    payload = {
+        "action": category,
+        "resource": resource,
+        "issued_at": int(now),
+        "expires_at": int(now + minutes * 60),
+        # secrets, not random: a predictable nonce is a forgeable grant the day
+        # nonce consumption lands.
+        "nonce": secrets.token_hex(16),
+    }
+    grant = {**payload, "sig": _sign(_load_or_create_key(key_path), payload)}
+
+    out_dir = out_dir or (key_path.parent / "instructions")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"instruction-{category}-{payload['nonce'][:8]}.json"
+    path.write_text(json.dumps(grant, indent=1, sort_keys=True), encoding="utf-8")
+    # Same posture as the signing key and the mount grants: a world-readable
+    # authorization is one anything on the box can present.
+    path.chmod(0o600)
+    return path
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Issue one signed task-level instruction.")
+    parser.add_argument("--action", required=True, help="The action Joe is authorizing.")
+    parser.add_argument("--resource", required=True, help="The exact target it is bound to.")
+    parser.add_argument(
+        "--minutes",
+        type=int,
+        default=DEFAULT_INSTRUCTION_MINUTES,
+        help=f"Validity window, at most {MAX_INSTRUCTION_MINUTES}.",
+    )
+    parser.add_argument("--key", type=Path, default=DEFAULT_KEY_PATH)
+    parser.add_argument("--out-dir", type=Path, default=None)
+    args = parser.parse_args(argv)
+
+    try:
+        path = issue_instruction(
+            args.action,
+            args.resource,
+            minutes=args.minutes,
+            key_path=args.key,
+            out_dir=args.out_dir,
+        )
+    except InstructionRefused as refusal:
+        print(f"refusing to issue: {refusal}", file=sys.stderr)
+        return 2
+    print(path)
+    print(
+        "This grant is replayable until it expires; nonce consumption is not yet "
+        "implemented. Keep the window short.",
+        file=sys.stderr,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
