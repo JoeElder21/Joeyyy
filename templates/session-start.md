@@ -81,9 +81,15 @@ splitting on `$(...)` let a file named `--help` land as the scanner's first
 argument: it printed usage, exited 0, and scanned none of the other paths — a
 green gate over an unscanned tree, chosen by whoever named the file.
 
+`--diff-filter=d` drops deleted paths. Without it an ordinary unstaged deletion
+hands the scanner a path that no longer exists, it reports the file unreadable,
+and the mandatory front-loaded validation cannot pass at all — which teaches you
+to skip the step rather than fix anything.
+
 ```bash
 # Scans tracked files AND anything new this session has written.
-{ git diff --name-only -z; git ls-files --others --exclude-standard -z; } \
+{ git diff --name-only --diff-filter=d -z; \
+  git ls-files --others --exclude-standard -z; } \
   | xargs -0 --no-run-if-empty python scripts/privacy_guard.py --
 python scripts/privacy_guard.py            # tracked tree, after the above
 python scripts/validate_specialist_corps.py
