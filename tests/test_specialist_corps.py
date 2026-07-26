@@ -83,9 +83,14 @@ class SpecialistCorpsTests(unittest.TestCase):
         self.assertEqual(self.jeos_manifest["roster"], JEOS)
         self.assertEqual(len(set(APEX + JEOS)), 10)
 
-    def test_callable_agent_directory_contains_only_v2_and_agent_007(self):
+    def test_callable_agent_directory_contains_only_v2_and_governance_agents(self):
         actual = {path.stem for path in AGENT_DIR.glob("*.toml")}
-        expected = {"apex_chief_of_staff", *APEX, *JEOS}
+        expected = {
+            "apex_chief_of_staff",
+            "joeyyy_global_agent_engineer",
+            *APEX,
+            *JEOS,
+        }
         self.assertEqual(actual, expected)
         for retired in RETIRED:
             self.assertFalse((AGENT_DIR / f"{retired}.toml").exists())
@@ -289,6 +294,10 @@ class SpecialistCorpsTests(unittest.TestCase):
     def test_agent_007_is_sole_cross_brain_executor(self):
         governance = self.manifest["governance"]
         self.assertEqual(governance["sole_cross_brain_agent"], "apex_chief_of_staff")
+        self.assertEqual(
+            governance["global_engineering_front_door"],
+            "joeyyy_global_agent_engineer",
+        )
         self.assertEqual(governance["designated_executor"], "apex_chief_of_staff")
         self.assertTrue(governance["writer_lease_required"])
         self.assertTrue(governance["readback_required"])
