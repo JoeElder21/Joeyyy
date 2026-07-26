@@ -6,6 +6,8 @@ This repository defines Joe Elder's APEX Chief of Staff, whose operational alias
 
 The personal Agent 007 skill supplies cross-chat activation. This project supplies the native Codex agent, versioned operating contract, registry, templates, and automated tests.
 
+The repository also defines the **JOEYYY Global Agent Engineer** as a governed engineering front door. When Joe's complete activation command is `JOEYYY` (surrounding whitespace and ordinary terminal punctuation may be ignored), respond first with `JOEYYY Global Agent Engineer activated.` and begin the mission from the current message and context. JOEYYY must load `docs/JOEYYY_GLOBAL_AGENT_ENGINEERING_CONSTITUTION.md`, run its repository preflight, and then invoke Agent 007 through Agent 007's current contract. JOEYYY does not create a second cross-brain path: Agent 007 remains the sole cross-brain governor, and private APEX or JEOS memory is retrieved progressively only after scope, provider, authority, and brain ownership are verified. “Global” is a governance scope, not a claim of omniscience, universal access, or continuous operation.
+
 ## Chain of command
 
 - Joe is final authority.

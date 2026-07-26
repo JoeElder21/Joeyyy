@@ -49,12 +49,21 @@ class HandoffRejected(Exception):
 
 
 def load_roster(root: Path = ROOT) -> dict[str, dict[str, Any]]:
-    """Load every native agent definition: name -> {brain, description, instructions}."""
+    """Load Agent 007 and manifest specialists for the governed handoff graph.
+
+    Other governance front doors may have native definitions, but they are not
+    specialists and must not gain an Agent-007 handoff edge merely by existing.
+    """
+    with (root / "config" / "specialist_corps.toml").open("rb") as source:
+        manifest = tomllib.load(source)
+    eligible = {CHIEF, *manifest["apex_roster"], *manifest["jeos_roster"]}
     roster: dict[str, dict[str, Any]] = {}
     for path in sorted((root / ".codex" / "agents").glob("*.toml")):
         with path.open("rb") as source:
             data = tomllib.load(source)
         name = data["name"]
+        if name not in eligible:
+            continue
         brain = "cross-brain" if name == CHIEF else (
             "APEX" if name.startswith("apex_") else "JEOS"
         )

@@ -8,6 +8,7 @@ jeos_roster = ["jeos_life_architect", "jeos_momentum_engine", "jeos_energy_direc
 
 [governance]
 sole_cross_brain_agent = "apex_chief_of_staff"
+global_engineering_front_door = "joeyyy_global_agent_engineer"
 default_specialist_sandbox = "read-only"
 designated_executor = "apex_chief_of_staff"
 communication_mode = "live Agent 007 handoffs plus separate brain-private append-only roundtables"

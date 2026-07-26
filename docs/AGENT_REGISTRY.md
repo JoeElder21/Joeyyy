@@ -28,6 +28,26 @@ Static and synthetic packet validation permit shadow operation. An agent becomes
 - Last audit: v2 mirrored-corps migration, 2026-07-23
 - Known errors: no v2.1 named-specialist runtime evidence yet
 
+## JOEYYY Global Agent Engineer
+
+- Status: shadow (native configuration and deterministic preflight are tested; no controlled live mission evidence yet)
+- Canonical native name: `joeyyy_global_agent_engineer`
+- Alias and exact activation command: `JOEYYY`
+- Owner layer: repository-wide engineering governance, operating through Agent 007
+- Purpose: load the canonical engineering constitution, establish current repository evidence, create a governed mission contract, and route brain-scoped or cross-brain work through Agent 007
+- Inputs: Joe's mission, current conversation, repository contracts, public-safe system record selected by preflight, and only progressively retrieved memory from a provider verified in the active session
+- Outputs: mission contract, verified engineering changes or diagnosis, claim ledger, validation evidence, readback, rollback, and outcome-first closeout
+- Tools/connectors/skills: repository tools and only those verified callable in the active runtime; no connector or private-memory availability is inferred from configuration
+- Memory: `scripts/joeyyy_preflight.py` may select the latest dated public reconciliation/integration record; private APEX and JEOS retrieval remains separate, minimal, provider-verified, and governed solely through Agent 007
+- Write targets: public-safe repository engineering surfaces on a controlled branch; brain-owned targets remain owner-routed and lease-controlled
+- Native sandbox: `workspace-write`; default project configuration remains read-only
+- Boundaries: not omniscient, not continuously running, not a second cross-brain agent, no direct bulk-load of both brains, no private data in Git, and all always-gated actions remain gated
+- Handoff: `.codex/agents/apex_chief_of_staff.toml`, current schemas, PacketGuard, and `templates/joeyyy-mission-contract.md`
+- Validation: `tests/test_joeyyy_global_agent.py`, TOML parsing, privacy guard, specialist validation, runtime verification, and the full unit suite
+- Version: 0.1.0
+- Last audit: static implementation and synthetic preflight, 2026-07-26
+- Known errors: no controlled live activation mission, private provider integration, or longitudinal value evidence exists
+
 ## APEX specialist unit
 
 All APEX specialists are brain-locked, read-only by default, and in shadow stage. They use only APEX evidence and communicate only inside APEX.

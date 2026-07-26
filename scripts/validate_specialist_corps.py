@@ -204,9 +204,15 @@ def _parse_configuration() -> tuple[dict[str, Any], list[str]]:
 
     native_paths = sorted((ROOT / ".codex" / "agents").glob("*.toml"))
     parsed_native = {path.stem: _load_toml(path) for path in native_paths}
-    expected_native = {"apex_chief_of_staff", *roster}
+    expected_native = {
+        "apex_chief_of_staff",
+        manifest["governance"]["global_engineering_front_door"],
+        *roster,
+    }
     if set(parsed_native) != expected_native:
-        errors.append("native custom-agent files do not match Agent 007 plus the roster")
+        errors.append(
+            "native custom-agent files do not match the governance agents plus the roster"
+        )
     for agent in roster:
         native = parsed_native.get(agent)
         if native is None or native.get("name") != agent:
