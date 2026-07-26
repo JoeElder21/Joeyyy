@@ -1,0 +1,31 @@
+# Per-finding gitleaks exemptions.
+#
+# One fingerprint per line, never a path or directory rule. A directory
+# exemption would silence every future finding under it as well, which is how a
+# real credential gets committed into a folder someone once excused. Each entry
+# below names an exact commit, file, rule and line, so it stops applying the
+# moment that line changes.
+#
+# Every exemption here is a documentation or test placeholder verified by hand
+# at the line cited. Adding one requires reading the line, not trusting this
+# comment.
+
+# scripts/privacy_guard.py builds its own negative fixtures as SPLIT string
+# literals -- `"p" + 'assword": "secure_password"'` -- precisely so the guard's
+# own patterns do not match its test data. gitleaks reassembles the
+# concatenation and sees a credential assignment that exists in no single
+# literal. The value is the word "secure_password".
+03cb44399f6ed4f5904ffc4ac33dfadfb164a759:scripts/privacy_guard.py:generic-api-key:321
+
+# Kubernetes Secret manifests in an absorbed agent's documentation. The values
+# are `myapp-secrets` style placeholders in a worked example of how to mount a
+# secret, not a secret.
+d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:454
+d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:455
+d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:591
+
+# `const API_KEY = "..."` inside code-review and OWASP instruction documents,
+# where the surrounding prose is teaching a reviewer to REJECT a hardcoded key.
+# The example has to look like the thing it warns about.
+7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/code-review-generic.instructions.md:stripe-access-token:142
+7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/security-and-owasp.instructions.md:stripe-access-token:412

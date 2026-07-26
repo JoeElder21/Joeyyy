@@ -64,6 +64,8 @@ pydantic-core==2.46.4
     # via pydantic
 python-dotenv==1.2.2
     # via autogen-agentchat
+pyyaml==6.0.3
+    # via -r requirements.txt
 regex==2026.7.19
     # via tiktoken
 requests==2.34.2
