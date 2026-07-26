@@ -308,6 +308,29 @@ class OrderService:
         """Calculate tax based on user location"""
         # Simplified tax calculation
         return subtotal * Decimal('0.08')  # 8% tax
+    
+    def _process_payment(self, order, user, idempotency_key: str):
+        """Charge through the gateway configured in __init__.
+        
+        The idempotency key is required, not optional: capture runs from a retryable
+        task with at-least-once delivery, so without it a redelivery double-charges.
+        """
+        return self.payment_gateway.charge(
+            amount=order.total,
+            customer=user,
+            idempotency_key=idempotency_key,
+        )
+    
+    def _release_inventory(self, order) -> None:
+        """Return reserved stock when an order will never be paid."""
+        for item in order.items.select_related('product'):
+            Product.objects.filter(pk=item.product_id).update(
+                stock=F('stock') + item.quantity
+            )
+    
+    def _send_order_confirmation(self, order) -> None:
+        self.email_service.send_order_confirmation(order)
+    
     def _fail_order_and_release_stock(self, order, reason: str) -> None:
         """Single reconciliation path for every capture failure."""
         with transaction.atomic():
@@ -379,10 +402,12 @@ def capture_payment_task(self, order_id: int, user_id: int) -> None:
 ### Django Admin Customization
 ```python
 from django.contrib import admin
+from django.core.cache import cache
 from django.utils.html import format_html
 from django.urls import reverse
 from django.db.models import Count, Sum
 from .models import Product, Category, Order, OrderItem
+from .tasks import update_search_index
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -456,14 +481,39 @@ class ProductAdmin(admin.ModelAdmin):
     stock_display.short_description = 'Stock'
     stock_display.admin_order_field = 'stock'
     
+    # `queryset.update()` writes straight to SQL: it never calls save() and never emits
+    # post_save, so the invalidate_product_cache receiver defined later in this project
+    # does not run. Bulk-publishing left `featured_products` and the search index stale
+    # until something else happened to touch each row. Fire the same side effects
+    # explicitly rather than trading correctness for one query.
+    def _run_post_save_side_effects(self, product_ids):
+        """Everything the post_save receiver would have done, done explicitly."""
+        cache.delete_many([
+            'featured_products',
+            'published_products',
+            *[f'product_{pk}' for pk in product_ids],
+        ])
+        for pk in product_ids:
+            update_search_index.delay('product', pk)
+
+    def _bulk_set(self, request, queryset, message, **fields):
+        # Capture the ids BEFORE updating: the filter that selected these rows may no
+        # longer match them afterwards.
+        product_ids = list(queryset.values_list('pk', flat=True))
+        updated = queryset.update(**fields)
+        self._run_post_save_side_effects(product_ids)
+        self.message_user(request, message.format(count=updated))
+
     def make_published(self, request, queryset):
-        updated = queryset.update(is_published=True)
-        self.message_user(request, f'{updated} products published.')
+        self._bulk_set(
+            request, queryset, '{count} products published.', is_published=True
+        )
     make_published.short_description = 'Publish selected products'
     
     def make_featured(self, request, queryset):
-        updated = queryset.update(is_featured=True)
-        self.message_user(request, f'{updated} products featured.')
+        self._bulk_set(
+            request, queryset, '{count} products featured.', is_featured=True
+        )
     make_featured.short_description = 'Feature selected products'
 ```
 
