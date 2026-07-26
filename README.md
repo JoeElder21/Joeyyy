@@ -51,6 +51,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/ABSORBED_PATTERNS.md` — capability-absorption record from the ecosystem analysis.
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
+- `docs/FRAMEWORK_INTEGRATION_PROGRAM.md` — staged, fail-closed program for the nine requested multi-agent, workflow, memory, retrieval, and validation frameworks; starts with Microsoft AutoGen.
+- `config/framework_integrations.toml` — machine-checked integration contracts and per-framework validation/rollback gates.
+- `agent_runtime/autogen_orchestrator.py` — local, brain-locked group-chat participant selector for a future validated AutoGen adapter.
 - `schemas/` — delegation, handoff, and roundtable packet contracts.
 - `templates/agent-intake.md` — new-agent onboarding and validation.
 - `templates/specialist-handoff.md` — human-readable specialist packet.
@@ -67,11 +70,12 @@ Run:
 ```bash
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
+python scripts/validate_framework_integrations.py
 python -m unittest discover -s tests -v
 ```
 
 GitHub Actions runs the same checks on pushes to `main` and pull requests.
 
-The harness parses the configuration and validates synthetic v2.1 packets and fail-closed boundary probes. It does not invoke named agents, call connectors, complete real missions, or prove output quality.
+The harness parses the configuration and validates synthetic v2.1 packets and fail-closed boundary probes. The framework validator checks nine public integration contracts; it does not install packages, invoke named agents, call connectors, complete real missions, or prove output quality.
 
 The ten v2.1 specialists are deployed in `shadow` stage. Each becomes active only after every material mode completes a controlled real mission with evidence, runtime connector-isolation verification, writer-lease compliance, and readback where a mutation occurs. Agents are invoked on demand and do not claim continuous background operation.

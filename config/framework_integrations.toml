@@ -1,0 +1,81 @@
+version = "1.0.0"
+owner = "apex_chief_of_staff"
+rollback_parent = "85f01dc0d9d8eb6a9c5f427f2fdf5dba0c5ab9a4"
+public_repository_rule = "Configuration contains no connector identifiers, credentials, Drive identifiers, or source records."
+
+# An entry is an integration contract, not a claim that its package, service, or
+# connector is installed.  `validated` can only be set after its listed gate is
+# evidenced in the target runtime.
+
+[integrations.autogen]
+repository = "microsoft/autogen"
+role = "runtime_conversation_orchestration"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+entrypoint = "agent_runtime.autogen_orchestrator:GroupChatOrchestrator"
+validation_gate = "Run same-brain synthetic debate, validate every handoff with PacketGuard, and prove no opposite-brain participant is selectable."
+rollback = "Remove this integration entry and agent_runtime/autogen_orchestrator.py; no runtime state is stored by this repository."
+
+[integrations.langgraph]
+repository = "langchain-ai/langgraph"
+role = "lifecycle_and_cadence_state_machine"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Prove lifecycle guards reject shadow-to-active promotion without every required evidence item and pause high-impact actions for Joe."
+rollback = "Disable the adapter configuration; retain PacketGuard as the enforcement baseline."
+
+[integrations.crewai]
+repository = "crewAIInc/crewAI"
+role = "role_task_crew_mapping"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Map one same-brain crew from the roster and require each task output to validate as its registered artifact type."
+rollback = "Disable crew execution; canonical TOML definitions remain authoritative."
+
+[integrations.prefect]
+repository = "PrefectHQ/prefect"
+role = "retryable_cadence_scheduling"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Run one synthetic, idempotent cadence with task retries and artifact metadata; do not schedule a live run before runtime review."
+rollback = "Unschedule the deployment and remove its runtime configuration."
+
+[integrations.mem0]
+repository = "mem0ai/mem0"
+role = "scoped_agent_memory"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Prove agent-scoped retrieval, writer-lease enforcement before add, and no cross-brain result leakage using synthetic records."
+rollback = "Disable the client and delete only synthetic test storage through the verified runtime procedure."
+
+[integrations.llama_index]
+repository = "run-llama/llama_index"
+role = "brain_scoped_retrieval_index"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Build separate synthetic APEX and JEOS indexes and prove retrieval never crosses the selected brain."
+rollback = "Delete synthetic index storage through the runtime and remove the adapter configuration."
+
+[integrations.langchain]
+repository = "langchain-ai/langchain"
+role = "structured_output_and_tools"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Parse a synthetic typed handoff against the existing schema and prove tools are supplied only through the brain-scoped proxy."
+rollback = "Disable chains and retain JSON Schema validation as the baseline."
+
+[integrations.jsonschema]
+repository = "python-jsonschema/jsonschema"
+role = "standards_json_schema_validation"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Compare valid and invalid synthetic packets with Draft 2020-12 validation and collect all errors."
+rollback = "Use the existing dependency-free PacketGuard structural validator."
+
+[integrations.pydantic]
+repository = "pydantic/pydantic"
+role = "typed_packet_models"
+status = "configured_not_validated"
+owner_brain = "Agent-007"
+validation_gate = "Model-validate a synthetic v2.1 packet and cross-check it with PacketGuard before any runtime adoption."
+rollback = "Remove typed adapter models; JSON schemas and PacketGuard remain canonical."

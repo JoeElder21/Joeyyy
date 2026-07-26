@@ -22,4 +22,5 @@ jobs:
         run: |
           python scripts/privacy_guard.py
           python scripts/validate_specialist_corps.py
+          python scripts/validate_framework_integrations.py
           python -m unittest discover -s tests -v

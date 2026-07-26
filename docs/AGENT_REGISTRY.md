@@ -93,6 +93,16 @@ See `docs/ROSTER_MIGRATION_2026-07-23.md` for the reversible migration record.
 
 External tools under evaluation for the ecosystem. These are not agents; they are infrastructure that agents would use. None may be treated as available until validated in its target environment. Source analysis: `docs/ECOSYSTEM_REPO_ANALYSIS.md` (2026-07-23).
 
+### Nine-framework integration program (AutoGen first)
+
+- Status: configured, not runtime-validated
+- Owner layer: Agent 007 governance
+- Scope: `microsoft/autogen`, `langchain-ai/langgraph`, `crewAIInc/crewAI`, `PrefectHQ/prefect`, `mem0ai/mem0`, `run-llama/llama_index`, `langchain-ai/langchain`, `python-jsonschema/jsonschema`, and `pydantic/pydantic`
+- Contract and gates: `config/framework_integrations.toml`; operating record: `docs/FRAMEWORK_INTEGRATION_PROGRAM.md`
+- First implementation: a brain- and mode-locked local group-chat participant selector at `agent_runtime/autogen_orchestrator.py`, tested only with synthetic configuration
+- Boundaries: no external package, Drive connector, memory service, scheduler, or live agent is claimed available; no specialist lifecycle status changes through this program
+- Rollback: revert this additive integration program or use the per-framework TOML rollback instruction after a future runtime activation
+
 ### Civil 3D MCP connector (barbosaihan/civil3d-mcp)
 
 - Status: candidate
