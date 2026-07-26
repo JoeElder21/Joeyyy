@@ -237,15 +237,23 @@ class OrderService
   def call
     return false unless valid?
     
+    # Payment capture is deliberately OUTSIDE this transaction. Capturing inside it
+    # means a later failure - update_inventory finding insufficient stock under its
+    # lock, a notification raising, or the commit itself - rolls back the order while
+    # the external charge stands, leaving a charged customer with no order and no
+    # compensation path. The order commits PENDING first; capture then runs as an
+    # idempotent, retryable job keyed on the order id, which reconciles the pending
+    # order on every failure path.
     ActiveRecord::Base.transaction do
       @order = create_order
-      process_payment
       update_inventory
-      send_notifications
       clear_cart
       
       @order
     end
+
+    CapturePaymentJob.perform_later(@order.id)
+    @order
   rescue StandardError => e
     errors.add(:base, e.message)
     false

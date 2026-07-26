@@ -976,11 +976,17 @@ class MemoryEfficientDataStructures:
     @staticmethod
     def create_slots_class(class_name: str, attributes: List[str]) -> type:
         """Create class with __slots__ for memory efficiency"""
+        # __init__ must return None. A lambda wrapping a list comprehension returns
+        # the list it built, so every instantiation raised
+        # "TypeError: __init__() should return None, not 'list'" after setting the
+        # attributes. Use a real function so the return is implicit.
+        def __init__(self, **kwargs):
+            for attr in attributes:
+                setattr(self, attr, kwargs.get(attr))
+
         return type(class_name, (), {
             '__slots__': attributes,
-            '__init__': lambda self, **kwargs: [
-                setattr(self, attr, kwargs.get(attr)) for attr in attributes
-            ]
+            '__init__': __init__,
         })
     
     @staticmethod

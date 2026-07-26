@@ -110,7 +110,7 @@ sample fails the guard until the new literal is reviewed and pinned.
 contents, because a missing field exposes no forbidden tool *names* to match on and
 would otherwise pass a check that only inspects what is declared.
 
-### Agent bodies (9)
+### Agent bodies (15)
 
 Divergences from upstream, applied because the shipped samples are wrong in ways that
 would mislead anyone acting on them. Each was reported by automated review on the PR.
@@ -126,6 +126,11 @@ would mislead anyone acting on them. Each was reported by automated review on th
 | `specialized/python/web-scraping-expert.md` | `headers` left in `**kwargs` *and* passed explicitly → `TypeError` on every custom-header request | `kwargs.pop('headers', {})` |
 | `specialized/python/ml-data-expert.md` | Appended `nn.Softmax` while training with `CrossEntropyLoss`, which applies log-softmax itself → softmax twice, distorted gradients | Output layer emits logits; added `predict_proba()` for inference |
 | `specialized/django/django-backend-expert.md` | Three: stock decremented without re-checking under `select_for_update` (oversell); payment captured *inside* `transaction.atomic` (charged customer, rolled-back order); success-rate division by zero on a valid empty import | Re-validates under the lock; capture moved to a durable retryable Celery task enqueued from `transaction.on_commit`, idempotent on order id, reconciling the pending order on every failure path; guarded denominator |
+| `specialized/python/fastapi-expert.md` (2 more) | `PaginatedResponse` was a plain `BaseModel` but used as `PaginatedResponse[UserResponse]` → `TypeError` at import, so no route registered; `/export` was declared after `/{user_id}` so FastAPI matched `export` as a UUID and returned 422 | Made it `Generic[T]` with `items: List[T]`; moved the literal route above the dynamic one |
+| `specialized/python/performance-expert.md` | `create_slots_class()` used a lambda wrapping a list comprehension as `__init__`, which returns the list → `TypeError` on every instantiation | Real initializer, implicit `None` return |
+| `specialized/rails/rails-api-developer.md` | `paginate()` returned only Pagy's records while `pagination_meta` called Kaminari accessors on them → `NoMethodError`; `show` and the GraphQL `product` resolver looked up unscoped, letting anyone enumerate unpublished drafts by ID | Returns the `pagy` object too and builds metadata from it; both single-product paths scope to `Product.published` for non-admins |
+| `specialized/rails/rails-backend-expert.md` | Payment captured inside `ActiveRecord::Base.transaction`, so a later inventory or notification failure rolled back the order while the charge stood | Order commits pending; capture runs as an idempotent retryable job |
+| `specialized/python/devops-cicd-expert.md` | Build published branch/latest/short-SHA tags but the deploy substituted the full `github.sha`, so the rollout pulled a tag that was never pushed | Added `type=sha,format=long` to the metadata tags |
 
 Everything else is byte-identical to upstream.
 

@@ -221,6 +221,12 @@ jobs:
           type=ref,event=branch
           type=ref,event=pr
           type=sha,prefix={{branch}}-
+          # The FULL commit SHA, because the deploy job below substitutes
+          # github.sha into the manifest. Without this the build publishes only
+          # branch, latest, and a branch-prefixed SHORT sha, so a normal
+          # main-branch deploy asks Kubernetes to pull a tag that was never
+          # pushed and the rollout fails on ImagePullBackOff.
+          type=sha,format=long
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push Docker image

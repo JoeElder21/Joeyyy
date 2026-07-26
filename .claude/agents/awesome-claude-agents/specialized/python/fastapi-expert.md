@@ -275,7 +275,7 @@ app = create_app()
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, Annotated
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union, Annotated
 from uuid import UUID
 
 from pydantic import (
@@ -470,10 +470,19 @@ class PaginationParams(BaseModel):
         return (self.page - 1) * self.size
 
 
-class PaginatedResponse(BaseModel):
-    """Réponse paginée générique."""
-    
-    items: List[Any] = Field(description="Éléments de la page courante")
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Réponse paginée générique.
+
+    NB : doit hériter de Generic[T]. Les routes l'utilisent en tant que
+    `PaginatedResponse[UserResponse]` ; sans paramètre de type, cette
+    souscription lève TypeError au chargement du module et aucune route ne
+    s'enregistre.
+    """
+
+    items: List[T] = Field(description="Éléments de la page courante")
     total: int = Field(description="Nombre total d'éléments")
     page: int = Field(description="Page courante")
     size: int = Field(description="Taille de page")
@@ -735,6 +744,37 @@ async def update_current_user(
     return UserResponse.model_validate(updated_user)
 
 
+# NB : cette route littérale DOIT précéder `/{user_id}`. FastAPI teste les routes
+# dans l'ordre de déclaration ; si la route dynamique vient d'abord, `export` est
+# validé comme un UUID et la requête échoue en 422 sans jamais atteindre ce handler.
+@router.get(
+    "/export",
+    response_class=StreamingResponse,
+    dependencies=[Depends(get_current_admin)],
+    summary="Exporter les utilisateurs",
+    description="Exporter la liste des utilisateurs en CSV ou Excel",
+)
+async def export_users(
+    format: str = Query("csv", regex="^(csv|excel)$", description="Format d'export"),
+    search: UserSearchParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Exporter les utilisateurs."""
+    export_service = ExportService(db)
+    
+    # Générer le fichier d'export
+    file_stream, filename, media_type = await export_service.export_users(
+        format=format,
+        search_params=search,
+    )
+    
+    return StreamingResponse(
+        file_stream,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @router.get(
     "/{user_id}",
     response_model=UserResponse,
@@ -830,34 +870,6 @@ async def upload_avatar(
     updated_user = await user_service.update_avatar(current_user, file)
     
     return UserResponse.model_validate(updated_user)
-
-
-@router.get(
-    "/export",
-    response_class=StreamingResponse,
-    dependencies=[Depends(get_current_admin)],
-    summary="Exporter les utilisateurs",
-    description="Exporter la liste des utilisateurs en CSV ou Excel",
-)
-async def export_users(
-    format: str = Query("csv", regex="^(csv|excel)$", description="Format d'export"),
-    search: UserSearchParams = Depends(),
-    db: AsyncSession = Depends(get_db),
-) -> StreamingResponse:
-    """Exporter les utilisateurs."""
-    export_service = ExportService(db)
-    
-    # Générer le fichier d'export
-    file_stream, filename, media_type = await export_service.export_users(
-        format=format,
-        search_params=search,
-    )
-    
-    return StreamingResponse(
-        file_stream,
-        media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
 
 
 @router.delete(

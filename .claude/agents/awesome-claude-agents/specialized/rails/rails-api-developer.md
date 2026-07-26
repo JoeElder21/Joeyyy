@@ -227,6 +227,9 @@ module Api
         render json: { error: exception.message }, status: :bad_request
       end
       
+      # Returns BOTH halves. Returning only `records` loses the Pagy object, and an
+      # ActiveRecord relation has no current_page/next_page/total_pages - those are
+      # Kaminari's - so building metadata from it raised NoMethodError on every index.
       def paginate(collection)
         pagy, records = pagy(collection)
         
@@ -235,7 +238,7 @@ module Api
         response.headers['X-Per-Page'] = pagy.items.to_s
         response.headers['X-Pages'] = pagy.pages.to_s
         
-        records
+        [pagy, records]
       end
     end
   end
@@ -254,15 +257,19 @@ module Api
           .search(params[:q])
           .sorted_by(params[:sort])
         
-        @products = paginate(products)
+        pagy, @products = paginate(products)
         
         render json: @products,
                each_serializer: ProductSerializer,
-               meta: pagination_meta(@products)
+               meta: pagination_meta(pagy)
       end
       
       def show
-        @product = Product.find(params[:id])
+        # Scope the public read. `show` is exempt from authentication, so an
+        # unscoped find lets any caller enumerate unpublished drafts by ID - the
+        # index is already restricted to Product.published for the same reason.
+        scope = current_user&.admin? ? Product.all : Product.published
+        @product = scope.find(params[:id])
         
         render json: @product,
                serializer: ProductDetailSerializer,
@@ -329,13 +336,14 @@ module Api
         params.slice(:category_id, :min_price, :max_price, :in_stock)
       end
       
-      def pagination_meta(collection)
+      # Built from the Pagy object, whose accessors are page/next/prev/pages/count.
+      def pagination_meta(pagy)
         {
-          current_page: collection.current_page,
-          next_page: collection.next_page,
-          prev_page: collection.prev_page,
-          total_pages: collection.total_pages,
-          total_count: collection.total_count
+          current_page: pagy.page,
+          next_page: pagy.next,
+          prev_page: pagy.prev,
+          total_pages: pagy.pages,
+          total_count: pagy.count
         }
       end
     end
@@ -565,7 +573,11 @@ module Types
     end
     
     def product(id:)
-      Product.find(id)
+      # Same scoping as the `products` field above and the REST `show`. An unscoped
+      # find here reopens draft enumeration by ID through GraphQL after the REST
+      # path was closed.
+      scope = context[:current_user]&.admin? ? Product.all : Product.published
+      scope.find(id)
     end
     
     def me
