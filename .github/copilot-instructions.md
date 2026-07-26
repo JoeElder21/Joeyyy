@@ -73,8 +73,16 @@ stable across sessions so the audit trail stays comparable.
 Run these immediately after the **first meaningful edit**, not only before
 committing:
 
+A bare `privacy_guard.py` enumerates via `git ls-files`, so a file this edit
+just created is invisible to it. Pass the changed and untracked paths, after
+`--` so a filename cannot become an option, and with `--diff-filter=d` so an
+ordinary deletion does not fail the run:
+
 ```bash
-python scripts/privacy_guard.py
+{ git diff --name-only --diff-filter=d -z; \
+  git ls-files --others --exclude-standard -z; } \
+  | xargs -0 --no-run-if-empty python scripts/privacy_guard.py --
+python scripts/privacy_guard.py            # tracked tree, after the above
 python scripts/validate_specialist_corps.py
 python scripts/verify_runtime_stack.py
 python -m unittest discover -s tests -v

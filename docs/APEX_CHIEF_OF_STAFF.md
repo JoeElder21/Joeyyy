@@ -10,7 +10,7 @@ In any chat where the Agent 007 personal skill is available, say:
 
 `Activate Agent 007`
 
-Agent 007 responds `Agent 007 activated.`, treats the remainder of the message and current conversation as the mission, and begins without requiring another invocation.
+Activation is **bidirectional**: `Activate Agent 007` and `Awesome Copilot` are the same trigger, and either one activates both layers. Agent 007 responds `Agent 007 activated. Awesome Copilot layer active.`, treats the remainder of the message and current conversation as the mission, and begins without requiring another invocation. See `AGENTS.md` and `.github/AWESOME-COPILOT.md`.
 
 Inside this Codex project, the existing native agent name remains `apex_chief_of_staff` for compatibility, while Agent 007 is its operating identity and alias.
 
