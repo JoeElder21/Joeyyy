@@ -1224,6 +1224,90 @@ enumerated CI wiring and documentation and stopped, missing the requirements fil
 the harness itself introduced: the same too-narrow scoping that test exists to
 catch, inside that test.
 
+### Automated review, twenty-ninth pass — six findings, five fixed, one deferred
+
+**A prohibition was satisfied by asking for more than it forbade.** Containment
+was checked one way only — whether the prohibited scope covers the request. A
+commission allowing `APEX::Roundtable` while prohibiting
+`APEX::Roundtable::secret` therefore authorized a read of the **parent
+collection**, which serves the withheld record along with everything else. Now
+denied in both directions. Denial rather than filtering is deliberate: this is an
+authorization decision with no access to the records, so it cannot serve a
+redacted collection, and there is no third answer between allowing the exposure
+and refusing the read. A commission that means to permit the parent must not
+prohibit a child of it.
+
+The over-denial direction is tested too. `APEX/Strategy-CampaignsX` shares a
+textual prefix with `APEX/Strategy-Campaigns` and contains nothing of it; a
+`startswith` without the separator would deny it, which is over-denial dressed as
+rigour.
+
+**A drive-relative path walked out of the tree.** `_DRIVE_ABSOLUTE` required a
+separator after the colon, so `C:\secret.txt` was caught and `C:..\secret.txt` was
+not — separator normalization turns it into `C:../secret.txt`, which matches
+neither that pattern nor the leading-`../` check. `C:secret.txt` was equally
+uncaught. Verified: a chief read of each returned **`allowed=True` with an empty
+reason tuple**. Windows resolves every drive-qualified spelling against that
+drive's current directory, which this module cannot know, so all of them are now
+escapes. Checked in the other direction that `APEX::Roundtable` is not swept up —
+its second character is not a colon, which is what keeps it out.
+
+**The fourth ledger.** The previous round hand-listed three collection fields and
+missed `active_leases`, so `active_leases=7` still raised `TypeError` out of
+`_usable_leases`. Reachable only on the **no-registry** path, where `_lease_ledger`
+falls back to the caller's copy — the first reproduction used a registry, found
+nothing, and had to be re-run against the right construction before the finding
+could be confirmed. The replacement test enumerates the tuple-typed fields **from
+the dataclass**, because a hand-written list is precisely how a fourth field gets
+missed.
+
+**Two documentation findings, both siblings of last round's own fix.**
+
+- `evals/run_evaluations.py` printed "install `requirements/runtime-evaluation.txt`"
+  to an operator who had just been told the runtime was missing — the one
+  instruction seen at the moment it is acted on. The sweep that corrected every
+  document missed it because the sweep, and its test, were scoped to `*.md`. **A
+  command a program prints is documentation too**; the file type was the
+  incidental part.
+- The documented "run everything by hand" sequence installed only the contracts
+  lock, while CI's validate job installs the **root** lock first — and that lock
+  carries `autogen-agentchat`, so `tests/test_autogen_orchestrator.py` skipped on
+  the workstation and ran in CI. A sequence advertised as reproducing the gate
+  that quietly exercises fewer tests than the gate is the aggregate-versus-hand-run
+  divergence again, in the direction that lets a real failure reach CI unseen.
+  Both sequences now install every tier CI installs, derived from the workflow.
+
+| Finding | Verdict | Outcome |
+| --- | --- | --- |
+| Parent read allowed while a descendant was prohibited | **Correct — P1 fail-open** | Containment checked both ways; over-denial tested |
+| Drive-relative paths escaped the tree | **Correct — P1 fail-open** | Every drive-qualified spelling is an escape |
+| `active_leases` not type-checked | **Correct — P2** | Added; the test now derives the field list |
+| The runner printed the floating manifest | **Correct — P2** | Points at the lock; the check now covers printed commands |
+| Manual sequence installed fewer tiers than CI | **Correct — P2** | Root lock added to both, derived from the workflow |
+| No production issuer for instruction grants | **Correct — deferred** | See below |
+
+**Deferred: there is no trusted issuer for instruction grants.** Accurate.
+`_high_impact_boundary` accepts only a signed grant bound to action and resource;
+`trusted_launcher.py` issues *mount*-shaped grants, and the only instruction-grant
+constructor in the tree is a test helper calling the private `_sign`. Once
+`enforce()` is wired, an action Joe has expressly authorized has no supported path
+through the boundary. Building the issuer means creating a command that mints
+Joe's personal authority for the six actions `AGENTS.md` reserves to him —
+whoever can run it can authorize a financial transaction or a public publication.
+**Who may operate that command, and under what custody the signing key sits, is
+the decision**, not the code. It belongs with the governance-mount audit path and
+constraint-packet issuance already on the list; all three are the same question —
+what constitutes proof that an authorization was issued rather than asserted.
+
+**Mutation testing caught one weakness in this round's own test.** Asserting the
+locks appear *in the document* passed while the sequence itself had lost the root
+lock, because the same filename appears in a separate paragraph about the AutoGen
+adapter. Presence somewhere in a document is not presence in the steps a
+contributor executes; scoped to the fenced block that invokes the suite. The
+equivalent weakness one round earlier was recorded as unfixable — this one was
+fixable, and the difference is that "the steps that run the suite" is
+mechanically identifiable while "named for deletion" is not.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

@@ -328,6 +328,52 @@ class DocumentedInstallTests(unittest.TestCase):
                 pairs[parts[1]] = parts[2]
         return pairs
 
+    def test_the_manual_sequence_installs_every_tier_ci_installs(self):
+        # CI's validate job installs the root lock AND the contracts lock before
+        # running the suite; the documented sequence installed only contracts.
+        # `lock-runtime-root.txt` carries autogen-agentchat, so
+        # tests/test_autogen_orchestrator.py SKIPPED on a workstation following
+        # the documented steps and RAN in CI -- a sequence advertised as "run
+        # everything by hand" that quietly exercises fewer tests than the gate
+        # it is meant to reproduce.
+        #
+        # Derived from the workflow, so a fourth tier added to CI setup and
+        # missed in the documentation fails here rather than being discovered
+        # by a contributor whose green local run goes red on push.
+        installed = set(
+            re.findall(
+                r"pip install -r (requirements/lock-[a-z-]+\.txt)",
+                self.VALIDATE.read_text(encoding="utf-8"),
+            )
+        )
+        self.assertTrue(installed, "CI installs no locks; this test would be vacuous")
+        for relative in ("CONTRIBUTING.md", "README.md"):
+            # The fenced block that RUNS THE SUITE, not the whole document.
+            # Searching the file passed while the sequence itself had lost the
+            # root lock, because the same filename appears in a separate
+            # paragraph about the AutoGen adapter -- presence somewhere in the
+            # document is not presence in the steps a contributor executes.
+            # Found by mutation testing; the equivalent weakness one round
+            # earlier was not fixable, and this one is.
+            block = self._sequence_block((ROOT / relative).read_text(encoding="utf-8"))
+            self.assertIsNotNone(block, f"{relative} documents no runnable validation sequence")
+            for lock in sorted(installed):
+                with self.subTest(doc=relative, lock=lock):
+                    self.assertIn(
+                        lock,
+                        block,
+                        f"{relative} documents a full validation sequence that never "
+                        f"installs {lock}, which CI installs before the same suite",
+                    )
+
+    @staticmethod
+    def _sequence_block(text):
+        """The fenced bash block that invokes the unit suite."""
+        for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
+            if "unittest discover -s tests" in block:
+                return block
+        return None
+
     def test_the_drift_check_declares_its_pairs(self):
         # Guard against the derivation silently finding nothing, which would
         # make every assertion below vacuous.
@@ -341,7 +387,19 @@ class DocumentedInstallTests(unittest.TestCase):
         # lands on the workstation without being the version CI tested or the
         # scanner cleared -- the aggregate and the hand-run sequence diverging
         # again, this time between CI and the documentation a human follows.
-        docs = sorted(ROOT.glob("*.md")) + sorted(ROOT.glob("*/*.md"))
+        # Markdown AND the commands programs print. `evals/run_evaluations.py`
+        # printed "install requirements/runtime-evaluation.txt" to an operator
+        # who had just been told the runtime was missing -- the one instruction
+        # seen at the moment it is acted on, and the sweep that fixed every
+        # document missed it because the sweep was scoped to `*.md`. The
+        # property is "anything that tells a human what to install", not "every
+        # markdown file": the file type was the incidental part.
+        docs = (
+            sorted(ROOT.glob("*.md"))
+            + sorted(ROOT.glob("*/*.md"))
+            + sorted(ROOT.glob("*/*.py"))
+            + sorted(ROOT.glob("*.py"))
+        )
         for manifest in self._locked_manifests():
             command = f"pip install -r {manifest}"
             for path in docs:

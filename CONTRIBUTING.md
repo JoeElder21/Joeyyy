@@ -27,6 +27,13 @@ To run everything by hand:
 # The LOCK, not the manifest. CI installs the resolved lock and osv-scanner
 # audits it with --no-resolve, so installing the floating manifest here puts a
 # resolution on the workstation that nothing scanned and CI never tested.
+# The root lock FIRST. CI's validate job installs this before the contracts
+# lock, and it carries autogen-agentchat -- so `tests/test_autogen_orchestrator.py`
+# SKIPS on a workstation that installed only the contracts tier and RUNS in CI.
+# A sequence advertised as "run everything by hand" that silently exercises
+# fewer tests than CI is the aggregate-versus-hand-run divergence again, in the
+# direction that lets a real failure reach CI unseen.
+python -m pip install -r requirements/lock-runtime-root.txt
 python -m pip install -r requirements/lock-runtime-contracts.txt  # jsonschema, rtoml, mcp
 # Ruff too: runtime-contracts.txt does not carry it, and installing
 # pre-commit builds Ruff an isolated hook environment whose executable is

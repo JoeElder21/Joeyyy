@@ -268,8 +268,15 @@ def execute(stamp: str | None) -> int:
     report = coverage_report()
     if not report["deepeval_available"]:
         print(
+            # The LOCK, matching evals/README.md. The documentation was pointed
+            # at the audited lock and this printed command was left naming the
+            # floating manifest -- so the one instruction an operator sees at
+            # the moment they need it was the one that installs an unscanned
+            # resolution. A command a program PRINTS is documentation too, and
+            # scanning only *.md is how this survived the sweep that fixed the
+            # rest.
             "No evaluation runtime installed. Install with:\n"
-            "    python -m pip install -r requirements/runtime-evaluation.txt\n"
+            "    python -m pip install -r requirements/lock-runtime-evaluation.txt\n"
             "and provide a model for the judge metrics. Coverage inventory below.\n",
             file=sys.stderr,
         )

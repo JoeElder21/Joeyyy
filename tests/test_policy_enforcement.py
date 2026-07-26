@@ -2973,6 +2973,127 @@ class TwentySeventhPassRegressionTests(unittest.TestCase):
         self.assertTrue(self.pep.evaluate(self._handoff_read(delegation, handoff)).allowed)
 
 
+class TwentyNinthPassRegressionTests(unittest.TestCase):
+    """Containment in one direction, a drive-relative escape, and a fourth ledger."""
+
+    PARENT = "APEX/Strategy-Campaigns"
+    CHILD = "APEX/Strategy-Campaigns/apex_war_architect"
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _pair(self):
+        from tests.test_packet_contracts import PacketContractTests
+
+        PacketContractTests.setUpClass()
+        delegation, handoff = PacketContractTests().v21_readonly_pair()
+        return json.loads(json.dumps(delegation)), json.loads(json.dumps(handoff))
+
+    def _prohibiting(self, entries, resource):
+        delegation, _ = self._pair()
+        delegation["prohibited_scope"] = entries
+        return self.pep._prohibited_scope_errors(
+            ToolRequest(
+                agent=SPECIALIST,
+                action="read",
+                resource=resource,
+                owner_brain="APEX",
+                packet=delegation,
+                packet_schema="delegation_packet.schema.json",
+            ),
+            delegation,
+        )
+
+    def test_a_parent_read_is_denied_when_a_descendant_is_prohibited(self):
+        # Containment was checked one way only: whether the prohibition covers
+        # the request. A commission allowing the parent while prohibiting one
+        # child therefore authorized a read of the whole collection -- which
+        # serves the withheld record along with everything else. The prohibition
+        # was satisfied by asking for strictly MORE than it forbade.
+        errors = self._prohibiting([self.CHILD], self.PARENT)
+        self.assertTrue(errors, "a collection read served a record the commission withheld")
+        self.assertTrue(any("contained by" in error for error in errors), errors)
+
+    def test_the_original_direction_still_denies(self):
+        # The round-25/27 property, re-asserted: adding the reverse check must
+        # not displace the one already there.
+        self.assertTrue(self._prohibiting([self.PARENT], self.CHILD))
+
+    def test_containment_does_not_deny_unrelated_or_merely_similar_scopes(self):
+        # Both controls. `APEX/Strategy-CampaignsX` shares a textual prefix with
+        # the request and contains nothing of it -- a naive `startswith` without
+        # the separator would deny it, which is over-denial dressed as rigour.
+        for entries in (["JEOS/Other"], ["APEX/Strategy-CampaignsX"], ["binding commitments"]):
+            with self.subTest(entries=entries):
+                self.assertEqual(self._prohibiting(entries, self.PARENT), [])
+
+    def test_drive_relative_paths_are_escapes(self):
+        # `C:..\\secret.txt` normalizes to `C:../secret.txt`, matching neither
+        # the drive-ABSOLUTE pattern (which required a separator after the
+        # colon) nor the leading-`../` check. Windows resolves it against that
+        # drive's current directory, so a chief read returned allowed=True with
+        # an EMPTY reason tuple for a path outside the governed tree.
+        for resource in ("C:..\\secret.txt", "C:../secret.txt", "C:secret.txt", "c:x/y"):
+            with self.subTest(resource=resource):
+                decision = self.pep.evaluate(
+                    ToolRequest(agent=CHIEF, action="read", resource=resource, owner_brain="APEX")
+                )
+                self.assertFalse(decision.allowed, f"{resource} was allowed out of the tree")
+                self.assertTrue(decision.reasons)
+
+    def test_ordinary_resources_are_not_read_as_drive_paths(self):
+        # The other direction: a brain namespace and a repository path must not
+        # be swept up by a widened drive pattern. `APEX::Roundtable` has no
+        # colon in second position, which is what keeps it out.
+        for resource in ("docs/README.md", self.PARENT, "APEX::Roundtable"):
+            with self.subTest(resource=resource):
+                self.assertFalse(PolicyEnforcementPoint._escapes_the_tree(resource))
+
+    def test_every_collection_field_is_type_checked(self):
+        # Derived from the dataclass rather than enumerated. The previous round
+        # hand-listed three ledgers and missed `active_leases`, which then still
+        # raised TypeError out of `_usable_leases` on the no-registry path. A
+        # hand-written list is exactly how a fourth field gets missed, so this
+        # asserts the property over every tuple-typed field the request carries.
+        import dataclasses
+
+        collection_fields = [
+            field.name
+            for field in dataclasses.fields(ToolRequest)
+            if isinstance(
+                getattr(ToolRequest(agent="a", action="read", resource="r"), field.name), tuple
+            )
+        ]
+        self.assertIn("active_leases", collection_fields)
+        delegation, handoff = self._pair()
+        # registry=None is the path that reaches `_usable_leases`; with a
+        # registry the ledger comes from the registry and never touches the
+        # caller's copy, which is why the first reproduction of this found
+        # nothing and had to be re-run against the right construction.
+        pep = PolicyEnforcementPoint(ROOT, registry=None, clock=lambda: NOW)
+        base = {
+            "agent": SPECIALIST,
+            "action": "read",
+            "resource": self.CHILD,
+            "owner_brain": "APEX",
+            "packet": handoff,
+            "packet_schema": "handoff_packet.schema.json",
+            "delegations": [delegation],
+            "resource_id": handoff.get("resource_id"),
+        }
+        self.assertTrue(pep.evaluate(ToolRequest(**base)).allowed, "control must be admitted")
+        for name in collection_fields:
+            for bad in (7, None, "x", {"a": 1}):
+                with self.subTest(field=name, bad=type(bad).__name__):
+                    decision = pep.evaluate(ToolRequest(**{**base, name: bad}))
+                    self.assertFalse(decision.allowed)
+                    self.assertTrue(
+                        any("must be a list or tuple" in reason for reason in decision.reasons),
+                        decision.reasons,
+                    )
+
+
 class GovernanceMountAdmissionTests(unittest.TestCase):
     """A deferred gap, recorded as a tripwire rather than left to be rediscovered.
 

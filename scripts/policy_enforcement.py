@@ -204,7 +204,15 @@ CURRENT_MESSAGE = "current-message"
 # `C:/…`, `c:\…`, and the UNC form. A single letter before the colon is what
 # distinguishes a drive from a `mount:`/`connector:` handle, and it is the whole
 # reason a Windows path was being treated as an opaque handle rather than a path.
-_DRIVE_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
+# ANY drive-qualified path, not only drive-ABSOLUTE ones. The pattern required
+# a separator after the colon, so `C:\\secret.txt` was caught while the
+# drive-RELATIVE `C:..\\secret.txt` was not: separator normalization turns it
+# into `C:../secret.txt`, which matches neither this pattern nor the leading
+# `../` check, and Windows resolves it against the drive's current directory --
+# outside the repository. `C:secret.txt` was equally uncaught. On Windows every
+# drive-qualified spelling names a location this module cannot prove is inside
+# the tree, so all of them are escapes.
+_DRIVE_QUALIFIED = re.compile(r"^[A-Za-z]:")
 
 # A memory namespace is `APEX::…` or `JEOS::…`. Anchored, because merely
 # CONTAINING `::` was still enough to be treated as opaque -- so
@@ -649,6 +657,13 @@ class PolicyEnforcementPoint:
         for name, value in (
             ("delegations", request.delegations),
             ("constraint_packets", request.constraint_packets),
+            # The fourth ledger. The previous round added the three above and
+            # missed this one, so `active_leases=7` still raised TypeError out
+            # of `_usable_leases` -- on the no-registry path, where
+            # `_lease_ledger` falls back to the caller's copy. Enumerating
+            # fields by hand is how a fourth gets missed; the test below is
+            # derived from the dataclass instead.
+            ("active_leases", request.active_leases),
             ("private_constraint_packets", request.private_constraint_packets),
         ):
             if not isinstance(value, (list, tuple)):
@@ -867,12 +882,15 @@ class PolicyEnforcementPoint:
     def _escapes_the_tree(resource: str) -> bool:
         """A resource that climbs out of the repository cannot be classified.
 
-        Drive-absolute and UNC paths are escapes in their own right: they name
-        an absolute location that no amount of normalization brings inside the
-        tree, and `posixpath` has no concept of either.
+        Drive-qualified and UNC paths are escapes in their own right: they name
+        a location that no amount of normalization brings inside the tree, and
+        `posixpath` has no concept of either. Drive-RELATIVE spellings
+        (`C:..\\secret.txt`, `C:secret.txt`) count, not only drive-absolute
+        ones -- Windows resolves them against that drive's current directory,
+        which this module cannot know.
         """
         canonical = PolicyEnforcementPoint._canonical_resource(resource)
-        if _DRIVE_ABSOLUTE.match(canonical) or canonical.startswith("//"):
+        if _DRIVE_QUALIFIED.match(canonical) or canonical.startswith("//"):
             return True
         return canonical.startswith(("../", "/")) or canonical == ".."
 
@@ -1582,6 +1600,27 @@ class PolicyEnforcementPoint:
                     errors.append(
                         f"{label} prohibits {entry!r}, which covers the requested "
                         f"{request.resource!r}; a delegation cannot authorize what it forbids"
+                    )
+                elif normalized.startswith(f"{resource}/"):
+                    # Containment the OTHER way: the request names a parent that
+                    # CONTAINS the prohibited record. Checking only whether the
+                    # prohibition covers the resource meant a delegation
+                    # allowing `APEX::Roundtable` while prohibiting
+                    # `APEX::Roundtable::secret` still authorized a read of the
+                    # parent collection -- which serves the withheld record
+                    # along with everything else. The prohibition was satisfied
+                    # by asking for strictly more than it forbade.
+                    #
+                    # Denied rather than filtered: this is an authorization
+                    # decision with no access to the records, so it cannot serve
+                    # a redacted collection, and there is no third answer
+                    # between allowing the exposure and refusing the read. A
+                    # commission that means to permit the parent must not
+                    # prohibit a child of it.
+                    errors.append(
+                        f"{label} prohibits {entry!r}, which is contained by the requested "
+                        f"{request.resource!r}; a collection read cannot serve a record the "
+                        "commission withholds, and this gate cannot redact one"
                     )
         return errors
 
