@@ -280,7 +280,14 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
         'P' + "ASSWORD': get_env_variable('DB_READ_PASSWORD', default=get_env_variable('DB_PASSWORD')),",
     ),
     Path(".claude/agents/awesome-claude-agents/specialized/python/fastapi-expert.md"): (
-        'P' + 'assword = Annotated[str',
+        # The COMPLETE type-alias line, not just its opening fragment. A pin that
+        # stopped at the alias's first comma left the rest of the line unpinned, so
+        # extending it with credential-bearing metadata inside the Field(...) call
+        # would strip the name and the assignment and leave only unkeyed metadata,
+        # which no pattern matches. Pinning the whole line means any change to it
+        # fails the guard until the new text is reviewed. (The fragment is described
+        # rather than quoted: this file is scanned by its own patterns.)
+        'P' + 'assword = Annotated[str, Field(min_length=8, max_length=100)]',
         'user' + '@example.com"',
         'password: P' + 'assword = Field(description="Mot de passe (min 8 caractères)")',
     ),

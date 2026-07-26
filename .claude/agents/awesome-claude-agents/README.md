@@ -110,10 +110,22 @@ sample fails the guard until the new literal is reviewed and pinned.
 contents, because a missing field exposes no forbidden tool *names* to match on and
 would otherwise pass a check that only inspects what is declared.
 
-### Agent bodies (15)
+### Agent bodies
 
 Divergences from upstream, applied because the shipped samples are wrong in ways that
 would mislead anyone acting on them. Each was reported by automated review on the PR.
+
+**No count is given here on purpose.** An earlier revision published one, it went stale
+the moment the next review round landed, and a stale number in a rollback procedure is
+worse than none — it reads as a checklist that has been completed. The authoritative
+list is the git history of this directory:
+
+```bash
+git log --oneline -- .claude/agents/awesome-claude-agents/
+```
+
+The table below is a summary of the substantive classes of defect, not an exhaustive
+enumeration of every hunk.
 
 | File | Defect | Change |
 | --- | --- | --- |
@@ -140,13 +152,23 @@ Everything else is byte-identical to upstream.
 git clone https://github.com/vijaythecoder/awesome-claude-agents.git /tmp/aca
 rsync -a --delete --exclude README.md /tmp/aca/agents/ .claude/agents/awesome-claude-agents/
 cp /tmp/aca/LICENSE .claude/agents/awesome-claude-agents/LICENSE
-# Then re-apply EVERY local change documented above — 3 frontmatter fixes, the tool
-# constraint across all 33 files (16 stripped, 17 given an allowlist they lacked, 11
-# granted WebFetch), and 15 agent-body fixes — and update the commit SHA here.
-# The counts above are asserted nowhere, so treat them as a checklist and re-read the
-# sections rather than trusting these numbers alone.
+# Then re-apply EVERY local change documented above:
+#   - 3 frontmatter fixes
+#   - the tool constraint across all 33 files (16 stripped, 17 given an allowlist they
+#     lacked, 11 granted WebFetch)
+#   - every agent-body fix in the git history of this directory
+# ...and update the commit SHA here.
+#
+# Do NOT work from a remembered number of body fixes: reconstruct the set from
+# `git log -p -- .claude/agents/awesome-claude-agents/` against the previous vendored
+# commit. Only the frontmatter and tool-constraint counts are stable enough to quote,
+# and even those are a checklist rather than evidence — the tests below are the evidence.
 python -m unittest tests.test_vendored_agents   # must pass before committing
+python scripts/privacy_guard.py                 # pinned placeholders must still match
 ```
 
-A sync that skips the tool constraint silently re-grants `Write`/`Bash` to 16 agents, so
-treat a failing `test_vendored_agents` as a blocker rather than a lint nit.
+A sync that skips the tool constraint silently re-grants `Write`/`Bash` to 16 agents and
+returns 17 more to inheriting every tool the main thread holds, so treat a failing
+`test_vendored_agents` as a blocker rather than a lint nit. The test enforces a *closed*
+allowlist (`LS`, `Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`), not a denylist of
+known-bad names, so a tool that does not exist yet still fails the gate.

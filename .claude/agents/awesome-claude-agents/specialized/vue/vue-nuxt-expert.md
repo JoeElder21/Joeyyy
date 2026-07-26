@@ -280,10 +280,14 @@ if (!product.value) {
 }
 
 // Fetch related products
+// `default` matters here: with `server: false` this request has not run during SSR or
+// initial hydration, so `data` is null and the template's `relatedProducts.length`
+// throws before the client fetch ever completes.
 const { data: relatedProducts } = await useLazyFetch<Product[]>(
   `/api/products/${route.params.id}/related`,
   {
     server: false, // Client-side only
+    default: () => [],
   }
 )
 
@@ -504,18 +508,47 @@ export const useCart = () => {
     }
   }
   
-  function removeItem(productId: string) {
+  async function removeItem(productId: string) {
+    const previous = [...items.value]
     items.value = items.value.filter(
       item => item.product.id !== productId
     )
+    
+    // Persist, exactly as addItem() does. Updating only local state meant the next
+    // reload or server sync restored the removed item from the unchanged server cart,
+    // so the removal appeared to work and then silently undid itself.
+    if (useAuth().isAuthenticated.value) {
+      try {
+        await $fetch('/api/cart', {
+          method: 'POST',
+          body: { items: items.value }
+        })
+      } catch (error) {
+        items.value = previous  // roll back rather than report a false success
+        throw error
+      }
+    }
   }
   
-  function clearCart() {
+  async function clearCart() {
+    const previous = [...items.value]
     items.value = []
+    
+    if (useAuth().isAuthenticated.value) {
+      try {
+        await $fetch('/api/cart', { method: 'POST', body: { items: [] } })
+      } catch (error) {
+        items.value = previous
+        throw error
+      }
+    }
   }
   
-  // Sync with server on auth change
-  watch(() => useAuth().isAuthenticated, async (isAuth) => {
+  // Sync with server on auth change.
+  // The getter must return `.value`: returning the Ref itself gives Vue a source whose
+  // identity never changes, so the watcher never fires - and `isAuth` would be the
+  // always-truthy Ref object rather than a boolean if it did.
+  watch(() => useAuth().isAuthenticated.value, async (isAuth) => {
     if (isAuth) {
       const { data } = await $fetch('/api/cart')
       if (data?.items) {
@@ -647,14 +680,18 @@ export default defineNuxtConfig({
   },
   
   hooks: {
-    'nitro:config'(nitroConfig) {
+    // `async` + `await`: both generators are async, so spreading their return values
+    // directly spreads Promises - which throws, and the hook never configures any
+    // dynamic prerender route.
+    async 'nitro:config'(nitroConfig) {
       if (nitroConfig.dev) return
       
       // Generate dynamic routes
-      nitroConfig.prerender.routes.push(
-        ...generateProductRoutes(),
-        ...generateCategoryRoutes()
-      )
+      const [productRoutes, categoryRoutes] = await Promise.all([
+        generateProductRoutes(),
+        generateCategoryRoutes(),
+      ])
+      nitroConfig.prerender.routes.push(...productRoutes, ...categoryRoutes)
     }
   }
 })
