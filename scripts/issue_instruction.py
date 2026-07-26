@@ -37,6 +37,7 @@ import argparse
 import json
 import os
 import secrets
+import stat
 import sys
 import time
 from pathlib import Path
@@ -58,6 +59,47 @@ DEFAULT_INSTRUCTION_MINUTES = 15
 
 class InstructionRefused(Exception):
     """The instruction cannot be issued as stated."""
+
+
+def _refuse_a_readable_key(key_path: Path) -> None:
+    """Refuse to sign with a key any other local user can read.
+
+    The check was existence-only. `docs/AGENT_REGISTRY.md:182` states the
+    signing key lives outside the repository at `0600` on Joe's machine, and
+    nothing verified it -- so a key restored from a backup, copied between
+    machines, or written by a tool with a permissive umask sat at `0644`, and
+    any other local user could read it and forge grants that
+    `_high_impact_boundary` accepts. Custody IS the control here; the previous
+    round's own note said so while checking only that the file existed.
+
+    Refused rather than repaired. Silently chmod'ing the key would hide the fact
+    that it was readable, and a key that HAS been world-readable on a shared box
+    should be rotated, not tightened -- the exposure already happened and only
+    Joe can decide whether it mattered. Saying so is the useful action.
+
+    `lstat`, so a symlink is judged on its own terms rather than on its target's:
+    a link is not a regular file, and a signing key reached through one is a
+    path another process can repoint between this check and the read below.
+    """
+    try:
+        info = key_path.lstat()
+    except OSError as error:
+        raise InstructionRefused(
+            f"cannot inspect the signing key at {key_path}: {error}"
+        ) from error
+    if not stat.S_ISREG(info.st_mode):
+        raise InstructionRefused(
+            f"{key_path} is not a regular file; a signing key reached through a link "
+            "or device can be repointed between this check and the read that follows"
+        )
+    exposed = stat.S_IMODE(info.st_mode) & 0o077
+    if exposed:
+        raise InstructionRefused(
+            f"the signing key at {key_path} is mode {stat.S_IMODE(info.st_mode):04o}, "
+            "readable beyond its owner. Any local user could read it and forge grants "
+            "this issuer's signature authorizes, so custody is already in question: "
+            "ROTATE the key rather than only tightening the mode, then re-issue."
+        )
 
 
 def issue_instruction(
@@ -136,6 +178,7 @@ def issue_instruction(
             "machine that holds none. Creating one here would manufacture Joe's "
             "authority rather than exercise it."
         )
+    _refuse_a_readable_key(key_path)
     grant = {**payload, "sig": _sign(key_path.read_bytes(), payload)}
 
     out_dir = out_dir or (key_path.parent / "instructions")

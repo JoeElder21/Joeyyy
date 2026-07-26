@@ -1975,6 +1975,73 @@ the packet was validated against one schema and the allowlist check read another
 it. Keyed on `root` now. **Third time a cache in this module has been scoped to
 the process rather than to its input** (brain manifests, mount registry, this).
 
+### Fortieth pass — four fixed, and the gitleaks claim refuted a fourth time
+
+**The refutation, with the same evidence discipline as last round.** The
+`.gitleaksignore` history entry was raised again, this time asserting the
+fingerprint is `ecf3f5a3…:scripts/privacy_guard.py:generic-api-key:362` and that
+`03cb443…` "is not an ancestor of the reviewed squash". Against the reviewed
+commit: `03cb443…` **is** an ancestor (`git merge-base --is-ancestor`);
+`ecf3f5a3` **does not exist** (`git cat-file`, and no prefix match in
+`git rev-list --all`); both scans report `no leaks found`; and **CI's own gitleaks
+check on this head was green**. Four rounds, four different non-existent commits
+offered as fresh evidence.
+
+**The signing key was checked for existence, not custody.** `docs/AGENT_REGISTRY.md`
+states the key lives outside the repository at `0600`, and nothing verified it —
+so a key restored from a backup, copied between machines, or written under a
+permissive umask sat at `0644`, and any other local user could read it and forge
+grants the boundary accepts. The previous round's own note said "THE REAL CONTROL
+IS KEY CUSTODY" while checking only that the file existed.
+
+Refused rather than repaired: silently chmod'ing the key would hide that it *had*
+been readable, and a key exposed on a shared box should be **rotated**, not
+tightened — the exposure already happened and only Joe can judge whether it
+mattered. The message says so. `lstat`, so a symlink is judged on its own terms:
+a link is a path another process can repoint between the check and the read.
+Group bits count as exposure (`& 0o077`), because a shared group is the normal
+shape of a shared workstation, and `0o620` — group-*writable* — is worse than
+readable, since the key can be replaced rather than merely copied.
+
+**The fixtures were themselves creating world-readable signing keys.** Nine test
+sites wrote a key with `write_bytes` and no `chmod`, which is `0644` under the
+default umask. The new check refused them and 22 tests broke — correctly. The
+fixtures now write `0600`, which is also what the real environment must do. A
+check that had to be weakened to keep the fixtures passing would have been the
+wrong fix; the fixtures were wrong.
+
+**`overwrite` was reserved for every overwrite.** AGENTS.md §9 reserves
+"irreversible bulk deletion or overwrite **of originals**", and `overwrite` was
+mapped bare — so `overwrite_draft` and `overwrite_cache_entry` demanded Joe's
+signature. `purge`, `truncate`, `drop` and `wipe` stay bare because they name
+destruction whatever the object is; overwriting is destructive only when what it
+replaces was the original. `overwrite_master` is unaffected: the governance rule
+catches it earlier under the category the contract actually names for it, so the
+new marker set covers what governance does not rather than duplicating it.
+
+**This is the fourth over-gate of one shape in three rounds** — `task`, `final`,
+`send`, `overwrite`: each a verb whose reserved meaning lives in its object,
+mapped bare. The pattern is now explicit in the module rather than rediscovered
+per verb.
+
+**The evaluation output root leaked run ids.** Each run directory is `0700` and
+the root was created under the ambient umask, so another local user could not read
+a run's contents but could **list** the root and learn every `--run-id` — which
+the documented command derives from the mission being evaluated. Directory
+metadata is disclosure when the names are the private material. Tightened with
+`chmod` after `mkdir` rather than `mkdir(mode=...)`, deliberately unlike the run
+directory: `exist_ok=True` leaves the mode of a root that already exists, and a
+root created once by an earlier version is exactly the case needing repair.
+
+**The repository overview had become two snapshots in one table.** It named head
+`2ba3fb2` and 150 tracked files while the suite figure said 1,063 tests — because
+`tests/test_governance_docs.py` asserts that figure against a live run, so I had
+been updating it every round while the head and scale went stale. **That is worse
+than a stale table:** a reader cannot tell which claims are current. Head, scale
+and suite figures are regenerated together now (`80f5369`, 304 files, ~90,700
+lines), with a note in the document saying a change to one means re-reading the
+others, and stating which sections were verified rather than re-derived.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

@@ -44,6 +44,7 @@ class IssuedGrantSatisfiesTheBoundaryTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.key = Path(self.tmp.name) / "launch_key"
         self.key.write_bytes(b"test-signing-key")
+        self.key.chmod(0o600)
         self.out = Path(self.tmp.name) / "instructions"
         registry, _ = registry_and_lease()
         self.pep = PolicyEnforcementPoint(
@@ -109,6 +110,7 @@ class IssuedGrantSatisfiesTheBoundaryTests(unittest.TestCase):
         # anyone else's key must not pass this gate.
         other = Path(self.tmp.name) / "other_key"
         other.write_bytes(b"a-different-signing-key")
+        other.chmod(0o600)
         grant, _ = self._issue("publishReport")
         foreign = issue_instruction(
             "publishReport",
@@ -137,6 +139,7 @@ class IssuanceRefusalTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.key = Path(self.tmp.name) / "launch_key"
         self.key.write_bytes(b"test-signing-key")
+        self.key.chmod(0o600)
         self.out = Path(self.tmp.name) / "instructions"
 
     def _issue(self, **kwargs):
@@ -237,6 +240,7 @@ class GrantFileTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.key = Path(self.tmp.name) / "launch_key"
         self.key.write_bytes(b"test-signing-key")
+        self.key.chmod(0o600)
         self.out = Path(self.tmp.name) / "instructions"
 
     def test_the_grant_file_is_not_world_readable(self):
@@ -349,3 +353,78 @@ class IssuerHonestyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SigningKeyCustodyTests(unittest.TestCase):
+    """A key any local user can read is a key that can forge Joe's authority.
+
+    The check was existence-only. `docs/AGENT_REGISTRY.md:182` states the signing
+    key lives outside the repository at `0600`, and nothing verified it -- so a
+    key restored from a backup or written under a permissive umask sat at `0644`
+    and any other local user could read it and mint grants
+    `_high_impact_boundary` accepts. Custody IS the control, and the previous
+    round's own note said so while checking only that the file existed.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.out = self.root / "instructions"
+
+    def _key(self, mode):
+        key = self.root / f"key_{mode:o}"
+        key.write_bytes(b"test-signing-key")
+        key.chmod(0o600)
+        key.chmod(mode)
+        return key
+
+    def _issue(self, key):
+        return issue_instruction(
+            "publishReport", RESOURCE, key_path=key, out_dir=self.out, now=NOW.timestamp()
+        )
+
+    def test_an_owner_only_key_is_accepted(self):
+        # The control for every refusal below, and both owner-only modes: 0400 is
+        # stricter than the documented 0600 and must not be refused for it.
+        for mode in (0o600, 0o400):
+            with self.subTest(mode=oct(mode)):
+                self.assertTrue(self._issue(self._key(mode)).exists())
+
+    def test_a_world_readable_key_is_refused(self):
+        with self.assertRaises(InstructionRefused) as raised:
+            self._issue(self._key(0o644))
+        message = str(raised.exception)
+        self.assertIn("0644", message)
+        # The advice matters as much as the refusal: a key that HAS been readable
+        # should be rotated, not merely tightened, and only Joe can judge whether
+        # the exposure mattered.
+        self.assertIn("ROTATE", message)
+
+    def test_a_group_readable_key_is_refused(self):
+        # 0640 exposes nothing to "other" and is still wrong on a box with a
+        # shared group, which is the normal shape of a shared workstation.
+        with self.assertRaises(InstructionRefused):
+            self._issue(self._key(0o640))
+
+    def test_a_group_writable_key_is_refused(self):
+        # Write access is worse than read: the key can be REPLACED with one the
+        # attacker holds, and every grant after that verifies against it.
+        with self.assertRaises(InstructionRefused):
+            self._issue(self._key(0o620))
+
+    def test_a_symlinked_key_is_refused(self):
+        # Judged by lstat, on its own terms rather than its target's. A link is a
+        # path another process can repoint between the check and the read.
+        target = self._key(0o600)
+        link = self.root / "link"
+        link.symlink_to(target)
+        with self.assertRaises(InstructionRefused) as raised:
+            self._issue(link)
+        self.assertIn("not a regular file", str(raised.exception))
+
+    def test_a_directory_is_refused_rather_than_read(self):
+        directory = self.root / "key_dir"
+        directory.mkdir(mode=0o700)
+        with self.assertRaises(InstructionRefused):
+            self._issue(directory)

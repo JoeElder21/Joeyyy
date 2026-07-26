@@ -131,8 +131,23 @@ HIGH_IMPACT_VERBS = {
     # queue is ordinary work, and only a FINAL permit or agency submission is
     # reserved. The qualifier carries the meaning, so the compound is matched
     # via SUBMISSION_QUALIFIERS below rather than by the bare verb.
-    "overwrite": "irreversible_bulk_deletion",
 }
+
+# `overwrite` is reserved only for ORIGINALS.
+#
+# AGENTS.md section 9 reserves "irreversible bulk deletion or overwrite **of
+# originals**", and `overwrite` was mapped bare -- so `overwrite_draft` and
+# `overwrite_cache_entry`, ordinary mutations, demanded Joe's personally signed
+# instruction. `purge`, `truncate`, `drop` and `wipe` stay bare because they name
+# destruction whatever the object is; overwriting is only destructive when what
+# it replaces was the original.
+#
+# `overwrite_master` and `overwrite_canonical_snapshot` are unaffected: the
+# governance rule runs earlier and catches them as
+# `governance_or_master_change`, which is the category the contract actually
+# names for those. So this set covers what governance does not, rather than
+# duplicating it.
+ORIGINALS_MARKERS = frozenset({"original", "originals"})
 
 # Four keys above are NOUNS as much as verbs, and the map is named for verbs.
 # Because the classifier scanned every token, `read_invoice`, `view_post`,
@@ -2651,6 +2666,8 @@ class PolicyEnforcementPoint:
             token in CREDENTIAL_NOUNS for token in tokens
         ):
             return "credential_or_access_change"
+        if "overwrite" in tokens and any(token in ORIGINALS_MARKERS for token in tokens):
+            return "irreversible_bulk_deletion"
         # An internal delivery is not a publication. Placed before the verb map
         # so `send` reaches it; the exemption is narrow and defaults to gating.
         if "send" in tokens and _is_internal_delivery(tokens):

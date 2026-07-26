@@ -1334,3 +1334,98 @@ class HighImpactCriterionTests(unittest.TestCase):
                 literal,
                 "the hand-written six-category list is back in the criteria text",
             )
+
+
+class OutputRootPermissionTests(unittest.TestCase):
+    """Run-id names are private material; directory metadata discloses them.
+
+    Each run directory is created `0700`, and the ROOT was created under the
+    ambient umask -- `0755` on a normal workstation. Another local user could not
+    read a run's contents but could LIST the root and learn every `--run-id`,
+    which the documented command derives from the mission being evaluated. The
+    names are the disclosure.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "evals"))
+        import run_evaluations
+
+        self.module = run_evaluations
+
+    def test_the_output_root_is_tightened_even_when_it_already_exists(self):
+        # The case that matters. `mkdir(exist_ok=True)` leaves the mode of a
+        # directory it did not create, so a root made once by an earlier version
+        # stays 0755 for every run afterwards -- and it is created empty, long
+        # before anyone looks at its permissions again.
+        import os
+        import stat
+        import tempfile
+
+        original_umask = os.umask(0o022)
+        root = Path(tempfile.mkdtemp()) / "output"
+        try:
+            root.mkdir(mode=0o755)
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o755)
+            # The production sequence, applied to the fixture: create-if-absent
+            # then tighten unconditionally.
+            root.mkdir(parents=True, exist_ok=True)
+            root.chmod(0o700)
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+        finally:
+            os.umask(original_umask)
+
+    def test_execute_tightens_the_root_before_creating_a_run(self):
+        # Structural and ORDERED, because the behavioural test above exercises
+        # the sequence rather than the module. The chmod must come before the run
+        # directory is created, or the first run's name is listable in the window
+        # between. Parsed, not grepped: a mention in a comment must not satisfy it.
+        import ast
+        import inspect
+
+        tree = ast.parse(inspect.getsource(self.module.execute).lstrip())
+        chmods = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "chmod"
+        ]
+        run_dir_mkdirs = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "mkdir"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "out_dir"
+        ]
+        self.assertTrue(chmods, "execute() never tightens the output root")
+        self.assertTrue(run_dir_mkdirs, "execute() no longer creates a run directory")
+        self.assertLess(
+            min(chmods),
+            min(run_dir_mkdirs),
+            "the root is tightened after the run directory is created, leaving the "
+            "first run's id listable in between",
+        )
+
+    def test_the_run_directory_is_still_created_owner_only(self):
+        # The root's mode must not be mistaken for the run's. Both matter: the
+        # root hides the names, the run hides the evidence.
+        import ast
+        import inspect
+
+        source = inspect.getsource(self.module.execute)
+        tree = ast.parse(source.lstrip())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "mkdir"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "out_dir"
+            ):
+                modes = [kw.value for kw in node.keywords if kw.arg == "mode"]
+                self.assertTrue(modes, "the run directory is created without an explicit mode")
+                self.assertEqual(modes[0].value, 0o700)
+                return
+        self.fail("no out_dir.mkdir call found")

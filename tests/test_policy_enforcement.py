@@ -236,6 +236,7 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
+            key_path.chmod(0o600)
             for action in sorted(HIGH_IMPACT_ACTIONS):
                 with self.subTest(action=action):
                     pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
@@ -274,6 +275,7 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
+            key_path.chmod(0o600)
             pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
             grant = instruction_grant("public_publication", "APEX/Post", key_path)
             wrong_action = pep._high_impact_boundary(
@@ -299,6 +301,7 @@ class DenialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
+            key_path.chmod(0o600)
             pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
             grant = instruction_grant("public_publication", "APEX/Post", key_path)
             grant["sig"] = "0" * 64
@@ -636,6 +639,7 @@ class NormalizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = Path(tmp) / "launch_key"
             key_path.write_bytes(b"test-signing-key")
+            key_path.chmod(0o600)
             stale = instruction_grant("public_publication", "APEX/Post", key_path, minutes=-1)
             # Backdating is not available: the PEP's own clock decides.
             pep = PolicyEnforcementPoint(ROOT, launch_key_path=key_path, clock=lambda: NOW)
@@ -4692,3 +4696,66 @@ class FixtureClockTests(unittest.TestCase):
             "packet_guard no longer reads the real clock directly; re-examine "
             "whether NOW still needs to track it",
         )
+
+
+class FortiethPassRegressionTests(unittest.TestCase):
+    """`overwrite` was reserved for every overwrite, not for originals.
+
+    AGENTS.md section 9 reserves "irreversible bulk deletion or overwrite **of
+    originals**", and `overwrite` was mapped bare -- so `overwrite_draft` and
+    `overwrite_cache_entry` demanded Joe's personally signed instruction. The
+    fourth over-gate of this shape in three rounds: `final`, `send`, `task`, and
+    now `overwrite`, each a verb whose reserved meaning lives in its object.
+    """
+
+    GATED = (
+        "overwrite_originals",
+        "overwrite_all_originals",
+        "overwrite_original_record",
+        "overwriteOriginals",
+    )
+    # Governance catches these earlier and under the category the contract names
+    # for them, so they must still gate -- just not as bulk deletion.
+    GATED_AS_GOVERNANCE = ("overwrite_master", "overwrite_canonical_snapshot")
+    UNGATED = (
+        "overwrite_draft",
+        "overwrite_cache_entry",
+        "overwrite_temp_file",
+        "overwrite_field",
+        "overwrite_row",
+        "overwrite_config_value",
+    )
+    # `purge`, `truncate`, `drop`, `wipe` name destruction whatever the object is
+    # and must stay bare. Narrowing `overwrite` must not narrow these.
+    STILL_BARE = ("purge_records", "truncate_table", "drop_index", "wipe_disk")
+
+    def _category(self, action):
+        return PolicyEnforcementPoint._boundary_category(action)
+
+    def test_overwriting_originals_is_gated(self):
+        for action in self.GATED:
+            with self.subTest(action=action):
+                self.assertEqual(self._category(action), "irreversible_bulk_deletion")
+
+    def test_overwriting_a_master_is_still_gated_as_governance(self):
+        for action in self.GATED_AS_GOVERNANCE:
+            with self.subTest(action=action):
+                self.assertEqual(self._category(action), "governance_or_master_change")
+
+    def test_an_ordinary_overwrite_is_not_reserved(self):
+        for action in self.UNGATED:
+            with self.subTest(action=action):
+                self.assertNotIn(
+                    self._category(action),
+                    HIGH_IMPACT_ACTIONS,
+                    f"{action} replaces something that is not an original",
+                )
+
+    def test_the_unconditionally_destructive_verbs_are_untouched(self):
+        for action in self.STILL_BARE:
+            with self.subTest(action=action):
+                self.assertEqual(
+                    self._category(action),
+                    "irreversible_bulk_deletion",
+                    f"{action} names destruction whatever its object is",
+                )

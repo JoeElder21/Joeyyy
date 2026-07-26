@@ -367,7 +367,19 @@ def execute(stamp: str | None) -> int:
     # directory as absent and both proceed to write the same coverage.json and
     # results.xml -- corrupting the very evidence the mandatory run id exists to
     # preserve. `mkdir(exist_ok=False)` makes the claim the check.
+    # The ROOT, not only each run directory. Each run is 0700, and the parent was
+    # created at 0755 under the common umask -- so another local user could not
+    # read a run's contents but could LIST the root and learn every `--run-id`,
+    # which the documented command derives from the mission being evaluated.
+    # Directory metadata is disclosure: the names are the private material here.
+    #
+    # `chmod` after `mkdir` rather than `mkdir(mode=...)`, deliberately and unlike
+    # the run directory below, because `exist_ok=True` leaves the mode of a root
+    # that already exists -- and an `evals/output` created once by an earlier
+    # version is exactly the case that needs tightening. The window this opens is
+    # on the empty root, before any run directory or evidence exists inside it.
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    OUTPUT_ROOT.chmod(0o700)
     try:
         # Owner-only. Under the common 0022 umask this created a 0755
         # directory, and the JUnit report inside it deliberately retains
