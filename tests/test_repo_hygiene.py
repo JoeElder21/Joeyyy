@@ -1436,3 +1436,74 @@ class SecretScanScopeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrivacyGuardFixtureShapeTests(unittest.TestCase):
+    """The guard's own fixtures must need no gitleaks suppression.
+
+    `scripts/privacy_guard.py` builds negative fixtures as split literals so its
+    OWN patterns do not match its test data. Splitting off the first character
+    (`"c" + 'lient_secret...'`) achieves that but not the same for gitleaks,
+    which reads the reassembled line -- so one fixture produced a working-tree
+    finding, that finding needed a LINE-PINNED suppression, and a line-pinned
+    suppression drifts whenever anything above it moves. It broke CI once, was
+    raised in review four times, and Joe marked it Fix.
+
+    The fix was to stop producing the finding rather than to keep suppressing it.
+    This test keeps it that way: no working-tree entry may name this file. It is
+    the one file in the exemption list this repository actually wrote, so it is
+    the one where "do not need the exemption" was available -- the rest are
+    absorbed documents whose sample text must keep looking like the credential it
+    warns about.
+    """
+
+    GUARD = "scripts/privacy_guard.py"
+
+    def test_the_guard_needs_no_working_tree_exemption(self):
+        for path, rule, number in GitleaksSuppressionTests()._working_tree_entries():
+            with self.subTest(entry=f"{path}:{rule}:{number}"):
+                self.assertNotEqual(
+                    path,
+                    self.GUARD,
+                    f"{self.GUARD} is back in the working-tree exemptions. Re-split the "
+                    "fixture so gitleaks stops matching it instead of pinning a line "
+                    "number that will drift again.",
+                )
+
+    def test_the_history_exemption_is_still_present_and_immutable(self):
+        # The other direction, and the part that CANNOT be removed: `gitleaks git`
+        # attributes a secret to the commit that ADDED the line, so that
+        # fingerprint is pinned to an immutable ancestor. Deleting it because the
+        # working-tree one went away would turn the history scan red.
+        text = (ROOT / ".gitleaksignore").read_text(encoding="utf-8")
+        history = [
+            line.strip()
+            for line in text.splitlines()
+            if self.GUARD in line and not line.strip().startswith("#")
+        ]
+        self.assertEqual(
+            len(history),
+            1,
+            f"expected exactly one (history-form) entry for {self.GUARD}, found {history}",
+        )
+        self.assertRegex(history[0], r"^[0-9a-f]{40}:")
+
+    def test_the_fixture_value_still_matches_the_document_it_excuses(self):
+        # The re-split is only safe because the runtime VALUE is unchanged. This
+        # string is an allowlist entry: if it stops matching the absorbed
+        # document, the guard starts reporting that document as a real leak.
+        import sys
+
+        sys.path.insert(0, str(ROOT))
+        from scripts.privacy_guard import PLACEHOLDER_LITERALS
+
+        document = Path(".claude/agents/awesome-claude-agents/specialized/python/testing-expert.md")
+        literals = PLACEHOLDER_LITERALS[document]
+        matching = [value for value in literals if value.startswith("client_secret")]
+        self.assertEqual(len(matching), 1, f"expected one client_secret literal, got {matching}")
+        self.assertIn(
+            matching[0],
+            (ROOT / document).read_text(encoding="utf-8"),
+            "the re-split fixture no longer matches the document it exempts, so the "
+            "guard will report that document as a real leak",
+        )

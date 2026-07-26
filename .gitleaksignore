@@ -15,6 +15,18 @@
 # own patterns do not match its test data. gitleaks reassembles the
 # concatenation and sees a credential assignment that exists in no single
 # literal. The value is the word "secure_password".
+#
+# THIS ENTRY CANNOT BE REMOVED, and the reason is worth stating because the same
+# finding was raised in review four times. `gitleaks git` scans DIFFS and
+# attributes a secret to the commit that ADDED the line, so this fingerprint is
+# pinned to `03cb443`, which is an immutable ancestor of every future commit on
+# this branch. Nothing in the present tree can change it and no edit can make it
+# stale -- which also means it can never DRIFT, unlike a working-tree entry.
+#
+# What was removable was the cause of new findings: the fixture that produced the
+# working-tree entry has been re-split so gitleaks no longer matches it at all
+# (see the note at that line). `scripts/privacy_guard.py` therefore has no
+# working-tree fingerprint below, and no future edit to it can create one.
 03cb44399f6ed4f5904ffc4ac33dfadfb164a759:scripts/privacy_guard.py:generic-api-key:321
 
 # Kubernetes Secret manifests in an absorbed agent's documentation. The values
@@ -35,7 +47,7 @@ d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/sp
 # The CI job runs BOTH `gitleaks git` (history) and `gitleaks dir` (the tree),
 # and the two produce DIFFERENT fingerprint forms: history entries carry a
 # commit prefix, working-tree entries do not. Listing only the history form
-# left the `dir .` scan failing with the identical six findings. The line
+# left the `dir .` scan failing with the identical findings. The line
 # numbers also differ between the two, because history pins the line as it was
 # in that commit and the tree pins it as it is now.
 #
@@ -51,10 +63,17 @@ d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/sp
 # turns this from a CI surprise into a local one. It cannot prove an entry is
 # RIGHT -- only gitleaks can -- but drift is the failure that actually happens.
 #
-# Same six placeholders as above, verified at the lines cited.
+# The best fix for a drifting entry is not a better entry: it is not needing one.
+# `scripts/privacy_guard.py` used to appear here and no longer does, because its
+# fixture was re-split so gitleaks stops matching it while the runtime value stays
+# byte-identical. The five below are absorbed vendor documents whose sample text
+# must keep looking like the credential it warns about, so they cannot be
+# rewritten the same way and are exempted per line instead.
+#
+# Five placeholders, in documents this repository absorbed rather than wrote,
+# verified at the lines cited.
 .github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
 .github/instructions/code-review-generic.instructions.md:stripe-access-token:142
 .claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:461
 .claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:462
 .claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:592
-scripts/privacy_guard.py:generic-api-key:362
