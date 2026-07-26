@@ -129,7 +129,21 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     the designated executor, which is the whole reason the specialists are.
     """
     corps = corps if corps is not None else _corps()
-    roster = set(corps.get("apex_roster", [])) | set(corps.get("jeos_roster", []))
+    # Syntactically valid TOML can still be structurally wrong -- a roster
+    # mistyped as a scalar during a partial edit, say. Indexing it raised a
+    # bare TypeError, and both callers convert only ManifestUnavailable, so the
+    # CLI printed a traceback and wrote no denial event: the same
+    # loud-but-unauditable failure the loaders were fixed for, one layer up.
+    rosters = {}
+    for key in ("apex_roster", "jeos_roster"):
+        value = corps.get(key, [])
+        if not isinstance(value, (list, tuple)) or not all(
+                isinstance(name, str) for name in value):
+            raise ManifestUnavailable(
+                f"{CORPS.name}: [{key}] must be a list of agent names; the "
+                "registry cannot say who is rostered")
+        rosters[key] = set(value)
+    roster = rosters["apex_roster"] | rosters["jeos_roster"]
     if agent not in roster:
         # The exemption belongs to the DESIGNATED EXECUTOR, not to "anyone the
         # roster does not mention". Keying it on absence made a missing roster
@@ -150,8 +164,8 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     # made to depend on the other brain's files, which is precisely the
     # coupling AGENTS.md separates the brains to avoid. A read failure is still
     # an authorization failure, but only for the brain that owns the agent.
-    in_apex = agent in set(corps.get("apex_roster", []))
-    in_jeos = agent in set(corps.get("jeos_roster", []))
+    in_apex = agent in rosters["apex_roster"]
+    in_jeos = agent in rosters["jeos_roster"]
     if in_apex and in_jeos:
         # Brain-locking is the point: an identity belongs to exactly one brain,
         # so listing it in both is not a preference to resolve but a registry

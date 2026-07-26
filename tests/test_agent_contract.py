@@ -301,6 +301,53 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 with self.subTest(agent=name, tool=tool):
                     self.assertNotIn(tool, tools_line)
 
+    def test_the_prescribed_privacy_command_sees_untracked_files(self):
+        """The template told you to run the blind form of the gate.
+
+        `privacy_guard.py` with no arguments enumerates via `git ls-files`, so
+        a file the session has just created is invisible to it — it reports
+        success without ever opening the new file. The template prescribed that
+        bare form both after the first edit and again before committing, which
+        is precisely a validate-then-stage workflow in which a new
+        credential-bearing file reaches a commit behind a green gate. The
+        repository already knows this: the discovery skills carry the same
+        warning, and it had not reached the session template."""
+        template = (ROOT / "templates" / "session-start.md").read_text(
+            encoding="utf-8")
+
+        self.assertIn("git ls-files --others --exclude-standard", template)
+        self.assertIn("invisible to it", template)
+        # The explicit-path form must come BEFORE the bare form, or a reader
+        # following top to bottom still runs the blind check first.
+        explicit = template.index("--exclude-standard")
+        bare = template.index("python scripts/privacy_guard.py            #")
+        self.assertLess(explicit, bare)
+
+    def test_the_checklist_carries_every_discovery_trigger(self):
+        """A checklist narrower than the contract makes the gap invisible.
+
+        `AGENTS.md` names four independent triggers for RUNNING a discovery
+        skill; the checklist named one. A mission that changed a capability
+        outside `.github/`, asked what had drifted, or reached a weekly audit
+        could therefore produce a complete-looking session record with the
+        required fetch pass never run and nothing recording its absence."""
+        checklist = " ".join(
+            (ROOT / "templates" / "session-start.md").read_text(
+                encoding="utf-8").split())
+        agents = " ".join((ROOT / "AGENTS.md").read_text(
+            encoding="utf-8").split())
+
+        # Each trigger the contract states must be recordable.
+        for trigger in ("changes a capability", "has drifted", "weekly audit"):
+            with self.subTest(trigger=trigger):
+                self.assertIn(trigger, agents,
+                              "the contract no longer states this trigger; "
+                              "update the checklist deliberately")
+                self.assertIn(trigger, checklist)
+        self.assertIn("RUN (not listed)", checklist)
+        # And the unrun-not-clean rule that accompanies it.
+        self.assertIn("UNRUN when no fetch-capable tool is verified", checklist)
+
     def test_session_checklist_covers_every_mandatory_contract_step(self):
         """A checklist that cannot record a step makes skipping it invisible.
 

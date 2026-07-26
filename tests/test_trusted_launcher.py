@@ -339,6 +339,48 @@ class TrustedLauncherTests(unittest.TestCase):
             self.assertEqual(granted["detail"].get("agent"),
                              "apex_systems_blacksmith")
 
+    def test_a_structurally_invalid_registry_is_denied_and_audited(self):
+        """Valid TOML is not the same as a usable registry.
+
+        A roster mistyped as a scalar during a partial edit parses fine and
+        then raised a bare TypeError out of `specialist_stage`. Both callers
+        convert only `ManifestUnavailable`, so the CLI printed a traceback and
+        wrote no denial event — the same loud-but-unauditable failure the
+        loaders were fixed for, one layer up. Type errors are authorization
+        failures here, not crashes."""
+        from unittest import mock
+
+        import scripts.trusted_launcher as launcher
+
+        malformed = {
+            "roster is a scalar": {"apex_roster": 1, "jeos_roster": []},
+            "roster holds non-strings": {"apex_roster": ["a", 3],
+                                         "jeos_roster": []},
+            "roster is a table": {"apex_roster": {"a": 1}, "jeos_roster": []},
+            "other roster malformed": {"apex_roster": [], "jeos_roster": 2},
+        }
+        for label, corps in malformed.items():
+            with self.subTest(registry=label):
+                with self.assertRaises(ManifestUnavailable):
+                    specialist_stage("apex_systems_blacksmith", corps=corps)
+
+        # And it must reach the ledger as a denial through the normal path,
+        # which is the half a bare exception type does not prove.
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            with mock.patch.object(
+                    launcher, "_corps",
+                    lambda: {"apex_roster": 1, "jeos_roster": []}):
+                with self.assertRaises(LaunchDenied):
+                    issue_grant("filesystem", 30, key_path=key,
+                                out_dir=Path(tmp) / "grants",
+                                agent="apex_systems_blacksmith", ledger=ledger)
+            events = [json.loads(line)["event"] for line
+                      in ledger.path.read_text(encoding="utf-8").splitlines()
+                      if line.strip()]
+            self.assertEqual(events, ["grant_denied"])
+            self.assertEqual(ledger.verify(), [])
+
     def test_an_identity_in_both_rosters_is_refused(self):
         """Brain-locking means exactly one owner, so "both" is not a tie-break.
 

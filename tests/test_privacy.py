@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,6 +39,21 @@ except ImportError:  # pragma: no cover - environment-dependent
 # failures. CI installs PyYAML, so the parser path is still exercised there --
 # it is gated, not abandoned.
 needs_yaml = unittest.skipIf(_yaml is None, "PyYAML not installed")
+
+
+def _have_yaml() -> bool:
+    """Whether the parser is importable RIGHT NOW.
+
+    The module-level `_yaml` binding is captured at import, so an inline guard
+    written against it does not degrade when the import is blocked later --
+    which made inline-gated cases run anyway under the dependency simulation
+    and, worse, meant the gate check trusted them instead of verifying them.
+    """
+    try:
+        import yaml  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / ".github" / "skills"
@@ -726,8 +742,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         the scan down: a non-YAML file, an oversized document or a missing
         PyYAML has to fall through to the regex normalisers rather than raise
         or return a false clean."""
-        # Genuinely malformed YAML (unbalanced flow) must fall through, not raise.
-        self.assertEqual(yaml_reconstructed_values("{a: [1, 2}\n"), "")
+        # Genuinely malformed YAML must be REPORTED as unreconstructed, not
+        # silently returned as "". An earlier version asserted "" here, which
+        # is what let a credential sitting above a syntax error fall through to
+        # regexes that cannot decode it. Whether it matters is the caller's
+        # decision -- asserted below, through scan_paths.
+        self.assertEqual(
+            yaml_reconstructed_values("{a: [1, 2}\n"), TRUNCATION_MARKER)
         # Oversized input is not parsed -- but it is REPORTED, not skipped
         # silently. The earlier version of this line asserted "" here, which
         # encoded the defect: padding a file past the cap dropped the parser
@@ -745,6 +766,24 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         secret = "Xy7Q" + "secretValue0192"
         cred = "AZURE" + "_CLIENT_SECRET"
         self.assertIn(secret, yaml_reconstructed_values(f"{cred}: !custom {secret}\n"))
+
+        # And the caller must only ACT on that report where the destination
+        # claims the format: a markdown or Python file that happens not to
+        # parse as YAML is fully scanned by the patterns and must stay clean,
+        # or every large source file fails the gate on a false finding.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("notes.md", "helper.py", "data.json"):
+                probe = root / name
+                probe.write_text("def f(:\n  not yaml [\n", encoding="utf-8")
+                with self.subTest(destination=name):
+                    self.assertEqual(scan_paths([probe], root=root), [])
+            broken_yaml = root / "config.yaml"
+            broken_yaml.write_text("{a: [1, 2}\n", encoding="utf-8")
+            self.assertTrue(
+                any("incomplete scan" in finding for finding
+                    in scan_paths([broken_yaml], root=root)),
+                "a file that declares YAML and does not parse is unscanned")
 
     def test_toml_escapes_are_decoded_by_a_parser_not_by_the_fold(self):
         """The parser argument, one format over.
@@ -1057,7 +1096,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             # other parser test carries. Gating four tests and then adding a
             # fifth with ungated YAML subtests reintroduced the stdlib-only
             # failure the gate exists to prevent -- in the same round.
-            **({} if _yaml is None else {
+            **({} if not _have_yaml() else {
                 "yaml nested":
                     ("y0.yaml",
                      "AZURE:\n  CLIENT:\n    SECRET: %s\n" % secret),
@@ -1144,8 +1183,6 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         import ast
         from unittest import mock
 
-        import scripts.privacy_guard as guard
-
         source = (ROOT / "tests" / "test_privacy.py").read_text(encoding="utf-8")
         candidates = []
         for node in ast.walk(ast.parse(source)):
@@ -1160,7 +1197,7 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                 getattr(decorator, "id", getattr(decorator, "attr", ""))
                 == "needs_yaml"
                 for decorator in node.decorator_list)
-            if not gated and "_yaml is None" not in body:
+            if not gated:
                 candidates.append(node.name)
 
         self.assertTrue(candidates,
@@ -1175,8 +1212,13 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         failures = []
         with open(os.devnull, "w", encoding="utf-8") as quiet:
             for name in candidates:
-                with mock.patch.object(guard, "yaml_reconstructed_values",
-                                       lambda text: ""):
+                # Simulate the REAL condition -- PyYAML absent -- by making the
+                # import fail, not by stubbing the reconstruction to "".
+                # Stubbing was stricter than reality: the size and syntax
+                # checks run before the import and still report, so a test
+                # relying on those passes without PyYAML and was being flagged
+                # as needing a gate it does not need.
+                with mock.patch.dict(sys.modules, {"yaml": None}):
                     result = unittest.TextTestRunner(
                         stream=quiet, verbosity=0,
                     ).run(unittest.TestLoader().loadTestsFromName(
@@ -1238,6 +1280,159 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
         # And the real tracked files must still pass, which is what stops this
         # from being fixed by simply refusing to strip anything.
+        self.assertEqual(scan_repository(ROOT), [])
+
+    @needs_yaml
+    def test_the_reconstruction_keeps_every_duplicate_mapping_entry(self):
+        """The constructor discards data before the walker ever sees it.
+
+        PyYAML keeps only the LAST entry when a mapping repeats a key, so a
+        credential under a duplicated key was dropped by the parser and the
+        reconstruction emitted only the benign value. Walking the composed node
+        graph preserves every source entry.
+
+        Scoped deliberately to the RECONSTRUCTION. Every scan-level probe I
+        built for this was still caught by the raw-text normalisers, so I have
+        no demonstration that it was an exploitable bypass -- it is a fidelity
+        defect in the authoritative layer, fixed as defence in depth, and this
+        test claims exactly that and no more."""
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        cases = {
+            "flow mapping, credential first":
+                '{"%s": !!str %s, "%s": harmless}\n' % (cred, secret, cred),
+            "block mapping, credential first":
+                "%s: %s\n%s: harmless\n" % (cred, secret, cred),
+            "duplicate under a shared parent":
+                "outer:\n  %s: %s\n  %s: harmless\n" % (cred, secret, cred),
+        }
+        for label, body in cases.items():
+            with self.subTest(case=label):
+                emitted = yaml_reconstructed_values(body)
+                self.assertIn(
+                    secret, emitted,
+                    f"{label}: the earlier entry was discarded by the "
+                    f"constructor -- emitted {emitted!r}")
+                self.assertIn("harmless", emitted,
+                              "the later entry must survive too")
+
+    def test_an_unfinished_reconstruction_is_reported_only_where_it_matters(self):
+        """Both halves, because each alone is a defect this round found.
+
+        Reporting too little: a `.toml` file whose syntax breaks below a
+        credential fell back to regexes that cannot decode an escaped key, and
+        read clean. Reporting too much: marking every oversized document failed
+        ordinary markdown and Python sources over 2 MB as "incomplete
+        reconstruction", which is a false finding, and a gate that cries wolf
+        is one people learn to override."""
+        secret = "Xy7Q" + "secretValue0192"
+        escaped_key = '"AZURE\\u005fCLIENT\\u005fSECRET"'
+        oversized = "# " + ("x" * 200 + "\n# ") * (MAX_PARSE_BYTES // 203 + 5)
+
+        must_report = {
+            "toml syntax error below a credential":
+                ("a.toml", '%s = "%s"\nbroken = [\n' % (escaped_key, secret)),
+            "toml unparseable outright": ("b.toml", "= = =\n"),
+            # YAML cases need the parser to produce the marker; the TOML and
+            # size paths do not, so gate only these and keep the rest running
+            # in a stdlib-only environment.
+            **({} if not _have_yaml() else {
+                "yaml unparseable": ("c.yaml", "{a: [1, 2}\n"),
+                "oversized yaml": ("d.yaml", "k: v\n" * 200_000),
+            }),
+            "oversized toml": ("e.toml", oversized),
+        }
+        must_stay_clean = {
+            "oversized markdown": ("f.md", oversized),
+            "oversized python": ("g.py", oversized),
+            "unparseable markdown": ("h.md", "def f(:\n  not yaml [\n"),
+            "ordinary toml": ("i.toml", 'name = "governance"\n'),
+            "ordinary yaml": ("j.yaml", "name: governance\n"),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for group, cases, expected in (("report", must_report, True),
+                                           ("clean", must_stay_clean, False)):
+                for label, (name, body) in cases.items():
+                    probe = root / name
+                    probe.write_text(body, encoding="utf-8")
+                    with self.subTest(case=label, expect=group):
+                        self.assertEqual(
+                            bool(scan_paths([probe], root=root)), expected,
+                            f"{label}")
+
+    def test_reconstruction_is_bounded_by_depth_not_by_the_stack(self):
+        """A deeply nested document must yield a finding, never a crash.
+
+        A ~1000-component dotted key is ordinary valid TOML and raised
+        RecursionError straight out of the privacy gate, which is a way to stop
+        the scan running rather than be reported by it. Shallower ones still
+        generated hundreds of thousands of suffix forms, because suffix
+        emission is O(depth) per leaf."""
+        import time
+
+        for depth in (200, 1_000, 5_000):
+            body = ".".join(f"k{index}" for index in range(depth)) + ' = "v"\n'
+            started = time.time()
+            emitted = toml_reconstructed_values(body)
+            with self.subTest(format="toml", depth=depth):
+                self.assertIn(TRUNCATION_MARKER, emitted)
+                self.assertLess(len(emitted), 10_000)
+                self.assertLess(time.time() - started, 10)
+
+        if _have_yaml():
+            deep_yaml = "".join("  " * level + f"k{level}:\n"
+                                for level in range(1_200))
+            deep_yaml += "  " * 1_200 + "leaf: value\n"
+            self.assertIn(TRUNCATION_MARKER,
+                          yaml_reconstructed_values(deep_yaml))
+
+        # Ordinary nesting must still reconstruct, or the cap has swallowed the
+        # feature it is protecting.
+        secret = "Xy7Q" + "secretValue0192"
+        self.assertIn(
+            secret,
+            toml_reconstructed_values('[AZURE.CLIENT]\nSECRET = "%s"\n' % secret))
+
+    def test_private_material_in_a_path_is_reported(self):
+        """A path is published exactly as content is.
+
+        A file named for a tenant id or a client's address names that thing in
+        the repository listing whatever the file contains. Only the basename
+        allowlist and the artifact-suffix rule applied to paths -- while the
+        adjacent gitlink handling already ran every pattern over a published
+        path string, which is the same string reached by a different code
+        path."""
+        guid = "3f2b8c1a-9d4e-4f7a-8b2c-1e5d9a7c3f04"
+        address = "client" + "@" + "clientcorp.com"
+        flagged = {
+            "connector id in the name": f"AZURE_TENANT_ID={guid}.md",
+            "address in the name": f"notes-for-{address}.md",
+            "connector id in a directory": f"AZURE_TENANT_ID={guid}/README.md",
+        }
+        clean = {
+            "ordinary name": "ordinary-notes.md",
+            "reserved placeholder": "tenant.example.com-notes.md",
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for group, cases, expected in (("flag", flagged, True),
+                                           ("clean", clean, False)):
+                for label, name in cases.items():
+                    probe = root / "docs" / name
+                    probe.parent.mkdir(parents=True, exist_ok=True)
+                    probe.write_text("nothing notable\n", encoding="utf-8")
+                    with self.subTest(case=label, expect=group):
+                        findings = scan_paths([probe], root=root)
+                        self.assertEqual(bool(findings), expected, f"{label}")
+                        if expected:
+                            self.assertTrue(
+                                any("in the file path" in finding
+                                    for finding in findings),
+                                "the finding must say the PATH is the problem")
+
+        # And the tracked tree must still pass, so this cannot be satisfied by
+        # a rule that flags ordinary repository paths.
         self.assertEqual(scan_repository(ROOT), [])
 
     def test_placeholder_stripping_requires_whole_token_boundaries(self):

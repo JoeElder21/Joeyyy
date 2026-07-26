@@ -294,6 +294,16 @@ MAX_EMITTED_VALUES = 20_000
 # file reports clean. A truncated reconstruction is an unfinished check, and an
 # unfinished check is reported, never passed.
 TRUNCATION_MARKER = "__privacy_guard_reconstruction_truncated__"
+# Nesting past this is not reconstructed. A ~1000-component dotted key is
+# valid TOML and blew the interpreter stack, taking the whole gate down
+# instead of producing a bounded finding; shallower ones still generated
+# hundreds of thousands of suffix forms, because suffix emission is O(depth)
+# per leaf. Real credential names are two or three segments, so a cap costs
+# nothing and removes a way to stop the scan running.
+MAX_KEY_DEPTH = 64
+# Suffix forms emitted per leaf, counted from the leaf end -- the credential
+# name is always near it, never near the root.
+MAX_KEY_FORMS = 8
 
 
 def _yaml_loader():
@@ -335,13 +345,11 @@ def yaml_reconstructed_values(text: str) -> str:
     every one of which leaves the regex normalisers in charge.
     """
     if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
-        # Skipping the parser is a coverage loss, and this one is
-        # ATTACKER-SELECTABLE: pad a file past the cap and everything in it
-        # goes unreconstructed while the scan still reports clean. Report it
-        # the same way an exhausted budget is reported. (A missing PyYAML is
-        # also a coverage loss, but it is a uniform, visible, environment-wide
-        # condition rather than a per-file bypass anyone can choose, so it
-        # stays a documented degradation.)
+        # An unparsed document is an unfinished check. Whether that matters is
+        # the CALLER's decision -- see _scan_files, which reports it only when
+        # the destination declares this format. Returning the marker here and
+        # deciding there is what stopped an oversized ordinary markdown file
+        # from failing the gate as an "incomplete reconstruction".
         return TRUNCATION_MARKER
     try:
         import yaml
@@ -349,57 +357,64 @@ def yaml_reconstructed_values(text: str) -> str:
         return ""
 
     lines: list[str] = []
-    # An alias is a SHARED REFERENCE, so a five-line file with four levels of
-    # ten-way aliasing expands to hundreds of thousands of emitted characters
-    # without ever increasing recursion depth. MAX_PARSE_BYTES bounds the input
-    # and the RecursionError handler bounds the depth; neither bounds this.
-    # Both a visited set (each shared subtree walked once) and a hard output
-    # budget are needed: the set alone still permits a wide flat structure.
-    seen: set[int] = set()
+    # Walk the COMPOSED NODE GRAPH, not the constructed Python object. The
+    # constructor collapses a mapping that repeats a key, keeping only the last
+    # entry -- so a tagged credential under a duplicated key was discarded by
+    # the parser before this ever saw it, and the regex fallback cannot read a
+    # tagged value inside a flow mapping. Nodes preserve every source entry,
+    # need no custom constructors, and give scalar text directly, which also
+    # removes the tag-handling special cases the constructor path needed.
+    seen: set[tuple[int, tuple]] = set()
     budget = [MAX_EMITTED_VALUES]
+    truncated = [False]
 
-    def walk(node, key=()):
-        if budget[0] <= 0:
-            return
-        if isinstance(node, (dict, list, tuple)):
-            # Key the visit on (identity, KEY PATH), not identity alone. An
-            # alias is a shared reference, so a mapping first reached under an
-            # innocuous key and later aliased beneath a credential-forming one
-            # is the SAME object at two different paths -- and suppressing the
-            # second one dropped the only path that would have matched. The
-            # round-21 remedy for the alias bomb silently changed the
-            # reconstruction from context-sensitive to context-free, which is a
-            # bypass anyone can write: anchor the payload somewhere harmless,
-            # alias it where it counts.
-            #
-            # The bound still holds. A cycle repeats a (path, node) pair and is
-            # cut here, and a shared subtree is now walked once per distinct
-            # path rather than once overall -- bounded by MAX_EMITTED_VALUES,
-            # which is charged per emitted line either way.
-            marker = (id(node), key)
-            if marker in seen:
-                return
-            seen.add(marker)
-        if isinstance(node, dict):
-            for child_key, value in node.items():
-                walk(value, (key or ()) + (child_key,))
-        elif isinstance(node, (list, tuple)):
-            for value in node:
-                walk(value, key)
-        elif node is not None and key:
-            forms = _key_forms(key)
-            budget[0] -= len(forms)
-            lines.extend(_reconstructed(form, ":", node) for form in forms)
+    def emit(path, value):
+        forms = _key_forms(path)
+        budget[0] -= len(forms)
+        lines.extend(_reconstructed(form, ":", value) for form in forms)
 
     try:
-        # An alias bomb expands geometrically; the size cap plus these guards
-        # keep a hostile document from taking the scan down instead of being
-        # reported by it.
-        for document in yaml.load_all(text, Loader=_yaml_loader()):
-            walk(document)
-    except (Exception, RecursionError):  # noqa: BLE001 - any parse failure falls back
-        return ""
-    if budget[0] <= 0:
+        documents = list(yaml.compose_all(text))
+    except Exception:  # noqa: BLE001 - any parse failure is reported, not raised
+        return TRUNCATION_MARKER
+
+    # Iterative, with an explicit stack: a document nested past the interpreter
+    # limit raised RecursionError and took the whole gate down instead of
+    # producing a bounded finding, which is a way to stop the scan running.
+    stack = [(document, ()) for document in reversed(documents)]
+    while stack:
+        if budget[0] <= 0:
+            truncated[0] = True
+            break
+        node, path = stack.pop()
+        if len(path) > MAX_KEY_DEPTH:
+            truncated[0] = True
+            continue
+        if isinstance(node, yaml.ScalarNode):
+            if path and node.value:
+                emit(path, node.value)
+            continue
+        # Key the visit on (identity, KEY PATH), not identity alone. An alias
+        # composes to the SAME node object, so a mapping first reached under an
+        # innocuous key and later aliased beneath a credential-forming one is
+        # one object at two paths -- and suppressing the second dropped the
+        # only path that would have matched.
+        marker = (id(node), path)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        if isinstance(node, yaml.MappingNode):
+            # node.value is a LIST of (key, value) pairs, so duplicate keys are
+            # all present here.
+            for key_node, value_node in node.value:
+                child = getattr(key_node, "value", None)
+                stack.append(
+                    (value_node, path + (child,) if child else path))
+        elif isinstance(node, yaml.SequenceNode):
+            for item in node.value:
+                stack.append((item, path))
+
+    if truncated[0] or budget[0] <= 0:
         lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
 
@@ -422,7 +437,11 @@ def _key_forms(path) -> list[str]:
     budget per emitted line, so the DoS bound is unchanged.
     """
     parts = [str(part) for part in path if str(part)]
-    return ["_".join(parts[index:]) for index in range(len(parts))] or [""]
+    # Only the suffixes nearest the leaf: a credential name sits at the end
+    # of a path, never at its root, and emitting one form per depth level
+    # made a deep key generate hundreds of thousands of lines.
+    start = max(0, len(parts) - MAX_KEY_FORMS)
+    return ["_".join(parts[index:]) for index in range(start, len(parts))] or [""]
 
 
 def _reconstructed(key, delimiter: str, value) -> str:
@@ -450,35 +469,50 @@ def toml_reconstructed_values(text: str) -> str:
     Returns "" when the text is not TOML, which leaves the regex fold in charge.
     """
     if len(text.encode("utf-8", errors="ignore")) > MAX_PARSE_BYTES:
-        # Same reasoning as the YAML side: an oversized file is an unfinished
-        # check, not a clean one.
+        # Same reasoning as the YAML side: an unparsed document is an
+        # unfinished check, and _scan_files decides whether that matters for
+        # this destination.
         return TRUNCATION_MARKER
     try:
         import tomllib
 
         document = tomllib.loads(text)
-    except Exception:  # noqa: BLE001 - any parse failure falls back
-        return ""
+    except Exception:  # noqa: BLE001 - reported, not raised
+        # A syntax error ANYWHERE discarded the whole reconstruction, so a
+        # credential with an escaped key sitting above a broken line fell
+        # through to regexes that cannot decode it and the file read clean.
+        # Whether an unparseable file matters depends on whether it claims to
+        # be TOML, which only the caller knows.
+        return TRUNCATION_MARKER
 
     lines: list[str] = []
     budget = [MAX_EMITTED_VALUES]
+    truncated = False
 
-    def walk(node, key=()):
+    # Iterative for the same reason as the YAML walker: a deeply dotted key is
+    # ordinary valid TOML and must not be able to raise RecursionError out of
+    # the privacy gate.
+    stack: list[tuple[object, tuple]] = [(document, ())]
+    while stack:
         if budget[0] <= 0:
-            return
+            truncated = True
+            break
+        node, path = stack.pop()
+        if len(path) > MAX_KEY_DEPTH:
+            truncated = True
+            continue
         if isinstance(node, dict):
             for child_key, value in node.items():
-                walk(value, (key or ()) + (child_key,))
+                stack.append((value, path + (child_key,)))
         elif isinstance(node, (list, tuple)):
             for value in node:
-                walk(value, key)
-        elif node is not None and key:
-            forms = _key_forms(key)
+                stack.append((value, path))
+        elif node is not None and path:
+            forms = _key_forms(path)
             budget[0] -= len(forms)
             lines.extend(_reconstructed(form, "=", node) for form in forms)
 
-    walk(document)
-    if budget[0] <= 0:
+    if truncated or budget[0] <= 0:
         lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
 
@@ -640,6 +674,26 @@ def applicable_patterns(relative: Path) -> dict[str, re.Pattern[str]]:
     quiet condition inside the scan loop.
     """
     return PATTERNS
+
+
+def path_findings(relative: Path) -> list[str]:
+    """Private material published in a PATH, not in file content.
+
+    A path is published exactly as the content is: a file named for a tenant
+    id, a client's e-mail address, or a private host names that thing in the
+    repository listing whatever the file holds. Only the basename allowlist and
+    the artifact-suffix rule applied here, so a clean file at
+    `docs/<credential-name>=<real-guid>.md` passed with no findings -- while
+    the adjacent gitlink handling already ran every pattern over a published
+    path string, which is the same string in a different code path.
+
+    Separators are replaced with spaces so a directory boundary cannot hide a
+    match, and so a legitimate path segment cannot run into the next one.
+    """
+    probe = " ".join(str(relative).replace("\\", "/").split("/"))
+    return [f"{relative}: possible {label} in the file path"
+            for label, pattern in applicable_patterns(relative).items()
+            if pattern.search(probe)]
 
 
 
@@ -863,6 +917,7 @@ def scan_repository(root: Path = ROOT) -> list[str]:
             findings.append(
                 f"{relative}: non-source artifact type is not allowed in this public repository"
             )
+        findings.extend(path_findings(relative))
         for label, pattern in PATTERNS.items():
             if pattern.search(name):
                 findings.append(f"{relative}: possible {label} (submodule path)")
@@ -901,6 +956,7 @@ def _scan_files(
             findings.append(
                 f"{relative}: non-source artifact type is not allowed in this public repository"
             )
+        findings.extend(path_findings(relative))
         try:
             if path.is_symlink():
                 # What git publishes for a symlink is the *target string* it
@@ -938,25 +994,39 @@ def _scan_files(
         # an incomplete scan. The reconstructions are the only place the marker
         # can legitimately appear, and it is stripped before matching so it
         # cannot be mistaken for content.
-        reconstructions = [yaml_reconstructed_values(text),
-                           toml_reconstructed_values(text)]
-        truncated = any(TRUNCATION_MARKER in value for value in reconstructions)
+        yaml_values = yaml_reconstructed_values(text)
+        toml_values = toml_reconstructed_values(text)
+        # An unfinished reconstruction only matters where the destination
+        # CLAIMS that format. Both parsers run on every file, because
+        # opportunistic coverage is free -- but reporting their failure on a
+        # file that never claimed to be YAML or TOML made every ordinary
+        # markdown or Python source over 2 MB fail the gate as an "incomplete
+        # reconstruction", which is a false finding, and a noisy gate is one
+        # people learn to override.
+        suffix = relative.suffix.lower()
+        declared = (
+            (suffix in {".yaml", ".yml"} and TRUNCATION_MARKER in yaml_values)
+            or (suffix == ".toml" and TRUNCATION_MARKER in toml_values)
+        )
         reconstructions = [value.replace(TRUNCATION_MARKER, "")
-                           for value in reconstructions]
+                           for value in (yaml_values, toml_values)]
         scannable = strip_known_placeholders(
             relative,
             fold_toml_multiline(fold_block_scalars(strip_yaml_node_properties(text)))
             + "\n" + "\n".join(reconstructions))
-        # A truncated reconstruction means part of this file was never matched
-        # against anything. Report it as an incomplete scan rather than letting
-        # the patterns that did run stand in for the ones that could not: a
-        # budget that stops quietly is a way to push a credential out of scope
-        # by padding the file in front of it.
-        if truncated:
+        # A file that declares a parseable format and could not be parsed, or
+        # was cut short, has had part of itself matched against nothing. Report
+        # that rather than letting the patterns that did run stand in for the
+        # ones that could not: a limit that stops quietly is a way to push a
+        # credential out of scope, by padding the file, by nesting it, or by
+        # appending a syntax error below it.
+        if declared:
             findings.append(
-                f"{relative}: incomplete scan — value reconstruction stopped "
-                f"at {MAX_EMITTED_VALUES} values, so part of this file was "
-                f"never matched. Split the file or review it by hand.")
+                f"{relative}: incomplete scan — the {suffix.lstrip('.')} "
+                "reconstruction could not be completed (unparseable, too "
+                "large, too deeply nested, or past the value budget), so part "
+                "of this file was never matched. Fix the syntax, split the "
+                "file, or review it by hand.")
         for label, pattern in applicable_patterns(relative).items():
             if pattern.search(scannable):
                 findings.append(f"{relative}: possible {label}")
