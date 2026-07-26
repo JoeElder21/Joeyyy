@@ -1,0 +1,32 @@
+schema_version: v1alpha1
+
+environment:
+  type: none
+
+skills:
+  - source: local_path
+    path: .
+
+engine:
+  name: joeyyy-governed-smoke
+  custom:
+    transport: local
+    response_format: session_result
+    local:
+      command: python3
+      args:
+        - governed_eval_engine.py
+        - ${input_file}
+
+cases:
+  files:
+    - evals/cases/apex-boundary.yaml
+    - evals/cases/jeos-boundary.yaml
+    - evals/cases/evolution-gates.yaml
+  defaults:
+    timeout_seconds: 30
+    max_turns: 1
+  parallelism: 1
+
+report:
+  formats: [json]

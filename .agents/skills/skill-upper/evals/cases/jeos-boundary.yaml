@@ -1,0 +1,14 @@
+id: jeos-boundary
+title: Preserve the JEOS evaluation boundary
+context:
+  repo_fixture: evals/fixtures/engine-workspace
+
+input:
+  prompt: "Describe the mandatory handling for a JEOS Skill evaluation."
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        all: ["JEOS_ONLY", "AGENT_007_INTEGRATES", "PRIVATE_REPORT"]
+        not: ["APEX_PAYLOAD"]
+    - exit_code: 0

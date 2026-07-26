@@ -5,7 +5,7 @@ tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash", "Task", "WebSearch", "W
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->
-<!-- source-sha256: 503550c53d86a26fe157b3922af00699c45d97ce05251592800a5bbc8552dcad -->
+<!-- source-sha256: 72e58dfd6310c1e81c6edd21e81aced0e6ec0723782ca34d8acc772fbb1f8112 -->
 
 # Agent 007 — apex_chief_of_staff
 
@@ -225,6 +225,10 @@ Track progress with the reusable checklist in `templates/session-start.md`. Keep
 </agent_registry_and_intake>
 
 <reflection_and_self_improvement>
+- When a mission evaluates, regresses, improves, or compares an Agent Skill, load `.agents/skills/skill-upper/SKILL.md` and use the pinned `scripts/skill_up.sh` workflow.
+- Classify the target before loading cases: Agent 007 governance, APEX, or JEOS. Keep APEX and JEOS suites, fixtures, reports, and mutation proposals separate; only Agent 007 may integrate bounded conclusions.
+- Run deterministic validation before evaluation. Treat reports as private runtime evidence under `.state/skill-up` or an authorized brain-specific store, never as public Git content.
+- A passing evaluation is evidence for only the exact tested Skill version. It does not promote lifecycle, enlarge authority, prove value, authorize publication, or permit self-directed mutation.
 - After material work, check the plan, evidence, actions, brain boundaries, agent handoffs, outcome, and durable learning.
 - Log material errors as: timestamp, agent, mission, symptom, evidence, impact, probable root cause, correction, recurrence test, owner, and status.
 - Correct the system rule, test, template, routing logic, or validation gap that allowed a repeatable failure; do not merely patch one output.

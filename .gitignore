@@ -57,3 +57,6 @@ audit/
 # Trusted-launcher replay ledger and grant claim files: consumed grant ids and
 # operational state from a real workstation. Machine-local, never tracked.
 .state/
+
+# skill-up reports can contain prompts, transcripts, and model output.
+*-workspace/
