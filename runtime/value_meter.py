@@ -24,6 +24,7 @@ Read the policy from ``config/value_policy.toml``; never hardcode a threshold.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import tomllib
@@ -130,6 +131,15 @@ class Observation:
     cleared_by: str = ""
 
     @property
+    def is_clearance(self) -> bool:
+        """Administrative clearance records are not measured runs.
+
+        Counting one as an observation let a clearance become the fifth
+        favourable sample and produce meets_threshold from four actual runs.
+        """
+        return bool(self.clears_incident_for_mission)
+
+    @property
     def total_cost_minutes(self) -> float:
         return (
             self.agent_minutes
@@ -212,6 +222,14 @@ def build_observation(policy: ValuePolicy, payload: dict[str, Any]) -> Observati
             raise ObservationRejected(f"{mode}: {term} must be a finite number")
         if value < 0:
             raise ObservationRejected(f"{mode}: {term} may not be negative")
+
+    for flag in ("accepted_first_pass", "output_rejected", "boundary_incident"):
+        if flag in payload and not isinstance(payload[flag], bool):
+            # bool("false") is True, so a JSON-ish string would flip a quality
+            # gate the payload explicitly set to false.
+            raise ObservationRejected(
+                f"{mode}: {flag} must be a real boolean, got {type(payload[flag]).__name__}"
+            )
 
     return Observation(
         mode=mode,
@@ -306,7 +324,11 @@ def evaluate_mode(
         deduped.append(obs)
     for_mode = deduped
 
-    relevant = [obs for obs in for_mode if _within_window(obs, policy, now)]
+    relevant = [
+        obs
+        for obs in for_mode
+        if _within_window(obs, policy, now) and not obs.is_clearance
+    ]
 
     verdict = ModeVerdict(
         mode=mode,
@@ -451,15 +473,51 @@ def _previously_met(
 
 
 class ValueLedger:
-    """Append-only JSONL store of observations."""
+    """Append-only JSONL store of observations, with per-line integrity.
+
+    The mission ledger is hash-chained; this one was not, so a structurally
+    valid edit to a cost, baseline, acceptance, or incident field would change a
+    verdict with no warning at all. Each line now carries a digest over its own
+    content, and ``report()`` refuses to issue verdicts over records that fail it.
+    """
 
     def __init__(self, path: Path):
         self.path = path
 
+    @staticmethod
+    def _digest(record: dict[str, Any]) -> str:
+        body = {key: value for key, value in record.items() if key != "_digest"}
+        return hashlib.sha256(
+            json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def integrity_errors(self) -> list[str]:
+        """Lines whose contents no longer match their recorded digest."""
+        if not self.path.exists():
+            return []
+        errors: list[str] = []
+        for index, raw in enumerate(self.path.read_text(encoding="utf-8").splitlines()):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                record = json.loads(raw)
+            except json.JSONDecodeError:
+                errors.append(f"line {index}: not valid JSON")
+                continue
+            recorded = record.get("_digest")
+            if not recorded:
+                errors.append(f"line {index}: no integrity digest")
+            elif recorded != self._digest(record):
+                errors.append(f"line {index}: contents do not match digest")
+        return errors
+
     def record(self, observation: Observation) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = observation.to_json()
+        payload["_digest"] = self._digest(payload)
         with self.path.open("a", encoding="utf-8") as sink:
-            sink.write(json.dumps(observation.to_json(), sort_keys=True) + "\n")
+            sink.write(json.dumps(payload, sort_keys=True) + "\n")
 
     def observations(self, policy: ValuePolicy) -> list[Observation]:
         if not self.path.exists():
@@ -477,6 +535,21 @@ class ValueLedger:
         modes: Iterable[str] | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
+        integrity = self.integrity_errors()
+        if integrity:
+            # Fail closed: a tampered or unverifiable value store must not
+            # produce a verdict at all.
+            return {
+                "policy_version": "config/value_policy.toml",
+                "threshold": policy.min_net_time_saved_ratio,
+                "min_observations": policy.min_observations,
+                "total_observations": 0,
+                "modes": [],
+                "value_proven_modes": [],
+                "integrity_errors": integrity,
+                "ledger_trustworthy": False,
+            }
+
         observations = self.observations(policy)
         # Deriving targets only from recorded observations meant a fresh ledger
         # reported no modes at all, so the documented `no_baseline` verdict never
@@ -507,4 +580,6 @@ class ValueLedger:
             "total_observations": len(observations),
             "modes": verdicts,
             "value_proven_modes": [v["mode"] for v in verdicts if v["value_proven"]],
+            "integrity_errors": [],
+            "ledger_trustworthy": True,
         }

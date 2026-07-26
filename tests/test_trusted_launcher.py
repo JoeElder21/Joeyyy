@@ -46,7 +46,7 @@ class RuntimeTrustedLauncherTests(unittest.TestCase):
     """Tests for runtime/trusted_launcher.py (library)."""
     
     def setUp(self):
-        self.secret = "test-secret"
+        self.secret = "test-launcher-secret-0123456789"
         self.now = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
         self.tempdir = tempfile.TemporaryDirectory()
         self.ledger_path = Path(self.tempdir.name) / "ledger.json"

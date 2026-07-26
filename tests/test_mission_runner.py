@@ -618,3 +618,73 @@ class SuppliedEvidenceVerificationTests(RunnerHarness):
         report = self.runner.promotion_status([forged])
         self.assertEqual(report["covered_modes"], 0)
         self.assertIn(f"{AGENT}:{MODE}", report["unrecorded_evidence"])
+
+
+class LiveEvidenceRealismTests(RunnerHarness):
+    """Real email and document evidence routinely contains links."""
+
+    def test_a_url_inside_delegated_content_is_not_a_boundary_violation(self):
+        """This blocked every realistic Gmail or Drive mission."""
+        prepared = self.runner.prepare(
+            spec(
+                evidence=[
+                    EvidenceRecord(
+                        "gmail://thread/agency-1",
+                        "connector_record",
+                        content=(
+                            "LFUCG review comments attached. Portal: "
+                            "https://permits.example.gov/case/1234"
+                        ),
+                    )
+                ]
+            )
+        )
+        handoff = handoff_for(prepared)
+        handoff["artifacts"][0]["records"][0]["source_refs"] = [
+            "gmail://thread/agency-1"
+        ]
+        handoff["artifacts"][0]["records"][0]["source_locator"] = (
+            "gmail://thread/agency-1"
+        )
+        handoff["evidence"] = prepared.delegation["allowed_evidence"]
+        handoff["findings"] = [
+            "Review portal link quoted from the delegated email: "
+            "https://permits.example.gov/case/1234"
+        ]
+        evidence = self.runner.complete(prepared, handoff, **COSTS)
+        self.assertTrue(evidence.connector_isolation_verified, evidence.errors)
+        self.assertTrue(evidence.qualifies_mode, evidence.errors)
+
+    def test_a_locator_not_present_in_the_content_still_fails(self):
+        prepared = self.runner.prepare(
+            spec(
+                evidence=[
+                    EvidenceRecord(
+                        "gmail://thread/agency-1",
+                        "connector_record",
+                        content="No links in this excerpt.",
+                    )
+                ]
+            )
+        )
+        handoff = handoff_for(prepared)
+        handoff["artifacts"][0]["records"][0]["source_refs"] = [
+            "gmail://thread/agency-1"
+        ]
+        handoff["artifacts"][0]["records"][0]["source_locator"] = (
+            "gmail://thread/agency-1"
+        )
+        handoff["evidence"] = prepared.delegation["allowed_evidence"]
+        handoff["findings"] = ["Also checked drive://file/undelegated-9"]
+        evidence = self.runner.complete(prepared, handoff, **COSTS)
+        self.assertFalse(evidence.connector_isolation_verified)
+
+
+class FrozenIdentityTests(RunnerHarness):
+    def test_mutating_the_spec_after_prepare_cannot_redirect_coverage(self):
+        prepared = self.runner.prepare(spec())
+        # The caller mutates the spec to a sibling mode of the same agent.
+        prepared.spec.mode = "weekly_load"
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        self.assertEqual(evidence.mode, MODE)
+        self.assertEqual(evidence.value_observation["mode"], MODE)

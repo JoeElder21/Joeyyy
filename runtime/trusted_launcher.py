@@ -50,17 +50,36 @@ def _parse_timestamp(value: str, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+class GrantDeniedError(ValueError):
+    """Raised when a launch request violates trusted-launcher policy."""
+
+
 def _canonical_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
+MIN_SECRET_LENGTH = 16
+
+
+def _require_secret(secret: str) -> str:
+    """Refuse an absent or trivially guessable signing secret.
+
+    A missing environment variable defaulted to "" would otherwise still produce
+    a valid HMAC, so anyone could mint a grant for an allowlisted operation.
+    """
+    if not isinstance(secret, str) or not secret.strip():
+        raise GrantDeniedError("launcher signing secret is empty")
+    if len(secret) < MIN_SECRET_LENGTH:
+        raise GrantDeniedError(
+            f"launcher signing secret must be at least {MIN_SECRET_LENGTH} characters"
+        )
+    return secret
+
+
 def sign_claims(claims: dict[str, Any], secret: str) -> str:
+    _require_secret(secret)
     digest = hmac.new(secret.encode("utf-8"), _canonical_json(claims).encode("utf-8"), hashlib.sha256)
     return digest.hexdigest()
-
-
-class GrantDeniedError(ValueError):
-    """Raised when a launch request violates trusted-launcher policy."""
 
 
 @dataclass(frozen=True)
@@ -185,6 +204,7 @@ class TrustedLauncher:
         if non_string_fields:
             raise GrantDeniedError(f"grant claims fields must be strings: {non_string_fields}")
 
+        _require_secret(secret)
         expected_signature = sign_claims(claims, secret)
         if not hmac.compare_digest(signature, expected_signature):
             raise GrantDeniedError("grant signature is invalid")

@@ -64,6 +64,9 @@ HANDOFF_SCHEMA = "handoff_packet.schema.json"
 
 VALID_EVIDENCE_SENSITIVITY = {"public", "internal", "confidential", "restricted"}
 
+# Scheme-prefixed tokens are the shape a real connector locator takes.
+LOCATOR_PATTERN = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s\"'<>,;)\]]+")
+
 
 class MissionRejected(ValueError):
     """The mission cannot run as specified. Fail closed; never downgrade to a guess."""
@@ -441,6 +444,16 @@ class MissionRunner:
         spec = prepared.spec
         brain = prepared.meta["brain"]
 
+        # Two missions prepared before either completes both see no established
+        # observation, so the prepare-time guard alone lets them record
+        # different baselines. Re-check against what is now on record.
+        established = self._established_baseline(delegation["mode"])
+        if established is not None and established != spec.baseline_minutes:
+            errors.append(
+                f"baseline drift: mode {delegation['mode']!r} is established at "
+                f"{established} minutes but this mission used {spec.baseline_minutes}"
+            )
+
         # 1. The return must be a schema-valid 2.1 handoff bound to this delegation.
         schema_errors = self.guard.validate(
             HANDOFF_SCHEMA, handoff, delegations=[delegation]
@@ -471,8 +484,12 @@ class MissionRunner:
                     f"connector isolation: return cites {cited!r}, which was not in the "
                     "delegation packet — the specialist reached past its evidence"
                 )
+        # Locators quoted from inside the delegated content are delegated too.
+        delegated_tokens = {
+            token.rstrip(".") for token in self._delegated_content_tokens(delegation)
+        }
         for token in self._locator_like_tokens(handoff):
-            if token not in allowed_refs:
+            if token not in allowed_refs and token not in delegated_tokens:
                 connector_isolation_verified = False
                 errors.append(
                     f"connector isolation: return references locator {token!r} in free "
@@ -503,6 +520,15 @@ class MissionRunner:
         # An invalid or non-completed return is not a first-pass acceptance, no
         # matter what the caller passed. Otherwise five failing missions could
         # still average out to meets_threshold.
+        # A brain or sensitivity rejection, or a shadow specialist reporting a
+        # performed write, is a boundary incident — not merely a failed run that
+        # ages out of the window.
+        boundary_markers = ("owner_brain", "sensitivity", "brain", "lifecycle:")
+        if any(
+            marker in error.lower() for error in errors for marker in boundary_markers
+        ):
+            connector_isolation_verified = False
+
         mission_sound = status == "completed" and not errors
         if not mission_sound:
             accepted_first_pass = False
@@ -510,8 +536,8 @@ class MissionRunner:
 
         completed_at = datetime.now(timezone.utc).isoformat()
         value_observation = {
-            "mode": spec.mode,
-            "agent": spec.agent,
+            "mode": delegation["mode"],
+            "agent": delegation["agent"],
             "mission_id": delegation["mission_id"],
             "observed_at": completed_at,
             "baseline_minutes": spec.baseline_minutes,
@@ -541,8 +567,11 @@ class MissionRunner:
         evidence = MissionEvidence(
             delegation_id=delegation["delegation_id"],
             mission_id=delegation["mission_id"],
-            agent=spec.agent,
-            mode=spec.mode,
+            # Identity comes from the validated delegation. Reading it from the
+            # caller's still-mutable spec let a caller run one mode, rewrite
+            # spec.mode to a sibling, and collect coverage for the sibling.
+            agent=delegation["agent"],
+            mode=delegation["mode"],
             brain=brain,
             status=status,
             typed_return_valid=typed_return_valid,
@@ -668,9 +697,32 @@ class MissionRunner:
                 )
             )
         # Drop missions whose value record was later revoked by a compensation.
-        return [
+        surviving = [
             evidence for evidence in recovered if evidence.delegation_id not in revoked
         ]
+
+        # Read-time reconciliation. A crash between the mission append and the
+        # value append (or while writing the compensation) leaves a record
+        # claiming value_recorded=true with no observation behind it. The
+        # compensating entry cannot cover that window, so verify against the
+        # value ledger rather than trusting the flag.
+        recorded_missions: set[str] = set()
+        try:
+            recorded_missions = {
+                observation.mission_id
+                for observation in self.value_ledger.observations(self.value_policy)
+            }
+        except (ObservationRejected, OSError):
+            recorded_missions = set()
+
+        for evidence in surviving:
+            if evidence.value_recorded and evidence.mission_id not in recorded_missions:
+                evidence.value_recorded = False
+                evidence.errors.append(
+                    "reconciliation: mission claims a value observation that the "
+                    "value ledger does not contain"
+                )
+        return surviving
 
     # ---------------------------------------------------------------- helpers
 
@@ -698,6 +750,21 @@ class MissionRunner:
         return cited
 
     @staticmethod
+    def _delegated_content_tokens(delegation: dict[str, Any]) -> set[str]:
+        """Locators that appear *inside* the evidence Agent 007 supplied.
+
+        A delegated email or document routinely contains links. Those are part of
+        the content the specialist was given, not evidence it reached past its
+        packet, so they must not count as undelegated locators.
+        """
+        blob = " ".join(
+            str(record.get("content", ""))
+            for record in delegation.get("allowed_evidence", []) or []
+            if isinstance(record, dict)
+        )
+        return set(LOCATOR_PATTERN.findall(blob))
+
+    @staticmethod
     def _locator_like_tokens(handoff: dict[str, Any]) -> set[str]:
         """Locator-shaped tokens anywhere in the return's free text.
 
@@ -720,8 +787,7 @@ class MissionRunner:
                     walk(value)
 
         walk(handoff)
-        pattern = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s\"\'<>,;)\]]+")
-        return {match.group(0).rstrip(".") for match in pattern.finditer(" ".join(blob_parts))}
+        return {token.rstrip(".") for token in LOCATOR_PATTERN.findall(" ".join(blob_parts))}
 
     # ------------------------------------------------------------- promotion
 
@@ -748,8 +814,20 @@ class MissionRunner:
         if supplied:
             ledger_errors = self.ledger.verify()
             if not ledger_errors:
+                # Comparing ids alone let a caller reuse a real delegation_id
+                # while substituting a different agent, mode, and contract hash.
+                # Match the identity fields that decide coverage.
                 recorded_ids = {
-                    entry.delegation_id for entry in self.evidence_from_ledger()
+                    (
+                        entry.delegation_id,
+                        entry.agent,
+                        entry.mode,
+                        entry.contract_sha,
+                        entry.real_evidence,
+                        entry.readback_performed,
+                        entry.value_recorded,
+                    )
+                    for entry in self.evidence_from_ledger()
                 }
 
         qualifying: dict[str, list[str]] = {}
@@ -758,14 +836,25 @@ class MissionRunner:
         for evidence in evidences:
             if not evidence.qualifies_mode:
                 continue
-            if supplied and evidence.delegation_id not in recorded_ids:
-                unrecorded.append(f"{evidence.agent}:{evidence.mode}")
-                continue
             current = self.contract_sha(evidence.agent) if evidence.agent in self.roster else ""
             # An absent hash is stale, not exempt. Defaulting it to "" and then
             # skipping the comparison failed open on the exact binding it added.
+            # Checked before ledger membership so genuinely outdated evidence is
+            # diagnosed as stale rather than as merely unrecorded.
             if not evidence.contract_sha or evidence.contract_sha != current:
                 stale.append(f"{evidence.agent}:{evidence.mode}")
+                continue
+            fingerprint = (
+                evidence.delegation_id,
+                evidence.agent,
+                evidence.mode,
+                evidence.contract_sha,
+                evidence.real_evidence,
+                evidence.readback_performed,
+                evidence.value_recorded,
+            )
+            if supplied and fingerprint not in recorded_ids:
+                unrecorded.append(f"{evidence.agent}:{evidence.mode}")
                 continue
             qualifying.setdefault(evidence.agent, []).append(evidence.mode)
 
