@@ -21,6 +21,7 @@ being silently missed.
 from __future__ import annotations
 
 import json
+import math
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -158,7 +159,16 @@ def threshold_for(case: dict, metric: str) -> float:
     """
     floor = MINIMUM_THRESHOLDS.get(metric, 0.0)
     declared = (case.get("thresholds") or {}).get(metric)
-    if not isinstance(declared, int | float) or isinstance(declared, bool):
+    # `math.isfinite` here as well as in `validate_thresholds`. This accessor
+    # is reachable without the loader -- that is the whole reason it exists --
+    # so a NaN arriving through it would reach DeepEval with `max(nan, floor)`
+    # returning whichever operand comes first. Guarding only the validator
+    # would be fixing the instance and leaving the class, one layer down.
+    if (
+        not isinstance(declared, int | float)
+        or isinstance(declared, bool)
+        or not math.isfinite(declared)
+    ):
         return floor
     return max(float(declared), floor)
 
@@ -178,6 +188,16 @@ def validate_thresholds(case: dict, *, source: str = "case") -> None:
             raise ValueError(f"{source}: threshold for unmapped metric {name!r}")
         if not isinstance(value, int | float) or isinstance(value, bool):
             raise ValueError(f"{source}: threshold for {name!r} must be a number, got {value!r}")
+        # NaN and the infinities are numbers to `isinstance` and satisfy every
+        # comparison below by failing all of them: `nan < floor` is False and
+        # `nan > 1.0` is False, so a case declaring NaN passed validation and
+        # carried a threshold whose pass/fail behaviour no comparison in this
+        # repository governs. A gate whose bound is not-a-number is not a gate.
+        if not math.isfinite(value):
+            raise ValueError(
+                f"{source}: threshold for {name!r} must be finite, got {value!r}; "
+                "a non-finite bound satisfies every range check by failing it"
+            )
         floor = MINIMUM_THRESHOLDS.get(name)
         if floor is not None and value < floor:
             raise ValueError(

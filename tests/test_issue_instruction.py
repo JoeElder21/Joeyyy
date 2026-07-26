@@ -205,6 +205,16 @@ class KeyCustodyTests(unittest.TestCase):
             self.assertIn("no signing key", str(raised.exception))
             self.assertFalse(absent.exists(), "the issuer created a signing key")
 
+    def test_the_cli_offers_no_confirmation_skip_flag(self):
+        # `--yes` was an escape hatch through the only confirmation there is:
+        # an unattended process can allocate a pseudo-terminal, satisfy
+        # isatty(), pass the flag, and mint a grant with nobody present. A
+        # control with an opt-out is the caller-set-boolean defect wearing a
+        # different costume, and this module removed three of those.
+        source = (ROOT / "scripts" / "issue_instruction.py").read_text(encoding="utf-8")
+        self.assertNotIn('"--yes"', source)
+        self.assertNotIn("args.yes", source)
+
     def test_the_cli_refuses_without_a_terminal(self):
         # An unattended agent process running under the same account must not
         # be able to mint a publication or transaction grant. This does not

@@ -3103,6 +3103,112 @@ class TwentyNinthPassRegressionTests(unittest.TestCase):
                     )
 
 
+class ThirtySecondPassRegressionTests(unittest.TestCase):
+    """A declared operation that outranked its action, and an empty category."""
+
+    def setUp(self):
+        self.registry, self.lease = registry_and_lease()
+        self.pep = PolicyEnforcementPoint(ROOT, registry=self.registry, clock=lambda: NOW)
+
+    def _request(self, action, operation=None):
+        return ToolRequest(
+            agent=CHIEF,
+            action=action,
+            resource="APEX/Strategy-Campaigns",
+            owner_brain="APEX",
+            operation=operation,
+        )
+
+    def test_a_declared_write_operation_is_a_mutation(self):
+        # `operation` is documented as the verb the executor actually performs,
+        # and the packet and lease rules already consulted it -- while the
+        # mutation classification looked only at the action name. So
+        # `action="read_record", operation="replace"` evaluated as a read and
+        # skipped the lease, lifecycle, packet and launch-grant controls with
+        # nothing presented. Where the two disagree, the more dangerous reading
+        # has to win.
+        for action, operation in (
+            ("read_record", "replace"),
+            ("read_record", "append"),
+            ("list_rows", "delete"),
+            ("get_row", "overwrite"),
+        ):
+            with self.subTest(action=action, operation=operation):
+                normalized, _ = PolicyEnforcementPoint.normalize(self._request(action, operation))
+                self.assertTrue(normalized.mutating)
+                self.assertFalse(self.pep.evaluate(self._request(action, operation)).allowed)
+
+    def test_a_read_operation_does_not_make_a_read_a_mutation(self):
+        # The control. Without it this passes by classifying everything as a
+        # mutation, which would deny every lawful read.
+        for action, operation in (
+            ("read_record", None),
+            ("read_record", "read"),
+            ("list_rows", "list"),
+        ):
+            with self.subTest(action=action, operation=operation):
+                normalized, _ = PolicyEnforcementPoint.normalize(self._request(action, operation))
+                self.assertFalse(normalized.mutating)
+                self.assertTrue(self.pep.evaluate(self._request(action, operation)).allowed)
+
+    def test_binding_legal_commitment_has_reachable_verbs(self):
+        # The category shipped in HIGH_IMPACT_ACTIONS with NO verb mapped to it,
+        # so it fired only when a caller volunteered the category name as its
+        # own action -- a control that asks the caller to incriminate itself.
+        for action in (
+            "accept_contract",
+            "execute_agreement",
+            "agree_to_terms",
+            "countersign_deed",
+            "ratify_agreement",
+            "acceptContract",
+            "enter_into_agreement",
+        ):
+            with self.subTest(action=action):
+                self.assertEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "binding_legal_commitment",
+                )
+
+    def test_legal_verbs_alone_do_not_gate_ordinary_work(self):
+        # The first fix mapped the bare verbs and gated `execute_query`,
+        # `commit_message` and `accept_row` -- database, git and data work. The
+        # verb carries no legal meaning; the OBJECT does, so both are required.
+        for action in (
+            "accept_row",
+            "commit_message",
+            "execute_query",
+            "execute_report",
+            "create_record",
+        ):
+            with self.subTest(action=action):
+                self.assertNotIn(
+                    PolicyEnforcementPoint._boundary_category(action), HIGH_IMPACT_ACTIONS
+                )
+
+    def test_every_boundary_category_is_reachable_from_some_verb(self):
+        # The class, not the instance. A category with no concrete spelling that
+        # resolves to it never fires, and nothing said so -- which is how
+        # `binding_legal_commitment` sat inert since it was written. Derived
+        # from the frozenset, so a category added later without a mapping fails
+        # here rather than being discovered by a reviewer.
+        probes = {
+            "irreversible_bulk_deletion": "delete_all",
+            "financial_transaction": "transfer_funds",
+            "credential_or_access_change": "rotate_credentials",
+            "sign_or_certify_professional_work": "sign_drawing",
+            "binding_legal_commitment": "accept_contract",
+            "public_publication": "publish_report",
+            "final_submission": "submit_permit",
+            "scheduled_task_change": "create_scheduled_task",
+            "governance_or_master_change": "modify_separation_governance",
+        }
+        self.assertEqual(set(probes), set(HIGH_IMPACT_ACTIONS), "a category has no probe")
+        for category, action in sorted(probes.items()):
+            with self.subTest(category=category):
+                self.assertEqual(PolicyEnforcementPoint._boundary_category(action), category)
+
+
 class GovernanceMountAdmissionTests(unittest.TestCase):
     """A deferred gap, recorded as a tripwire rather than left to be rediscovered.
 

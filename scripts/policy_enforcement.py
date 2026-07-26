@@ -127,6 +127,36 @@ HIGH_IMPACT_VERBS = {
     "overwrite": "irreversible_bulk_deletion",
 }
 
+# `binding_legal_commitment` was in HIGH_IMPACT_ACTIONS from the start with NO
+# verb mapped to it, so it fired only when a caller volunteered the category
+# name as its own action -- the "controls that ask the caller to incriminate
+# itself" shape removed elsewhere in this module. `accept_contract`,
+# `execute_agreement` and `agree_to_terms` all reached the fallback unchanged.
+#
+# Compound, like the submission and schedule rules, and for the same reason
+# learned the same way: the first attempt mapped the bare verbs, which gated
+# `execute_query`, `commit_message` and `accept_row` -- ordinary database, git
+# and data work. The verb alone carries no legal meaning; the OBJECT does.
+LEGAL_COMMITMENT_VERBS = frozenset(
+    {"accept", "agree", "commit", "countersign", "execute", "ratify", "bind", "enter"}
+)
+LEGAL_COMMITMENT_NOUNS = frozenset(
+    {
+        "contract",
+        "agreement",
+        "terms",
+        "deed",
+        "covenant",
+        "waiver",
+        "settlement",
+        "nda",
+        "msa",
+        "sow",
+        "engagement",
+        "undertaking",
+    }
+)
+
 # `submit` is gated only when qualified as a final or external submission.
 # Gating every `submit` would demand Joe's signature for saving a draft, and a
 # boundary that fires on ordinary work is one an operator learns to wave
@@ -602,6 +632,22 @@ class PolicyEnforcementPoint:
         """
         if request.mutating:
             return True
+        # The DECLARED OPERATION, not only the action name. `operation` is
+        # documented as the verb actually performed by the executor, and it was
+        # consulted by the packet and lease rules while the mutation
+        # classification ignored it entirely -- so `action="read_record",
+        # operation="replace"` evaluated as a read and skipped the lease,
+        # lifecycle, packet and launch-grant controls with nothing presented.
+        # Reproduced before fixing. A request that says it will replace a
+        # record is a mutation whatever its action is called, and where the two
+        # disagree the more dangerous reading is the one that must win.
+        operation = (
+            (request.operation or "").strip().lower() if isinstance(request.operation, str) else ""
+        )
+        if operation:
+            operation_tokens = _action_tokens(operation)
+            if not operation_tokens or operation_tokens[0] not in READ_ONLY_ACTION_VERBS:
+                return True
         action = (request.action or "").strip().lower()
         if action in HIGH_IMPACT_ACTIONS:
             return True
@@ -1966,6 +2012,10 @@ class PolicyEnforcementPoint:
             token in GOVERNANCE_NOUNS for token in tokens
         ):
             return "governance_or_master_change"
+        if any(token in LEGAL_COMMITMENT_VERBS for token in tokens) and any(
+            token in LEGAL_COMMITMENT_NOUNS for token in tokens
+        ):
+            return "binding_legal_commitment"
 
         for token in tokens:
             if token in HIGH_IMPACT_VERBS:

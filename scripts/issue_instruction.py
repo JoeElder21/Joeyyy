@@ -159,11 +159,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--key", type=Path, default=DEFAULT_KEY_PATH)
     parser.add_argument("--out-dir", type=Path, default=None)
-    parser.add_argument(
-        "--yes",
-        action="store_true",
-        help="Skip the interactive confirmation. Refuses unless stdin is a TTY.",
-    )
     args = parser.parse_args(argv)
 
     # A human at a terminal, by default. This does NOT prove the human is Joe
@@ -188,12 +183,16 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    if not args.yes:
-        category = PolicyEnforcementPoint._boundary_category(args.action)
-        print(f"Authorize {category!r} on {args.resource!r}? Type the category to confirm: ")
-        if input().strip() != category:
-            print("refusing to issue: not confirmed", file=sys.stderr)
-            return 2
+    # No skip flag. The first version offered `--yes`, which meant an
+    # unattended process could allocate a pseudo-terminal, satisfy isatty(),
+    # pass the flag and mint a grant with nobody present -- an escape hatch
+    # through the only confirmation there is. A control with an opt-out is the
+    # caller-set-boolean defect in another costume.
+    category = PolicyEnforcementPoint._boundary_category(args.action)
+    print(f"Authorize {category!r} on {args.resource!r}? Type the category to confirm: ")
+    if input().strip() != category:
+        print("refusing to issue: not confirmed", file=sys.stderr)
+        return 2
 
     try:
         path = issue_instruction(

@@ -435,6 +435,33 @@ class ThresholdIntegrityTests(unittest.TestCase):
             0.95,
         )
 
+    def test_a_non_finite_threshold_is_refused(self):
+        # NaN and the infinities are numbers to `isinstance` and satisfy every
+        # range check by FAILING all of them: `nan < floor` is False and
+        # `nan > 1.0` is False. `json.loads` accepts NaN, so a case file could
+        # carry a threshold whose pass/fail behaviour no comparison in this
+        # repository governs. A gate whose bound is not-a-number is not a gate.
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), self.assertRaises(ValueError) as raised:
+                harness.validate_thresholds({"thresholds": {"case_criteria": value}})
+            self.assertIn("finite", str(raised.exception))
+
+    def test_the_accessor_also_refuses_a_non_finite_threshold(self):
+        # Guarded in BOTH places, because `threshold_for` is reachable without
+        # the loader -- which is the reason it exists. `max(nan, floor)` returns
+        # whichever operand comes first, so guarding only the validator would
+        # fix the instance and leave the class one layer down.
+        for metric, value in (
+            ("case_criteria", float("nan")),
+            ("task_completion", float("inf")),
+            ("role_adherence", float("-inf")),
+        ):
+            with self.subTest(metric=metric, value=value):
+                self.assertEqual(
+                    harness.threshold_for({"thresholds": {metric: value}}, metric),
+                    harness.MINIMUM_THRESHOLDS[metric],
+                )
+
     def test_the_minima_cover_every_metric_in_the_contract(self):
         # A metric with no floor is a metric a case can set to zero. The
         # contract and the minima have to be changed as a set.
@@ -643,6 +670,23 @@ class ArtifactSubstanceTests(unittest.TestCase):
         for packet in (None, [], "packet", {"artifacts": "not a list"}, {"artifacts": [1, 2]}):
             with self.subTest(packet=packet):
                 self.assertEqual(harness.artifact_records(packet), [])
+
+
+class RunDirectoryPrivacyTests(unittest.TestCase):
+    """Run output is private mission context, and lands on a shared machine."""
+
+    def test_the_run_directory_is_created_owner_only(self):
+        # Under the common 0022 umask a bare `mkdir()` yields 0755, and the
+        # JUnit report inside deliberately retains passing-test output --
+        # model responses and mission context -- so any other local user could
+        # read evaluation evidence before it reached the authorized private
+        # store. Asserted against the source because creating a real run needs
+        # deepeval and a model key; the mode must be passed TO mkdir rather than
+        # chmod'ed after, or the directory is briefly world-readable exactly
+        # while results are being written into it.
+        source = (EVALS / "run_evaluations.py").read_text(encoding="utf-8")
+        self.assertIn("out_dir.mkdir(mode=0o700", source)
+        self.assertNotIn("out_dir.mkdir(exist_ok=False)", source)
 
 
 class EvaluationSuiteWiringTests(unittest.TestCase):

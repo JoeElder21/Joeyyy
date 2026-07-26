@@ -321,7 +321,14 @@ def execute(stamp: str | None) -> int:
     # preserve. `mkdir(exist_ok=False)` makes the claim the check.
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     try:
-        out_dir.mkdir(exist_ok=False)
+        # Owner-only. Under the common 0022 umask this created a 0755
+        # directory, and the JUnit report inside it deliberately retains
+        # passing-test output -- model responses and private mission context --
+        # so on a shared workstation any other local user could read evaluation
+        # evidence before it reached the authorized private store. The mode is
+        # passed to mkdir rather than chmod'ed after, so the directory is never
+        # briefly world-readable while the results are being written into it.
+        out_dir.mkdir(mode=0o700, exist_ok=False)
     except FileExistsError:
         raise UnsafeRun(
             f"{out_dir} already exists. Choose a new --run-id rather than "
