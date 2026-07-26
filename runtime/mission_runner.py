@@ -473,3 +473,64 @@ class MissionRunner:
             name for name, entry in report["agents"].items() if entry["all_modes_covered"]
         )
         return report
+
+
+# ------------------------------------------------------------------- catalog
+
+
+@dataclass(frozen=True)
+class CatalogEntry:
+    """A prepared mission awaiting live evidence and a baseline.
+
+    Everything except the two things only Joe can supply is settled in advance,
+    so a Monday mission is executed rather than designed.
+    """
+
+    key: str
+    agent: str
+    mode: str
+    trigger: str
+    objective: str
+    definition_of_done: list[str]
+    definition_of_done_ids: list[str]
+    evidence_sources: list[str]
+    baseline_prompt: str
+
+    def to_spec(
+        self,
+        evidence: list[EvidenceRecord],
+        baseline_minutes: int,
+        baseline_source: str = "joe_declared",
+    ) -> MissionSpec:
+        """Bind live evidence and Joe's baseline into a runnable mission."""
+        return MissionSpec(
+            agent=self.agent,
+            mode=self.mode,
+            objective=self.objective.strip(),
+            definition_of_done=list(self.definition_of_done),
+            definition_of_done_ids=list(self.definition_of_done_ids),
+            evidence=evidence,
+            baseline_minutes=baseline_minutes,
+            baseline_source=baseline_source,
+        )
+
+
+def load_mission_catalog(root: Path = ROOT) -> dict[str, CatalogEntry]:
+    """Load the prepared missions from ``config/mission_catalog.toml``."""
+    raw = tomllib.loads(
+        (root / "config" / "mission_catalog.toml").read_text(encoding="utf-8")
+    )
+    catalog: dict[str, CatalogEntry] = {}
+    for entry in raw.get("mission", []):
+        catalog[entry["key"]] = CatalogEntry(
+            key=entry["key"],
+            agent=entry["agent"],
+            mode=entry["mode"],
+            trigger=entry["trigger"],
+            objective=entry["objective"],
+            definition_of_done=list(entry["definition_of_done"]),
+            definition_of_done_ids=list(entry["definition_of_done_ids"]),
+            evidence_sources=list(entry.get("evidence_sources", [])),
+            baseline_prompt=entry["baseline_prompt"],
+        )
+    return catalog

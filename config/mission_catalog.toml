@@ -1,0 +1,151 @@
+# Ready-to-run controlled missions for the modes Joe actually uses.
+#
+# Each entry is a complete mission specification minus two things only Joe can
+# supply at run time: the evidence (Agent 007 retrieves it from live connectors)
+# and the baseline (how long the task takes him by hand).
+#
+# The point is that Monday is "run this" rather than "design this". Agent 007
+# loads a catalog entry, attaches the evidence it just retrieved, and runs the
+# mission through runtime/mission_runner.py.
+#
+# Adding an entry here is not a promotion and does not change any lifecycle
+# stage. It is a prepared assignment, nothing more.
+
+version = "1.0.0"
+effective_date = "2026-07-26"
+
+# ---------------------------------------------------------------- APEX
+
+[[mission]]
+key = "submittal_status"
+agent = "apex_delivery_commander"
+mode = "delivery_control"
+trigger = "Where do my submittals stand? / delivery status / what is due this week"
+objective = """
+Produce one delivery-control board covering every active submittal in the supplied
+evidence: current review stage, owning agency, last action date, next action, and
+who holds it. Flag anything whose next action is overdue or unowned.
+"""
+definition_of_done = [
+  "One delivery_board artifact with a row per submittal found in the evidence.",
+  "Every row carries its source locator, revision, and as-of date.",
+  "Overdue or unowned next actions are called out explicitly.",
+]
+definition_of_done_ids = ["board-complete", "rows-source-linked", "risks-flagged"]
+evidence_sources = ["drive:project folders", "gmail:agency correspondence", "calendar:deadlines"]
+baseline_prompt = "How long does a full submittal-status pass normally take you by hand?"
+
+[[mission]]
+key = "pipeline_triage"
+agent = "apex_deal_engine"
+mode = "pipeline_triage"
+trigger = "Triage my pipeline / what opportunities need attention"
+objective = """
+Deduplicate the opportunities in the supplied evidence into one pipeline view,
+score each on observable evidence only, and return the next-best action per
+opportunity. Do not infer client intent that the evidence does not show.
+"""
+definition_of_done = [
+  "One opportunity_pipeline artifact, deduplicated by stable source and content key.",
+  "Each opportunity has a next-best action grounded in a cited source.",
+  "Opportunities with no evidence of movement are listed as dormant, not as lost.",
+]
+definition_of_done_ids = ["pipeline-deduped", "actions-grounded", "dormant-labeled"]
+evidence_sources = ["gmail:proposal threads", "drive:proposal folders", "calendar:pursuit meetings"]
+baseline_prompt = "How long does a full pipeline triage normally take you by hand?"
+
+[[mission]]
+key = "weekend_intake"
+agent = "apex_intelligence_forge"
+mode = "intake_normalization"
+trigger = "Normalize what came in / catch me up / what happened while I was out"
+objective = """
+Normalize the supplied intake into one deduplicated record set: what arrived, from
+whom, what it concerns, what it asks of Joe, and by when. Preserve citations and
+the smallest necessary evidence excerpt. Separate facts from inferences.
+"""
+definition_of_done = [
+  "One normalized record set with stable dedup keys and preserved citations.",
+  "Each record states what it asks of Joe and its deadline, or says none is stated.",
+  "Inferences are labeled separately from source-backed facts.",
+]
+definition_of_done_ids = ["records-normalized", "asks-explicit", "inference-labeled"]
+evidence_sources = ["gmail:unread threads", "drive:recently modified", "calendar:recent events"]
+baseline_prompt = "How long does catching up on intake normally take you by hand?"
+
+[[mission]]
+key = "process_diagnosis"
+agent = "apex_systems_blacksmith"
+mode = "process_diagnosis"
+trigger = "This keeps eating my time / why does X take so long"
+objective = """
+Diagnose the repetition in the supplied evidence: what recurs, how often, how long
+it takes, where it fails, and what the smallest reliable intervention would be.
+Do not propose automation whose maintenance burden exceeds the time it returns.
+"""
+definition_of_done = [
+  "The recurring workload is quantified from evidence, not estimated.",
+  "One smallest-adequate intervention is proposed, with its maintenance cost stated.",
+  "Interventions whose cost exceeds their return are named and rejected.",
+]
+definition_of_done_ids = ["workload-quantified", "intervention-scoped", "cost-honest"]
+evidence_sources = ["drive:process records", "gmail:recurring threads", "calendar:recurring events"]
+baseline_prompt = "How long do you spend on this recurring task in a typical week?"
+
+# ---------------------------------------------------------------- JEOS
+
+[[mission]]
+key = "daily_capacity"
+agent = "jeos_energy_director"
+mode = "daily_capacity"
+trigger = "What is realistic today? / how much can I take on"
+objective = """
+Return one capacity map for the day from the supplied schedule evidence: committed
+time, genuine open windows, peak windows, and the realistic ceiling on demanding
+work. Name one adjustment if the day is overloaded.
+"""
+definition_of_done = [
+  "One capacity_map artifact distinguishing committed, open, and peak windows.",
+  "A stated ceiling on demanding work, grounded in the schedule evidence.",
+  "At most one adjustment recommended, and only if the day is genuinely overloaded.",
+]
+definition_of_done_ids = ["windows-mapped", "ceiling-stated", "adjustment-bounded"]
+evidence_sources = ["calendar:today and tomorrow", "todoist:due today"]
+baseline_prompt = "How long does planning your day realistically take you by hand?"
+
+[[mission]]
+key = "weekly_plan"
+agent = "jeos_life_architect"
+mode = "weekly_plan"
+trigger = "Plan my week / what matters this week"
+objective = """
+Produce one weekly plan from the supplied evidence: what matters this week, what
+is already committed, what must move, and what should be dropped. Preserve Joe's
+agency — recommend, do not prescribe.
+"""
+definition_of_done = [
+  "One weekly plan naming what matters, what is committed, and what must move.",
+  "Every item traces to a source in the evidence.",
+  "A stop / delegate / postpone list where the week is over-committed.",
+]
+definition_of_done_ids = ["plan-complete", "items-traced", "tradeoffs-named"]
+evidence_sources = ["calendar:next 7 days", "todoist:this week", "drive:personal planning notes"]
+baseline_prompt = "How long does weekly planning normally take you by hand?"
+
+[[mission]]
+key = "daily_activation"
+agent = "jeos_momentum_engine"
+mode = "daily_activation"
+trigger = "Get me moving / I keep avoiding this"
+objective = """
+Convert the stated priority into the smallest visible next action with a start cue,
+location or tool, time box, and stop condition. One action, not a plan.
+"""
+definition_of_done = [
+  "Exactly one next action, small enough to start immediately.",
+  "Start cue, location or tool, time box, and stop condition are all present.",
+  "No motivational framing that outruns what the evidence supports.",
+]
+definition_of_done_ids = ["single-action", "cue-complete", "claims-bounded"]
+evidence_sources = ["todoist:stalled tasks", "calendar:today"]
+baseline_prompt = "How long do you usually spend getting started on a stalled task?"

@@ -292,3 +292,53 @@ class PromotionStatusTests(RunnerHarness):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MissionCatalogTests(RunnerHarness):
+    """The prepared Monday missions must be runnable, not aspirational."""
+
+    def setUp(self):
+        super().setUp()
+        from runtime.mission_runner import load_mission_catalog
+
+        self.catalog = load_mission_catalog()
+
+    def test_catalog_is_not_empty(self):
+        self.assertGreaterEqual(len(self.catalog), 7)
+
+    def test_every_entry_names_a_registered_agent_and_mode(self):
+        for key, entry in self.catalog.items():
+            with self.subTest(mission=key):
+                meta = self.runner.roster.get(entry.agent)
+                self.assertIsNotNone(meta, f"{entry.agent} is not registered")
+                self.assertIn(entry.mode, meta["modes"])
+
+    def test_every_entry_produces_a_packetguard_clean_delegation(self):
+        """A catalog entry that cannot actually be prepared is worthless on Monday."""
+        for key, entry in self.catalog.items():
+            with self.subTest(mission=key):
+                prepared = self.runner.prepare(
+                    entry.to_spec(
+                        evidence=[
+                            EvidenceRecord(
+                                source_ref=f"fixture/{key}/source-1",
+                                source_type="synthetic",
+                            )
+                        ],
+                        baseline_minutes=30,
+                    )
+                )
+                self.assertEqual(prepared.delegation["mode"], entry.mode)
+                self.assertEqual(prepared.delegation["agent"], entry.agent)
+
+    def test_definition_of_done_ids_line_up_with_criteria(self):
+        for key, entry in self.catalog.items():
+            with self.subTest(mission=key):
+                self.assertEqual(
+                    len(entry.definition_of_done), len(entry.definition_of_done_ids)
+                )
+                self.assertTrue(entry.baseline_prompt.strip())
+
+    def test_catalog_covers_both_brains(self):
+        brains = {self.runner.roster[e.agent]["brain"] for e in self.catalog.values()}
+        self.assertEqual(brains, {"APEX", "JEOS"})

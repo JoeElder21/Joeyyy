@@ -73,6 +73,20 @@ Say what you need in your own words. Examples that map to registered modes:
 
 Agent 007 routes; you do not need to name the specialist.
 
+These seven are **pre-written** in `config/mission_catalog.toml` — objective,
+definition of done, criterion ids, and the evidence sources to retrieve are all
+settled in advance, so Monday is running a mission rather than designing one.
+Every catalog entry is tested to produce a PacketGuard-clean delegation, so none
+of them can fail at the starting line.
+
+```bash
+python -c "
+from runtime.mission_runner import load_mission_catalog
+for key, entry in load_mission_catalog().items():
+    print(f'{key:20s} {entry.agent:32s} {entry.mode}')
+"
+```
+
 ### 3. Give a baseline the first time you run a mode
 
 The value meter refuses to invent one. The first time you run a mode, Agent 007
