@@ -44,7 +44,10 @@ reason is audit evidence; a missing line is a gap.
 ```
 - [ ] Ops brief posted (5 lines, before first edit)
 - [ ] Awesome Copilot layer read (.github/AWESOME-COPILOT.md)
-- [ ] Discovery skills checked — run, not just listed, if scope touches .github/
+- [ ] Discovery skill RUN (not listed) on any of its triggers: the mission
+      changes a capability upstream may cover, touches `.github/instructions|agents|skills`,
+      asks what is available or has drifted, or reaches a weekly audit
+- [ ] Drift check reported as UNRUN when no fetch-capable tool is verified
 - [ ] Ownership classified (APEX | JEOS | shared | governance | unknown)
 - [ ] Mission staffed from the full registered corps, scaled to the mission,
       one designated writer per shared resource (AGENTS.md; `[-]` with the
@@ -67,8 +70,16 @@ reason is audit evidence; a missing line is a gap.
 
 Run after the **first meaningful edit**, then again before committing.
 
+A bare `privacy_guard.py` enumerates via `git ls-files`, so a file created by the
+edit you are about to validate is **invisible to it** — it reports success without
+ever opening the new file. Pass the changed and untracked paths explicitly, or
+stage them first; running only the bare form before committing is how a new
+credential-bearing file reaches a commit with a green gate behind it.
+
 ```bash
-python scripts/privacy_guard.py
+# Scans tracked files AND anything new this session has written.
+python scripts/privacy_guard.py $(git diff --name-only; git ls-files --others --exclude-standard)
+python scripts/privacy_guard.py            # tracked tree, after the above
 python scripts/validate_specialist_corps.py
 python scripts/verify_runtime_stack.py
 python -m unittest discover -s tests -v
