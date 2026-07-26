@@ -56,8 +56,17 @@ SOURCE_HASH_PREFIX = "<!-- source-sha256: "
 # connector_policy = "packet_only_no_direct_connectors".
 SPECIALIST_TOOLS: list[str] = []
 
-# Agent 007 is the cross-brain governor and the only connector holder. Its tool
-# surface is broad by design; every always-gated action still needs Joe live.
+# Agent 007 is the cross-brain governor and the only connector holder.
+#
+# An earlier version listed only built-in tools. That silently broke the whole
+# architecture in the subagent path: the runbook says Agent 007 retrieves
+# evidence from Gmail, Drive, Calendar, and Todoist, but a subagent whose
+# frontmatter omits those tools cannot reach them even when the parent session
+# is authorized. Every catalog mission would have had no evidence to package.
+#
+# `mcp__*` is a wildcard over the session's connected MCP servers: whatever Joe
+# has authorized is available, and nothing is invented if a connector is absent.
+# Specialists still receive an empty list, so isolation is unchanged.
 CHIEF_TOOLS = [
     "Read",
     "Glob",
@@ -68,6 +77,7 @@ CHIEF_TOOLS = [
     "Task",
     "WebSearch",
     "WebFetch",
+    "mcp__*",
 ]
 
 
@@ -300,7 +310,16 @@ def build() -> dict[Path, str]:
         encoding="utf-8"
     )
     chief_body = render_chief(CHIEF_OF_STAFF, chief_contract, roster)
-    outputs[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"] = _stamp(chief_body, [chief_source])
+    # The chief projection renders both brain rosters, so hashing only its own
+    # contract would let two different rosters produce the same advertised
+    # source-sha256 — the stamp could not say which roster is callable.
+    manifest_sources = [
+        (ROOT / "brains" / brain / "agents.toml").read_text(encoding="utf-8")
+        for brain in ("apex", "jeos")
+    ]
+    outputs[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"] = _stamp(
+        chief_body, [chief_source, *manifest_sources]
+    )
 
     for name, meta in sorted(roster.items()):
         contract_path = ROOT / meta["native_file"]

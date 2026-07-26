@@ -1,6 +1,6 @@
 # CLAUDE.md — Claude Code runtime adapter
 
-This file is a thin runtime adapter. The canonical cross-runtime repository policy is the **JOEYYY Global Agent Engineering Constitution** in the repository-root [`AGENTS.md`](AGENTS.md). Read it first and follow it; nothing in this file may amend, restate, or supersede it.
+This file is a thin runtime adapter. The canonical cross-runtime repository policy is the **JOEYYY Global Agent Engineering Constitution** in the repository-root [`AGENTS.md`](AGENTS.md). Read it first and follow it; nothing in this file may amend, restate, or supersede it. Where this file and the constitution disagree, the constitution wins.
 
 Claude Code specific guidance:
 

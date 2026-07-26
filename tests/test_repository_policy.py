@@ -121,19 +121,31 @@ class RuntimeAdapterTests(unittest.TestCase):
         for path in (CLAUDE_ADAPTER_PATH, COPILOT_ADAPTER_PATH):
             yield path, path.read_text(encoding="utf-8")
 
-    def test_adapters_exist_and_point_to_agents_md(self):
+    def test_adapters_name_the_canonical_policy(self):
         for path, text in self.adapter_texts():
             with self.subTest(adapter=path.name):
                 self.assertIn("AGENTS.md", text)
-                self.assertIn("thin runtime adapter", text)
                 self.assertIn("JOEYYY Global Agent Engineering Constitution", text)
+                # The adapter must say which document wins, or "thin" is a
+                # description rather than a rule.
+                self.assertIn("the constitution wins", text)
 
-    def test_adapters_stay_thin(self):
+    def test_adapters_do_not_restate_the_constitution(self):
+        """Section 18's actual rule is no duplicated policy, not a byte budget.
+
+        An earlier version capped adapters at 2000 characters. PR #26 then
+        merged a genuinely substantive Copilot entry point — bidirectional
+        activation, the Awesome Copilot layer, the mission protocol — which is
+        exactly the runtime-specific invocation guidance section 18 permits, and
+        it is far over any sensible byte cap. The cap was a proxy; the rule it
+        stood for is that no adapter may carry an independently editable copy of
+        constitution policy. Test the rule.
+        """
         for path, text in self.adapter_texts():
             with self.subTest(adapter=path.name):
-                self.assertLess(len(text), 2000)
                 for heading in SECTION_HEADINGS:
                     self.assertNotIn(heading, text)
+                self.assertNotIn(CONSTITUTION_TITLE, text)
 
 
 class StaffingRuleSupersessionTests(unittest.TestCase):
