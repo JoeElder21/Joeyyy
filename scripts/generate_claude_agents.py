@@ -8,12 +8,12 @@ Claude Code runtime, where Joe's connectors are actually live.
 Two properties matter more than convenience:
 
 1. **Connector isolation is enforced by the tool list, not by prose.** Every
-   specialist declares ``connector_policy = "packet_only_no_direct_connectors"``.
-   A generated specialist therefore receives only read tools over the repository
-   working set. It cannot reach Gmail, Drive, Calendar, Todoist, the web, or a
-   shell, because those tools are absent from its frontmatter — not because a
-   sentence asks it not to. Agent 007 holds the connectors and supplies evidence
-   inside a PacketGuard-validated delegation packet.
+   specialist declares ``connector_policy = "packet_only_no_direct_connectors"``,
+   so a generated specialist receives an empty tool list. It cannot reach Gmail,
+   Drive, Calendar, Todoist, the web, a shell, or even the repository filesystem,
+   because it has no tools at all — not because a sentence asks it not to. Agent
+   007 holds the connectors and supplies every permitted record inside a
+   PacketGuard-validated delegation packet.
 
 2. **Drift is detectable.** Each generated file records the SHA-256 of the exact
    canonical inputs that produced it. ``tests/test_claude_agents.py``
@@ -45,10 +45,16 @@ CHIEF_OF_STAFF = "apex_chief_of_staff"
 GENERATED_MARKER = "<!-- GENERATED FILE - DO NOT EDIT BY HAND -->"
 SOURCE_HASH_PREFIX = "<!-- source-sha256: "
 
-# A packet-only specialist gets repository reads and nothing else. No connector
-# tool, no shell, no writer. This is the technical half of the isolation the
-# contracts describe.
-SPECIALIST_TOOLS = ["Read", "Glob", "Grep"]
+# A packet-only specialist gets NO tools at all.
+#
+# An earlier version granted Read/Glob/Grep, reasoning that repository reads were
+# harmless. They are not: the repository contains both brain manifests, so a JEOS
+# specialist could read brains/apex/** directly and the "structurally enforced"
+# brain lock would have been prose again. The delegation packet already carries
+# every record the specialist is allowed to analyze, so a packet-only specialist
+# genuinely needs no tool. An empty list is the faithful projection of
+# connector_policy = "packet_only_no_direct_connectors".
+SPECIALIST_TOOLS: list[str] = []
 
 # Agent 007 is the cross-brain governor and the only connector holder. Its tool
 # surface is broad by design; every always-gated action still needs Joe live.
@@ -67,6 +73,32 @@ CHIEF_TOOLS = [
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _yaml_scalar(value: str) -> str:
+    """Emit a YAML-safe scalar.
+
+    The chief's description begins "Agent 007: Joe Elder's ...". Unquoted, the
+    colon-space makes the frontmatter invalid YAML ("mapping values are not
+    allowed here"), and a strict parser refuses the whole file. Always quote,
+    escaping backslashes and double quotes.
+    """
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _frontmatter(name: str, description: str, tools: list[str]) -> str:
+    """Build frontmatter whose scalars survive a real YAML parser."""
+    lines = [
+        "---",
+        f"name: {_yaml_scalar(name)}",
+        f"description: {_yaml_scalar(description)}",
+        # An empty tools list must still be valid YAML, and must not read as a
+        # missing key that a runtime would fill with a permissive default.
+        f"tools: [{', '.join(_yaml_scalar(tool) for tool in tools)}]",
+        "---",
+    ]
+    return "\n".join(lines)
 
 
 def load_manifests() -> dict[str, dict[str, Any]]:
@@ -133,8 +165,9 @@ def render_specialist(name: str, meta: dict[str, Any], contract: dict[str, Any])
 
 ## Enforced boundaries
 
-These are structural, not advisory. Your tool list is `{", ".join(SPECIALIST_TOOLS)}`
-and deliberately contains no connector, no shell, and no writer.
+These are structural, not advisory. You have **no tools at all**: no connector,
+no shell, no writer, and no filesystem read. Everything you are permitted to
+analyze is already in the delegation packet.
 
 1. **You are {brain}-only.** You never read, infer, write, or ask about the other
    brain. Agent 007 is the sole cross-brain governor and transfer point.
@@ -170,11 +203,7 @@ reproduced verbatim. It governs; this projection may not amend it.
 """
 
     return (
-        f"---\n"
-        f"name: {name}\n"
-        f"description: {description}\n"
-        f"tools: {', '.join(SPECIALIST_TOOLS)}\n"
-        f"---\n\n"
+        f"{_frontmatter(name, description, SPECIALIST_TOOLS)}\n\n"
         f"{GENERATED_MARKER}\n\n"
         f"# {name}\n\n"
         f"{governance}"
@@ -253,11 +282,7 @@ reproduced verbatim. It governs; this projection may not amend it.
 """
 
     return (
-        f"---\n"
-        f"name: {name}\n"
-        f"description: {contract.get('description', '').strip()}\n"
-        f"tools: {', '.join(CHIEF_TOOLS)}\n"
-        f"---\n\n"
+        f"{_frontmatter(name, contract.get('description', '').strip(), CHIEF_TOOLS)}\n\n"
         f"{GENERATED_MARKER}\n\n"
         f"# Agent 007 — {name}\n\n"
         f"{governance}"
@@ -287,6 +312,25 @@ def build() -> dict[Path, str]:
     return outputs
 
 
+def find_orphaned_projections(outputs: dict[Path, str]) -> list[Path]:
+    """Generated projections in the output directory with no current source.
+
+    Retiring an agent in the manifests must remove it from callable routing. A
+    leftover marker-bearing file would keep a retired specialist invocable, so it
+    is deleted on generate and fails ``--check``. Hand-authored agents (no
+    generated marker) are never touched.
+    """
+    if not OUTPUT_DIR.is_dir():
+        return []
+    orphans = []
+    for path in sorted(OUTPUT_DIR.glob("*.md")):
+        if path in outputs:
+            continue
+        if GENERATED_MARKER in path.read_text(encoding="utf-8"):
+            orphans.append(path)
+    return orphans
+
+
 def _stamp(body: str, sources: list[str]) -> str:
     """Insert the canonical-source hash directly after the generated marker."""
     digest = _sha256("\n---\n".join(sources))
@@ -307,6 +351,7 @@ def main() -> int:
     args = parser.parse_args()
 
     outputs = build()
+    orphans = find_orphaned_projections(outputs)
     stale: list[str] = []
     for path, content in sorted(outputs.items()):
         current = path.read_text(encoding="utf-8") if path.exists() else None
@@ -318,13 +363,23 @@ def main() -> int:
             path.write_text(content, encoding="utf-8")
 
     if args.check:
-        if stale:
-            print("stale or missing generated agents:")
-            for name in stale:
-                print(f"  {name}")
+        if stale or orphans:
+            if stale:
+                print("stale or missing generated agents:")
+                for name in stale:
+                    print(f"  {name}")
+            if orphans:
+                print("generated agents no longer backed by a manifest entry:")
+                for path in orphans:
+                    print(f"  {path.relative_to(ROOT)}")
             return 1
         print(f"OK: {len(outputs)} generated agents match their canonical sources.")
         return 0
+
+    for path in orphans:
+        # A retired agent whose projection survives stays callable in the runtime.
+        path.unlink()
+        print(f"Removed orphaned projection: {path.relative_to(ROOT)}")
 
     if stale:
         print(f"Wrote {len(stale)} of {len(outputs)} agent projections:")

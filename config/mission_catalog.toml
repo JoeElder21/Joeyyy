@@ -18,6 +18,7 @@ effective_date = "2026-07-26"
 
 [[mission]]
 key = "submittal_status"
+required_artifact_types = ["delivery_board"]
 agent = "apex_delivery_commander"
 mode = "delivery_control"
 trigger = "Where do my submittals stand? / delivery status / what is due this week"
@@ -37,6 +38,7 @@ baseline_prompt = "How long does a full submittal-status pass normally take you 
 
 [[mission]]
 key = "pipeline_triage"
+required_artifact_types = ["opportunity_pipeline"]
 agent = "apex_deal_engine"
 mode = "pipeline_triage"
 trigger = "Triage my pipeline / what opportunities need attention"
@@ -56,6 +58,7 @@ baseline_prompt = "How long does a full pipeline triage normally take you by han
 
 [[mission]]
 key = "weekend_intake"
+required_artifact_types = ["intelligence_brief"]
 agent = "apex_intelligence_forge"
 mode = "intake_normalization"
 trigger = "Normalize what came in / catch me up / what happened while I was out"
@@ -75,6 +78,7 @@ baseline_prompt = "How long does catching up on intake normally take you by hand
 
 [[mission]]
 key = "process_diagnosis"
+required_artifact_types = ["automation_assessment"]
 agent = "apex_systems_blacksmith"
 mode = "process_diagnosis"
 trigger = "This keeps eating my time / why does X take so long"
@@ -96,6 +100,7 @@ baseline_prompt = "How long do you spend on this recurring task in a typical wee
 
 [[mission]]
 key = "daily_capacity"
+required_artifact_types = ["capacity_map"]
 agent = "jeos_energy_director"
 mode = "daily_capacity"
 trigger = "What is realistic today? / how much can I take on"
@@ -115,6 +120,7 @@ baseline_prompt = "How long does planning your day realistically take you by han
 
 [[mission]]
 key = "weekly_plan"
+required_artifact_types = ["life_plan"]
 agent = "jeos_life_architect"
 mode = "weekly_plan"
 trigger = "Plan my week / what matters this week"
@@ -134,6 +140,7 @@ baseline_prompt = "How long does weekly planning normally take you by hand?"
 
 [[mission]]
 key = "daily_activation"
+required_artifact_types = ["activation_queue"]
 agent = "jeos_momentum_engine"
 mode = "daily_activation"
 trigger = "Get me moving / I keep avoiding this"

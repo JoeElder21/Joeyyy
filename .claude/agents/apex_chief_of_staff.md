@@ -1,7 +1,7 @@
 ---
-name: apex_chief_of_staff
-description: Agent 007: Joe Elder's cross-brain Chief of Staff, agent governor, and multi-agent orchestrator for APEX and JEOS.
-tools: Read, Glob, Grep, Edit, Write, Bash, Task, WebSearch, WebFetch
+name: "apex_chief_of_staff"
+description: "Agent 007: Joe Elder's cross-brain Chief of Staff, agent governor, and multi-agent orchestrator for APEX and JEOS."
+tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash", "Task", "WebSearch", "WebFetch"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

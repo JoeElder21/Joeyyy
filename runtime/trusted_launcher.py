@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 from typing import Any
@@ -72,7 +73,9 @@ class TrustedLauncher:
         max_grant_lifetime: timedelta = timedelta(minutes=30),
         expected_subject: str = "agent007-launcher",
     ):
-        self.tool_catalog = tool_catalog or {
+        # `or` treated an explicitly empty catalog as absent and silently
+        # restored the built-in tools, granting capabilities the caller removed.
+        self.tool_catalog = tool_catalog if tool_catalog is not None else {
             "civil3d-mcp": {
                 "version": ("node", "--version"),
                 "manual_synthetic_dwg_trial": ("echo", "manual Civil 3D trial must run on workstation"),
@@ -120,7 +123,7 @@ class TrustedLauncher:
             )
 
         completed = subprocess.run(
-            list(command),
+            self._resolved_command(command),
             capture_output=True,
             text=True,
             check=False,
@@ -204,6 +207,27 @@ class TrustedLauncher:
 
         return claims
 
+    @staticmethod
+    def _resolved_command(command: tuple[str, ...]) -> list[str]:
+        """Resolve the executable to an absolute path before running it.
+
+        A signed grant authorizes a tool and operation, not "whatever binary
+        happens to be first on the caller's PATH". Passing a bare name such as
+        `node` lets a modified environment turn an allowlisted version check
+        into arbitrary code execution.
+        """
+        resolved = list(command)
+        executable = resolved[0]
+        if Path(executable).is_absolute():
+            if not Path(executable).exists():
+                raise GrantDeniedError(f"allowlisted executable not found: {executable}")
+            return resolved
+        found = shutil.which(executable)
+        if not found:
+            raise GrantDeniedError(f"allowlisted executable not found on PATH: {executable}")
+        resolved[0] = str(Path(found).resolve())
+        return resolved
+
     def _used_grants(self) -> set[str]:
         if not self.ledger_path.exists():
             return set()
@@ -211,8 +235,30 @@ class TrustedLauncher:
             content = json.loads(self.ledger_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             raise GrantDeniedError(f"ledger read/parse failure: {exc}") from exc
-        used = content.get("used_grants", [])
-        return {item for item in used if isinstance(item, str)}
+        if not isinstance(content, dict) or "used_grants" not in content:
+            raise GrantDeniedError("ledger is malformed: missing used_grants")
+        used = content["used_grants"]
+        if not isinstance(used, list) or any(not isinstance(item, str) for item in used):
+            # Silently dropping unreadable entries would let anyone who can edit
+            # the ledger corrupt one consumed id and replay a captured grant.
+            raise GrantDeniedError("ledger is malformed: used_grants must be a list of strings")
+        return set(used)
+
+    def _claim_grant_exclusively(self, grant_id: str) -> None:
+        """Take an exclusive on-disk claim before consuming the grant.
+
+        Validation and consumption were two separate steps, so two concurrent
+        processes could both pass the replay check before either wrote the
+        ledger and both execute a one-time grant. An O_EXCL claim file makes the
+        winner unambiguous; the loser is denied.
+        """
+        self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        claim = self.ledger_path.parent / f".{self.ledger_path.name}.claim-{grant_id}"
+        try:
+            fd = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError as exc:
+            raise GrantDeniedError("grant_id is already being consumed") from exc
+        os.close(fd)
 
     def _consume_grant_id(self, grant_id: str) -> None:
         """Record a consumed grant, replacing the ledger atomically.
@@ -224,6 +270,7 @@ class TrustedLauncher:
         and calling ``os.replace`` means a reader sees either the old ledger or
         the new one, never a partial one.
         """
+        self._claim_grant_exclusively(grant_id)
         used = self._used_grants()
         used.add(grant_id)
         self.ledger_path.parent.mkdir(parents=True, exist_ok=True)

@@ -31,6 +31,7 @@ def spec(**overrides) -> MissionSpec:
         evidence=[EvidenceRecord(source_ref=SOURCE, source_type="synthetic")],
         baseline_minutes=20,
         baseline_source="joe_declared",
+        required_artifact_types=["capacity_map"],
     )
     base.update(overrides)
     return MissionSpec(**base)
@@ -94,11 +95,14 @@ def handoff_for(prepared, **overrides) -> dict:
     return packet
 
 
+# A qualifying mission must have had its result read back, so the default costs
+# used by the happy-path tests include it.
 COSTS = dict(
     agent_minutes=1.0,
     review_minutes=2.0,
     correction_minutes=0.0,
     maintenance_share_minutes=0.5,
+    readback_performed=True,
 )
 
 
@@ -424,3 +428,94 @@ class BrainSeparationLoaderTests(unittest.TestCase):
             self.assertIn("both brain manifests", str(caught.exception))
         finally:
             module.tomllib.loads = original
+
+
+class GateIntegrityTests(RunnerHarness):
+    """Ways a mode could be marked covered without meeting the gate."""
+
+    def test_a_mission_without_readback_does_not_qualify(self):
+        """config/specialist_corps.toml names readback in the active gate."""
+        prepared = self.runner.prepare(spec())
+        costs = dict(COSTS)
+        costs["readback_performed"] = False
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **costs)
+        self.assertEqual(evidence.errors, [])
+        self.assertFalse(evidence.readback_performed)
+        self.assertFalse(evidence.qualifies_mode)
+        self.assertEqual(self.runner.promotion_status([evidence])["covered_modes"], 0)
+
+    def test_a_failed_mission_is_not_recorded_as_first_pass_accepted(self):
+        """Otherwise five failing missions could still average to meets_threshold."""
+        prepared = self.runner.prepare(spec())
+        evidence = self.runner.complete(
+            prepared, handoff_for(prepared, criterion_validation=[]), **COSTS
+        )
+        self.assertFalse(evidence.qualifies_mode)
+        self.assertFalse(evidence.value_observation["accepted_first_pass"])
+        self.assertTrue(evidence.value_observation["output_rejected"])
+
+    def test_a_locator_cited_only_in_free_text_breaks_isolation(self):
+        """Citations outside artifact records were previously unchecked."""
+        prepared = self.runner.prepare(spec())
+        sneaky = handoff_for(prepared)
+        sneaky["findings"] = [
+            "Cross-referenced gmail://thread/undelegated-1 for extra context."
+        ]
+        evidence = self.runner.complete(prepared, sneaky, **COSTS)
+        self.assertFalse(evidence.connector_isolation_verified)
+        self.assertFalse(evidence.qualifies_mode)
+        self.assertTrue(any("free text" in e for e in evidence.errors))
+
+    def test_non_first_modes_can_complete_a_mission(self):
+        """technical_qa must not be forced to return a delivery_board."""
+        prepared = self.runner.prepare(
+            MissionSpec(
+                agent="apex_delivery_commander",
+                mode="technical_qa",
+                objective="Review the supplied sheet set for grading risk.",
+                definition_of_done=["Return one QA risk packet."],
+                definition_of_done_ids=["qa-packet"],
+                evidence=[EvidenceRecord("fixture/apex/sheets-1", "synthetic")],
+                baseline_minutes=45,
+                baseline_source="joe_declared",
+                required_artifact_types=["qa_risk_packet"],
+            )
+        )
+        self.assertEqual(
+            prepared.delegation["required_artifact_types"], ["qa_risk_packet"]
+        )
+
+    def test_unregistered_artifact_type_is_refused(self):
+        with self.assertRaises(MissionRejected):
+            self.runner.prepare(spec(required_artifact_types=["not_a_type"]))
+
+    def test_a_mission_that_names_no_artifact_type_is_refused(self):
+        """The harness will not guess; a wrong guess fails every return."""
+        with self.assertRaises(MissionRejected) as caught:
+            self.runner.prepare(spec(required_artifact_types=[]))
+        self.assertIn("artifact type", str(caught.exception))
+
+
+class LedgerBackedPromotionTests(RunnerHarness):
+    """The runbook's coverage command must see missions that actually ran."""
+
+    def test_promotion_status_reads_the_ledger_when_given_nothing(self):
+        prepared = self.runner.prepare(spec())
+        self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+
+        report = self.runner.promotion_status()
+        self.assertEqual(report["covered_modes"], 1)
+        self.assertIn(MODE, report["agents"][AGENT]["covered_modes"])
+
+    def test_an_empty_ledger_reports_no_coverage(self):
+        self.assertEqual(self.runner.promotion_status()["covered_modes"], 0)
+
+    def test_evidence_from_an_obsolete_contract_stops_covering_a_mode(self):
+        prepared = self.runner.prepare(spec())
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        self.assertTrue(evidence.qualifies_mode)
+
+        evidence.contract_sha = "0000000000000000"
+        report = self.runner.promotion_status([evidence])
+        self.assertEqual(report["covered_modes"], 0)
+        self.assertIn(f"{AGENT}:{MODE}", report["stale_contract_evidence"])

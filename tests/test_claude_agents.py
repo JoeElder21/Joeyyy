@@ -6,8 +6,11 @@ quietly gains a tool that would break connector isolation or the brain lock.
 """
 
 from pathlib import Path
+from typing import Any
 import tomllib
 import unittest
+
+import yaml
 
 from scripts.generate_claude_agents import (
     CHIEF_OF_STAFF,
@@ -33,16 +36,24 @@ FORBIDDEN_SPECIALIST_TOOLS = {
 }
 
 
-def frontmatter(text: str) -> dict[str, str]:
+def frontmatter(text: str) -> dict[str, Any]:
+    """Parse frontmatter with a real YAML parser.
+
+    An earlier version split on the first colon, which happily "parsed"
+    `description: Agent 007: Joe Elder's ...` — frontmatter that a real YAML
+    parser rejects outright, so Claude Code could not have loaded the chief.
+    """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         raise AssertionError("missing opening frontmatter fence")
-    fields: dict[str, str] = {}
+    block = []
     for line in lines[1:]:
         if line.strip() == "---":
-            return fields
-        key, _, value = line.partition(":")
-        fields[key.strip()] = value.strip()
+            parsed = yaml.safe_load("\n".join(block))
+            if not isinstance(parsed, dict):
+                raise AssertionError("frontmatter is not a YAML mapping")
+            return parsed
+        block.append(line)
     raise AssertionError("missing closing frontmatter fence")
 
 
@@ -77,13 +88,16 @@ class GeneratedCorpsTests(unittest.TestCase):
             if path.stem == CHIEF_OF_STAFF:
                 continue
             with self.subTest(agent=path.stem):
-                tools = {t.strip() for t in frontmatter(content)["tools"].split(",")}
+                tools = set(frontmatter(content)["tools"])
                 self.assertEqual(tools, set(SPECIALIST_TOOLS))
                 self.assertEqual(tools & FORBIDDEN_SPECIALIST_TOOLS, set())
+                # Packet-only means no tools at all, including filesystem reads
+                # that would expose the other brain's manifest.
+                self.assertEqual(tools, set())
 
     def test_chief_of_staff_holds_the_connector_and_writer_surface(self):
         content = self.expected[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
-        tools = {t.strip() for t in frontmatter(content)["tools"].split(",")}
+        tools = set(frontmatter(content)["tools"])
         self.assertEqual(tools, set(CHIEF_TOOLS))
         self.assertIn("Agent 007 activated.", content)
 
@@ -166,3 +180,20 @@ class BrainSeparationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FrontmatterParsesAsYamlTests(unittest.TestCase):
+    """Every shipped projection must load in a strict YAML parser."""
+
+    def test_all_generated_frontmatter_is_valid_yaml(self):
+        for path, content in build().items():
+            with self.subTest(agent=path.stem):
+                parsed = frontmatter(content)
+                self.assertEqual(parsed["name"], path.stem)
+                self.assertIsInstance(parsed["description"], str)
+                self.assertIsInstance(parsed["tools"], list)
+
+    def test_a_description_containing_a_colon_survives(self):
+        """`Agent 007: Joe ...` is the exact string that broke the first version."""
+        chief = build()[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
+        self.assertIn("Agent 007:", frontmatter(chief)["description"])

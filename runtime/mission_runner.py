@@ -30,6 +30,9 @@ with no evidence record is not promotable. That asymmetry is the point.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 import tomllib
 import uuid
 from dataclasses import dataclass, field
@@ -93,23 +96,40 @@ def load_brain_roster(root: Path = ROOT) -> dict[str, dict[str, Any]]:
 class EvidenceRecord:
     """One piece of evidence Agent 007 retrieved and is handing to a specialist.
 
-    ``source_ref`` must locate the real record. ``retrieved_by`` names who called
-    the connector — always Agent 007, because specialists have no connector tool.
+    ``source_ref`` locates the real record; ``content`` carries what the
+    specialist actually analyzes.
+
+    Carrying only a locator was a design error: a packet-only specialist has no
+    connector and no filesystem tool, so it cannot dereference
+    ``gmail://thread/abc`` or a Drive file id. Without the content in the packet,
+    the only way to convey it would be an unvalidated side channel such as the
+    objective text — which is exactly the ungoverned path the packet contract
+    exists to prevent.
+
+    Keep ``content`` bounded and minimized: the smallest excerpt that supports
+    the mission, never a raw dump, and always labeled with its sensitivity.
     """
 
     source_ref: str
     source_type: str
+    content: str = ""
     sensitivity: str = "internal"
     retrieved_by: str = "apex_chief_of_staff"
+    as_of: str | None = None
 
     def as_packet_evidence(self, brain: str) -> dict[str, Any]:
-        return {
+        record = {
             "source_ref": self.source_ref,
             "owner_brain": brain,
             "source_type": self.source_type,
             "scope_verified_by": self.retrieved_by,
             "sensitivity": self.sensitivity,
         }
+        if self.content:
+            record["content"] = self.content
+        if self.as_of:
+            record["as_of"] = self.as_of
+        return record
 
 
 @dataclass
@@ -129,6 +149,17 @@ class MissionSpec:
     sensitivity: str = "internal"
     allowed_actions: list[str] = field(default_factory=lambda: ["analyze", "read_packet_evidence"])
     deadline: str | None = None
+    # Which artifact types the return must produce. Required, never inferred.
+    #
+    # An earlier version hardcoded artifact_types[0] for every mode, so
+    # technical_qa demanded a delivery_board and a correct qa_risk_packet return
+    # failed PacketGuard — most non-first modes could never complete a mission.
+    # Defaulting to "all registered types" is equally wrong, because PacketGuard
+    # requires every listed type to be present. And no positional mode->artifact
+    # mapping exists: apex_intelligence_forge has five modes and four artifact
+    # types, jeos_life_architect five and three. So the mission must say which
+    # artifact its mode produces, and a mission that does not is refused.
+    required_artifact_types: list[str] = field(default_factory=list)
 
     def validated_against(self, meta: dict[str, Any]) -> None:
         """Reject the mission rather than let an invalid one produce evidence."""
@@ -153,6 +184,13 @@ class MissionSpec:
                 raise MissionRejected(
                     f"{self.agent}: evidence sensitivity {record.sensitivity!r} is invalid"
                 )
+            if record.source_type != "synthetic" and not record.content:
+                # A toolless specialist cannot dereference a locator. Real
+                # connector evidence must arrive with its content in the packet.
+                raise MissionRejected(
+                    f"{self.agent}: evidence {record.source_ref!r} carries no content; "
+                    "a packet-only specialist has no connector to fetch it with"
+                )
         if self.baseline_minutes <= 0:
             raise MissionRejected(
                 f"{self.agent}: controlled missions need a positive human baseline so the "
@@ -162,6 +200,19 @@ class MissionSpec:
             raise MissionRejected(
                 f"{self.agent}: baseline_source must be 'measured' or 'joe_declared'; "
                 f"got {self.baseline_source!r}"
+            )
+        registered = meta.get("artifact_types", [])
+        if not self.required_artifact_types:
+            raise MissionRejected(
+                f"{self.agent}: mission must name the artifact type(s) mode "
+                f"{self.mode!r} produces (registered: {registered}); the harness "
+                "will not guess, because a wrong guess fails every return"
+            )
+        unknown = [a for a in self.required_artifact_types if a not in registered]
+        if unknown:
+            raise MissionRejected(
+                f"{self.agent}: artifact types {unknown} are not registered "
+                f"(registered: {registered})"
             )
 
 
@@ -173,6 +224,7 @@ class PreparedMission:
     meta: dict[str, Any]
     delegation: dict[str, Any]
     prepared_at: str
+    contract_sha: str = ""
 
     @property
     def delegation_id(self) -> str:
@@ -196,14 +248,22 @@ class MissionEvidence:
     ledger_entry: dict[str, Any] | None
     value_observation: dict[str, Any] | None
     value_recorded: bool = False
+    contract_sha: str = ""
+    completed_at: str = ""
 
     @property
     def qualifies_mode(self) -> bool:
-        """Does this single mission satisfy the per-mode controlled-mission gate?"""
+        """Does this single mission satisfy the per-mode controlled-mission gate?
+
+        The gate in config/specialist_corps.toml names readback explicitly, so a
+        run that never read its result back does not qualify — previously the
+        default of False still produced a covered mode.
+        """
         return (
             self.status == "completed"
             and self.typed_return_valid
             and self.connector_isolation_verified
+            and self.readback_performed
             and self.value_recorded
             and not self.errors
         )
@@ -220,6 +280,8 @@ class MissionEvidence:
             "connector_isolation_verified": self.connector_isolation_verified,
             "readback_performed": self.readback_performed,
             "value_recorded": self.value_recorded,
+            "contract_sha": self.contract_sha,
+            "completed_at": self.completed_at,
             "errors": self.errors,
             "qualifies_mode": self.qualifies_mode,
             "value_observation": self.value_observation,
@@ -293,7 +355,7 @@ class MissionRunner:
             "sensitivity": spec.sensitivity,
             "return_schema": "schemas/handoff_packet.schema.json",
             "mode": spec.mode,
-            "required_artifact_types": [meta["artifact_types"][0]],
+            "required_artifact_types": list(spec.required_artifact_types),
             "mutation_contract": {
                 "allowed_operations": [],
                 "require_idempotency_key": True,
@@ -330,6 +392,7 @@ class MissionRunner:
             meta=meta,
             delegation=delegation,
             prepared_at=datetime.now(timezone.utc).isoformat(),
+            contract_sha=self.contract_sha(spec.agent),
         )
 
     # --------------------------------------------------------------- complete
@@ -385,6 +448,13 @@ class MissionRunner:
                     f"connector isolation: return cites {cited!r}, which was not in the "
                     "delegation packet — the specialist reached past its evidence"
                 )
+        for token in self._locator_like_tokens(handoff):
+            if token not in allowed_refs:
+                connector_isolation_verified = False
+                errors.append(
+                    f"connector isolation: return references locator {token!r} in free "
+                    "text, which was not in the delegation packet"
+                )
 
         # 4. Every definition-of-done id must have a validation record.
         validated_ids = {
@@ -407,11 +477,20 @@ class MissionRunner:
         status = str(handoff.get("status", "unknown"))
         typed_return_valid = not schema_errors
 
+        # An invalid or non-completed return is not a first-pass acceptance, no
+        # matter what the caller passed. Otherwise five failing missions could
+        # still average out to meets_threshold.
+        mission_sound = status == "completed" and not errors
+        if not mission_sound:
+            accepted_first_pass = False
+            output_rejected = True
+
+        completed_at = datetime.now(timezone.utc).isoformat()
         value_observation = {
             "mode": spec.mode,
             "agent": spec.agent,
             "mission_id": delegation["mission_id"],
-            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "observed_at": completed_at,
             "baseline_minutes": spec.baseline_minutes,
             "baseline_source": spec.baseline_source,
             "agent_minutes": agent_minutes,
@@ -451,10 +530,71 @@ class MissionRunner:
             ledger_entry=None,
             value_observation=value_observation,
             value_recorded=value_recorded,
+            contract_sha=prepared.contract_sha,
+            completed_at=completed_at,
         )
 
         evidence.ledger_entry = self.ledger.append("mission_completed", evidence.to_json())
         return evidence
+
+    def contract_sha(self, agent: str) -> str:
+        """Fingerprint of the exact contract + manifest entry a mission ran under.
+
+        Coverage keyed only by (agent, mode) would keep crediting a mode after
+        its contract changed. Binding the evidence to a contract hash means a
+        behavioural change invalidates the coverage it earned.
+        """
+        meta = self.roster[agent]
+        contract = (self.root / meta["native_file"]).read_bytes()
+        entry = json.dumps(
+            {k: v for k, v in sorted(meta.items()) if k != "roundtable_namespace"},
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
+        return hashlib.sha256(contract + entry).hexdigest()[:16]
+
+    def evidence_from_ledger(self) -> list[MissionEvidence]:
+        """Reconstruct completed-mission evidence from the audit ledger.
+
+        The runbook's coverage command previously passed an empty list, so it
+        always reported zero covered modes no matter how many missions had run.
+        """
+        if not self.ledger.path.exists():
+            return []
+        recovered: list[MissionEvidence] = []
+        for raw in self.ledger.path.read_text(encoding="utf-8").splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                entry = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("event") != "mission_completed":
+                continue
+            detail = entry.get("detail", {})
+            recovered.append(
+                MissionEvidence(
+                    delegation_id=detail.get("delegation_id", ""),
+                    mission_id=detail.get("mission_id", ""),
+                    agent=detail.get("agent", ""),
+                    mode=detail.get("mode", ""),
+                    brain=detail.get("brain", ""),
+                    status=detail.get("status", "unknown"),
+                    typed_return_valid=bool(detail.get("typed_return_valid")),
+                    connector_isolation_verified=bool(
+                        detail.get("connector_isolation_verified")
+                    ),
+                    readback_performed=bool(detail.get("readback_performed")),
+                    errors=list(detail.get("errors", [])),
+                    ledger_entry=entry,
+                    value_observation=detail.get("value_observation"),
+                    value_recorded=bool(detail.get("value_recorded")),
+                    contract_sha=detail.get("contract_sha", ""),
+                    completed_at=detail.get("completed_at", ""),
+                )
+            )
+        return recovered
 
     # ---------------------------------------------------------------- helpers
 
@@ -466,6 +606,7 @@ class MissionRunner:
 
     @staticmethod
     def _cited_source_refs(handoff: dict[str, Any]) -> set[str]:
+        """Structured source citations from artifact records."""
         cited: set[str] = set()
         for artifact in handoff.get("artifacts", []) or []:
             if not isinstance(artifact, dict):
@@ -473,22 +614,64 @@ class MissionRunner:
             for record in artifact.get("records", []) or []:
                 if isinstance(record, dict):
                     cited.update(record.get("source_refs", []) or [])
+            if isinstance(artifact, dict):
+                cited.update(artifact.get("source_refs", []) or [])
+        for record in handoff.get("evidence", []) or []:
+            if isinstance(record, dict) and record.get("source_ref"):
+                cited.update([record["source_ref"]])
         return cited
+
+    @staticmethod
+    def _locator_like_tokens(handoff: dict[str, Any]) -> set[str]:
+        """Locator-shaped tokens anywhere in the return's free text.
+
+        Checking only ``artifacts[*].records[*].source_refs`` left a hole: a
+        specialist could cite an undelegated ``gmail://`` or Drive locator inside
+        findings, tests, validation, or notes while attaching one allowed
+        artifact record, and still be scored connector-isolation clean. Scheme
+        prefixed tokens are the shape a real connector locator takes.
+        """
+        blob_parts: list[str] = []
+
+        def walk(node: Any) -> None:
+            if isinstance(node, str):
+                blob_parts.append(node)
+            elif isinstance(node, dict):
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, (list, tuple)):
+                for value in node:
+                    walk(value)
+
+        walk(handoff)
+        pattern = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s\"\'<>,;)\]]+")
+        return {match.group(0).rstrip(".") for match in pattern.finditer(" ".join(blob_parts))}
 
     # ------------------------------------------------------------- promotion
 
     def promotion_status(
-        self, evidences: Iterable[MissionEvidence]
+        self, evidences: Iterable[MissionEvidence] | None = None
     ) -> dict[str, Any]:
         """Which modes now have a qualifying controlled mission, and which do not.
 
         Reports the gap honestly: a mode with no qualifying mission is listed as
         uncovered, not omitted. Silence about missing coverage reads as coverage.
         """
+        if evidences is None:
+            evidences = self.evidence_from_ledger()
+
         qualifying: dict[str, list[str]] = {}
+        stale: list[str] = []
         for evidence in evidences:
-            if evidence.qualifies_mode:
-                qualifying.setdefault(evidence.agent, []).append(evidence.mode)
+            if not evidence.qualifies_mode:
+                continue
+            current = self.contract_sha(evidence.agent) if evidence.agent in self.roster else ""
+            if evidence.contract_sha and current and evidence.contract_sha != current:
+                # The contract changed after this run, so the behaviour it
+                # evidenced is no longer the behaviour that would run today.
+                stale.append(f"{evidence.agent}:{evidence.mode}")
+                continue
+            qualifying.setdefault(evidence.agent, []).append(evidence.mode)
 
         report: dict[str, Any] = {"agents": {}, "total_modes": 0, "covered_modes": 0}
         for name, meta in sorted(self.roster.items()):
@@ -510,6 +693,7 @@ class MissionRunner:
         report["agents_fully_covered"] = sorted(
             name for name, entry in report["agents"].items() if entry["all_modes_covered"]
         )
+        report["stale_contract_evidence"] = sorted(set(stale))
         return report
 
 
@@ -533,6 +717,7 @@ class CatalogEntry:
     definition_of_done_ids: list[str]
     evidence_sources: list[str]
     baseline_prompt: str
+    required_artifact_types: list[str]
 
     def to_spec(
         self,
@@ -550,6 +735,7 @@ class CatalogEntry:
             evidence=evidence,
             baseline_minutes=baseline_minutes,
             baseline_source=baseline_source,
+            required_artifact_types=list(self.required_artifact_types),
         )
 
 
@@ -570,5 +756,6 @@ def load_mission_catalog(root: Path = ROOT) -> dict[str, CatalogEntry]:
             definition_of_done_ids=list(entry["definition_of_done_ids"]),
             evidence_sources=list(entry.get("evidence_sources", [])),
             baseline_prompt=entry["baseline_prompt"],
+            required_artifact_types=list(entry["required_artifact_types"]),
         )
     return catalog

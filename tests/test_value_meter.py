@@ -211,7 +211,7 @@ class LedgerTests(unittest.TestCase):
             ledger = ValueLedger(Path(tmp) / "value.jsonl")
             for i in range(policy.min_observations):
                 ledger.record(build_observation(policy, payload(mission_id=f"M-{i}")))
-            report = ledger.report(policy)
+            report = ledger.report(policy, now=NOW)
             self.assertEqual(report["total_observations"], policy.min_observations)
             self.assertEqual(report["threshold"], 0.35)
             self.assertEqual(report["value_proven_modes"], ["delivery_control"])
@@ -220,10 +220,74 @@ class LedgerTests(unittest.TestCase):
         policy = ValuePolicy.load()
         with tempfile.TemporaryDirectory() as tmp:
             ledger = ValueLedger(Path(tmp) / "value.jsonl")
-            report = ledger.report(policy, modes=["delivery_control"])
+            report = ledger.report(policy, modes=["delivery_control"], now=NOW)
             self.assertEqual(report["total_observations"], 0)
             self.assertEqual(report["value_proven_modes"], [])
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MeasurementIntegrityTests(unittest.TestCase):
+    """Ways a value verdict could be manufactured without doing the work."""
+
+    def setUp(self):
+        self.policy = ValuePolicy.load()
+
+    def test_nan_cost_is_refused(self):
+        """NaN passes `< 0` and then fails every threshold comparison, landing on 'meets'."""
+        for term in self.policy.required_cost_terms:
+            with self.subTest(term=term):
+                with self.assertRaises(ObservationRejected):
+                    build_observation(self.policy, payload(**{term: float("nan")}))
+
+    def test_infinite_cost_is_refused(self):
+        with self.assertRaises(ObservationRejected):
+            build_observation(self.policy, payload(agent_minutes=float("inf")))
+
+    def test_nan_baseline_is_refused(self):
+        with self.assertRaises(ObservationRejected):
+            build_observation(self.policy, payload(baseline_minutes=float("nan")))
+
+    def test_replaying_one_observation_does_not_satisfy_the_count(self):
+        """Five copies of one run are one run."""
+        replayed = [
+            build_observation(self.policy, payload(mission_id="M-SAME"))
+            for _ in range(self.policy.min_observations)
+        ]
+        verdict = evaluate_mode("delivery_control", replayed, self.policy, now=NOW)
+        self.assertEqual(verdict.verdict, VERDICT_INSUFFICIENT)
+        self.assertEqual(verdict.observation_count, 1)
+
+    def test_future_dated_observations_do_not_count(self):
+        ahead = NOW + timedelta(days=400)
+        future = [
+            build_observation(
+                self.policy, payload(mission_id=f"M-{i}", observed_at=ahead.isoformat())
+            )
+            for i in range(self.policy.min_observations)
+        ]
+        verdict = evaluate_mode("delivery_control", future, self.policy, now=NOW)
+        self.assertEqual(verdict.observation_count, 0)
+        self.assertNotEqual(verdict.verdict, VERDICT_MEETS)
+
+    def test_an_incident_does_not_clear_itself_by_ageing_out(self):
+        """config/value_policy.toml says an incident blocks until reviewed."""
+        old = NOW - timedelta(days=self.policy.observation_window_days + 10)
+        observations = [
+            build_observation(self.policy, payload(mission_id=f"M-{i}"))
+            for i in range(self.policy.min_observations)
+        ]
+        observations.append(
+            build_observation(
+                self.policy,
+                payload(
+                    mission_id="M-INCIDENT",
+                    boundary_incident=True,
+                    observed_at=old.isoformat(),
+                ),
+            )
+        )
+        verdict = evaluate_mode("delivery_control", observations, self.policy, now=NOW)
+        self.assertEqual(verdict.verdict, VERDICT_BLOCKED)

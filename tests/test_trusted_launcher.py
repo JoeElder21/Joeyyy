@@ -237,5 +237,71 @@ class LedgerDurabilityTests(unittest.TestCase):
 
             payload = _json.loads(ledger.read_text(encoding="utf-8"))
             self.assertEqual(payload["used_grants"], ["grant-1", "grant-2"])
-            leftovers = [p.name for p in _Path(tmp).iterdir() if p.name != "grants.json"]
+            # Claim markers are the exclusive on-disk claim and are meant to
+            # persist; what must not survive is a partial ledger write.
+            leftovers = [
+                p.name
+                for p in _Path(tmp).iterdir()
+                if p.name != "grants.json" and not p.name.startswith(".grants.json.claim-")
+            ]
             self.assertEqual(leftovers, [])
+
+
+class LauncherFailClosedTests(unittest.TestCase):
+    def _launcher(self, tmp, catalog=None):
+        from pathlib import Path as _P
+
+        from runtime.trusted_launcher import TrustedLauncher
+
+        return TrustedLauncher(catalog, ledger_path=_P(tmp) / "grants.json")
+
+    def test_explicitly_empty_catalog_stays_empty(self):
+        """An empty catalog is a deliberate fail-closed configuration."""
+        import tempfile as _t
+
+        with _t.TemporaryDirectory() as tmp:
+            launcher = self._launcher(tmp, {})
+            self.assertEqual(launcher.tool_catalog, {})
+            self.assertIn("unknown tool operation", launcher.prove_denial("civil3d-mcp", "version"))
+
+    def test_default_catalog_still_loads_when_omitted(self):
+        import tempfile as _t
+
+        with _t.TemporaryDirectory() as tmp:
+            self.assertIn("civil3d-mcp", self._launcher(tmp).tool_catalog)
+
+    def test_malformed_ledger_denies_instead_of_reading_as_empty(self):
+        import json as _j
+        import tempfile as _t
+        from pathlib import Path as _P
+
+        from runtime.trusted_launcher import GrantDeniedError
+
+        for corrupt in ({}, {"used_grants": "nope"}, {"used_grants": [1, 2]}, []):
+            with self.subTest(corrupt=corrupt), _t.TemporaryDirectory() as tmp:
+                ledger = _P(tmp) / "grants.json"
+                ledger.write_text(_j.dumps(corrupt), encoding="utf-8")
+                launcher = self._launcher(tmp)
+                with self.assertRaises(GrantDeniedError):
+                    launcher._used_grants()
+
+    def test_a_second_process_cannot_claim_the_same_grant(self):
+        import tempfile as _t
+
+        from runtime.trusted_launcher import GrantDeniedError
+
+        with _t.TemporaryDirectory() as tmp:
+            launcher = self._launcher(tmp)
+            launcher._claim_grant_exclusively("grant-x")
+            with self.assertRaises(GrantDeniedError):
+                launcher._claim_grant_exclusively("grant-x")
+
+    def test_executables_resolve_to_absolute_paths(self):
+        import tempfile as _t
+
+        from runtime.trusted_launcher import GrantDeniedError, TrustedLauncher
+
+        resolved = TrustedLauncher._resolved_command(("python3", "--version"))
+        self.assertTrue(resolved[0].startswith("/"))
+        with self.assertRaises(GrantDeniedError):
+            TrustedLauncher._resolved_command(("definitely-not-a-real-binary-xyz",))

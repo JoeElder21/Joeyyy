@@ -25,6 +25,7 @@ Read the policy from ``config/value_policy.toml``; never hardcode a threshold.
 from __future__ import annotations
 
 import json
+import math
 import tomllib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -188,12 +189,21 @@ def build_observation(policy: ValuePolicy, payload: dict[str, Any]) -> Observati
             f"{list(policy.baseline_sources)}; an agent may not supply its own baseline"
         )
 
-    baseline_minutes = int(payload.get("baseline_minutes", 0))
+    raw_baseline = float(payload.get("baseline_minutes", 0))
+    if not math.isfinite(raw_baseline):
+        raise ObservationRejected(f"{mode}: baseline_minutes must be a finite number")
+    baseline_minutes = int(raw_baseline)
     if baseline_minutes <= 0:
         raise ObservationRejected(f"{mode}: no usable baseline recorded")
 
     for term in policy.required_cost_terms:
-        if float(payload[term]) < 0:
+        value = float(payload[term])
+        # NaN slips past `< 0` because every NaN comparison is false, and a NaN
+        # ratio then fails every threshold comparison too, falling through to a
+        # "meets_threshold" verdict. Reject non-finite measurements outright.
+        if not math.isfinite(value):
+            raise ObservationRejected(f"{mode}: {term} must be a finite number")
+        if value < 0:
             raise ObservationRejected(f"{mode}: {term} may not be negative")
 
     return Observation(
@@ -247,12 +257,20 @@ class ModeVerdict:
 
 
 def _within_window(observation: Observation, policy: ValuePolicy, now: datetime) -> bool:
+    """Inside the measurement window, and not dated in the future.
+
+    Checking only the lower bound let a clock error or an edited ledger supply
+    observations stamped years ahead, which would then stay eligible for that
+    whole interval — five of them would prove value before the runs happened.
+    """
     try:
         stamp = datetime.fromisoformat(observation.observed_at)
     except ValueError:
         return False
     if stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=timezone.utc)
+    if stamp > now:
+        return False
     return stamp >= now - timedelta(days=policy.observation_window_days)
 
 
@@ -266,6 +284,18 @@ def evaluate_mode(
     now = now or datetime.now(timezone.utc)
     threshold = policy.threshold_for(mode)
     for_mode = [obs for obs in observations if obs.mode == mode]
+
+    # Deduplicate by mission identity. Appending one successful observation five
+    # times would otherwise satisfy min_observations from a single real run.
+    seen_missions: set[str] = set()
+    deduped = []
+    for obs in for_mode:
+        if obs.mission_id in seen_missions:
+            continue
+        seen_missions.add(obs.mission_id)
+        deduped.append(obs)
+    for_mode = deduped
+
     relevant = [obs for obs in for_mode if _within_window(obs, policy, now)]
 
     verdict = ModeVerdict(
@@ -286,7 +316,10 @@ def evaluate_mode(
         )
         return verdict
 
-    if policy.boundary_incident_blocks_verdict and any(o.boundary_incident for o in relevant):
+    # An incident blocks until reviewed and cleared, so it is checked against
+    # every observation for the mode rather than only the recent window. Scoping
+    # it to the window let an unreviewed incident clear itself on day 91.
+    if policy.boundary_incident_blocks_verdict and any(o.boundary_incident for o in for_mode):
         verdict.verdict = VERDICT_BLOCKED
         verdict.reasons.append(
             "A boundary incident was recorded for this mode; no value verdict until reviewed."
@@ -373,10 +406,18 @@ class ValueLedger:
                 found.append(build_observation(policy, json.loads(raw)))
         return found
 
-    def report(self, policy: ValuePolicy, modes: Iterable[str] | None = None) -> dict[str, Any]:
+    def report(
+        self,
+        policy: ValuePolicy,
+        modes: Iterable[str] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
         observations = self.observations(policy)
         target_modes = sorted(set(modes) if modes else {o.mode for o in observations})
-        verdicts = [evaluate_mode(mode, observations, policy).to_json() for mode in target_modes]
+        verdicts = [
+            evaluate_mode(mode, observations, policy, now=now).to_json()
+            for mode in target_modes
+        ]
         return {
             "policy_version": "config/value_policy.toml",
             "threshold": policy.min_net_time_saved_ratio,

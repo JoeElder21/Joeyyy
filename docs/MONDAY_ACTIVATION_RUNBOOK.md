@@ -150,7 +150,7 @@ Check coverage at any time:
 ```bash
 python -c "
 from runtime.mission_runner import MissionRunner
-import json; print(json.dumps(MissionRunner().promotion_status([]), indent=2))
+import json; print(json.dumps(MissionRunner().promotion_status(), indent=2))
 "
 ```
 
@@ -186,7 +186,13 @@ touches professional liability.
    entry.** `AuditLedger.verify()` catches rewriting of records that already had
    a successor; it does not protect the most recent record, and a later append
    re-anchors onto tampered content. Recorded in `tests/test_mission_runner.py`.
-6. **The JEOS Executive Chief of Staff does not exist as an agent.** Section 5
+6. **A mission only counts once its result is read back.** `readback_performed`
+   is part of the gate, so a run you never verified does not cover its mode.
+7. **Evidence must carry its content.** Specialists have no tools at all, so a
+   bare `gmail://` locator is unusable to them. Agent 007 puts the minimized
+   excerpt in the packet; a real-connector evidence record with no content is
+   refused at prepare time.
+8. **The JEOS Executive Chief of Staff does not exist as an agent.** Section 5
    names it as JEOS's front door, but no such identity is registered. JEOS work
    currently routes through Agent 007. This is a real gap between the
    constitution and the roster, and it needs your decision (see below).
