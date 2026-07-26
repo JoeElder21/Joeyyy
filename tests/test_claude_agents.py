@@ -99,7 +99,7 @@ class GeneratedCorpsTests(unittest.TestCase):
         content = self.expected[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
         tools = set(frontmatter(content)["tools"])
         self.assertEqual(tools, set(CHIEF_TOOLS))
-        self.assertIn("Agent 007 activated.", content)
+        self.assertIn("Agent 007 activated. Awesome Copilot layer active.", content)
 
     def test_each_specialist_declares_its_brain_and_packet_only_policy(self):
         for name, meta in self.roster.items():

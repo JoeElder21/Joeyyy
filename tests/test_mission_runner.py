@@ -33,6 +33,7 @@ def spec(**overrides) -> MissionSpec:
                 source_ref=SOURCE,
                 source_type="connector_record",
                 content="09:00-10:30 site walk; 13:00-14:00 review call",
+                owner_brain="JEOS",
             )
         ],
         baseline_minutes=20,
@@ -486,7 +487,10 @@ class GateIntegrityTests(RunnerHarness):
                 definition_of_done_ids=["qa-packet"],
                 evidence=[
                     EvidenceRecord(
-                        "fixture/apex/sheets-1", "connector_record", content="sheet set"
+                        "fixture/apex/sheets-1",
+                        "connector_record",
+                        content="sheet set",
+                        owner_brain="APEX",
                     )
                 ],
                 baseline_minutes=45,
@@ -557,7 +561,9 @@ class RealMissionProvenanceTests(RunnerHarness):
         prepared = self.runner.prepare(
             spec(
                 evidence=[
-                    EvidenceRecord(SOURCE, "connector_record", content="real"),
+                    EvidenceRecord(
+                        SOURCE, "connector_record", content="real", owner_brain="JEOS"
+                    ),
                     EvidenceRecord("fixture/synthetic-1", "synthetic"),
                 ]
             )
@@ -635,6 +641,7 @@ class LiveEvidenceRealismTests(RunnerHarness):
                             "LFUCG review comments attached. Portal: "
                             "https://permits.example.gov/case/1234"
                         ),
+                        owner_brain="JEOS",
                     )
                 ]
             )
@@ -663,6 +670,7 @@ class LiveEvidenceRealismTests(RunnerHarness):
                         "gmail://thread/agency-1",
                         "connector_record",
                         content="No links in this excerpt.",
+                        owner_brain="JEOS",
                     )
                 ]
             )
@@ -688,3 +696,35 @@ class FrozenIdentityTests(RunnerHarness):
         evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
         self.assertEqual(evidence.mode, MODE)
         self.assertEqual(evidence.value_observation["mode"], MODE)
+
+
+class EvidenceOwnershipTests(RunnerHarness):
+    """Ownership is verified at retrieval, never inferred from the recipient."""
+
+    def test_real_evidence_without_declared_ownership_is_refused(self):
+        with self.assertRaises(MissionRejected) as caught:
+            self.runner.prepare(
+                spec(
+                    evidence=[
+                        EvidenceRecord(SOURCE, "connector_record", content="x")
+                    ]
+                )
+            )
+        self.assertIn("owner_brain", str(caught.exception))
+
+    def test_opposite_brain_evidence_cannot_be_relabelled(self):
+        """An APEX email handed to a JEOS mission is a separation breach."""
+        with self.assertRaises(MissionRejected) as caught:
+            self.runner.prepare(
+                spec(
+                    evidence=[
+                        EvidenceRecord(
+                            "gmail://thread/client-1",
+                            "connector_record",
+                            content="Client scope change",
+                            owner_brain="APEX",
+                        )
+                    ]
+                )
+            )
+        self.assertIn("constraint packet", str(caught.exception))

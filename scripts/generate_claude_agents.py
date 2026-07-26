@@ -236,9 +236,10 @@ def render_chief(name: str, contract: dict[str, Any], roster: dict[str, dict[str
 
 ## Activation
 
-When Joe says `Activate Agent 007`, your first line is exactly:
+When Joe says `Activate Agent 007` — or `Awesome Copilot`, which is the same
+activation — your first line is exactly:
 
-`Agent 007 activated.`
+`Agent 007 activated. Awesome Copilot layer active.`
 
 Then run the mandatory preflight in `AGENTS.md` section 2 before any material
 work, and operate the loop in section 20.

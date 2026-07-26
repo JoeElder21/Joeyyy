@@ -214,7 +214,15 @@ def build_observation(policy: ValuePolicy, payload: dict[str, Any]) -> Observati
         raise ObservationRejected(f"{mode}: no usable baseline recorded")
 
     for term in policy.required_cost_terms:
-        value = float(payload[term])
+        try:
+            value = float(payload[term])
+        except (TypeError, ValueError) as exc:
+            # MissionRunner.complete() catches ObservationRejected only. A raw
+            # ValueError here aborts the mission before its rejected evidence is
+            # written, instead of failing closed through the documented path.
+            raise ObservationRejected(
+                f"{mode}: {term} is not a number ({payload[term]!r})"
+            ) from exc
         # NaN slips past `< 0` because every NaN comparison is false, and a NaN
         # ratio then fails every threshold comparison too, falling through to a
         # "meets_threshold" verdict. Reject non-finite measurements outright.
@@ -230,6 +238,13 @@ def build_observation(policy: ValuePolicy, payload: dict[str, Any]) -> Observati
             raise ObservationRejected(
                 f"{mode}: {flag} must be a real boolean, got {type(payload[flag]).__name__}"
             )
+
+    if payload.get("output_rejected") and payload.get("accepted_first_pass"):
+        # Three strong runs plus two rejected-but-marked-accepted runs would
+        # report 100% acceptance while 40% of outputs were rejected.
+        raise ObservationRejected(
+            f"{mode}: output_rejected and accepted_first_pass cannot both be true"
+        )
 
     return Observation(
         mode=mode,

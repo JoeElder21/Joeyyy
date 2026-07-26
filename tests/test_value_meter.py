@@ -123,7 +123,9 @@ class ArithmeticTests(unittest.TestCase):
         self.assertLess(worse.ratio(self.policy), 0.35)
 
     def test_rejected_output_carries_full_cost_and_zero_benefit(self):
-        obs = build_observation(self.policy, payload(output_rejected=True))
+        obs = build_observation(
+            self.policy, payload(output_rejected=True, accepted_first_pass=False)
+        )
         self.assertAlmostEqual(obs.net_time_saved(self.policy), -9.0)
         self.assertLess(obs.ratio(self.policy), 0)
 
@@ -423,3 +425,20 @@ class DemotionIsReachableFromTheReportTests(unittest.TestCase):
                 )
             report = ledger.report(policy, modes=["delivery_control"], now=NOW)
             self.assertEqual(report["modes"][0]["verdict"], VERDICT_DEMOTE)
+
+
+class ContradictoryFlagTests(unittest.TestCase):
+    def test_rejected_output_cannot_also_be_first_pass_accepted(self):
+        """Otherwise rejected runs still raise the acceptance rate."""
+        policy = ValuePolicy.load()
+        with self.assertRaises(ObservationRejected):
+            build_observation(
+                policy, payload(output_rejected=True, accepted_first_pass=True)
+            )
+
+    def test_a_malformed_numeric_cost_is_an_observation_rejection(self):
+        """MissionRunner catches ObservationRejected only; a raw ValueError
+        would abort the mission before its rejected evidence is written."""
+        policy = ValuePolicy.load()
+        with self.assertRaises(ObservationRejected):
+            build_observation(policy, payload(agent_minutes="bad"))

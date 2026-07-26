@@ -119,11 +119,19 @@ class EvidenceRecord:
     sensitivity: str = "internal"
     retrieved_by: str = "apex_chief_of_staff"
     as_of: str | None = None
+    # Which brain the source material actually belongs to, as verified by
+    # Agent 007 when it retrieved the record. Required for real evidence.
+    #
+    # Deriving this from the recipient specialist's brain meant a professional
+    # APEX email handed to a JEOS mission was relabelled JEOS and passed
+    # PacketGuard — opposite-brain content delivered under a valid-looking
+    # packet. Ownership is now asserted at retrieval and checked, not inferred.
+    owner_brain: str = ""
 
     def as_packet_evidence(self, brain: str) -> dict[str, Any]:
         record = {
             "source_ref": self.source_ref,
-            "owner_brain": brain,
+            "owner_brain": self.owner_brain or brain,
             "source_type": self.source_type,
             "scope_verified_by": self.retrieved_by,
             "sensitivity": self.sensitivity,
@@ -186,6 +194,17 @@ class MissionSpec:
             if record.sensitivity not in VALID_EVIDENCE_SENSITIVITY:
                 raise MissionRejected(
                     f"{self.agent}: evidence sensitivity {record.sensitivity!r} is invalid"
+                )
+            if record.source_type != "synthetic" and not record.owner_brain:
+                raise MissionRejected(
+                    f"{self.agent}: evidence {record.source_ref!r} declares no verified "
+                    "owner_brain; ownership may not be inferred from the recipient"
+                )
+            if record.owner_brain and record.owner_brain != meta["brain"]:
+                raise MissionRejected(
+                    f"{self.agent}: evidence {record.source_ref!r} belongs to "
+                    f"{record.owner_brain} but this mission is {meta['brain']}; "
+                    "cross-brain material needs a constraint packet, not a relabel"
                 )
             if record.source_type != "synthetic" and not record.content:
                 # A toolless specialist cannot dereference a locator. Real
