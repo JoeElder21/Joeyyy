@@ -26,7 +26,7 @@ flowchart TD
 ```
 
 - Joe sets the mission and remains final authority.
-- Agent 007 classifies ownership, selects the smallest useful team, supplies bounded packets, reconciles challenges, assigns one active lease per canonical brain/target/resource, and verifies the result.
+- Agent 007 classifies ownership, activates the smallest evidence-justified team whose independent contributions materially change the result, supplies bounded packets, reconciles challenges, assigns one active lease per canonical brain/target/resource, and verifies the result.
 - APEX specialists operate only on professional, firm, project, technical, revenue, and career work.
 - JEOS specialists operate only on personal, private, life, faith, relationships, capacity, and administration.
 - A specialist never opens a mixed, unknown, or opposite-brain source. It returns `boundary_blocked` with the safe `BOUNDARY_SCOPE_REJECTED` sentinel and no source-bearing return fields.

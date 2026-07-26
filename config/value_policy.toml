@@ -1,0 +1,117 @@
+# JOEYYY value policy — the machine-readable source required by AGENTS.md section 17.
+#
+# Section 17 makes a 35% minimum binding for a bounded repeatable workload. Until
+# this file existed, that threshold had no enforcement surface and its status was
+# recorded as `unknown`. This file is that surface.
+#
+# The measurement rule is deliberately unflattering: gross automation time is not
+# savings. Review, correction, incident response, and amortized maintenance are
+# subtracted from the benefit, because Joe pays those too.
+
+version = "1.0.0"
+owner = "Joe Elder"
+effective_date = "2026-07-26"
+canonical_policy = "AGENTS.md section 17"
+
+[threshold]
+# Binding minimum net time saved, as a fraction of the human baseline, for a
+# bounded repeatable workload. A mode-specific exception requires a reviewed
+# amendment to this file — never an interpretive relaxation at measurement time.
+min_net_time_saved_ratio = 0.35
+
+# A single good run is not evidence. Section 13 rejects value claims built on one
+# example, so a mode needs this many independent observations before any
+# value verdict other than `insufficient_data` may be reported.
+min_observations = 5
+
+# Observations older than this stop counting toward a live verdict; capability
+# and workload both drift.
+observation_window_days = 90
+
+# If measured value falls below this after having met the threshold, the mode is
+# demoted rather than left running on its historical reputation.
+demotion_ratio = 0.20
+
+[measurement]
+# net_time_saved = baseline_minutes - (agent_minutes + review_minutes
+#                  + correction_minutes + incident_minutes + maintenance_share_minutes)
+# ratio = net_time_saved / baseline_minutes
+#
+# Every cost term below is REQUIRED on each observation. A missing term is not
+# treated as zero — the observation is rejected as incomplete, because silently
+# defaulting costs to zero is how gross time masquerades as net savings.
+required_cost_terms = [
+  "agent_minutes",
+  "review_minutes",
+  "correction_minutes",
+  "incident_minutes",
+  "maintenance_share_minutes",
+]
+
+# Baselines must be measured or explicitly declared by Joe. A baseline that was
+# never established makes the observation unusable; the meter refuses to invent
+# one from the agent's own runtime.
+baseline_sources = ["measured", "joe_declared"]
+
+# Quality gates. Time saved on a wrong answer is not time saved.
+[quality]
+# An observation whose output Joe rejected outright counts as zero benefit and
+# still carries its full cost.
+rejected_output_counts_as_zero_benefit = true
+# First-pass acceptance below this rate blocks a value-proven verdict regardless
+# of measured minutes.
+min_first_pass_acceptance = 0.70
+# Any boundary incident (brain leak, privacy exposure, unauthorized action)
+# blocks a value verdict for that mode until reviewed and cleared.
+boundary_incident_blocks_verdict = true
+
+# Declared per-mode baselines. `source = "manifest_declared"` means the number was
+# copied from a `routine_time_budget` in the brain manifest — a design intent, NOT
+# an observation of Joe actually doing the task. Those must be confirmed or
+# replaced with a measured baseline before a value verdict is reported.
+[[baseline]]
+mode = "daily_capacity"
+agent = "jeos_energy_director"
+baseline_minutes = 2
+source = "manifest_declared"
+note = "brains/jeos/agents.toml routine_time_budget: daily capacity pass <= 2 minutes"
+
+[[baseline]]
+mode = "daily_activation"
+agent = "jeos_momentum_engine"
+baseline_minutes = 0
+source = "unset"
+note = "Awaiting Joe's measured or declared baseline."
+
+[[baseline]]
+mode = "delivery_control"
+agent = "apex_delivery_commander"
+baseline_minutes = 0
+source = "unset"
+note = "Awaiting Joe's measured or declared baseline for a delivery-status pass."
+
+[[baseline]]
+mode = "pipeline_triage"
+agent = "apex_deal_engine"
+baseline_minutes = 0
+source = "unset"
+note = "Awaiting Joe's measured or declared baseline for an opportunity triage pass."
+
+[[baseline]]
+mode = "intake_normalization"
+agent = "apex_intelligence_forge"
+baseline_minutes = 0
+source = "unset"
+note = "Awaiting Joe's measured or declared baseline for an intake pass."
+
+[[baseline]]
+mode = "weekly_plan"
+agent = "jeos_life_architect"
+baseline_minutes = 0
+source = "unset"
+note = "Awaiting Joe's measured or declared baseline for weekly planning."
+
+# Reviewed mode-specific exceptions to the binding threshold. Empty by design.
+# Adding an entry here is a policy amendment and requires Joe's review; the
+# meter reads exceptions only from this table.
+[exceptions]

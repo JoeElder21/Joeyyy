@@ -38,11 +38,14 @@ Strengths: wraps both runtimes (Claude Code and Codex); Autopilots directly impl
 
 Bounded, non-production, on the Joeyyy repo only — no client-facing or permit work until the winner passes validation.
 
+Execution sequencing for the current program: Civil 3D workstation build evidence closes first (Friday), then the execution-layer trial run starts (Monday).
+
 1. The task set is pre-defined in `trial/` (fixed ground truth, per the benchmarking pattern in `docs/ABSORBED_PATTERNS.md`): five tickets drawn from the real backlog — a registry intake draft, a weekly-audit dry run, an absorbed-pattern merge proposal, one deliberately blocked task (missing input) to test notify-when-stuck, and one recurring cadence job. The ticket files are CAR-native and map one-to-one onto multica issues/Autopilots per `trial/README.md`.
 2. Metrics, defined up front, cost beside quality: tasks completed without intervention; correct notify-on-block behavior (did it ping only when genuinely stuck); durable state accuracy after a forced interruption/resume; wall-clock and token cost per task; setup + weekly upkeep time.
 3. Run Candidate B first (`multica setup` against Multica Cloud is the cheaper trial); run Candidate A second only if B fails a defining metric.
 4. Score per metric, not by impression; state each candidate's known weakness plainly in the results.
 5. Winner's registry entry moves `candidate → shadow` per lifecycle rules; loser is recorded in `docs/ECOSYSTEM_REPO_ANALYSIS.md` with the reason.
+6. Every start/stop action for trial tasks must use `runtime/trusted_launcher.py` with a user-signed one-time grant; missing or replayed grants are expected hard denies.
 
 ## Decision rule
 

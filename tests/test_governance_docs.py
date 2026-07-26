@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+=======
+from pathlib import Path
+import os
+>>>>>>> refs/remotes/origin/main
 import unittest
 from pathlib import Path
 
@@ -101,3 +106,46 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OverviewMeasurementTests(unittest.TestCase):
+    """The overview presents its figures as measured evidence, so a stale one
+    is a false claim rather than a cosmetic slip."""
+
+    def test_published_suite_figures_match_a_live_run(self):
+        """A hardcoded count in a document that calls itself validation
+        evidence goes stale the moment a test is added, and it did — twice in
+        three rounds, published as "442 tests" against an actual 451. Derive
+        the figures from the mandated command instead of trusting the prose."""
+        import re
+        import subprocess
+        import sys
+
+        # This test runs the whole suite, which runs this test. The inner run
+        # carries the marker and skips, so the recursion is one level deep by
+        # construction rather than by luck.
+        if os.environ.get("JOEYYY_SUITE_SELFCHECK"):
+            self.skipTest("inner run of the suite self-check")
+
+        root = Path(__file__).resolve().parents[1]
+        completed = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
+            cwd=root, capture_output=True, text=True, check=False,
+            env={**os.environ, "JOEYYY_SUITE_SELFCHECK": "1"},
+        )
+        output = completed.stderr + completed.stdout
+        ran = re.search(r"Ran (\d+) tests", output)
+        self.assertIsNotNone(ran, output[-400:])
+        measured = int(ran.group(1))
+        modules = len(list((root / "tests").glob("test_*.py")))
+
+        overview = (root / "docs" / "REPOSITORY_OVERVIEW.md").read_text(
+            encoding="utf-8")
+        # Every asserted suite size in the document must be the measured one.
+        published = set(re.findall(r"(\d{3,4}) tests", overview))
+        self.assertTrue(published, "the overview states no suite size")
+        self.assertEqual(
+            published, {str(measured)},
+            f"the overview publishes {sorted(published)} but the mandated "
+            f"command reports {measured}")
+        self.assertIn(f"{modules} unittest modules", overview)

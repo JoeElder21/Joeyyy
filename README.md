@@ -39,6 +39,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `config/specialist_corps.toml` — Agent 007's mirrored-class routing, lifecycle, and migration lineage.
 - `brains/apex/` — APEX-owned roster, namespace, target, route, and memory policy.
 - `brains/jeos/` — JEOS-owned roster, namespace, target, route, and memory policy.
+<<<<<<< HEAD
 - `AGENTS.md` — durable activation and repository guidance.
 - `CLAUDE.md` — Claude-runtime guidance; defers to `AGENTS.md` as the single contract.
 - `docs/README.md` — indexed entry point to every documentation record.
@@ -51,6 +52,16 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/policy_enforcement.py` — the single policy-enforcement point: eight rules (roster, brain lock, connector policy, packet admission, writer lease, lifecycle stage, high-impact boundary, launch grant) in one call a caller cannot partially perform. **Built and tested, not yet wired** — `enforce()` has no call sites, so it constrains nothing at runtime today. Connecting it is the top follow-up in `docs/REPO_OPTIMIZATION_2026-07-25.md`; until then this module is a specification with a test suite, not an active gate.
 - `evals/packet_validity.py` — deterministic, model-free evaluation metric running the live `PacketGuard`, so an evaluation and a real handoff are judged by identical rules.
 - `LICENSE`, `NOTICE`, `CITATION.cff` — Apache-2.0, with the reusable contribution scoped to the governance patterns rather than the roster.
+=======
+- `AGENTS.md` — the JOEYYY Global Agent Engineering Constitution: canonical cross-runtime repository policy, activation, and repository operating annex.
+- `CLAUDE.md` — thin Claude Code runtime adapter pointing to `AGENTS.md`.
+- `.github/copilot-instructions.md` — thin GitHub Copilot runtime adapter pointing to `AGENTS.md`.
+- `docs/CONSTITUTION_ADOPTION_2026-07-25.md` — constitution adoption record, staffing-rule supersession, and rollback point.
+- `docs/MONDAY_ACTIVATION_RUNBOOK.md` — how to actually run the corps, what each value verdict means, and what is honestly not ready.
+- `.claude/agents/` — the ten specialists and Agent 007 projected into Claude Code subagents from the canonical contracts; connector isolation enforced by the tool list. Regenerate with `python scripts/generate_claude_agents.py`.
+- `runtime/mission_runner.py` — controlled-mission harness: validated delegation, typed return, connector-isolation check, hash-chained evidence, per-mode promotion coverage.
+- `config/value_policy.toml` + `runtime/value_meter.py` — the section 17 value policy and its meter: net saving after review, correction, incident, and maintenance, against a binding 35% threshold.
+>>>>>>> refs/remotes/origin/main
 - `docs/APEX_CHIEF_OF_STAFF.md` — operating contract and activation examples.
 - `docs/AGENT_COMMUNITY_PROTOCOL.md` — delegation, learning, and audit protocol.
 - `docs/AGENT_REGISTRY.md` — canonical agent inventory and lifecycle status.
@@ -107,7 +118,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `templates/specialist-handoff.md` — human-readable specialist packet.
 - `templates/weekly-agent-audit.md` — weekly ecosystem review.
 - `scripts/validate_specialist_corps.py` — honest static and synthetic v2.1 packet validation.
-- `runtime/autogen_groupchat.py` — legacy planning/prototype adapter; governed runtime callers use `runtime/autogen_orchestrator.py`.
+- `runtime/autogen_groupchat.py` — brain-private AutoGen GroupChat planning adapter.
+- `runtime/trusted_launcher.py` — user-signed one-time grant launcher for constrained external tool activation.
+- `scripts/trusted_launcher.py` — user-signed, one-time launch grants for write-capable MCP mounts; denial paths proven by tests.
 - `requirements-runtime.txt` — opt-in runtime integration dependency set.
 - `tests/test_agent_contract.py` — contract validation.
 - `tests/test_specialist_corps.py` — roster, isolation, schema, privacy, and registry validation.
