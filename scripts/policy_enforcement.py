@@ -163,11 +163,54 @@ LEGAL_COMMITMENT_NOUNS = frozenset(
 # through -- the same reasoning that keeps `read` out of the issuer.
 SUBMISSION_QUALIFIERS = frozenset({"permit", "agency", "final", "submission"})
 
-# Scheduled-task creation or deletion. The noun is what makes it gated: a
-# `create` or `delete` of a SCHEDULE is reserved, while creating a record is
-# not, so both tokens must be present.
-SCHEDULE_NOUNS = frozenset({"schedule", "scheduled", "cron", "task"})
+# Scheduled-task creation or deletion. The SCHEDULING marker is what makes it
+# gated: a `create` or `delete` of a SCHEDULE is reserved, while creating a
+# record is not, so both a marker and a change verb must be present.
+#
+# `task` was in the noun set and is the whole finding. AGENTS.md reserves
+# "scheduled-task creation or deletion", and a bare `task` is not a schedule --
+# so `create_task` and `delete_task`, ordinary task-registry writes, demanded
+# Joe's personally signed instruction. A boundary that fires on ordinary work is
+# one an operator learns to wave through, which is the reasoning that already
+# keeps `read` out of the issuer and `submit` behind a qualifier.
+#
+# Removing it exposed the opposite defect in the same rule. `schedule_task` --
+# about as literal a scheduled-task creation as exists -- was ALREADY ungated,
+# because both its tokens were nouns and the rule demanded a verb. Fixing only
+# the over-gate would have left that.
+#
+# So the scheduling act itself counts as a verb, but POSITIONALLY: only when it
+# leads the action name. Accepting `schedule` as a verb anywhere let one token
+# satisfy both halves of the rule and gated `read_schedule` and `view_schedule`
+# -- reading a schedule is not changing one, and that is the same over-gate this
+# finding is about, reintroduced by its own fix. The leading token of an action
+# is its verb everywhere in this codebase (`create_task`, `read_record`,
+# `publish_report`), so position carries real information here rather than being
+# a convenient tiebreak.
+#
+# Markers match as a substring of a TOKEN, never of the whole action, so word
+# boundaries survive -- `unschedule` and `rescheduled` carry the marker while
+# `multitasking` does not acquire one.
+SCHEDULE_MARKERS = ("schedul", "cron", "crontab", "timer")
 SCHEDULE_VERBS = frozenset({"create", "delete", "remove", "add", "register", "unregister"})
+# Verb forms OF scheduling, which need no separate change verb because they are
+# one. Checked only in leading position.
+SCHEDULE_ACT_VERBS = frozenset({"schedule", "unschedule", "reschedule"})
+
+
+def _is_schedule_marker(token: str) -> bool:
+    """Whether one action token names a scheduling mechanism."""
+    return any(marker in token for marker in SCHEDULE_MARKERS)
+
+
+def _changes_a_schedule(tokens: tuple[str, ...]) -> bool:
+    """Whether the action both names a schedule and changes it."""
+    if not any(_is_schedule_marker(token) for token in tokens):
+        return False
+    if any(token in SCHEDULE_VERBS for token in tokens):
+        return True
+    return bool(tokens) and tokens[0] in SCHEDULE_ACT_VERBS
+
 
 # Separation governance and canonical brain masters/snapshots.
 GOVERNANCE_NOUNS = frozenset(
@@ -2099,9 +2142,7 @@ class PolicyEnforcementPoint:
         # names rather than to whichever bare verb happens to match first.
         if "submit" in tokens and any(token in SUBMISSION_QUALIFIERS for token in tokens):
             return "final_submission"
-        if any(token in SCHEDULE_VERBS for token in tokens) and any(
-            token in SCHEDULE_NOUNS for token in tokens
-        ):
+        if _changes_a_schedule(tokens):
             return "scheduled_task_change"
         if any(token in GOVERNANCE_VERBS for token in tokens) and any(
             token in GOVERNANCE_NOUNS for token in tokens

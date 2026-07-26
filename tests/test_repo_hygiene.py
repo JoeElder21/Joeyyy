@@ -187,6 +187,110 @@ class ValidationCoverageTests(unittest.TestCase):
         self.assertEqual(text.count("default-days:"), ecosystems)
 
 
+class GitleaksSuppressionTests(unittest.TestCase):
+    """A line-pinned exemption drifts whenever the file above it changes.
+
+    Working-tree fingerprints carry a CURRENT line number, so an entry stops
+    matching the moment anything above that line grows or shrinks -- even when
+    the excused line itself is untouched. Editing `scripts/privacy_guard.py`
+    shifted its fixture by 32 lines and turned CI's `gitleaks dir` scan red,
+    while the history scan stayed green and the local pre-commit hook passed:
+    that hook scans the STAGED DIFF, and CI scans the whole tree, so local green
+    never predicted it.
+
+    This cannot prove an entry is right -- only gitleaks can, and it is not a
+    dependency of this suite. It proves the weaker thing that catches the
+    failure which actually happens: an entry must sit on a line that could
+    plausibly produce the rule it names. After the drift above, the stale entry
+    pointed at a bare `),`.
+    """
+
+    IGNORE_FILE = ROOT / ".gitleaksignore"
+    # What each rule keys on, lowercased. Deliberately generous: a false PASS
+    # here costs a CI round, while a false FAIL blocks a legitimate edit on a
+    # keyword list nobody can complete from memory.
+    RULE_MARKERS = {
+        "generic-api-key": ("key", "secret", "token", "password", "passwd", "credential"),
+        "stripe-access-token": ("sk_", "pk_", "rk_", "stripe"),
+    }
+
+    def _working_tree_entries(self):
+        """`path:rule:line` entries only — the history form carries a commit."""
+        entries = []
+        for raw in self.IGNORE_FILE.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(":")
+            # History entries are `commit:path:rule:line`; a 40-char hex first
+            # field is what distinguishes them. Those pin a line as it was in
+            # that commit, which no present-day file can be checked against.
+            if len(parts) == 4 and FULL_SHA.match(parts[0]):
+                continue
+            self.assertEqual(len(parts), 3, f"unparseable .gitleaksignore entry: {line!r}")
+            entries.append((parts[0], parts[1], int(parts[2])))
+        return entries
+
+    def test_every_suppressed_line_still_exists(self):
+        entries = self._working_tree_entries()
+        self.assertTrue(entries, "no working-tree entries; this test would be vacuous")
+        for path, rule, number in entries:
+            with self.subTest(entry=f"{path}:{rule}:{number}"):
+                target = ROOT / path
+                self.assertTrue(target.exists(), f"{path} no longer exists")
+                lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+                self.assertGreaterEqual(
+                    len(lines),
+                    number,
+                    f"{path} has {len(lines)} lines but the entry cites {number}",
+                )
+
+    def test_every_suppressed_line_could_produce_the_rule_it_names(self):
+        for path, rule, number in self._working_tree_entries():
+            with self.subTest(entry=f"{path}:{rule}:{number}"):
+                markers = self.RULE_MARKERS.get(rule)
+                self.assertIsNotNone(
+                    markers,
+                    f"{rule} has no marker list; add one rather than letting an "
+                    "unrecognised rule pass unchecked",
+                )
+                text = (
+                    (ROOT / path)
+                    .read_text(encoding="utf-8", errors="replace")
+                    .splitlines()[number - 1]
+                    .lower()
+                )
+                self.assertTrue(
+                    any(marker in text for marker in markers),
+                    f"{path}:{number} holds {text.strip()[:60]!r}, which cannot produce a "
+                    f"{rule} finding -- the exemption has drifted off the line it was "
+                    "written for and the tree scan will report that line unsuppressed",
+                )
+
+    def test_the_drift_detector_detects(self):
+        # Without this, both tests above pass on any input including the drift
+        # they exist for. The real stale entry pointed at a bare `),`.
+        markers = self.RULE_MARKERS["generic-api-key"]
+        self.assertFalse(any(m in "    )," for m in markers))
+        self.assertTrue(any(m in '"client_secret": "pi_123"'.lower() for m in markers))
+
+    def test_history_entries_are_not_silently_skipped(self):
+        # The parser drops commit-prefixed entries because no present-day file
+        # can be checked against them. If a typo turned every entry into that
+        # shape, both tests above would pass while checking nothing.
+        raw = [
+            line.strip()
+            for line in self.IGNORE_FILE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        self.assertEqual(
+            len(raw),
+            len(self._working_tree_entries())
+            + sum(1 for line in raw if FULL_SHA.match(line.split(":")[0])),
+            "an entry is neither working-tree nor history shaped",
+        )
+
+
 class VulnerabilityTriageTests(unittest.TestCase):
     """A triage entry must stay a decision, not become a silence.
 

@@ -3442,5 +3442,151 @@ class ThirtyThirdPassRegressionTests(unittest.TestCase):
         )
 
 
+class ThirtyFifthPassRegressionTests(unittest.TestCase):
+    """`scheduled_task_change` gated ordinary task work and missed real schedules.
+
+    `task` was in the noun set, so `create_task` and `delete_task` -- ordinary
+    task-registry writes -- demanded Joe's personally signed instruction.
+    AGENTS.md reserves "scheduled-task creation or deletion"; a bare task is not
+    a schedule, and a boundary that fires on ordinary work is one an operator
+    learns to wave through.
+
+    Removing `task` exposed the opposite defect in the same rule, and fixing
+    that introduced a third: see the two `MUST_NOT` read cases below. Every
+    round of this rule has over- or under-gated in one direction while being
+    correct in the other, which is why both lists are exhaustive rather than
+    sampled.
+    """
+
+    # Genuine scheduled-task changes. Spellings a real dispatcher produces:
+    # snake, camel, verb-led, and the un-/re- forms.
+    MUST_GATE = (
+        "create_scheduled_task",
+        "delete_scheduled_task",
+        "create_cron_job",
+        "delete_cron",
+        "delete_crontab",
+        "add_schedule",
+        "remove_schedule",
+        "register_cron",
+        "unregister_scheduled_task",
+        "remove_timer",
+        "schedule_task",
+        "scheduleTask",
+        "scheduleReport",
+        "unschedule_report",
+        "reschedule_job",
+        "rescheduleMission",
+        "createScheduledTask",
+        "delete_cron_task",
+    )
+    # Ordinary work that must NOT need Joe's signature. The `task` group is the
+    # finding; the READ group is the defect the first fix introduced, where
+    # `schedule` counted as its own verb anywhere in the name and gated
+    # `read_schedule`.
+    MUST_NOT_GATE = (
+        "create_task",
+        "delete_task",
+        "add_task",
+        "remove_task",
+        "register_task",
+        "createTask",
+        "read_task",
+        "list_tasks",
+        "update_task",
+        "complete_task",
+        "read_schedule",
+        "view_schedule",
+        "get_cron",
+        "export_schedule",
+        "list_cron_jobs",
+        "scheduler_status",
+        "inspect_crontab",
+        "create_record",
+        "create_document",
+        "multitasking_report",
+    )
+
+    def setUp(self):
+        self.pep = PolicyEnforcementPoint(ROOT, clock=lambda: NOW)
+
+    def test_real_schedule_changes_are_gated(self):
+        for action in self.MUST_GATE:
+            with self.subTest(action=action):
+                self.assertEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "scheduled_task_change",
+                    f"{action} changes a schedule and must reach the boundary",
+                )
+
+    def test_ordinary_work_is_not_gated(self):
+        for action in self.MUST_NOT_GATE:
+            with self.subTest(action=action):
+                self.assertNotEqual(
+                    PolicyEnforcementPoint._boundary_category(action),
+                    "scheduled_task_change",
+                    f"{action} is not a schedule change; gating it demands Joe's "
+                    "signature for ordinary work",
+                )
+
+    def test_the_gating_is_visible_through_the_public_entry_point(self):
+        # `_boundary_category` is private and the previous round learned that a
+        # control is only as good as the entry point the system uses: an earlier
+        # fix passed when the rule was called directly and failed through
+        # `evaluate()`. One case each way, end to end.
+        gated = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF,
+                action="delete_scheduled_task",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+            )
+        )
+        self.assertFalse(gated.allowed)
+        self.assertTrue(
+            any("scheduled_task_change" in reason for reason in gated.reasons),
+            gated.reasons,
+        )
+        ungated = self.pep.evaluate(
+            ToolRequest(
+                agent=CHIEF,
+                action="create_task",
+                resource="APEX/Strategy-Campaigns",
+                owner_brain="APEX",
+            )
+        )
+        self.assertFalse(
+            any("scheduled_task_change" in reason for reason in ungated.reasons),
+            f"an ordinary task write reached the schedule boundary: {ungated.reasons}",
+        )
+
+    def test_a_marker_matches_a_token_not_the_whole_action(self):
+        # Substring matching against the whole action is what made `delete_thread`
+        # a read in round 7. `multitasking` must not acquire a scheduling marker,
+        # and `unschedule` must keep one.
+        from scripts.policy_enforcement import _is_schedule_marker
+
+        for token in ("schedule", "scheduled", "unschedule", "rescheduled", "cron", "crontab"):
+            with self.subTest(carries=token):
+                self.assertTrue(_is_schedule_marker(token))
+        for token in ("task", "tasks", "multitasking", "record", "document"):
+            with self.subTest(lacks=token):
+                self.assertFalse(_is_schedule_marker(token))
+
+    def test_a_scheduling_verb_counts_only_in_leading_position(self):
+        # The rule that keeps `read_schedule` out. If this ever holds anywhere in
+        # the name again, every read of a schedule is gated.
+        from scripts.policy_enforcement import _changes_a_schedule
+
+        self.assertTrue(_changes_a_schedule(("schedule", "task")))
+        self.assertFalse(_changes_a_schedule(("read", "schedule")))
+        self.assertFalse(_changes_a_schedule(("task", "schedule")))
+
+    def test_the_boundary_category_is_still_one_of_the_declared_nine(self):
+        # A category returned by the classifier but absent from
+        # HIGH_IMPACT_ACTIONS is a gate that never fires -- the round-32 finding.
+        self.assertIn("scheduled_task_change", HIGH_IMPACT_ACTIONS)
+
+
 if __name__ == "__main__":
     unittest.main()

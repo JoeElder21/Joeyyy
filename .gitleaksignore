@@ -39,10 +39,22 @@ d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/sp
 # numbers also differ between the two, because history pins the line as it was
 # in that commit and the tree pins it as it is now.
 #
+# A working-tree fingerprint is pinned to a CURRENT line number, so it stops
+# matching the moment anything above that line grows or shrinks -- even when the
+# excused line itself is untouched. Editing `scripts/privacy_guard.py` shifted
+# its fixture by 32 lines and turned the `dir` scan red while the history scan
+# stayed green and the local pre-commit hook, which scans only the staged diff,
+# passed. Local green does not predict CI green here.
+#
+# `tests/test_repo_hygiene.py::GitleaksSuppressionTests` now fails when an entry
+# drifts onto a line that could not produce the rule it names, which is what
+# turns this from a CI surprise into a local one. It cannot prove an entry is
+# RIGHT -- only gitleaks can -- but drift is the failure that actually happens.
+#
 # Same six placeholders as above, verified at the lines cited.
 .github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
 .github/instructions/code-review-generic.instructions.md:stripe-access-token:142
 .claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:461
 .claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:462
 .claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:592
-scripts/privacy_guard.py:generic-api-key:330
+scripts/privacy_guard.py:generic-api-key:362

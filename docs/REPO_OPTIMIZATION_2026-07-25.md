@@ -1604,6 +1604,66 @@ satisfied by the word appearing in a comment. Moving the sample back before
 `pytest` now fails too. The second survivor was the `"unknown"` branch, which no
 test exercised at all.
 
+### Thirty-fifth pass — one finding, and a correction I owe the previous round
+
+**The correction first.** Round 34 refuted a P1 about the `.gitleaksignore`
+history entry. The refutation was right on every fact it checked — the commit
+*is* an ancestor, the replacement commit offered does not exist, both scans were
+clean, and the suppression was load-bearing. **But the mechanism the finding
+gestured at is real, and the very commit that recorded the refutation triggered
+it.** Round 34 edited `scripts/privacy_guard.py`, which shifted its credential
+fixture down 32 lines, and a working-tree fingerprint is pinned to a *current*
+line number. So `gitleaks dir` went red on `6772084` while the history scan
+stayed green.
+
+Three things about that are worth writing down:
+
+- **The stale entry pointed at a bare `),`.** Line 330 no longer held anything a
+  `generic-api-key` rule could match; the fixture had moved to 362.
+- **The local pre-commit hook passed the commit CI rejected.** The hook runs
+  `gitleaks git --pre-commit --staged` — the staged diff. CI runs `gitleaks dir .`
+  over the whole tree plus `gitleaks git BASE..HEAD`. Local green never predicted
+  CI green here, which is a variant of the silently-degrading-checker family:
+  not a check that proves nothing, a check that proves something *else*.
+- **Refuting a finding's claims is not the same as refuting its class.** The
+  claims were false and saying so was correct. The class — line-pinned
+  suppressions drift — was live, and one round later it fired.
+
+`GitleaksSuppressionTests` now closes it without adding a dependency: every
+working-tree entry must cite a line that still exists and that could plausibly
+produce the rule it names. It cannot prove an entry is *right* — only gitleaks
+can, and gitleaks is not in the mandatory suite — but drift is the failure that
+actually happens, and it now fails in the suite that pre-commit already runs.
+Verified by reverting the line number and watching it fail.
+
+**The finding: `scheduled_task_change` gated ordinary task work.** `task` was in
+the noun set, so `create_task` and `delete_task` — ordinary task-registry writes
+— demanded Joe's personally signed instruction. `AGENTS.md` reserves
+"scheduled-task creation or deletion"; a bare task is not a schedule, and a
+boundary that fires on ordinary work is one an operator learns to wave through.
+That is the reasoning that already keeps `read` out of the issuer and `submit`
+behind a qualifier.
+
+**Removing `task` exposed a fail-open in the same rule that the finding did not
+mention.** `schedule_task` — about as literal a scheduled-task creation as
+exists — was *already* ungated, because both its tokens were nouns and the rule
+demanded a verb. Fixing only the reported direction would have left it.
+
+**And the fix for that introduced a third defect, caught by the reverse
+direction.** Accepting `schedule` as a verb anywhere in the name let one token
+satisfy both halves of the rule, which gated `read_schedule` and
+`view_schedule` — the same over-gate the finding was about, reintroduced by its
+own repair. The scheduling verbs now count only in **leading** position, which
+is a real structural claim rather than a tiebreak: the leading token of an
+action is its verb everywhere in this codebase.
+
+Markers match as a substring of a **token**, never of the whole action, so
+`unschedule` and `rescheduled` carry one while `multitasking` does not — the
+round-7 lesson, where whole-string substring matching made `delete_thread` a
+read. Thirty-eight probes, both directions, exhaustive rather than sampled
+because every previous round of this rule was correct in one direction and wrong
+in the other. Four mutants killed, including the two intermediate states above.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:
