@@ -1,0 +1,60 @@
+# Per-finding gitleaks exemptions.
+#
+# One fingerprint per line, never a path or directory rule. A directory
+# exemption would silence every future finding under it as well, which is how a
+# real credential gets committed into a folder someone once excused. Each entry
+# below names an exact commit, file, rule and line, so it stops applying the
+# moment that line changes.
+#
+# Every exemption here is a documentation or test placeholder verified by hand
+# at the line cited. Adding one requires reading the line, not trusting this
+# comment.
+
+# scripts/privacy_guard.py builds its own negative fixtures as SPLIT string
+# literals -- `"p" + 'assword": "secure_password"'` -- precisely so the guard's
+# own patterns do not match its test data. gitleaks reassembles the
+# concatenation and sees a credential assignment that exists in no single
+# literal. The value is the word "secure_password".
+03cb44399f6ed4f5904ffc4ac33dfadfb164a759:scripts/privacy_guard.py:generic-api-key:321
+
+# Kubernetes Secret manifests in an absorbed agent's documentation. The values
+# are `myapp-secrets` style placeholders in a worked example of how to mount a
+# secret, not a secret.
+d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:454
+d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:455
+d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:591
+
+# `const API_KEY = "..."` inside code-review and OWASP instruction documents,
+# where the surrounding prose is teaching a reviewer to REJECT a hardcoded key.
+# The example has to look like the thing it warns about.
+7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/code-review-generic.instructions.md:stripe-access-token:142
+7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
+
+# --- working-tree fingerprints ---
+#
+# The CI job runs BOTH `gitleaks git` (history) and `gitleaks dir` (the tree),
+# and the two produce DIFFERENT fingerprint forms: history entries carry a
+# commit prefix, working-tree entries do not. Listing only the history form
+# left the `dir .` scan failing with the identical six findings. The line
+# numbers also differ between the two, because history pins the line as it was
+# in that commit and the tree pins it as it is now.
+#
+# A working-tree fingerprint is pinned to a CURRENT line number, so it stops
+# matching the moment anything above that line grows or shrinks -- even when the
+# excused line itself is untouched. Editing `scripts/privacy_guard.py` shifted
+# its fixture by 32 lines and turned the `dir` scan red while the history scan
+# stayed green and the local pre-commit hook, which scans only the staged diff,
+# passed. Local green does not predict CI green here.
+#
+# `tests/test_repo_hygiene.py::GitleaksSuppressionTests` now fails when an entry
+# drifts onto a line that could not produce the rule it names, which is what
+# turns this from a CI surprise into a local one. It cannot prove an entry is
+# RIGHT -- only gitleaks can -- but drift is the failure that actually happens.
+#
+# Same six placeholders as above, verified at the lines cited.
+.github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
+.github/instructions/code-review-generic.instructions.md:stripe-access-token:142
+.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:478
+.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:479
+.claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:600
+scripts/privacy_guard.py:generic-api-key:369

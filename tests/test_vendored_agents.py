@@ -5,10 +5,9 @@ constraints recorded in `docs/AGENT_REGISTRY.md` are enforced here rather than
 trusted. See the "Vendored reference corps" section of that file.
 """
 
-from pathlib import Path
 import re
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VENDORED = ROOT / ".claude" / "agents" / "awesome-claude-agents"
@@ -156,21 +155,15 @@ class VendoredAgentContractTests(unittest.TestCase):
         for path in self.files:
             with self.subTest(path=path.relative_to(ROOT)):
                 block = frontmatter_of(path)
-                self.assertIsNotNone(
-                    DESCRIPTION_PATTERN.search(block), "missing description"
-                )
+                self.assertIsNotNone(DESCRIPTION_PATTERN.search(block), "missing description")
 
     def test_names_are_unique_kebab_case_slugs(self):
         seen: dict[str, Path] = {}
         for path in self.files:
             name = declared_name(path)
             with self.subTest(path=path.relative_to(ROOT), name=name):
-                self.assertRegex(
-                    name, NAME_PATTERN, "agent name must be a kebab-case slug"
-                )
-                self.assertNotIn(
-                    name, seen, f"duplicate name also declared by {seen.get(name)}"
-                )
+                self.assertRegex(name, NAME_PATTERN, "agent name must be a kebab-case slug")
+                self.assertNotIn(name, seen, f"duplicate name also declared by {seen.get(name)}")
             seen[name] = path
 
     def test_every_prompt_declares_an_explicit_tool_allowlist(self):
@@ -194,9 +187,7 @@ class VendoredAgentContractTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(ROOT)):
                 self.assertIsNotNone(tools, "missing `tools:` grants everything")
                 granted = set(tools) & FORBIDDEN_TOOLS
-                self.assertEqual(
-                    granted, set(), f"write-capable tools must be stripped: {granted}"
-                )
+                self.assertEqual(granted, set(), f"write-capable tools must be stripped: {granted}")
 
     def test_declared_tools_stay_inside_the_registered_read_only_surface(self):
         """Closed allowlist: anything not registered is a contract break, not just Write."""

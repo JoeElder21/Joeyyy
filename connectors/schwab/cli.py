@@ -13,12 +13,12 @@ form the Market Operator agent consumes before its research pass.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sys
 import time
+from dataclasses import asdict
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from connectors.schwab.client import SchwabClient, SchwabError
@@ -118,10 +118,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     access_left = (bundle.access_expires_at - now) / 60
     refresh_left = bundle.refresh_seconds_left(now) / 86400
     print(f"Token store:      {settings.token_path}")
-    print(f"Access valid:     {'yes' if bundle.access_valid(now) else 'no'} "
-          f"({access_left:.0f} min remaining)")
-    print(f"Refresh valid:    {'yes' if bundle.refresh_valid(now) else 'no'} "
-          f"({refresh_left:.1f} days remaining)")
+    print(
+        f"Access valid:     {'yes' if bundle.access_valid(now) else 'no'} "
+        f"({access_left:.0f} min remaining)"
+    )
+    print(
+        f"Refresh valid:    {'yes' if bundle.refresh_valid(now) else 'no'} "
+        f"({refresh_left:.1f} days remaining)"
+    )
     print(f"Scope:            {bundle.scope or 'not reported'}")
     if refresh_left < 2:
         print("\nRe-consent is due. Run: python -m connectors.schwab.cli login")
@@ -139,9 +143,13 @@ def cmd_accounts(args: argparse.Namespace) -> int:
 def cmd_positions(args: argparse.Namespace) -> int:
     settings = _settings()
     portfolio = _select_portfolio(_client(settings), args.account)
-    print(f"{portfolio.account_label} ({portfolio.account_type})  "
-          f"equity {portfolio.liquidation_value:,.2f}  cash {portfolio.cash:,.2f}\n")
-    header = f"{'SYMBOL':<10}{'QTY':>10}{'AVG':>12}{'LAST':>12}{'VALUE':>14}{'WEIGHT':>9}{'P/L':>10}"
+    print(
+        f"{portfolio.account_label} ({portfolio.account_type})  "
+        f"equity {portfolio.liquidation_value:,.2f}  cash {portfolio.cash:,.2f}\n"
+    )
+    header = (
+        f"{'SYMBOL':<10}{'QTY':>10}{'AVG':>12}{'LAST':>12}{'VALUE':>14}{'WEIGHT':>9}{'P/L':>10}"
+    )
     print(header)
     print("-" * len(header))
     for holding in portfolio.equity_holdings:
@@ -157,11 +165,9 @@ def cmd_positions(args: argparse.Namespace) -> int:
     return 0
 
 
-def _brief_payload(
-    portfolio: Portfolio, verdicts: list, alerts: list[str]
-) -> dict[str, Any]:
+def _brief_payload(portfolio: Portfolio, verdicts: list, alerts: list[str]) -> dict[str, Any]:
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "account": {
             "label": portfolio.account_label,
             "type": portfolio.account_type,
@@ -221,7 +227,7 @@ def cmd_brief(args: argparse.Namespace) -> int:
     if args.out:
         destination = Path(args.out)
     elif args.save:
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        stamp = datetime.now(UTC).strftime("%Y-%m-%d")
         suffix = "json" if args.json else "md"
         destination = settings.report_dir / f"brief-{stamp}.{suffix}"
 

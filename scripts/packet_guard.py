@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
 import json
-from pathlib import Path
 import re
 import sys
 import tomllib
-from typing import Any, Iterable
 import unicodedata
-
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY = {"public": 0, "internal": 1, "confidential": 2, "restricted": 3}
@@ -146,9 +146,7 @@ class PacketGuard:
             errors.extend(self.validate_constraint_ledger(constraints))
         if private_constraint_packets is not None:
             errors.extend(
-                self.validate_private_constraint_ledger(
-                    private_constraints, historical=historical
-                )
+                self.validate_private_constraint_ledger(private_constraints, historical=historical)
             )
         if errors:
             return errors
@@ -269,7 +267,9 @@ class PacketGuard:
         expected = self.agents[agent]
         errors: list[str] = []
         if packet["owner_brain"] != expected["brain"]:
-            errors.append(f"agent {agent} belongs to {expected['brain']}, not {packet['owner_brain']}")
+            errors.append(
+                f"agent {agent} belongs to {expected['brain']}, not {packet['owner_brain']}"
+            )
         if packet["memory_namespace"] != expected["memory_namespace"]:
             errors.append(f"agent {agent} must use memory namespace {expected['memory_namespace']}")
         if packet.get("schema_version") == "2.1":
@@ -291,19 +291,13 @@ class PacketGuard:
         errors: list[str] = []
         if packet["write_target"] not in targets:
             errors.append(f"write target is not registered to the {brain} unit")
-        elif packet["writer_agent"] not in self._eligible_writers(
-            brain, packet["write_target"]
-        ):
-            errors.append(
-                "writer is not eligible for the target at the deployed lifecycle stage"
-            )
+        elif packet["writer_agent"] not in self._eligible_writers(brain, packet["write_target"]):
+            errors.append("writer is not eligible for the target at the deployed lifecycle stage")
         return errors
 
     def _target_owners(self, brain: str, target: str) -> list[str]:
         return [
-            agent
-            for agent in self.rosters[brain]
-            if target in self.agents[agent]["write_targets"]
+            agent for agent in self.rosters[brain] if target in self.agents[agent]["write_targets"]
         ]
 
     def _eligible_writers(self, brain: str, target: str) -> set[str]:
@@ -313,9 +307,8 @@ class PacketGuard:
             return eligible
         owner = owners[0]
         meta = self.agents[owner]
-        if (
-            meta.get("status") not in {"active", "value-proven"}
-            or not meta.get("active_writer_eligible", False)
+        if meta.get("status") not in {"active", "value-proven"} or not meta.get(
+            "active_writer_eligible", False
         ):
             return eligible
         native_file = self.root / meta["file"]
@@ -367,9 +360,7 @@ class PacketGuard:
         ]
         for packet_field, lease_field in term_pairs:
             if packet_field in packet and packet[packet_field] != lease.get(lease_field):
-                errors.append(
-                    f"packet field {packet_field} must match lease field {lease_field}"
-                )
+                errors.append(f"packet field {packet_field} must match lease field {lease_field}")
         return errors
 
     def _evidence_errors(
@@ -417,13 +408,10 @@ class PacketGuard:
                                 f"cross-brain constraint field {field} does not match "
                                 "the consuming packet"
                             )
-                    disallowed = set(requested_actions) - set(
-                        constraint["permitted_actions"]
-                    )
+                    disallowed = set(requested_actions) - set(constraint["permitted_actions"])
                     if disallowed:
                         errors.append(
-                            "cross-brain constraint does not permit "
-                            f"actions {sorted(disallowed)}"
+                            f"cross-brain constraint does not permit actions {sorted(disallowed)}"
                         )
             elif item["source_type"] == "brain_private_constraint":
                 matches = [p for p in private_constraints if p["packet_id"] == source_ref]
@@ -448,13 +436,10 @@ class PacketGuard:
                                 f"brain-private constraint field {field} does not match "
                                 "the consuming packet"
                             )
-                    disallowed = set(requested_actions) - set(
-                        constraint["permitted_actions"]
-                    )
+                    disallowed = set(requested_actions) - set(constraint["permitted_actions"])
                     if disallowed:
                         errors.append(
-                            "brain-private constraint does not permit "
-                            f"actions {sorted(disallowed)}"
+                            f"brain-private constraint does not permit actions {sorted(disallowed)}"
                         )
             elif source_upper.startswith(f"{opposite}::") or source_upper.startswith(
                 f"{opposite}/"
@@ -497,9 +482,7 @@ class PacketGuard:
             )
         )
         if packet["allowed_evidence"] and "read_packet_evidence" not in packet["allowed_actions"]:
-            errors.append(
-                "delegation with evidence requires action 'read_packet_evidence'"
-            )
+            errors.append("delegation with evidence requires action 'read_packet_evidence'")
         if packet.get("schema_version") == "2.1":
             required_v21 = [
                 "mode",
@@ -519,9 +502,7 @@ class PacketGuard:
                 errors.append("2.1 definition_of_done_ids must be unique")
             requested_types = set(packet.get("required_artifact_types", []))
             if not requested_types.issubset(set(meta.get("artifact_types", []))):
-                errors.append(
-                    "2.1 required artifact type is not registered to the selected agent"
-                )
+                errors.append("2.1 required artifact type is not registered to the selected agent")
         allowed_targets = set(meta["write_targets"])
         for target in packet["allowed_write_targets"]:
             if target not in allowed_targets:
@@ -534,11 +515,7 @@ class PacketGuard:
                 )
             if not packet["writer_lease_id"]:
                 errors.append("a write-bearing delegation requires a writer lease")
-            errors.extend(
-                self._lease_match_errors(
-                    packet, target, active_leases
-                )
-            )
+            errors.extend(self._lease_match_errors(packet, target, active_leases))
         elif packet["writer_agent"] is not None or packet["writer_lease_id"] is not None:
             errors.append("read-only delegation must not name a writer or lease")
         return errors
@@ -581,9 +558,7 @@ class PacketGuard:
         ]:
             if packet[field] != delegation[field]:
                 errors.append(f"handoff field {field} must match originating delegation")
-        if packet.get("schema_version") == "2.1" and packet.get("mode") != delegation.get(
-            "mode"
-        ):
+        if packet.get("schema_version") == "2.1" and packet.get("mode") != delegation.get("mode"):
             errors.append("2.1 handoff mode must match originating delegation")
         return delegation, errors
 
@@ -620,8 +595,7 @@ class PacketGuard:
                     errors.append(f"boundary_blocked handoff must keep {field} empty")
             if packet["blockers"] != [BOUNDARY_BLOCKER]:
                 errors.append(
-                    f"boundary_blocked handoff must use only the safe sentinel "
-                    f"{BOUNDARY_BLOCKER!r}"
+                    f"boundary_blocked handoff must use only the safe sentinel {BOUNDARY_BLOCKER!r}"
                 )
             if packet["recommended_next_handoff"] != "apex_chief_of_staff":
                 errors.append("boundary_blocked handoff must return to Agent 007")
@@ -655,14 +629,10 @@ class PacketGuard:
             if packet["proposed_writes"] or packet["evidence"]:
                 errors.append("direct_read_only cannot propose writes or emit source evidence")
             if packet["sensitivity"] != "restricted":
-                errors.append(
-                    "unclassified direct_read_only content must remain restricted"
-                )
+                errors.append("unclassified direct_read_only content must remain restricted")
             if packet["recommended_next_handoff"] != "apex_chief_of_staff":
                 errors.append("direct_read_only handoff must return to Agent 007")
-            if packet.get("schema_version") == "2.1" and packet.get("mode") != (
-                "direct_read_only"
-            ):
+            if packet.get("schema_version") == "2.1" and packet.get("mode") != ("direct_read_only"):
                 errors.append("2.1 direct_read_only handoff mode must be direct_read_only")
         else:
             if packet["delegation_id"] is None:
@@ -682,30 +652,20 @@ class PacketGuard:
                     and delegation.get("schema_version") == "2.1"
                     and packet.get("schema_version") != "2.1"
                 ):
-                    errors.append(
-                        "handoff for a 2.1 delegation must use schema_version 2.1"
-                    )
+                    errors.append("handoff for a 2.1 delegation must use schema_version 2.1")
 
         if delegation is not None:
-            if (
-                SENSITIVITY[packet["sensitivity"]]
-                < SENSITIVITY[delegation["sensitivity"]]
-            ):
+            if SENSITIVITY[packet["sensitivity"]] < SENSITIVITY[delegation["sensitivity"]]:
                 errors.append("handoff sensitivity is lower than its delegation")
             allowed_evidence = delegation["allowed_evidence"]
             for item in packet["evidence"]:
                 if item not in allowed_evidence:
-                    errors.append(
-                        "handoff evidence does not exactly match delegated evidence"
-                    )
+                    errors.append("handoff evidence does not exactly match delegated evidence")
                 if item["owner_brain"] != packet["owner_brain"]:
                     errors.append("handoff evidence crosses the owner brain")
                 if SENSITIVITY[item["sensitivity"]] > SENSITIVITY[packet["sensitivity"]]:
                     errors.append("handoff sensitivity is lower than its evidence")
-                if (
-                    SENSITIVITY[item["sensitivity"]]
-                    < SENSITIVITY[delegation["sensitivity"]]
-                ):
+                if SENSITIVITY[item["sensitivity"]] < SENSITIVITY[delegation["sensitivity"]]:
                     errors.append("handoff evidence sensitivity is lower than its delegation")
             if packet["status"] == "completed":
                 if delegation["allowed_evidence"] and not packet["evidence"]:
@@ -717,9 +677,7 @@ class PacketGuard:
             allowed_actions = set(delegation["allowed_actions"])
             for field, action in ACTION_FIELDS.items():
                 if packet[field] and action not in allowed_actions:
-                    errors.append(
-                        f"handoff field {field} requires delegated action {action!r}"
-                    )
+                    errors.append(f"handoff field {field} requires delegated action {action!r}")
 
         if packet.get("schema_version") == "2.1":
             for field in ["mode", "artifacts", "criterion_validation"]:
@@ -749,9 +707,7 @@ class PacketGuard:
                             f"artifact record {record_id!r} in a completed handoff requires source evidence"
                         )
                     if not set(record["source_refs"]).issubset(delegated_source_refs):
-                        errors.append(
-                            f"artifact record {record_id!r} cites undelegated evidence"
-                        )
+                        errors.append(f"artifact record {record_id!r} cites undelegated evidence")
             criterion_items = packet.get("criterion_validation", [])
             criterion_ids = [item["criterion_id"] for item in criterion_items]
             if len(criterion_ids) != len(set(criterion_ids)):
@@ -771,18 +727,14 @@ class PacketGuard:
                 if delegation is not None:
                     required_types = set(delegation["required_artifact_types"])
                     if not required_types.issubset(artifact_types):
-                        errors.append(
-                            "completed 2.1 handoff is missing a required artifact type"
-                        )
+                        errors.append("completed 2.1 handoff is missing a required artifact type")
                     required_criteria = delegation["definition_of_done_ids"]
                     if set(criterion_ids) != set(required_criteria):
                         errors.append(
                             "completed 2.1 handoff must validate every stable criterion ID"
                         )
                     if any(item["status"] != "passed" for item in criterion_items):
-                        errors.append(
-                            "completed 2.1 handoff requires every criterion to pass"
-                        )
+                        errors.append("completed 2.1 handoff requires every criterion to pass")
 
         delegated_targets = set(delegation["allowed_write_targets"]) if delegation else set()
         for proposed in packet["proposed_writes"]:
@@ -814,28 +766,20 @@ class PacketGuard:
                 if not set(proposed.get("artifact_record_ids", [])).issubset(record_ids):
                     errors.append("2.1 proposed write cites an unknown artifact record")
                 if delegation is not None:
-                    allowed_operations = set(
-                        delegation["mutation_contract"]["allowed_operations"]
-                    )
+                    allowed_operations = set(delegation["mutation_contract"]["allowed_operations"])
                     if proposed.get("operation") not in allowed_operations:
-                        errors.append(
-                            "2.1 proposed-write operation exceeds mutation contract"
-                        )
+                        errors.append("2.1 proposed-write operation exceeds mutation contract")
                     if (
                         delegation["mutation_contract"]["require_expected_version"]
                         and proposed.get("expected_version") is None
                     ):
-                        errors.append(
-                            "2.1 mutation contract requires an expected version"
-                        )
+                        errors.append("2.1 mutation contract requires an expected version")
             lease_packet = {
                 **packet,
                 **proposed,
                 "write_target": proposed["target"],
             }
-            errors.extend(
-                self._lease_match_errors(lease_packet, proposed["target"], active_leases)
-            )
+            errors.extend(self._lease_match_errors(lease_packet, proposed["target"], active_leases))
 
         next_agent = packet["recommended_next_handoff"]
         permitted = {*self.rosters[meta["brain"]], "apex_chief_of_staff"}
@@ -898,10 +842,7 @@ class PacketGuard:
         )
         errors.extend(delegation_errors)
         if delegation is not None:
-            if (
-                SENSITIVITY[packet["sensitivity"]]
-                < SENSITIVITY[delegation["sensitivity"]]
-            ):
+            if SENSITIVITY[packet["sensitivity"]] < SENSITIVITY[delegation["sensitivity"]]:
                 errors.append("roundtable sensitivity is lower than its delegation")
             allowed_evidence = delegation["allowed_evidence"]
             for item in packet["evidence"]:
@@ -913,10 +854,7 @@ class PacketGuard:
                     errors.append("roundtable evidence crosses the owner brain")
                 if SENSITIVITY[item["sensitivity"]] > SENSITIVITY[packet["sensitivity"]]:
                     errors.append("roundtable sensitivity is lower than its evidence")
-                if (
-                    SENSITIVITY[item["sensitivity"]]
-                    < SENSITIVITY[delegation["sensitivity"]]
-                ):
+                if SENSITIVITY[item["sensitivity"]] < SENSITIVITY[delegation["sensitivity"]]:
                     errors.append("roundtable evidence sensitivity is lower than delegation")
             action_for_type = {
                 "ask": "handoff",
@@ -931,7 +869,7 @@ class PacketGuard:
                     f"delegated action {action_for_type!r}"
                 )
         timestamp = self._parse_timestamp(packet["timestamp"], "timestamp", errors)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if timestamp and timestamp > now + timedelta(minutes=5):
             errors.append("roundtable timestamp is in the future")
         target = self.roundtable_targets[brain]
@@ -946,11 +884,7 @@ class PacketGuard:
             errors.extend(self._lease_match_errors(packet, target, active_leases))
             lease = self._matching_lease(packet, active_leases)
             if lease is not None and timestamp is not None:
-                errors.extend(
-                    self._timestamp_within_lease_errors(
-                        timestamp, "timestamp", lease
-                    )
-                )
+                errors.extend(self._timestamp_within_lease_errors(timestamp, "timestamp", lease))
         return errors
 
     def _writer_lease_errors(
@@ -994,10 +928,10 @@ class PacketGuard:
         if (
             packet["status"] == "active"
             and issued
-            and issued > datetime.now(timezone.utc) + timedelta(minutes=5)
+            and issued > datetime.now(UTC) + timedelta(minutes=5)
         ):
             errors.append("active writer lease is not yet valid")
-        if packet["status"] == "active" and expires and expires <= datetime.now(timezone.utc):
+        if packet["status"] == "active" and expires and expires <= datetime.now(UTC):
             errors.append("active writer lease is expired")
         return errors
 
@@ -1021,14 +955,10 @@ class PacketGuard:
         errors: list[str] = []
         if packet["write_target"] not in self.agents[owner]["write_targets"]:
             errors.append("memory target is outside the namespace owner's allowlist")
-        if packet["writer_agent"] not in self._eligible_writers(
-            brain, packet["write_target"]
-        ):
-            errors.append(
-                "memory writer is not eligible for the target at the deployed stage"
-            )
+        if packet["writer_agent"] not in self._eligible_writers(brain, packet["write_target"]):
+            errors.append("memory writer is not eligible for the target at the deployed stage")
         created_at = self._parse_timestamp(packet["created_at"], "created_at", errors)
-        if created_at and created_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+        if created_at and created_at > datetime.now(UTC) + timedelta(minutes=5):
             errors.append("memory record created_at is in the future")
         errors.extend(
             self._evidence_errors(
@@ -1046,11 +976,7 @@ class PacketGuard:
         errors.extend(self._lease_match_errors(packet, packet["write_target"], active_leases))
         lease = self._matching_lease(packet, active_leases)
         if lease is not None and created_at is not None:
-            errors.extend(
-                self._timestamp_within_lease_errors(
-                    created_at, "created_at", lease
-                )
-            )
+            errors.extend(self._timestamp_within_lease_errors(created_at, "created_at", lease))
         if packet["status"] == "proposed" and packet["mutation_result_id"] is not None:
             errors.append("proposed memory record cannot claim a mutation result")
         if packet["status"] in {"written", "superseded", "retracted"}:
@@ -1064,11 +990,11 @@ class PacketGuard:
                 errors.append("mutated memory record requires one linked mutation result")
             else:
                 result = matches[0]
-                result_errors = self.validate(
-                    "mutation_result.schema.json", result, active_leases
-                )
+                result_errors = self.validate("mutation_result.schema.json", result, active_leases)
                 if result_errors:
-                    errors.extend(f"linked mutation result invalid: {item}" for item in result_errors)
+                    errors.extend(
+                        f"linked mutation result invalid: {item}" for item in result_errors
+                    )
                 for field in [
                     "mission_id",
                     "resource_id",
@@ -1109,21 +1035,15 @@ class PacketGuard:
                 else packet["constraint_type"]
             )
             allowed = set(
-                self.agents[packet["destination_agent"]].get(
-                    "private_constraint_profiles", []
-                )
+                self.agents[packet["destination_agent"]].get("private_constraint_profiles", [])
             )
             if packet.get("schema_version") == "2.1":
                 if "use_mode" not in packet:
                     errors.append("2.1 private constraint requires use_mode")
                 elif profile not in allowed:
-                    errors.append(
-                        "private constraint profile is not allowed for destination agent"
-                    )
+                    errors.append("private constraint profile is not allowed for destination agent")
             elif not any(item.startswith(f"{packet['constraint_type']}:") for item in allowed):
-                errors.append(
-                    "private constraint type is not allowed for destination agent"
-                )
+                errors.append("private constraint type is not allowed for destination agent")
         if not re.fullmatch(r"[0-9a-f]{64}", packet["source_proof_hash"]):
             errors.append("source_proof_hash must be a lowercase SHA-256 digest")
         if "\n" in packet["constraint_summary"]:
@@ -1131,13 +1051,11 @@ class PacketGuard:
         errors.extend(self._expiring_packet_errors(packet, maximum_hours=168))
         return errors
 
-    def _expiring_packet_errors(
-        self, packet: dict[str, Any], maximum_hours: int
-    ) -> list[str]:
+    def _expiring_packet_errors(self, packet: dict[str, Any], maximum_hours: int) -> list[str]:
         errors: list[str] = []
         issued = self._parse_timestamp(packet["issued_at"], "issued_at", errors)
         expires = self._parse_timestamp(packet["expires_at"], "expires_at", errors)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if issued and expires:
             if expires <= issued:
                 errors.append("constraint expires_at must be after issued_at")
@@ -1160,17 +1078,13 @@ class PacketGuard:
             if packet["expected_state_verified"] is not True:
                 errors.append("verified mutation must affirm the expected state")
             if packet["observed_state"] != packet["expected_state"]:
-                errors.append(
-                    "verified mutation observed_state must exactly match expected_state"
-                )
+                errors.append("verified mutation observed_state must exactly match expected_state")
             if not packet["readback_evidence"]:
                 errors.append("verified mutation requires readback evidence")
             if not packet["verified_at"]:
                 errors.append("verified mutation requires a verification timestamp")
             else:
-                verified_at = self._parse_timestamp(
-                    packet["verified_at"], "verified_at", errors
-                )
+                verified_at = self._parse_timestamp(packet["verified_at"], "verified_at", errors)
             if packet["rollback_test_status"] != "verified":
                 errors.append("verified mutation requires a verified rollback test")
             if not packet["rollback_evidence"]:
@@ -1187,19 +1101,16 @@ class PacketGuard:
             if not packet["verified_at"]:
                 errors.append("rolled-back mutation requires a verification timestamp")
             else:
-                verified_at = self._parse_timestamp(
-                    packet["verified_at"], "verified_at", errors
-                )
-        if packet["status"] not in {"verified", "rolled_back"} and packet["verified_at"] is not None:
+                verified_at = self._parse_timestamp(packet["verified_at"], "verified_at", errors)
+        if (
+            packet["status"] not in {"verified", "rolled_back"}
+            and packet["verified_at"] is not None
+        ):
             errors.append("unverified mutation must not claim a verification timestamp")
         errors.extend(self._lease_match_errors(packet, packet["write_target"], active_leases))
         lease = self._matching_lease(packet, active_leases)
         if lease is not None and verified_at is not None:
-            errors.extend(
-                self._timestamp_within_lease_errors(
-                    verified_at, "verified_at", lease
-                )
-            )
+            errors.extend(self._timestamp_within_lease_errors(verified_at, "verified_at", lease))
         return errors
 
     @staticmethod
@@ -1250,14 +1161,12 @@ class PacketGuard:
         issued = self._parse_timestamp(lease["issued_at"], "lease.issued_at", errors)
         expires = None
         if lease["expires_at"] is not None:
-            expires = self._parse_timestamp(
-                lease["expires_at"], "lease.expires_at", errors
-            )
+            expires = self._parse_timestamp(lease["expires_at"], "lease.expires_at", errors)
         if issued and timestamp < issued:
             errors.append(f"{field} precedes writer-lease issuance")
         if expires and timestamp > expires:
             errors.append(f"{field} occurs after writer-lease expiry")
-        if timestamp > datetime.now(timezone.utc) + timedelta(minutes=5):
+        if timestamp > datetime.now(UTC) + timedelta(minutes=5):
             errors.append(f"{field} is in the future")
         return errors
 
@@ -1271,7 +1180,7 @@ class PacketGuard:
         if parsed.tzinfo is None:
             errors.append(f"{field} must include a timezone")
             return None
-        return parsed.astimezone(timezone.utc)
+        return parsed.astimezone(UTC)
 
 
 def _read_json(path: str) -> Any:
@@ -1305,9 +1214,7 @@ def main(argv: list[str] | None = None) -> int:
         "private_constraint_packets": (
             _read_json(args.private_constraints) if args.private_constraints else None
         ),
-        "mutation_results": (
-            _read_json(args.mutation_results) if args.mutation_results else None
-        ),
+        "mutation_results": (_read_json(args.mutation_results) if args.mutation_results else None),
     }
     errors = guard.validate(args.schema, _read_json(args.packet), **kwargs)
     if errors:

@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import math
-from pathlib import Path
 import stat
 import sys
 import tempfile
 import unittest
 import urllib.parse
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -314,9 +314,7 @@ class TransportTests(unittest.TestCase):
         )
         naps: list[float] = []
 
-        response = send_with_retry(
-            transport, "GET", "https://example.test", {}, sleep=naps.append
-        )
+        response = send_with_retry(transport, "GET", "https://example.test", {}, sleep=naps.append)
 
         self.assertTrue(response.ok)
         self.assertEqual(len(transport.requests), 3)
@@ -461,9 +459,7 @@ class PortfolioParsingTests(unittest.TestCase):
         self.assertTrue(holding.is_short)
 
     def test_closed_and_unnamed_positions_are_dropped(self):
-        self.assertIsNone(
-            parse_position({"instrument": {"symbol": "X"}, "longQuantity": 0})
-        )
+        self.assertIsNone(parse_position({"instrument": {"symbol": "X"}, "longQuantity": 0}))
         self.assertIsNone(parse_position({"instrument": {}, "longQuantity": 5}))
 
     def test_account_totals_weights_and_concentration(self):
@@ -635,8 +631,9 @@ class VerdictTests(unittest.TestCase):
     def setUp(self):
         self.policy = signals.Policy.load(POLICY_PATH)
 
-    def holding(self, symbol="AAA", weight=0.05, average_price=100.0, market_value=1000.0,
-                unrealized=0.0):
+    def holding(
+        self, symbol="AAA", weight=0.05, average_price=100.0, market_value=1000.0, unrealized=0.0
+    ):
         from connectors.schwab.portfolio import Holding
 
         holding = Holding(
@@ -688,9 +685,7 @@ class VerdictTests(unittest.TestCase):
             candles(rising_series(300)),
             self.policy,
         )
-        self.assertTrue(
-            any("stop-loss" in breach for breach in verdict.guardrail_breaches)
-        )
+        self.assertTrue(any("stop-loss" in breach for breach in verdict.guardrail_breaches))
 
     def test_missing_history_yields_no_data_rather_than_a_verdict(self):
         verdict = signals.evaluate(self.holding(), [], self.policy)
@@ -839,8 +834,14 @@ class ReportTests(unittest.TestCase):
         alerts = signals.portfolio_alerts(self.portfolio, self.policy)
         text = report.render_brief(self.portfolio, verdicts, alerts)
 
-        for heading in ("# Portfolio brief", "## Guardrails", "## Actions",
-                        "## Portfolio", "## Holdings", "## Research queue"):
+        for heading in (
+            "# Portfolio brief",
+            "## Guardrails",
+            "## Actions",
+            "## Portfolio",
+            "## Holdings",
+            "## Research queue",
+        ):
             self.assertIn(heading, text)
 
     def test_brief_masks_the_account_number(self):

@@ -7,12 +7,13 @@ container, and every network call goes through a single injectable
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import time
-from typing import Any, Callable, Mapping
 import urllib.error
 import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -53,9 +54,7 @@ def urllib_transport(timeout: float = 30.0) -> Transport:
         headers: Mapping[str, str],
         body: bytes | None,
     ) -> HttpResponse:
-        request = urllib.request.Request(
-            url, data=body, headers=dict(headers), method=method
-        )
+        request = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return HttpResponse(

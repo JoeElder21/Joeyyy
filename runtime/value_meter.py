@@ -28,10 +28,11 @@ import hashlib
 import json
 import math
 import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config" / "value_policy.toml"
@@ -65,7 +66,7 @@ class ValuePolicy:
     exceptions: dict[str, Any]
 
     @classmethod
-    def load(cls, path: Path = POLICY_PATH) -> "ValuePolicy":
+    def load(cls, path: Path = POLICY_PATH) -> ValuePolicy:
         raw = tomllib.loads(path.read_text(encoding="utf-8"))
         threshold = raw["threshold"]
         measurement = raw["measurement"]
@@ -250,7 +251,7 @@ def build_observation(policy: ValuePolicy, payload: dict[str, Any]) -> Observati
         mode=mode,
         agent=payload.get("agent", "unknown"),
         mission_id=payload.get("mission_id", "unknown"),
-        observed_at=payload.get("observed_at") or datetime.now(timezone.utc).isoformat(),
+        observed_at=payload.get("observed_at") or datetime.now(UTC).isoformat(),
         baseline_minutes=baseline_minutes,
         baseline_source=baseline_source,
         agent_minutes=float(payload["agent_minutes"]),
@@ -310,7 +311,7 @@ def _within_window(observation: Observation, policy: ValuePolicy, now: datetime)
     except ValueError:
         return False
     if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
+        stamp = stamp.replace(tzinfo=UTC)
     if stamp > now:
         return False
     return stamp >= now - timedelta(days=policy.observation_window_days)
@@ -324,7 +325,7 @@ def evaluate_mode(
     previously_met: bool = False,
 ) -> ModeVerdict:
     """Return the verdict the evidence supports for one mode."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     threshold = policy.threshold_for(mode)
     for_mode = [obs for obs in observations if obs.mode == mode]
 
@@ -340,9 +341,7 @@ def evaluate_mode(
     for_mode = deduped
 
     relevant = [
-        obs
-        for obs in for_mode
-        if _within_window(obs, policy, now) and not obs.is_clearance
+        obs for obs in for_mode if _within_window(obs, policy, now) and not obs.is_clearance
     ]
 
     verdict = ModeVerdict(
@@ -463,7 +462,7 @@ def _previously_met(
     Reconstructed from the ledger rather than stored, so it survives a fresh
     process and cannot drift from the observations it summarises.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     history = sorted(
         (obs for obs in observations if obs.mode == mode),
         key=lambda obs: obs.observed_at,
@@ -480,7 +479,7 @@ def _previously_met(
         except ValueError:
             continue
         if as_of.tzinfo is None:
-            as_of = as_of.replace(tzinfo=timezone.utc)
+            as_of = as_of.replace(tzinfo=UTC)
         earlier = evaluate_mode(mode, prefix, policy, now=as_of)
         if earlier.verdict == VERDICT_MEETS:
             return True
@@ -575,9 +574,7 @@ class ValueLedger:
         # reported no modes at all, so the documented `no_baseline` verdict never
         # appeared until after a run. Configured modes are always in scope.
         target_modes = sorted(
-            set(modes)
-            if modes
-            else {o.mode for o in observations} | set(policy.baselines)
+            set(modes) if modes else {o.mode for o in observations} | set(policy.baselines)
         )
         verdicts = []
         for mode in target_modes:

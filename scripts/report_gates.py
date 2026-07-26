@@ -35,11 +35,11 @@ def unverified_note(output: str) -> str:
     except json.JSONDecodeError:
         # Non-JSON gate output: report the literal marker rather than claiming
         # there is nothing unverified.
-        return (" (output reports unverified items)"
-                if "unverified" in output else "")
+        return " (output reports unverified items)" if "unverified" in output else ""
 
     if not isinstance(payload, dict):
         return ""
+
     # "registered" is ALSO an unprobed state, and the larger one: every
     # verify_offline = false mount reports it. Naming only the "unverified"
     # ones published a row reading "not probed: filesystem, governance" while
@@ -52,7 +52,8 @@ def unverified_note(output: str) -> str:
 
     names = sorted(
         str(entry.get("name", "unnamed"))
-        for section in payload.values() if isinstance(section, list)
+        for section in payload.values()
+        if isinstance(section, list)
         for entry in section
         if isinstance(entry, dict) and unprobed(entry)
     )
@@ -80,8 +81,10 @@ def missing_dependency_note(output: str) -> str:
     installed = payload.get("installed_count")
     total = (installed + len(missing)) if isinstance(installed, int) else None
     scope = f"{len(missing)} of {total}" if total else f"{len(missing)}"
-    return (f" (runtime not installed: {scope} declared packages missing, "
-            "so this checks declarations only)")
+    return (
+        f" (runtime not installed: {scope} declared packages missing, "
+        "so this checks declarations only)"
+    )
 
 
 def static_validation_note(output: str) -> str:
@@ -104,7 +107,8 @@ def static_validation_note(output: str) -> str:
     if not isinstance(payload, dict):
         return ""
     unexercised = [
-        label for key, label in (
+        label
+        for key, label in (
             ("connectors_called", "no connector called"),
             ("named_agents_invoked", "no named agent invoked"),
             ("real_missions_completed", "no real mission completed"),
@@ -154,7 +158,8 @@ def failure_detail(completed) -> str:
         healthy = ("verified", "registered", "unverified")
         failures = [
             f"{entry.get('name', 'unnamed')}: {entry['status']}"
-            for section in payload.values() if isinstance(section, list)
+            for section in payload.values()
+            if isinstance(section, list)
             for entry in section
             if isinstance(entry, dict)
             and isinstance(entry.get("status"), str)
@@ -165,8 +170,7 @@ def failure_detail(completed) -> str:
 
     def substantive(stream: str) -> str | None:
         lines = [line.strip() for line in stream.splitlines() if line.strip()]
-        useful = [line for line in lines
-                  if line not in "{}[]," and not line.startswith('"')]
+        useful = [line for line in lines if line not in "{}[]," and not line.startswith('"')]
         if not useful:
             return None
         # A traceback's informative line is its last, not its first: "Traceback
@@ -194,7 +198,10 @@ def run_gate(script: str) -> str:
         completed = subprocess.run(
             [sys.executable, str(path)],
             cwd=ROOT,
-            capture_output=True, text=True, timeout=600, check=False,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return f"not measured at build time ({type(error).__name__})"
@@ -203,19 +210,17 @@ def run_gate(script: str) -> str:
     # file such as docs/R&D<draft>.pdf would raise a parse error and destroy the
     # very PDF meant to record the failure. Escape anything derived from output.
     if completed.returncode != 0:
-        return escape(
-            f"FAILED (exit {completed.returncode}) — "
-            f"{failure_detail(completed)[:110]}")
+        return escape(f"FAILED (exit {completed.returncode}) — {failure_detail(completed)[:110]}")
 
     output = completed.stdout.strip()
     if not output:
         return "passed"
-    note = (unverified_note(output) + missing_dependency_note(output)
-            + static_validation_note(output))
+    note = (
+        unverified_note(output) + missing_dependency_note(output) + static_validation_note(output)
+    )
     if '"valid": true' in output:
         checked = re.search(r'"(\w+_checked)":\s*(\d+)', output)
-        detail = (f" — {checked.group(2)} {checked.group(1).replace('_', ' ')}"
-                  if checked else "")
+        detail = f" — {checked.group(2)} {checked.group(1).replace('_', ' ')}" if checked else ""
         return escape(f'passed, "valid": true{detail}{note}')
     return escape(f"passed — {output.splitlines()[-1][:90]}{note}")
 
@@ -232,7 +237,10 @@ def measure_test_suite() -> str:
         completed = subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
             cwd=ROOT,
-            capture_output=True, text=True, timeout=900, check=False,
+            capture_output=True,
+            text=True,
+            timeout=900,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return f"not measured at build time ({type(error).__name__})"
@@ -244,8 +252,7 @@ def measure_test_suite() -> str:
     count = ran.group(1)
     if completed.returncode != 0:
         failures = re.search(r"(FAILED \([^)]*\))", output)
-        return escape(
-            f"{count} tests, {failures.group(1) if failures else 'FAILED'}")
+        return escape(f"{count} tests, {failures.group(1) if failures else 'FAILED'}")
     skipped = re.search(r"skipped=(\d+)", output)
     tail = f" ({skipped.group(1)} skipped)" if skipped else ""
     return f"{count} tests, OK{tail}"
@@ -255,8 +262,9 @@ def count_tracked(pattern: str) -> int:
     """Count tracked files matching a git pathspec, at build time."""
     root = Path(__file__).resolve().parents[1]
     try:
-        out = subprocess.run(["git", "ls-files", pattern], cwd=root,
-                             capture_output=True, text=True, check=False)
+        out = subprocess.run(
+            ["git", "ls-files", pattern], cwd=root, capture_output=True, text=True, check=False
+        )
     except OSError:
         return -1
     # A non-zero exit -- an extracted source archive with no .git, an
@@ -274,14 +282,19 @@ def count_tracked_at(ref: str, pattern: str) -> int:
     """Count matching tracked files at a git ref, for honest before/after deltas."""
     root = Path(__file__).resolve().parents[1]
     try:
-        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
-                             cwd=root, capture_output=True, text=True, check=False)
+        out = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", ref],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return -1
     if out.returncode != 0:
         return -1
     suffix = pattern.lstrip("*")
-    return len([l for l in out.stdout.splitlines() if l.endswith(suffix)])
+    return len([line for line in out.stdout.splitlines() if line.endswith(suffix)])
 
 
 # The tip of main immediately before this work began. Pinned deliberately: a
@@ -313,7 +326,11 @@ def _branch_point() -> str:
     try:
         known = subprocess.run(
             ["git", "cat-file", "-e", f"{PRE_INSTALL_BASELINE}^{{commit}}"],
-            cwd=root, capture_output=True, text=True, check=False)
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return ""
     return PRE_INSTALL_BASELINE if known.returncode == 0 else ""
@@ -323,9 +340,13 @@ def _tracked_set_at(ref: str, suffix: str) -> set[str] | None:
     """The tracked paths with `suffix` at `ref`, or None if unreadable."""
     root = Path(__file__).resolve().parents[1]
     try:
-        out = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref],
-                             cwd=root, capture_output=True, text=True,
-                             check=False)
+        out = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", ref],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return None
     if out.returncode != 0:
@@ -341,9 +362,13 @@ def _known(commit: str) -> bool:
     """Whether this clone actually has `commit`."""
     root = Path(__file__).resolve().parents[1]
     try:
-        out = subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"],
-                             cwd=root, capture_output=True, text=True,
-                             check=False)
+        out = subprocess.run(
+            ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return False
     return out.returncode == 0
@@ -365,7 +390,11 @@ def _contains(commit: str, ancestor: str) -> bool | None:
     try:
         out = subprocess.run(
             ["git", "merge-base", "--is-ancestor", ancestor, commit],
-            cwd=root, capture_output=True, text=True, check=False)
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return None
     return out.returncode == 0
@@ -392,14 +421,18 @@ def _merged_upstream_tips() -> list[str]:
     try:
         out = subprocess.run(
             ["git", "rev-list", "--merges", "--parents", "HEAD"],
-            cwd=root, capture_output=True, text=True, check=False)
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return []
     if out.returncode != 0:
         return []
-    seconds = [parts[2] for parts in
-               (line.split() for line in out.stdout.splitlines())
-               if len(parts) >= 3]
+    seconds = [
+        parts[2] for parts in (line.split() for line in out.stdout.splitlines()) if len(parts) >= 3
+    ]
     tips = []
     for tip in seconds:
         verdict = _contains(tip, BRANCH_ROOT)

@@ -50,9 +50,7 @@ def _db_reachable(host: str, port: int, timeout: float = 2.0) -> bool:
         return False
 
 
-def preconditions(
-    db_host: str | None = None, db_port: int | None = None
-) -> dict:
+def preconditions(db_host: str | None = None, db_port: int | None = None) -> dict:
     host = db_host or os.environ.get("FALKORDB_HOST", "localhost")
     port = db_port or int(os.environ.get("FALKORDB_PORT", "6379"))
     return {
@@ -88,9 +86,7 @@ def run_trial(db_host: str | None = None, db_port: int | None = None) -> dict:
         from graphiti_core import Graphiti
         from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-        driver = FalkorDriver(
-            host=checks["graph_db"]["host"], port=checks["graph_db"]["port"]
-        )
+        driver = FalkorDriver(host=checks["graph_db"]["host"], port=checks["graph_db"]["port"])
         graphiti = Graphiti(graph_driver=driver)
         try:
             await graphiti.build_indices_and_constraints()
@@ -101,9 +97,7 @@ def run_trial(db_host: str | None = None, db_port: int | None = None) -> dict:
                 reference_time=None,
                 group_id=TRIAL_GROUP,
             )
-            results = await graphiti.search(
-                "campaign record trial", group_ids=[TRIAL_GROUP]
-            )
+            results = await graphiti.search("campaign record trial", group_ids=[TRIAL_GROUP])
             return {
                 "status": "completed",
                 "episode_uuid": getattr(getattr(episode, "episode", episode), "uuid", None),

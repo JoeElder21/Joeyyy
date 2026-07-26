@@ -5,9 +5,9 @@ qualify. A harness that always produces a passing evidence record would let any
 mode leave shadow, which is exactly the failure the lifecycle gate exists to stop.
 """
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from runtime.mission_runner import (
     EvidenceRecord,
@@ -22,13 +22,13 @@ SOURCE = "fixture/jeos/calendar-2026-07-27"
 
 
 def spec(**overrides) -> MissionSpec:
-    base = dict(
-        agent=AGENT,
-        mode=MODE,
-        objective="Produce one capacity map from the supplied calendar evidence.",
-        definition_of_done=["Return one source-linked capacity map."],
-        definition_of_done_ids=["capacity-map"],
-        evidence=[
+    base = {
+        "agent": AGENT,
+        "mode": MODE,
+        "objective": "Produce one capacity map from the supplied calendar evidence.",
+        "definition_of_done": ["Return one source-linked capacity map."],
+        "definition_of_done_ids": ["capacity-map"],
+        "evidence": [
             EvidenceRecord(
                 source_ref=SOURCE,
                 source_type="connector_record",
@@ -36,10 +36,10 @@ def spec(**overrides) -> MissionSpec:
                 owner_brain="JEOS",
             )
         ],
-        baseline_minutes=20,
-        baseline_source="joe_declared",
-        required_artifact_types=["capacity_map"],
-    )
+        "baseline_minutes": 20,
+        "baseline_source": "joe_declared",
+        "required_artifact_types": ["capacity_map"],
+    }
     base.update(overrides)
     return MissionSpec(**base)
 
@@ -104,14 +104,14 @@ def handoff_for(prepared, **overrides) -> dict:
 
 # A qualifying mission must have had its result read back, so the default costs
 # used by the happy-path tests include it.
-COSTS = dict(
-    agent_minutes=1.0,
-    review_minutes=2.0,
-    correction_minutes=0.0,
-    maintenance_share_minutes=0.5,
-    readback_performed=True,
-    accepted_first_pass=True,
-)
+COSTS = {
+    "agent_minutes": 1.0,
+    "review_minutes": 2.0,
+    "correction_minutes": 0.0,
+    "maintenance_share_minutes": 0.5,
+    "readback_performed": True,
+    "accepted_first_pass": True,
+}
 
 
 class RunnerHarness(unittest.TestCase):
@@ -189,9 +189,7 @@ class CompleteTests(RunnerHarness):
         evidence = self.runner.complete(prepared, rogue, **COSTS)
         self.assertFalse(evidence.connector_isolation_verified)
         self.assertFalse(evidence.qualifies_mode)
-        self.assertTrue(
-            any("reached past its evidence" in error for error in evidence.errors)
-        )
+        self.assertTrue(any("reached past its evidence" in error for error in evidence.errors))
 
     def test_missing_criterion_validation_fails_the_mission(self):
         prepared = self.runner.prepare(spec())
@@ -232,9 +230,7 @@ class CompleteTests(RunnerHarness):
         self.runner.complete(prepared, handoff_for(prepared), **COSTS)
         path = self.runner.ledger.path
         # Rewrite the prepare entry, which a later entry chains to.
-        text = path.read_text(encoding="utf-8").replace(
-            "mission_prepared", "mission_tampered", 1
-        )
+        text = path.read_text(encoding="utf-8").replace("mission_prepared", "mission_tampered", 1)
         path.write_text(text, encoding="utf-8")
         self.assertNotEqual(self.runner.ledger.verify(), [])
 
@@ -351,9 +347,7 @@ class MissionCatalogTests(RunnerHarness):
     def test_definition_of_done_ids_line_up_with_criteria(self):
         for key, entry in self.catalog.items():
             with self.subTest(mission=key):
-                self.assertEqual(
-                    len(entry.definition_of_done), len(entry.definition_of_done_ids)
-                )
+                self.assertEqual(len(entry.definition_of_done), len(entry.definition_of_done_ids))
                 self.assertTrue(entry.baseline_prompt.strip())
 
     def test_catalog_covers_both_brains(self):
@@ -425,9 +419,7 @@ class BrainSeparationLoaderTests(unittest.TestCase):
             data = original(text)
             # Force the JEOS manifest to re-declare an APEX agent.
             if data.get("brain") == "JEOS":
-                data["agents"]["apex_war_architect"] = dict(
-                    next(iter(data["agents"].values()))
-                )
+                data["agents"]["apex_war_architect"] = dict(next(iter(data["agents"].values())))
             apex_seen["done"] = True
             return data
 
@@ -468,9 +460,7 @@ class GateIntegrityTests(RunnerHarness):
         """Citations outside artifact records were previously unchecked."""
         prepared = self.runner.prepare(spec())
         sneaky = handoff_for(prepared)
-        sneaky["findings"] = [
-            "Cross-referenced gmail://thread/undelegated-1 for extra context."
-        ]
+        sneaky["findings"] = ["Cross-referenced gmail://thread/undelegated-1 for extra context."]
         evidence = self.runner.complete(prepared, sneaky, **COSTS)
         self.assertFalse(evidence.connector_isolation_verified)
         self.assertFalse(evidence.qualifies_mode)
@@ -498,9 +488,7 @@ class GateIntegrityTests(RunnerHarness):
                 required_artifact_types=["qa_risk_packet"],
             )
         )
-        self.assertEqual(
-            prepared.delegation["required_artifact_types"], ["qa_risk_packet"]
-        )
+        self.assertEqual(prepared.delegation["required_artifact_types"], ["qa_risk_packet"])
 
     def test_unregistered_artifact_type_is_refused(self):
         with self.assertRaises(MissionRejected):
@@ -542,9 +530,7 @@ class RealMissionProvenanceTests(RunnerHarness):
     """A fixture must never satisfy a "controlled real mission" gate."""
 
     def test_synthetic_evidence_does_not_qualify_a_mode(self):
-        prepared = self.runner.prepare(
-            spec(evidence=[EvidenceRecord(SOURCE, "synthetic")])
-        )
+        prepared = self.runner.prepare(spec(evidence=[EvidenceRecord(SOURCE, "synthetic")]))
         evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
         self.assertEqual(evidence.errors, [])
         self.assertFalse(evidence.real_evidence)
@@ -561,9 +547,7 @@ class RealMissionProvenanceTests(RunnerHarness):
         prepared = self.runner.prepare(
             spec(
                 evidence=[
-                    EvidenceRecord(
-                        SOURCE, "connector_record", content="real", owner_brain="JEOS"
-                    ),
+                    EvidenceRecord(SOURCE, "connector_record", content="real", owner_brain="JEOS"),
                     EvidenceRecord("fixture/synthetic-1", "synthetic"),
                 ]
             )
@@ -647,12 +631,8 @@ class LiveEvidenceRealismTests(RunnerHarness):
             )
         )
         handoff = handoff_for(prepared)
-        handoff["artifacts"][0]["records"][0]["source_refs"] = [
-            "gmail://thread/agency-1"
-        ]
-        handoff["artifacts"][0]["records"][0]["source_locator"] = (
-            "gmail://thread/agency-1"
-        )
+        handoff["artifacts"][0]["records"][0]["source_refs"] = ["gmail://thread/agency-1"]
+        handoff["artifacts"][0]["records"][0]["source_locator"] = "gmail://thread/agency-1"
         handoff["evidence"] = prepared.delegation["allowed_evidence"]
         handoff["findings"] = [
             "Review portal link quoted from the delegated email: "
@@ -676,12 +656,8 @@ class LiveEvidenceRealismTests(RunnerHarness):
             )
         )
         handoff = handoff_for(prepared)
-        handoff["artifacts"][0]["records"][0]["source_refs"] = [
-            "gmail://thread/agency-1"
-        ]
-        handoff["artifacts"][0]["records"][0]["source_locator"] = (
-            "gmail://thread/agency-1"
-        )
+        handoff["artifacts"][0]["records"][0]["source_refs"] = ["gmail://thread/agency-1"]
+        handoff["artifacts"][0]["records"][0]["source_locator"] = "gmail://thread/agency-1"
         handoff["evidence"] = prepared.delegation["allowed_evidence"]
         handoff["findings"] = ["Also checked drive://file/undelegated-9"]
         evidence = self.runner.complete(prepared, handoff, **COSTS)
@@ -704,11 +680,7 @@ class EvidenceOwnershipTests(RunnerHarness):
     def test_real_evidence_without_declared_ownership_is_refused(self):
         with self.assertRaises(MissionRejected) as caught:
             self.runner.prepare(
-                spec(
-                    evidence=[
-                        EvidenceRecord(SOURCE, "connector_record", content="x")
-                    ]
-                )
+                spec(evidence=[EvidenceRecord(SOURCE, "connector_record", content="x")])
             )
         self.assertIn("owner_brain", str(caught.exception))
 

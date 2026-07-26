@@ -10,6 +10,17 @@
 # server in-container and list its tools with no credentials.
 # activation = "..."     -> what unlocks the mount when credentials or a
 # workstation are required.
+# expected_tools = [...] -> the tools this mount must actually offer. A
+# completed handshake proved only that a process started; verification
+# reported success whatever list_tools() returned, including an empty one.
+# Declaring the contract makes a regressed tool registration a CI failure
+# rather than a green check.
+# tools_are_exhaustive = true -> expected_tools is the COMPLETE surface, so an
+# undeclared tool fails verification too. Checking only for missing tools let a
+# server add anything and stay green; on a mount granted to agents = ["*"] that
+# is a new capability reaching the whole corps unreviewed. Set it where this
+# repository owns the server and the list is the full contract; leave it off
+# where the list is the subset we depend on from an upstream release.
 # env = [...]            -> the ONLY variables the launcher forwards to this
 # mount. Anything not listed is withheld, including variables the server reads
 # with a silent default, so a mount must declare every one it depends on.
@@ -24,13 +35,43 @@ command = ["python", "scripts/governance_mcp_server.py"]
 agents = ["*"]
 purpose = "Packet validation, fail-closed admission, return validation, audit verification, roster."
 verify_offline = true
+# This repository's own server, so the contract is exact: these five are the
+# governance surface every agent depends on. Mounted to every agent, which is
+# why the list is closed rather than a floor -- a sixth tool appearing here
+# reaches the entire corps.
+tools_are_exhaustive = true
+expected_tools = [
+  "admit_delegation_packet",
+  "list_registered_roster",
+  "validate_handoff_return",
+  "validate_packet",
+  "verify_audit_ledger",
+]
 
 [[mounts]]
 name = "filesystem"
 require_grant = true
 grant_scope = "Full read/write on every path the server is started against. A grant does not narrow it to a subtree."
 network = true
-command = ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
+# Version-pinned. `npx -y @modelcontextprotocol/server-filesystem` with no
+# `@<version>` fetches and executes whatever the registry currently serves, so
+# an unchanged commit could run different code on every CI run and on Joe's
+# workstation. That is the FakeGit-class exposure recorded in
+# docs/FRONTIER_REPO_SCAN_2026-07-24.md, applied to a package this repository
+# launches on purpose. Bumping this pin is a reviewed change, not a silent one.
+command = ["npx", "-y", "@modelcontextprotocol/server-filesystem@2026.7.10", "."]
+# The subset this mount exists to provide. Deliberately not the full listing:
+# naming every tool an upstream release happens to ship would turn any additive
+# upstream change into a CI failure. These are the ones a scoped file mount is
+# useless without.
+expected_tools = [
+  "create_directory",
+  "directory_tree",
+  "edit_file",
+  "list_directory",
+  "read_text_file",
+  "write_file",
+]
 agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
 purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
 verify_offline = true

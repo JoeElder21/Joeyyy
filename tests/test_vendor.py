@@ -81,9 +81,7 @@ EXPECTED_SUBMODULES = {
     "vendor/awesome-civil-engineering": (
         "https://github.com/QuantumNovice/awesome-civil-engineering.git"
     ),
-    "vendor/civil-innovation-agent": (
-        "https://github.com/Sun3hine7/civil-innovation-agent.git"
-    ),
+    "vendor/civil-innovation-agent": ("https://github.com/Sun3hine7/civil-innovation-agent.git"),
     "vendor/relay": "https://github.com/AgentWorkforce/relay.git",
 }
 
@@ -134,8 +132,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         parser = configparser.ConfigParser()
         parser.read(ROOT / ".gitmodules", encoding="utf-8")
         declared = {
-            parser.get(section, "path"): parser.get(section, "url")
-            for section in parser.sections()
+            parser.get(section, "path"): parser.get(section, "url") for section in parser.sections()
         }
         self.assertEqual(declared, EXPECTED_SUBMODULES)
 
@@ -188,17 +185,11 @@ class VendorSubmoduleTests(unittest.TestCase):
         for path, sha in self._index_gitlinks().items():
             name = path.split("/")[-1]
             row = next(
-                (
-                    line
-                    for line in readme.splitlines()
-                    if f"`{name}`" in line and "|" in line
-                ),
+                (line for line in readme.splitlines() if f"`{name}`" in line and "|" in line),
                 None,
             )
             with self.subTest(submodule=path):
-                self.assertIsNotNone(
-                    row, f"{name} has no provenance row in vendor/README.md"
-                )
+                self.assertIsNotNone(row, f"{name} has no provenance row in vendor/README.md")
                 recorded = re.findall(r"`([0-9a-f]{7,40})`", row or "")
                 self.assertTrue(recorded, f"{name} row records no pin SHA: {row}")
                 self.assertTrue(
@@ -231,9 +222,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         contents_row = next(
             (
                 line
-                for line in (ROOT / "vendor" / "README.md")
-                .read_text(encoding="utf-8")
-                .splitlines()
+                for line in (ROOT / "vendor" / "README.md").read_text(encoding="utf-8").splitlines()
                 if "`relay`" in line and RELAY_TAG_COMMIT[:7] in line
             ),
             None,
@@ -243,9 +232,7 @@ class VendorSubmoduleTests(unittest.TestCase):
             f"vendor/README.md has no relay contents row recording {RELAY_TAG_COMMIT[:7]}",
         )
         recorded_tag = re.search(r"tag `([^`]+)`", contents_row or "")
-        self.assertIsNotNone(
-            recorded_tag, f"relay contents row records no tag: {contents_row}"
-        )
+        self.assertIsNotNone(recorded_tag, f"relay contents row records no tag: {contents_row}")
         self.assertEqual(
             recorded_tag.group(1),
             RELAY_TAG,
@@ -266,9 +253,7 @@ class VendorSubmoduleTests(unittest.TestCase):
             source = ROOT / submodule / relative
             with self.subTest(submodule=submodule):
                 if not source.exists():
-                    self.skipTest(
-                        f"{submodule} not checked out; run git submodule update --init"
-                    )
+                    self.skipTest(f"{submodule} not checked out; run git submodule update --init")
                 digest = hashlib.sha256(source.read_bytes()).hexdigest()
                 self.assertEqual(
                     digest,
@@ -331,9 +316,7 @@ class VendorSubmoduleTests(unittest.TestCase):
         vendor_row = next(
             (
                 line
-                for line in (ROOT / "vendor" / "README.md")
-                .read_text(encoding="utf-8")
-                .splitlines()
+                for line in (ROOT / "vendor" / "README.md").read_text(encoding="utf-8").splitlines()
                 if "`relay`" in line and "agent-relay@" in line
             ),
             None,
@@ -373,9 +356,7 @@ class VendorSubmoduleTests(unittest.TestCase):
             if len(cells) == 2:
                 rows[cells[0]] = cells[1]
 
-        self.assertIn(
-            "Declared version", rows, "connector README has no Declared version row"
-        )
+        self.assertIn("Declared version", rows, "connector README has no Declared version row")
         # Exact comparison against the manifest spec, not a substring search:
         # `version` is the bare number, so `in` also accepts `^111.2.0` and
         # `^11.2.0 || ^12.0.0` — ranges that install something the pinned
@@ -428,14 +409,10 @@ class VendorSubmoduleTests(unittest.TestCase):
             declared_range = (entry.get("engines") or {}).get("node")
             if not declared_range:
                 continue
-            for match in re.finditer(
-                r">=\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?", declared_range
-            ):
+            for match in re.finditer(r">=\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?", declared_range):
                 major = int(match.group(1))
                 if major >= 22:
-                    bounds.add(
-                        (major, int(match.group(2) or 0), int(match.group(3) or 0))
-                    )
+                    bounds.add((major, int(match.group(2) or 0), int(match.group(3) or 0)))
 
         self.assertTrue(bounds, "no Node 22+ bound found in the locked tree")
         major, minor, patch = max(bounds)
@@ -474,9 +451,7 @@ class VendorScannerExclusionTests(unittest.TestCase):
         matching gitlink would be inert rather than loud. This makes it loud.
         """
         if not self.has_git_index:
-            self.skipTest(
-                "no Git index here (source archive); CI checkout validates this gate"
-            )
+            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
         self.assertEqual(submodule_paths(ROOT), gitlink_paths(ROOT))
 
     def test_scans_gate_on_index_proven_gitlinks_not_declarations(self) -> None:
@@ -496,9 +471,7 @@ class VendorScannerExclusionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "config").mkdir()
-            (root / "config" / "settings.toml").write_text(
-                "k = 'v'\n", encoding="utf-8"
-            )
+            (root / "config" / "settings.toml").write_text("k = 'v'\n", encoding="utf-8")
             run("git", "add", "-A")
             run("git", "commit", "-qm", "fixture")
 
@@ -567,9 +540,7 @@ class VendorScannerExclusionTests(unittest.TestCase):
 
     def test_upstream_files_are_excluded_from_the_privacy_contract(self) -> None:
         if not self.has_git_index:
-            self.skipTest(
-                "no Git index here (source archive); CI checkout validates this gate"
-            )
+            self.skipTest("no Git index here (source archive); CI checkout validates this gate")
         for submodule in EXPECTED_SUBMODULES:
             with self.subTest(submodule=submodule):
                 self.assertTrue(is_vendored(ROOT / submodule / "README.md", ROOT))
@@ -619,9 +590,7 @@ class VendorScannerExclusionTests(unittest.TestCase):
             guard.subprocess.run = original
 
 
-@unittest.skipUnless(
-    _git_available(), "no git binary; these fixtures build real repositories"
-)
+@unittest.skipUnless(_git_available(), "no git binary; these fixtures build real repositories")
 class TrackedSymlinkScanTests(unittest.TestCase):
     """Gitlinks are dropped by index mode, never by probing the filesystem.
 
@@ -684,9 +653,7 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             run("git", "add", "-A")
             run("git", "commit", "-qm", "fixture")
 
-            self.assertTrue(
-                (root / "reference.md").exists(), "fixture link should resolve"
-            )
+            self.assertTrue((root / "reference.md").exists(), "fixture link should resolve")
             findings = scan_repository(root)
             self.assertTrue(
                 any("email address" in finding for finding in findings),
@@ -703,9 +670,7 @@ class TrackedSymlinkScanTests(unittest.TestCase):
             )
 
 
-@unittest.skipUnless(
-    _git_available(), "no git binary; these fixtures build real repositories"
-)
+@unittest.skipUnless(_git_available(), "no git binary; these fixtures build real repositories")
 class StaleGitmodulesScanTests(unittest.TestCase):
     """The tracked-file scan trusts the index mode, never `.gitmodules` text.
 
@@ -794,9 +759,7 @@ class ForeignIndexScanTests(unittest.TestCase):
                 tracked_paths(extracted),
                 "an ancestor repository's index was reported as this tree's",
             )
-            scanned = {
-                str(path.relative_to(extracted)) for path in repository_files(extracted)
-            }
+            scanned = {str(path.relative_to(extracted)) for path in repository_files(extracted)}
             self.assertIn(
                 "leaked.md",
                 scanned,
