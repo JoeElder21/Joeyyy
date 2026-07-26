@@ -76,9 +76,15 @@ ever opening the new file. Pass the changed and untracked paths explicitly, or
 stage them first; running only the bare form before committing is how a new
 credential-bearing file reaches a commit with a green gate behind it.
 
+NUL-delimited, and after `--`, so a filename cannot become an option. Word
+splitting on `$(...)` let a file named `--help` land as the scanner's first
+argument: it printed usage, exited 0, and scanned none of the other paths — a
+green gate over an unscanned tree, chosen by whoever named the file.
+
 ```bash
 # Scans tracked files AND anything new this session has written.
-python scripts/privacy_guard.py $(git diff --name-only; git ls-files --others --exclude-standard)
+{ git diff --name-only -z; git ls-files --others --exclude-standard -z; } \
+  | xargs -0 --no-run-if-empty python scripts/privacy_guard.py --
 python scripts/privacy_guard.py            # tracked tree, after the above
 python scripts/validate_specialist_corps.py
 python scripts/verify_runtime_stack.py
