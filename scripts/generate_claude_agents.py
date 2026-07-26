@@ -76,6 +76,15 @@ def load_manifests() -> dict[str, dict[str, Any]]:
         manifest_path = ROOT / "brains" / brain / "agents.toml"
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
         for name, meta in manifest["agents"].items():
+            if name in merged:
+                # An agent id present in both brains would silently overwrite one
+                # projection with the other's brain lock. That is a governance
+                # failure, so fail loudly instead of generating a wrong corps.
+                raise ValueError(
+                    f"agent {name!r} is registered in both brain manifests "
+                    f"({merged[name]['brain']} and {manifest['brain']}); "
+                    "brain separation is violated"
+                )
             entry = dict(meta)
             entry["brain"] = manifest["brain"]
             entry["namespace_prefix"] = manifest["namespace_prefix"]

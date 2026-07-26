@@ -106,7 +106,10 @@ class RunnerHarness(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        self.runner = MissionRunner(ledger_path=Path(self._tmp.name) / "missions.jsonl")
+        self.runner = MissionRunner(
+            ledger_path=Path(self._tmp.name) / "missions.jsonl",
+            value_ledger_path=Path(self._tmp.name) / "value.jsonl",
+        )
 
 
 class PrepareTests(RunnerHarness):
@@ -342,3 +345,82 @@ class MissionCatalogTests(RunnerHarness):
     def test_catalog_covers_both_brains(self):
         brains = {self.runner.roster[e.agent]["brain"] for e in self.catalog.values()}
         self.assertEqual(brains, {"APEX", "JEOS"})
+
+
+class ValueEvidenceCouplingTests(RunnerHarness):
+    """Lifecycle evidence and value evidence must be written by the same call.
+
+    The first version of the harness built a value observation and dropped it,
+    so the runbook told Joe to read a file nothing ever wrote.
+    """
+
+    def test_completing_a_mission_persists_the_value_observation(self):
+        from runtime.value_meter import ValuePolicy
+
+        prepared = self.runner.prepare(spec())
+        evidence = self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+
+        self.assertTrue(evidence.value_recorded)
+        self.assertTrue(self.runner.value_ledger.path.exists())
+        recorded = self.runner.value_ledger.observations(ValuePolicy.load())
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0].mode, MODE)
+        self.assertEqual(recorded[0].baseline_minutes, 20)
+
+    def test_the_reported_value_ledger_path_is_the_one_the_runbook_names(self):
+        from runtime.mission_runner import DEFAULT_VALUE_LEDGER
+
+        self.assertEqual(DEFAULT_VALUE_LEDGER.name, "value.jsonl")
+        self.assertEqual(DEFAULT_VALUE_LEDGER.parent.name, "audit")
+
+    def test_a_mission_whose_value_cannot_be_recorded_does_not_qualify(self):
+        """Fail closed: no value record, no promotion credit."""
+        prepared = self.runner.prepare(spec())
+        evidence = self.runner.complete(
+            prepared,
+            handoff_for(prepared),
+            agent_minutes=1.0,
+            review_minutes=2.0,
+            correction_minutes=0.0,
+            maintenance_share_minutes=0.5,
+            incident_minutes=-1.0,  # invalid: rejected by the value meter
+        )
+        self.assertFalse(evidence.value_recorded)
+        self.assertFalse(evidence.qualifies_mode)
+        self.assertTrue(any("value observation rejected" in e for e in evidence.errors))
+
+    def test_observations_accumulate_across_missions(self):
+        from runtime.value_meter import ValuePolicy
+
+        for _ in range(3):
+            prepared = self.runner.prepare(spec())
+            self.runner.complete(prepared, handoff_for(prepared), **COSTS)
+        recorded = self.runner.value_ledger.observations(ValuePolicy.load())
+        self.assertEqual(len(recorded), 3)
+
+
+class BrainSeparationLoaderTests(unittest.TestCase):
+    def test_an_agent_in_both_manifests_is_a_hard_failure(self):
+        """A duplicate agent id across brains is a separation breach, not a merge."""
+        import runtime.mission_runner as module
+
+        original = module.tomllib.loads
+        apex_seen = {"done": False}
+
+        def fake_loads(text):
+            data = original(text)
+            # Force the JEOS manifest to re-declare an APEX agent.
+            if data.get("brain") == "JEOS":
+                data["agents"]["apex_war_architect"] = dict(
+                    next(iter(data["agents"].values()))
+                )
+            apex_seen["done"] = True
+            return data
+
+        module.tomllib.loads = fake_loads
+        try:
+            with self.assertRaises(module.MissionRejected) as caught:
+                module.load_brain_roster()
+            self.assertIn("both brain manifests", str(caught.exception))
+        finally:
+            module.tomllib.loads = original

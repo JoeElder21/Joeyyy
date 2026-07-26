@@ -140,5 +140,29 @@ class ContractProjectionFidelityTests(unittest.TestCase):
                 self.assertIn(instructions, content)
 
 
+
+class BrainSeparationTests(unittest.TestCase):
+    def test_duplicate_agent_across_manifests_fails_generation(self):
+        """A silent overwrite would emit a projection with the wrong brain lock."""
+        import scripts.generate_claude_agents as module
+
+        original = module.tomllib.loads
+
+        def fake_loads(text):
+            data = original(text)
+            if data.get("brain") == "JEOS":
+                data["agents"]["apex_war_architect"] = dict(
+                    next(iter(data["agents"].values()))
+                )
+            return data
+
+        module.tomllib.loads = fake_loads
+        try:
+            with self.assertRaises(ValueError) as caught:
+                module.load_manifests()
+            self.assertIn("both brain manifests", str(caught.exception))
+        finally:
+            module.tomllib.loads = original
+
 if __name__ == "__main__":
     unittest.main()

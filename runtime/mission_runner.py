@@ -43,10 +43,17 @@ from scripts.agent_runtime import (
     admit_delegation,
     validate_specialist_return,
 )
+from runtime.value_meter import (
+    ObservationRejected,
+    ValueLedger,
+    ValuePolicy,
+    build_observation,
+)
 from scripts.packet_guard import PacketGuard
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = ROOT / "audit" / "missions.jsonl"
+DEFAULT_VALUE_LEDGER = ROOT / "audit" / "value.jsonl"
 
 # PacketGuard keys its schema table by file name.
 DELEGATION_SCHEMA = "delegation_packet.schema.json"
@@ -67,6 +74,14 @@ def load_brain_roster(root: Path = ROOT) -> dict[str, dict[str, Any]]:
             (root / "brains" / brain / "agents.toml").read_text(encoding="utf-8")
         )
         for name, meta in manifest["agents"].items():
+            if name in roster:
+                # The same agent id in both manifests is a brain-separation
+                # failure, not a merge conflict to resolve silently.
+                raise MissionRejected(
+                    f"agent {name!r} is registered in both brain manifests "
+                    f"({roster[name]['brain']} and {manifest['brain']}); "
+                    "brain separation is violated"
+                )
             entry = dict(meta)
             entry["brain"] = manifest["brain"]
             entry["roundtable_namespace"] = manifest["roundtable_namespace"]
@@ -180,6 +195,7 @@ class MissionEvidence:
     errors: list[str]
     ledger_entry: dict[str, Any] | None
     value_observation: dict[str, Any] | None
+    value_recorded: bool = False
 
     @property
     def qualifies_mode(self) -> bool:
@@ -188,6 +204,7 @@ class MissionEvidence:
             self.status == "completed"
             and self.typed_return_valid
             and self.connector_isolation_verified
+            and self.value_recorded
             and not self.errors
         )
 
@@ -202,6 +219,7 @@ class MissionEvidence:
             "typed_return_valid": self.typed_return_valid,
             "connector_isolation_verified": self.connector_isolation_verified,
             "readback_performed": self.readback_performed,
+            "value_recorded": self.value_recorded,
             "errors": self.errors,
             "qualifies_mode": self.qualifies_mode,
             "value_observation": self.value_observation,
@@ -216,11 +234,18 @@ class MissionRunner:
         root: Path = ROOT,
         ledger_path: Path | None = None,
         guard: PacketGuard | None = None,
+        value_ledger_path: Path | None = None,
+        value_policy: ValuePolicy | None = None,
     ) -> None:
         self.root = root
         self.roster = load_brain_roster(root)
         self.guard = guard or PacketGuard(root)
         self.ledger = AuditLedger(ledger_path or DEFAULT_LEDGER)
+        # Lifecycle evidence and value evidence are written by the same call, so
+        # a mission cannot land in the promotion record while leaving no trace of
+        # what it cost Joe.
+        self.value_ledger = ValueLedger(value_ledger_path or DEFAULT_VALUE_LEDGER)
+        self.value_policy = value_policy or ValuePolicy.load()
 
     # ---------------------------------------------------------------- prepare
 
@@ -400,6 +425,18 @@ class MissionRunner:
             "notes": notes,
         }
 
+        # Persist the value observation, fail-closed. A mission whose cost cannot
+        # be recorded does not get to count toward promotion: otherwise a mode
+        # could accumulate lifecycle evidence while its value stayed invisible.
+        value_recorded = False
+        try:
+            self.value_ledger.record(
+                build_observation(self.value_policy, value_observation)
+            )
+            value_recorded = True
+        except ObservationRejected as rejection:
+            errors.append(f"value observation rejected: {rejection}")
+
         evidence = MissionEvidence(
             delegation_id=delegation["delegation_id"],
             mission_id=delegation["mission_id"],
@@ -413,6 +450,7 @@ class MissionRunner:
             errors=errors,
             ledger_entry=None,
             value_observation=value_observation,
+            value_recorded=value_recorded,
         )
 
         evidence.ledger_entry = self.ledger.append("mission_completed", evidence.to_json())

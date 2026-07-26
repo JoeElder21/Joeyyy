@@ -12,8 +12,10 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
+import tempfile
 from typing import Any
 
 
@@ -213,11 +215,38 @@ class TrustedLauncher:
         return {item for item in used if isinstance(item, str)}
 
     def _consume_grant_id(self, grant_id: str) -> None:
+        """Record a consumed grant, replacing the ledger atomically.
+
+        A torn write here is unrecoverable rather than merely inconvenient:
+        ``_used_grants()`` raises ``GrantDeniedError`` on a parse failure, so a
+        half-written ledger fails every subsequent launch closed until a human
+        repairs the file by hand. Writing to a temp file in the same directory
+        and calling ``os.replace`` means a reader sees either the old ledger or
+        the new one, never a partial one.
+        """
         used = self._used_grants()
         used.add(grant_id)
         self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"used_grants": sorted(used)}
-        self.ledger_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        payload = json.dumps({"used_grants": sorted(used)}, indent=2)
+
+        handle = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=self.ledger_path.parent,
+            prefix=f".{self.ledger_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        )
+        temp_path = Path(handle.name)
+        try:
+            with handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.ledger_path)
+        except BaseException:
+            temp_path.unlink(missing_ok=True)
+            raise
 
 
 __all__ = [

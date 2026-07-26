@@ -204,3 +204,38 @@ class ScriptsTrustedLauncherTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LedgerDurabilityTests(unittest.TestCase):
+    """A torn ledger write bricks every future launch, so the write must be atomic."""
+
+    def test_consume_grant_replaces_the_ledger_atomically(self):
+        import inspect
+
+        from runtime.trusted_launcher import TrustedLauncher
+
+        source = inspect.getsource(TrustedLauncher._consume_grant_id)
+        self.assertIn("os.replace", source)
+        self.assertIn("os.fsync", source)
+        # The real path must never be opened for writing directly.
+        self.assertNotIn("self.ledger_path.write_text", source)
+
+    def test_no_temp_files_are_left_behind_after_a_successful_consume(self):
+        import tempfile as _tempfile
+        from pathlib import Path as _Path
+
+        from runtime.trusted_launcher import TrustedLauncher
+
+        with _tempfile.TemporaryDirectory() as tmp:
+            ledger = _Path(tmp) / "grants.json"
+            launcher = TrustedLauncher.__new__(TrustedLauncher)
+            launcher.ledger_path = ledger
+            launcher._consume_grant_id("grant-1")
+            launcher._consume_grant_id("grant-2")
+
+            import json as _json
+
+            payload = _json.loads(ledger.read_text(encoding="utf-8"))
+            self.assertEqual(payload["used_grants"], ["grant-1", "grant-2"])
+            leftovers = [p.name for p in _Path(tmp).iterdir() if p.name != "grants.json"]
+            self.assertEqual(leftovers, [])
