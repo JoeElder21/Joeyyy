@@ -185,6 +185,39 @@ def _persisted_login_paths() -> list[Path]:
     ]
 
 
+# The worktree readings a proven claim depends on. Named in one place so the
+# sampling sites and the gate that reads them cannot fall out of step.
+TREE_SAMPLES = ("tree_dirty", "tree_dirty_after")
+
+
+def tree_dirty() -> bool | str:
+    """Whether the worktree differs from its commit, or `"unknown"`.
+
+    Extracted so it can be asked TWICE. `provenance()` samples it before the
+    run, and a sample taken before pytest cannot see a worktree that the run
+    itself modified -- a dispatched specialist writing a file, a tool call
+    leaving a scratch artifact. The pre-run sample said "clean", the artifact
+    recorded the commit, and the code that actually passed was no longer the
+    code at that commit.
+
+    `"unknown"` outside a checkout, never `False`. Absence of evidence that the
+    tree is dirty is not evidence that it is clean, and the caller compares
+    against `False` identically rather than for truthiness.
+    """
+    try:
+        return bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=Path(__file__).resolve().parent,
+            ).stdout.strip()
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
 def provenance() -> dict:
     """What produced this result, recorded so a score stays interpretable.
 
@@ -212,20 +245,13 @@ def provenance() -> dict:
             check=True,
             cwd=Path(__file__).resolve().parent,
         ).stdout.strip()
-        record["tree_dirty"] = bool(
-            subprocess.run(
-                ["git", "status", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=Path(__file__).resolve().parent,
-            ).stdout.strip()
-        )
     except (OSError, subprocess.CalledProcessError):
         # A result produced outside a checkout is still a result; it just
         # cannot claim a commit. Saying so beats omitting the field.
         record["commit"] = "unknown"
-        record["tree_dirty"] = "unknown"
+    # Sampled through the same helper the post-run check uses, so the two
+    # readings cannot disagree about what "dirty" means.
+    record["tree_dirty"] = tree_dirty()
 
     for package in ("deepeval", "pytest"):
         try:
@@ -356,6 +382,13 @@ def execute(stamp: str | None) -> int:
         ]
     )
 
+    # The second worktree sample, taken AFTER pytest and before anything is
+    # recorded as proven. `evals/output/` is gitignored, so writing the run's
+    # own results cannot trip this; what it catches is the run modifying the
+    # repository -- which is exactly what a wired specialist dispatch will be
+    # able to do.
+    report.setdefault("provenance", {})["tree_dirty_after"] = tree_dirty()
+
     # Without this, every published run reported `modes_proven: 0` permanently:
     # coverage.json was written before pytest and nothing read results.xml
     # afterwards, so the harness could never record the passing-run evidence its
@@ -398,8 +431,24 @@ def _record_passes(report: dict, results: Path, identifier: str) -> dict:
     # still executes and still writes its results -- only the PROVEN claim is
     # withheld, so a dirty-tree run remains useful for iteration and simply
     # cannot be cited for promotion.
-    dirty = report.get("provenance", {}).get("tree_dirty")
-    if dirty is not False:
+    #
+    # BOTH samples, before and after pytest. The pre-run reading cannot see a
+    # worktree the run itself modified -- a dispatched specialist writing a
+    # file, a tool call leaving a scratch artifact -- so a run that started
+    # clean and ended dirty was credited to a commit whose code is no longer
+    # what passed. Enumerated rather than checked one at a time: a third
+    # sample added later must be a one-line change here, not a third branch
+    # someone forgets to write.
+    #
+    # A MISSING sample is not a clean one. `_record_passes` is reachable
+    # directly, and a caller that omits the post-run reading would otherwise
+    # get the proven claim for free -- the same "absent means permitted"
+    # shape the policy gate has removed repeatedly.
+    provenance_record = report.get("provenance", {})
+    samples = {name: provenance_record.get(name, "missing") for name in TREE_SAMPLES}
+    unclean = {name: value for name, value in samples.items() if value is not False}
+    if unclean:
+        dirty = ", ".join(f"{name}={value!r}" for name, value in sorted(unclean.items()))
         report["modes_proven"] = 0
         # `False`, not `[]`. `Coverage.summary()` emits this key as a BOOLEAN
         # (`bool(self.modes) and not self.unproven`), and the withholding path
@@ -411,9 +460,10 @@ def _record_passes(report: dict, results: Path, identifier: str) -> dict:
         # "absent" become indistinguishable downstream.
         report["behavioral_modes_proven"] = False
         report["evidence_withheld"] = (
-            f"tree_dirty={dirty!r}: results were produced from a working tree that does "
-            "not match its commit, so no mode can be recorded as proven. Commit or "
-            "stash, then re-run."
+            f"{dirty}: the worktree could not be shown to match its commit both "
+            "before and after the run, so no mode can be recorded as proven. "
+            "A 'missing' sample was never taken; True means the tree differed. "
+            "Commit or stash, then re-run."
         )
         return report
     if results.exists():

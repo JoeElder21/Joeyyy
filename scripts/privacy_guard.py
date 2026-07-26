@@ -78,6 +78,17 @@ NOT_CONTINUED = (
 # The same idea for a quoted or bare VALUE: an exclusion is only safe when it
 # covers the entire value, not a prefix of one.
 VALUE_END = r"(?=[\s\"',}\]#]|$)"
+# VALUE_END allows a quote to follow because every exemption it was written for
+# matches a BARE value and therefore stops just before that value's own closing
+# quote. An exemption whose pattern already consumes its closing quote sits one
+# character further on, and there a following quote can never be the value's
+# own -- it can only open a concatenated literal. Reusing VALUE_END at such a
+# site let `= "{placeholder}""realCredential"` keep the exemption, because the
+# opening quote of the second literal satisfied "the value ended here".
+#
+# Split out rather than tightened in place: removing the quote from VALUE_END
+# itself would break the bare-value sites, which need it.
+QUOTED_VALUE_END = r"(?=[\s,}\]#]|$)"
 LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1"
 PATTERNS = {
     "secret token": re.compile(
@@ -177,7 +188,28 @@ PATTERNS = {
         # a real credential that merely contains a brace is still caught. This
         # is a false-positive repair, not a relaxation; the test below proves a
         # genuine secret in the identical shape still trips.
-        r"[\"']?\s*[:=]\s*(?!\s*[\"']\{[A-Za-z_][A-Za-z0-9_]*\}[\"'])"
+        #
+        # "and nothing else" was the CLAIM and not the code. The lookahead ended
+        # at the placeholder's closing quote and never asked what came after, so
+        # an assignment that OPENS with a placeholder and then concatenates a
+        # real value -- the shape a template-plus-secret takes -- suppressed the
+        # whole pattern on the strength of its first eight characters. A control
+        # differing only in that prefix was flagged, which is what made it a
+        # fail-open rather than a judgement call. NOT_CONTINUED is the same
+        # anchor the hostname and organization exemptions already carry for this
+        # exact reason; a second spelling of "the exemption must cover the whole
+        # value" is how two rules drift apart. The end-anchor is
+        # QUOTED_VALUE_END rather than VALUE_END because this exemption consumes
+        # its own closing quote -- see the note there. With VALUE_END, adjacent
+        # literals (`"{prefix}""realCredential"`) still slipped through, since
+        # the second literal's opening quote read as "the value ended".
+        #
+        # This does now flag `= "{prefix}".format(...)`, which holds no literal
+        # secret. That over-flag is deliberate and in the safe direction: the
+        # author restructures one line, where the alternative was a real
+        # credential reaching a public repository behind a placeholder prefix.
+        r"[\"']?\s*[:=]\s*"
+        r"(?!\s*[\"']\{[A-Za-z_][A-Za-z0-9_]*\}[\"']" + QUOTED_VALUE_END + NOT_CONTINUED + r")"
         r"(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
     ),
     # Organization and workspace slugs. These sit apart from "connector

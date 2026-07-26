@@ -1469,6 +1469,39 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             with self.subTest(flagged=probe):
                 self.assertTrue(pattern.search(probe), "a real credential slipped past the guard")
 
+        # A value that OPENS with a placeholder and then continues. The
+        # exemption's comment said "a lone `{identifier}` and nothing else"
+        # while the lookahead stopped at the placeholder's closing quote and
+        # never asked what followed -- so eight characters of template excused
+        # whatever was concatenated onto them. Each of these differs from an
+        # exempt probe only by what comes AFTER the placeholder, which is what
+        # attributes the flag to the continuation.
+        for probe in (
+            f'{name} = "{{prefix}}" + "{opaque}"',  # explicit concatenation
+            f'{name} = "{{prefix}}""{opaque}"',  # adjacent literals
+            f'{name} = "{{prefix}}" % {opaque}',  # percent formatting
+            f'{name} = "{{prefix}}".format(x)',  # deliberate over-flag
+        ):
+            with self.subTest(continued=probe):
+                self.assertTrue(
+                    pattern.search(probe),
+                    "a placeholder prefix exempted the value concatenated after it",
+                )
+
+        # The reverse direction, per lawful terminator. Revoking the exemption
+        # too broadly would flag the guard's own fixtures and fail every scan,
+        # which is the failure the exemption was written for in the first place.
+        for probe in (
+            f'{name} = "{{prefix}}"',  # end of line
+            f'{name}: "{{prefix}}",',  # comma
+            f'{{"{name}": "{{prefix}}"}}',  # closing brace
+            f'[{name}, "{{prefix}}"]',  # closing bracket
+            f'{name} = "{{prefix}}"  # note',  # comment
+            f"{name} = '{{prefix}}'",  # single quotes
+        ):
+            with self.subTest(still_exempt=probe):
+                self.assertFalse(pattern.search(probe), "a lone placeholder must stay exempt")
+
     def test_private_material_in_a_path_is_reported(self):
         """A path is published exactly as content is.
 

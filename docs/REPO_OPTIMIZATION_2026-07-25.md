@@ -1527,6 +1527,83 @@ check is anchored on the file's newest entry rather than on `date.today()`,
 because a check that starts failing on a fixed calendar day for reasons
 unrelated to any change is a time bomb in CI, not a check.
 
+### Thirty-fourth pass — two findings fixed, one refuted
+
+**The refuted one first, because verifying a reviewer's PREMISE is the part
+that gets skipped.** A P1 said the `.gitleaksignore` history entry names commit
+`03cb443…`, "which I verified is not an ancestor of the reviewed commit", and
+that the `BASE_SHA..HEAD` scan therefore "still reports this known fixture and
+blocks the PR". Every load-bearing claim is false, and the check was already
+green when the finding arrived:
+
+- `git merge-base --is-ancestor 03cb443… HEAD` returns **yes**.
+- The commit `d6c9cb33…` the finding offers instead **does not exist** in this
+  repository (`git cat-file`: not a valid object name).
+- Running CI's two scans by hand on the reviewed commit: `gitleaks dir` — no
+  leaks; `gitleaks git --log-opts=4f7693f9..HEAD`, 56 commits — no leaks.
+
+And the control that makes that meaningful, because "no leaks found" also
+describes a scan that examined nothing: with `.gitleaksignore` moved aside, the
+history scan reports **exactly one** finding, fingerprinted
+`03cb443…:scripts/privacy_guard.py:generic-api-key:321` — character-for-character
+the entry at line 18 — and the tree scan reports exactly the six working-tree
+fingerprints listed below it. The suppressions are load-bearing and correctly
+spelled. Nothing changed.
+
+**A negative lookahead exempted everything concatenated after a placeholder.**
+The credential-assignment pattern excuses a value that is a lone
+`{identifier}`, because the guard's own fixture writes one and the guard was
+failing its own scan. The comment said the value must be "a lone `{identifier}`
+and nothing else" — **the lookahead stopped at the placeholder's closing quote
+and never asked what followed.** So an assignment opening with a placeholder and
+then concatenating a real value was excused on the strength of its first eight
+characters. Reproduced against a control differing only in that prefix: the
+plain literal was flagged, the prefixed one was not.
+
+Fixed with `NOT_CONTINUED`, the anchor the hostname and organization exemptions
+already carry — a second spelling of "the exemption must cover the whole value"
+is how two rules drift apart. **The first attempt was incomplete and the case
+list caught it**: reusing `VALUE_END` still let adjacent literals
+(`"{prefix}""realCredential"`) through, because `VALUE_END` permits a following
+quote. That is correct for the bare-value sites it was written for, which stop
+*before* the value's own closing quote, and wrong for an exemption that consumes
+its closing quote — there a following quote can only open a concatenation.
+`QUOTED_VALUE_END` is `VALUE_END` minus that allowance, split out rather than
+tightened in place because the bare-value sites need it.
+
+The fix deliberately over-flags `= "{prefix}".format(...)`, which holds no
+literal secret. Stated rather than hidden: the author restructures one line,
+where the alternative is a credential reaching a public repository behind a
+placeholder prefix. Eleven probes, both directions, and all four mutants killed.
+
+**Provenance was sampled before the run and trusted after it.** `provenance()`
+records `tree_dirty` when the report is built; `pytest` then runs; nothing
+re-checks. A run that started clean and *ended* dirty — a dispatched specialist
+writing a file, a tool call leaving an artifact — was credited to a commit whose
+code is no longer what passed. The worktree is now sampled twice through one
+extracted helper, so the two readings cannot disagree about what "dirty" means,
+and both must read `False`.
+
+Three details, each a shape this record has hit before:
+
+- **A missing sample is not a clean one.** `_record_passes` is reachable
+  directly; a caller omitting the post-run reading would otherwise get the
+  proven claim for free.
+- **The samples are enumerated in `TREE_SAMPLES`**, and a test withholds on each
+  name independently, so a third sample added later cannot be a declared
+  control nothing reads.
+- **Outside a checkout the probe returns `"unknown"`, never `False`** — the
+  silently-degrading-checker failure found in three separate CI jobs.
+
+**Two mutants survived the first pass and produced the two best tests here.**
+Deleting the post-run sampling line from `execute()` left the suite green,
+because nothing drives `execute()` end to end — it shells into pytest. That is
+now an **AST** check: the assignment must exist and its line must come *after*
+the `pytest.main` call, parsed rather than grepped because a substring search is
+satisfied by the word appearing in a comment. Moving the sample back before
+`pytest` now fails too. The second survivor was the `"unknown"` branch, which no
+test exercised at all.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

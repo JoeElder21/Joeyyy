@@ -1004,13 +1004,21 @@ class DirtyTreeEvidenceTests(unittest.TestCase):
 
         self.module = run_evaluations
 
-    def _report(self, dirty):
+    def _report(self, dirty, after=None):
         # Shaped like a real summary: `behavioral_modes_proven` is the boolean
         # `Coverage.summary()` emits. The fixture used to hand in a list of mode
         # names, which is not a value the producing code can ever write, so the
         # withholding path was only ever tested against input it does not see.
+        #
+        # Both worktree samples, because a real report now carries both. `after`
+        # defaults to `dirty` so the existing single-argument cases keep meaning
+        # what their names say; the tests that care about the two disagreeing
+        # pass it explicitly.
         return {
-            "provenance": {"tree_dirty": dirty},
+            "provenance": {
+                "tree_dirty": dirty,
+                "tree_dirty_after": dirty if after is None else after,
+            },
             "modes_proven": 3,
             "behavioral_modes_proven": True,
         }
@@ -1053,6 +1061,118 @@ class DirtyTreeEvidenceTests(unittest.TestCase):
         # that is genuinely reproducible.
         result = self.module._record_passes(self._report(False), Path("/nonexistent"), "run")
         self.assertNotIn("evidence_withheld", result)
+
+    def test_a_run_that_dirties_the_tree_is_not_credited(self):
+        # The finding. The pre-run sample cannot see a worktree the run itself
+        # modified -- a dispatched specialist writing a file, a tool call
+        # leaving an artifact -- so a run that STARTED clean and ENDED dirty was
+        # credited to a commit whose code is no longer what passed.
+        #
+        # This differs from `test_a_clean_tree_is_not_withheld` in the
+        # post-run sample alone, which is what attributes the denial to that
+        # sample rather than to anything else in the report.
+        result = self.module._record_passes(
+            self._report(False, after=True), Path("/nonexistent"), "run"
+        )
+        self.assertEqual(result["modes_proven"], 0)
+        self.assertIs(result["behavioral_modes_proven"], False)
+        self.assertIn("tree_dirty_after", result["evidence_withheld"])
+
+    def test_an_unsampled_worktree_is_not_a_clean_one(self):
+        # `_record_passes` is reachable directly, so a caller that never takes
+        # the post-run reading must not get the proven claim for free. Absence
+        # of evidence is not evidence of cleanliness -- the same shape as
+        # "absent scope means unlimited scope".
+        report = self._report(False)
+        del report["provenance"]["tree_dirty_after"]
+        result = self.module._record_passes(report, Path("/nonexistent"), "run")
+        self.assertEqual(result["modes_proven"], 0)
+        self.assertIn("missing", result["evidence_withheld"])
+
+    def test_every_declared_sample_is_actually_consulted(self):
+        # The hand-enumerated-list defect: a third worktree sample added to
+        # TREE_SAMPLES but never checked would be a declared control nothing
+        # reads. Each name is withheld-on independently, derived from the tuple
+        # rather than listed here.
+        for name in self.module.TREE_SAMPLES:
+            with self.subTest(sample=name):
+                report = self._report(False)
+                report["provenance"][name] = True
+                result = self.module._record_passes(report, Path("/nonexistent"), "run")
+                self.assertEqual(
+                    result["modes_proven"],
+                    0,
+                    f"{name} is declared a worktree sample but does not withhold evidence",
+                )
+
+    def test_outside_a_checkout_the_probe_says_unknown_not_clean(self):
+        # A mutant returning False here survived: nothing exercised the failure
+        # branch. "git is unavailable" must never read as "the tree is clean" --
+        # that is the silently-degrading-checker failure this repository has
+        # found in three separate CI jobs.
+        import subprocess
+
+        original = subprocess.run
+
+        def refuse(*args, **kwargs):
+            raise OSError("no git here")
+
+        subprocess.run = refuse
+        try:
+            self.assertEqual(self.module.tree_dirty(), "unknown")
+        finally:
+            subprocess.run = original
+
+    def test_the_post_run_sample_is_taken_after_pytest(self):
+        # A mutant deleting the post-run sampling line from `execute()` left the
+        # suite green, because no test drives `execute()` end to end -- it shells
+        # into pytest. The property is structural and an ORDER: the assignment
+        # must exist, and it must come after the pytest call. Sampling before
+        # pytest would reproduce the exact finding this fixes.
+        #
+        # Parsed, not grepped. A substring search is satisfied by the word
+        # appearing in a comment, which is how "naming the cause" gets mistaken
+        # for fixing it.
+        import ast
+        import inspect
+
+        tree = ast.parse(inspect.getsource(self.module.execute).lstrip())
+        pytest_calls = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "main"
+        ]
+        sample_writes = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Subscript)
+            and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "tree_dirty_after"
+        ]
+        self.assertTrue(pytest_calls, "execute() no longer calls pytest.main")
+        self.assertTrue(
+            sample_writes,
+            "execute() never records tree_dirty_after, so the post-run worktree "
+            "state is never sampled and the gate below always sees 'missing'",
+        )
+        self.assertGreater(
+            min(sample_writes),
+            max(pytest_calls),
+            "the post-run sample is taken BEFORE pytest, which cannot observe a "
+            "worktree the run itself modified",
+        )
+
+    def test_both_samples_come_from_one_probe(self):
+        # Two spellings of "is the tree dirty" is how the pre- and post-run
+        # readings would come to disagree about what dirty means. provenance()
+        # must call the same helper the post-run sample does.
+        import inspect
+
+        source = inspect.getsource(self.module.provenance)
+        self.assertIn("tree_dirty()", source)
+        self.assertNotIn("git", source.split('record["tree_dirty"]')[-1])
 
 
 if __name__ == "__main__":
