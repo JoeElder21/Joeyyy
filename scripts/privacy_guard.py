@@ -253,6 +253,86 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
     Path(".github/instructions/self-explanatory-code-commenting.instructions.md"): (
         "username" + "@" + "domain.extension",
     ),
+    # Vendored third-party agent prompts (.claude/agents/awesome-claude-agents/).
+    # Registered per file and per literal like every other entry here. The collection is
+    # documentation whose samples use RFC 2606 example domains, dummy passwords, sample
+    # addresses, and code expressions the prose heuristics cannot tell from real leakage.
+    #
+    # An earlier revision of this branch carried a path-scoped exemption for this
+    # directory instead. It is gone: it was the directory-wide design the comment above
+    # records as already rejected, and it leaked four times in review - a base64 value, a
+    # JWT, an identifier-shaped key, and a punctuated password each defeated a different
+    # iteration. Exact-literal stripping has none of those holes, and an upstream sync
+    # that alters a sample fails the guard until the new literal is reviewed and pinned
+    # here. That cost is the point.
+    Path(".claude/agents/awesome-claude-agents/specialized/django/django-api-developer.md"): (
+        'a' + "pi_key = request.META.get('HTTP_X_API_KEY')",
+        'p' + "assword='testpass123'",
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/django/django-backend-expert.md"): (
+        'test' + "@example.com'",
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md"): (
+        'p' + 'assword = var.database_password',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/django-expert.md"): (
+        'P' + "ASSWORD': get_env_variable('DB_PASSWORD'),",
+        'P' + "ASSWORD': get_env_variable('DB_READ_PASSWORD', default=get_env_variable('DB_PASSWORD')),",
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/fastapi-expert.md"): (
+        'P' + 'assword = Annotated[str',
+        'user' + '@example.com"',
+        'password: P' + 'assword = Field(description="Mot de passe (min 8 caractères)")',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/ml-data-expert.md"): (
+        'ml' + '@example.com"',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/python-expert.md"): (
+        'email' + '@example.com"',
+        'test' + '@example.com"',
+        'test' + '@example.com)>"',
+        'p' + 'assword="testpassword123"',
+        'nonexistent' + '@example.com"',
+        'newuser' + '@example.com"',
+        'p' + 'assword": "password123"',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/security-expert.md"): (
+        'a' + 'ccess_token = self.jwt_manager.create_access_token(user)',
+        'a' + "ccess_token': access_token",
+        'user' + '@example.com"',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/python/testing-expert.md"): (
+        'john' + '@example.com"',
+        'jane' + '@example.com"',
+        'admin' + '@example.com"',
+        'test' + '@example.com"',
+        'new' + '@example.com"',
+        'p' + 'assword": "secure_password"',
+        'wrong' + '@example.com"',
+        'p' + 'assword="password"',
+        'recipient' + '@example.com"',
+        'user1' + '@example.com"',
+        'user2' + '@example.com"',
+        'user3' + '@example.com"',
+        'a' + 'pi_key="sk_test_123"',
+        'c' + 'lient_secret": "pi_123456_secret_abc"',
+        'newuser' + '@example.com"',
+        'p' + 'assword": "secure_password123"',
+        'auth' + '@example.com"',
+        'update' + '@example.com"',
+        'customer' + '@example.com"',
+        '12' + '3 Main St"',
+        'unique' + '@example.com"',
+        'p' + 'assword": "password123"',
+        'p' + 'assword": "valid_password123"',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/rails/rails-api-developer.md"): (
+        'a' + 'ccess_token: tokens[:access_token]',
+        'a' + 'ccess_token: encode_token(',
+    ),
+    Path(".claude/agents/awesome-claude-agents/specialized/rails/rails-backend-expert.md"): (
+        'p' + 'assword: password',
+    ),
 }
 
 
@@ -852,10 +932,21 @@ def strip_known_placeholders(relative: Path, text: str) -> str:
     for literal in PLACEHOLDER_LITERALS.get(relative, ()):
         text = re.sub(
             rf"(?<!{_TOKEN_CHAR}){re.escape(literal)}(?!{_TOKEN_CHAR})"
-            # Not followed, after optional spacing, by anything that continues
-            # the expression: concatenation, formatting, a method call, a line
-            # continuation, or an adjacent string literal (implicit concat).
-            rf"(?![ \t]*(?:[+%*.\\]|['\"`]))",
+            # Not followed, after optional spacing, by anything that continues the
+            # expression. The original set named concatenation, formatting, a method
+            # call, a line continuation and an adjacent string literal, and a keyword
+            # operator walked straight through it: the pinned fixture followed by a
+            # conditional and a second, real value stripped cleanly, and what remained
+            # carried no credential-bearing key, so the real secret passed the gate.
+            # Comparison, logical and bitwise operators are covered for the same reason.
+            #
+            # `in`, `for` and `-` are deliberately NOT here. They are ordinary English
+            # as often as they are operators, and an approved placeholder cited in prose
+            # must still strip - which is what test_placeholder_stripping_requires_whole
+            # _token_boundaries pins. The residual risk is an assignment continued by
+            # one of those three specifically, which is far narrower than the hole this
+            # closes.
+            rf"(?![ \t]*(?:[+%*.\\/=<>!&|^~?]|['\"`]|(?:if|elif|else|or|and|not|is)\b))",
             "",
             text,
         )
