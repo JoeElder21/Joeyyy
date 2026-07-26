@@ -200,7 +200,10 @@ module Api
       
       def authenticate_user!
         authenticate_or_request_with_http_token do |token, options|
-          @current_user = User.find_by_auth_token(token)
+          # `find_by_jwt` is the finder the JWT concern in this same prompt actually
+          # defines. `find_by_auth_token` exists nowhere, so every protected request
+          # raised NoMethodError instead of authenticating.
+          @current_user = User.find_by_jwt(token)
         end
       end
       
@@ -831,7 +834,15 @@ end
 class ApiChannel < ApplicationCable::Channel
   def subscribed
     if params[:channel] == 'products'
-      stream_from 'products:updates'
+      # Two separate streams. `Product#broadcast_update` serialises every updated
+      # product, drafts included, so a single shared 'products:updates' stream handed
+      # unpublished records to any anonymous subscriber - reopening through the
+      # realtime path exactly what the REST and GraphQL scoping closed.
+      if current_user&.admin?
+        stream_from 'products:updates:all'
+      else
+        stream_from 'products:updates:published'
+      end
     elsif params[:channel] == 'orders' && current_user
       stream_for current_user
     else
@@ -869,13 +880,17 @@ class Product < ApplicationRecord
   private
   
   def broadcast_update
-    ActionCable.server.broadcast(
-      'products:updates',
-      {
-        action: 'product_updated',
-        product: ProductSerializer.new(self).as_json
-      }
-    )
+    payload = {
+      action: 'product_updated',
+      product: ProductSerializer.new(self).as_json
+    }
+
+    # Admins see every change.
+    ActionCable.server.broadcast('products:updates:all', payload)
+
+    # The public stream carries published records only - broadcasting a draft to it
+    # would leak it to every anonymous subscriber regardless of channel scoping.
+    ActionCable.server.broadcast('products:updates:published', payload) if published?
   end
 end
 ```

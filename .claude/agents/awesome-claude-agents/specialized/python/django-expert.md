@@ -679,16 +679,29 @@ class PostQuerySet(models.QuerySet):
 
 
 class PostManager(models.Manager):
-    """Manager personnalisé pour les posts."""
+    """Manager personnalisé pour les posts - articles vivants uniquement.
+
+    `SoftDeleteModel.delete()` ne fait que renseigner `deleted_at`. En remplaçant le
+    manager « alive-only » du parent sans reprendre ce filtre, `Post.objects.published()`
+    continuait de renvoyer les articles supprimés aux vues liste et détail : la
+    suppression annoncée n'avait aucun effet visible.
+    """
     
     def get_queryset(self):
-        return PostQuerySet(self.model, using=self._db)
+        return PostQuerySet(self.model, using=self._db).filter(deleted_at__isnull=True)
     
     def published(self):
         return self.get_queryset().published()
     
     def featured(self):
         return self.get_queryset().published().featured()
+
+
+class AllPostManager(models.Manager):
+    """Accès non filtré, y compris aux articles supprimés (restauration, audit)."""
+    
+    def get_queryset(self):
+        return PostQuerySet(self.model, using=self._db)
 
 
 class Post(TimestampedModel, SoftDeleteModel):
@@ -728,6 +741,9 @@ class Post(TimestampedModel, SoftDeleteModel):
     tags = TaggableManager(blank=True)
     
     objects = PostManager()
+    # `all_objects` hérité de SoftDeleteModel reste non filtré ; AllPostManager expose
+    # en plus les méthodes de PostQuerySet sur les articles supprimés.
+    all_posts = AllPostManager()
     
     class Meta:
         verbose_name = _('Post')
@@ -781,6 +797,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from django.views.decorators.http import require_POST
 from django.views.decorators.vary import vary_on_cookie
 
 from .models import Post, Category
@@ -966,8 +983,14 @@ class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-# Vue basée sur des fonctions avec optimisations
-@method_decorator([cache_page(60 * 15), vary_on_cookie], name='dispatch')
+# Vue basée sur des fonctions avec optimisations.
+# `method_decorator(..., name='dispatch')` s'applique à une *classe* possédant une
+# méthode `dispatch` ; passé à une fonction il lève `ValueError` à l'import et empêche
+# tout le module de vues de se charger. Sur une vue-fonction, on applique directement
+# les décorateurs (vary_on_cookie au-dessus de cache_page, pour que l'en-tête Vary soit
+# posé avant la mise en cache de la réponse).
+@vary_on_cookie
+@cache_page(60 * 15)
 def blog_home(request):
     """Page d'accueil du blog avec mise en cache."""
     
@@ -994,6 +1017,10 @@ def blog_home(request):
 
 
 # API Views pour AJAX
+# `require_POST` est obligatoire : Django n'exige pas de jeton CSRF sur les méthodes
+# sûres, donc sans cette contrainte un simple GET - une balise <img>, un préchargeur,
+# un crawler authentifié - crée ou supprime un like.
+@require_POST
 def post_like_toggle(request, slug):
     """Toggle like sur un article via AJAX."""
     if not request.user.is_authenticated:
@@ -1185,6 +1212,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 from .serializers import (
@@ -1224,9 +1252,21 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     """API pour récupérer, modifier et supprimer un article."""
     
-    queryset = Post.objects.select_related('author', 'category').prefetch_related('tags')
     lookup_field = 'slug'
     permission_classes = [IsAuthorOrReadOnly]
+    
+    def get_queryset(self):
+        """Les brouillons ne sont visibles que par leur auteur.
+
+        Un `queryset` non filtré combiné à `IsAuthorOrReadOnly` - qui autorise les
+        méthodes sûres sur n'importe quel objet - suffisait à récupérer un brouillon en
+        devinant son slug. Seule la vue liste filtrait via `Post.objects.published()`.
+        """
+        base = Post.objects.select_related('author', 'category').prefetch_related('tags')
+        user = self.request.user
+        if user.is_authenticated:
+            return base.filter(Q(status='published') | Q(author=user))
+        return base.filter(status='published')
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:

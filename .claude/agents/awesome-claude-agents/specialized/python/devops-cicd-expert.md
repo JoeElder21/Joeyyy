@@ -253,18 +253,27 @@ jobs:
       env:
         KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         IMAGE_TAG: ${{ github.sha }}
+        IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+        K8S_NAMESPACE: myapp-production
       run: |
         echo "$KUBE_CONFIG" | base64 -d > kubeconfig
         export KUBECONFIG=kubeconfig
         
-        # Update image tag in deployment
+        # Substitute BOTH the repository and the tag. The build publishes to
+        # ghcr.io/${{ github.repository }}, while the manifest hard-codes the
+        # placeholder ghcr.io/username/myapp - replacing only IMAGE_TAG left every
+        # real repository pulling an image that was never pushed.
+        sed -i "s|IMAGE_REPOSITORY|$IMAGE_REPOSITORY|g" k8s/deployment.yaml
         sed -i "s|IMAGE_TAG|$IMAGE_TAG|g" k8s/deployment.yaml
         
         # Apply Kubernetes manifests
         kubectl apply -f k8s/
         
-        # Wait for deployment to complete
-        kubectl rollout status deployment/myapp -n production --timeout=300s
+        # Wait for deployment to complete.
+        # The namespace must match the manifests (k8s/namespace.yaml declares
+        # myapp-production). Looking in `production` reported the deployment missing
+        # instead of waiting for the rollout, so the job passed without verifying it.
+        kubectl rollout status deployment/myapp -n "$K8S_NAMESPACE" --timeout=300s
 ```
 
 ### 2. **Multi-Stage Docker Configuration**
@@ -292,8 +301,12 @@ ARG POETRY_VERSION=1.7.1
 RUN pip install poetry==$POETRY_VERSION
 
 # Configure Poetry
+# POETRY_VIRTUALENVS_IN_PROJECT, not POETRY_VENV_IN_PROJECT: only the former maps to
+# Poetry's `virtualenvs.in-project` option. With the wrong name the venv is created
+# under POETRY_CACHE_DIR, the install step then deletes that directory, and the later
+# `COPY --from=build /app/.venv` fails because /app/.venv was never created.
 ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VENV_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
 # Development stage
@@ -327,8 +340,12 @@ FROM python:${PYTHON_VERSION}-slim as production
 # Security: create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Install runtime dependencies only
-RUN apt-get update && apt-get install -y \
+# Install runtime dependencies only.
+# `curl` is required by the HEALTHCHECK below. This stage starts from a fresh slim
+# image, so nothing is inherited from `base`: with the package list left empty the
+# probe failed with "curl: not found" and Docker marked a healthy container unhealthy.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from build stage
@@ -488,7 +505,8 @@ spec:
     spec:
       containers:
       - name: myapp
-        image: ghcr.io/username/myapp:IMAGE_TAG
+        # Both tokens are substituted by the deploy job; neither is a real value.
+        image: IMAGE_REPOSITORY:IMAGE_TAG
         ports:
         - containerPort: 8000
         envFrom:
@@ -958,12 +976,28 @@ class MetricsMiddleware:
 **Structured logging configuration**:
 ```python
 # src/logging_config.py
+import contextvars
 import logging
 import json
 import sys
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 import traceback
+
+# Per-task, not per-process. Every coroutine handling a request sees its own value,
+# so overlapping requests cannot overwrite each other's id.
+request_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "request_id", default=None
+)
+
+
+class RequestIdFilter(logging.Filter):
+    """Stamps the current request id onto every record, from the contextvar."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_var.get()
+        return True
+
 
 class StructuredFormatter(logging.Formatter):
     """Custom formatter for structured JSON logging"""
@@ -982,7 +1016,7 @@ class StructuredFormatter(logging.Formatter):
         # Add extra fields
         if hasattr(record, 'user_id'):
             log_entry['user_id'] = record.user_id
-        if hasattr(record, 'request_id'):
+        if getattr(record, 'request_id', None):
             log_entry['request_id'] = record.request_id
         if hasattr(record, 'correlation_id'):
             log_entry['correlation_id'] = record.correlation_id
@@ -1006,6 +1040,7 @@ def setup_logging(level: str = "INFO", structured: bool = True):
     
     # Create handler
     handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(RequestIdFilter())
     
     if structured:
         handler.setFormatter(StructuredFormatter())
@@ -1043,20 +1078,16 @@ class LoggingContextMiddleware:
         # Add to scope for access in endpoints
         scope['request_id'] = request_id
         
-        # Configure logging context
-        old_factory = logging.getLogRecordFactory()
-        
-        def record_factory(*args, **kwargs):
-            record = old_factory(*args, **kwargs)
-            record.request_id = request_id
-            return record
-        
-        logging.setLogRecordFactory(record_factory)
-        
+        # Propagate the id through a contextvar, NOT by swapping the process-global
+        # record factory per request. Under concurrency that global is shared: request
+        # A finishing while B is in flight restores the original factory and B's logs
+        # lose their id; when B finishes it reinstalls A's closure globally and later
+        # logs are stamped with A's id. A contextvar is per-task by construction.
+        token = request_id_var.set(request_id)
         try:
             await self.app(scope, receive, send)
         finally:
-            logging.setLogRecordFactory(old_factory)
+            request_id_var.reset(token)
 ```
 
 ### 6. **Deployment Automation Scripts**

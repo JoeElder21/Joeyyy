@@ -89,7 +89,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -244,8 +244,14 @@ def setup_health_routes(app: FastAPI) -> None:
         return {"status": "healthy", "timestamp": datetime.utcnow()}
     
     @app.get("/health/detailed", tags=["health"])
-    async def detailed_health_check():
-        """Check de santé détaillé avec vérifications."""
+    async def detailed_health_check(response: Response):
+        """Check de santé détaillé avec vérifications.
+
+        Le *statut HTTP* doit refléter l'échec, pas seulement un champ JSON : les
+        sondes de readiness (Kubernetes, load balancers) lisent le code de retour.
+        Renvoyer 200 avec `"status": "unhealthy"` laissait l'instance dans le pool
+        alors qu'une dépendance était tombée.
+        """
         from .core.database import check_db_health
         from .core.cache import check_cache_health
         
@@ -253,6 +259,8 @@ def setup_health_routes(app: FastAPI) -> None:
         cache_healthy = await check_cache_health()
         
         overall_healthy = db_healthy and cache_healthy
+        if not overall_healthy:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         
         return {
             "status": "healthy" if overall_healthy else "unhealthy",
@@ -856,15 +864,23 @@ async def upload_avatar(
             detail="File must be JPEG, PNG, or WebP format",
         )
     
-    # Vérification de la taille (5MB max)
-    file_size = len(await file.read())
-    await file.seek(0)  # Reset file pointer
+    # Vérification de la taille (5MB max).
+    # `await file.read()` matérialise TOUT le corps avant de mesurer sa taille : la
+    # limite ne protège alors rien, et quelques envois simultanés de plusieurs
+    # centaines de Mo suffisent à épuiser la mémoire du worker. On lit par morceaux
+    # bornés et on s'arrête dès le premier octet en trop.
+    MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5MB
+    CHUNK = 64 * 1024
     
-    if file_size > 5 * 1024 * 1024:  # 5MB
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size must be less than 5MB",
-        )
+    file_size = 0
+    while chunk := await file.read(CHUNK):
+        file_size += len(chunk)
+        if file_size > MAX_AVATAR_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File size must be less than 5MB",
+            )
+    await file.seek(0)  # Reset file pointer
     
     user_service = UserService(db)
     updated_user = await user_service.update_avatar(current_user, file)
@@ -976,7 +992,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
 
 # app/middleware/request_id.py
 import uuid
-from typing import Callable
+from typing import Callable, Dict, Optional, Set, Tuple
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -1009,21 +1025,44 @@ from starlette.responses import JSONResponse
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Middleware de rate limiting global."""
     
-    def __init__(self, app, requests_per_minute: int = 60):
+    def __init__(self, app, requests_per_minute: int = 60,
+                 trusted_proxies: Optional[Set[str]] = None):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.clients: Dict[str, Tuple[int, float]] = {}
+        # Adresses des reverses proxies dont on accepte X-Forwarded-For. Vide par
+        # défaut : sans liste explicite, l'en-tête n'est jamais cru.
+        self.trusted_proxies = trusted_proxies or set()
     
     def get_client_id(self, request: Request) -> str:
-        """Obtenir l'identifiant client (IP + User-Agent)."""
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            client_ip = forwarded_for.split(",")[0].strip()
-        else:
-            client_ip = request.client.host
+        """Identité de limitation - jamais dérivée d'un en-tête libre.
+
+        Deux contournements sont fermés ici :
+
+        - `User-Agent` est choisi par l'appelant. L'inclure dans la clé donnait un
+          nouveau quota à chaque changement de chaîne : la limite « globale » se
+          contournait sans proxy ni usurpation d'IP.
+        - `X-Forwarded-For` est tout aussi libre quand l'application est joignable
+          directement ou derrière un proxy qui ne réécrit pas l'en-tête. On ne le lit
+          que si le pair TCP est un proxy déclaré de confiance.
+
+        Un principal authentifié est préférable à une adresse : il survit au NAT et
+        aux IP partagées.
+        """
+        user = getattr(request.state, "user", None)
+        if user is not None:
+            return f"user:{user.id}"
         
-        user_agent = request.headers.get("User-Agent", "")
-        return f"{client_ip}:{hash(user_agent)}"
+        peer = request.client.host if request.client else "unknown"
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for and peer in self.trusted_proxies:
+            # Dernière entrée : celle ajoutée par le proxy de confiance. La première
+            # est fournie par le client et donc falsifiable.
+            client_ip = forwarded_for.split(",")[-1].strip()
+        else:
+            client_ip = peer
+        
+        return f"ip:{client_ip}"
     
     async def dispatch(self, request: Request, call_next):
         client_id = self.get_client_id(request)

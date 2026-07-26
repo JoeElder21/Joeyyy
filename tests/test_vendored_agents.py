@@ -13,6 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 VENDORED = ROOT / ".claude" / "agents" / "awesome-claude-agents"
 # AGENTS.md: specialists default to read-only; Agent 007 alone executes mutations.
 FORBIDDEN_TOOLS = {"Write", "WriteFile", "Edit", "MultiEdit", "NotebookEdit", "Bash"}
+# The complete surface docs/AGENT_REGISTRY.md publishes for this corps. Enforced as a
+# closed allowlist rather than a denylist of six historical names: an upstream sync that
+# introduces a *newly named* execution or mutation tool (an MCP write tool, a shell
+# alias, a future Claude mutation tool) is not in FORBIDDEN_TOOLS and would otherwise
+# pass the contract gate unnoticed. Adding a tool here is a deliberate registry change.
+ALLOWED_TOOLS = {"LS", "Read", "Grep", "Glob", "WebFetch", "WebSearch"}
 NAME_PATTERN = re.compile(r"\A[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 DESCRIPTION_PATTERN = re.compile(r"^description:[ \t]*\S", re.M)
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
@@ -27,7 +33,52 @@ DELEGATION = re.compile(
 # lookahead excludes email addresses and domains (@host.tld) and npm scoped packages
 # (@radix-ui/react-dialog), neither of which is an agent reference.
 AT_REFERENCE = re.compile(r"@(?:agent-)?([a-z0-9]+(?:-[a-z0-9]+)+)(?![./])\b")
+# "Ping **backend-developer** when ..." - the collaboration-signal form, which carries no
+# `@` and no delegation verb the pattern above recognises.
+PING_REFERENCE = re.compile(r"Ping\s+\*\*([a-z0-9]+(?:-[a-z0-9]+)+)\*\*", re.I)
+# A bare kebab slug standing alone in a table cell, optionally decorated.
+TABLE_CELL_AGENT = re.compile(r"\A[`*@]*(?:agent-)?([a-z0-9]+(?:-[a-z0-9]+)+)[`*]*\Z")
+# Header cells that make a column an agent-assignment column.
+AGENT_COLUMN = re.compile(r"agent|target|owner", re.I)
+# Prompts write display names with typographic hyphens (U+2010..U+2015, U+2212). Those are
+# not ASCII "-", so a slug spelled with one slips past every pattern above and its target
+# is never validated. Fold them before matching.
+UNICODE_HYPHENS = re.compile(r"[‐-―−]")
 EXPECTED_AGENT_COUNT = 33
+
+
+def normalize(text: str) -> str:
+    return UNICODE_HYPHENS.sub("-", text)
+
+
+def table_owner_references(text: str) -> set[str]:
+    """Agent names assigned in markdown table cells.
+
+    The required report templates hand work off through tables ("| P2 | Add frontend
+    tests | testing-specialist |") rather than prose, so a delegation check that only
+    reads verbs and `@handles` never validates those owners.
+    """
+    found: set[str] = set()
+    agent_columns: set[int] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            agent_columns = set()  # table ended
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if set("".join(cells)) <= set("-: "):
+            continue  # separator row
+        if not agent_columns:  # first row of this table is its header
+            agent_columns = {i for i, cell in enumerate(cells) if AGENT_COLUMN.search(cell)}
+            continue
+        for index in agent_columns:
+            if index >= len(cells):
+                continue
+            for part in re.split(r"[,/]| or ", cells[index]):
+                match = TABLE_CELL_AGENT.match(part.strip())
+                if match:
+                    found.add(match.group(1))
+    return found
 
 
 def agent_files() -> list[Path]:
@@ -138,13 +189,32 @@ class VendoredAgentContractTests(unittest.TestCase):
                 granted = set(tools) & FORBIDDEN_TOOLS
                 self.assertEqual(granted, set(), f"write-capable tools must be stripped: {granted}")
 
+    def test_declared_tools_stay_inside_the_registered_read_only_surface(self):
+        """Closed allowlist: anything not registered is a contract break, not just Write."""
+        for path in self.files:
+            tools = declared_tools(path)
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertIsNotNone(tools, "missing `tools:` grants everything")
+                unregistered = set(tools) - ALLOWED_TOOLS
+                self.assertEqual(
+                    unregistered,
+                    set(),
+                    "tools outside the surface published in docs/AGENT_REGISTRY.md: "
+                    f"{sorted(unregistered)}",
+                )
+
     def test_delegation_targets_resolve_to_agents_that_exist(self):
         """An unfulfillable handoff is worse than none: it fails when help is needed."""
         known = {declared_name(path) for path in self.files}
         dangling: dict[str, set[str]] = {}
         for path in self.files:
-            text = path.read_text(encoding="utf-8")
-            referenced = set(DELEGATION.findall(text)) | set(AT_REFERENCE.findall(text))
+            text = normalize(path.read_text(encoding="utf-8"))
+            referenced = (
+                set(DELEGATION.findall(text))
+                | set(AT_REFERENCE.findall(text))
+                | set(PING_REFERENCE.findall(text))
+                | table_owner_references(text)
+            )
             missing = {
                 target
                 for target in referenced

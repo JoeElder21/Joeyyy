@@ -78,6 +78,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
+from cryptography import x509
 from cryptography.x509 import load_pem_x509_certificate
 import os
 import secrets
@@ -85,7 +86,8 @@ import base64
 import hashlib
 import hmac
 import time
-from typing import Dict, Tuple, Optional, Union, Any
+from datetime import datetime, timezone
+from typing import Dict, List, Tuple, Optional, Union, Any
 from dataclasses import dataclass
 from pathlib import Path
 import json
@@ -328,8 +330,9 @@ class SecureCryptoManager:
         if salt is None:
             salt = os.urandom(self.config.salt_length)
         
+        # Scrypt's constructor accepts salt, length, n, r, p and an optional backend.
+        # It has no `algorithm` parameter - passing one raises TypeError.
         kdf = Scrypt(
-            algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             n=2**14,  # CPU/memory cost
@@ -353,7 +356,6 @@ class SecureCryptoManager:
         stored_key = base64.b64decode(stored_hash['hash'])
         
         kdf = Scrypt(
-            algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             n=stored_hash['params']['n'],
@@ -501,16 +503,40 @@ class CertificateManager:
         return load_pem_x509_certificate(cert_data, default_backend())
     
     @staticmethod
-    def verify_certificate_chain(cert_chain: List[Any]) -> bool:
-        """Verify certificate chain validity"""
-        # Simplified certificate chain verification
-        # In production, use comprehensive verification
+    def verify_certificate_chain(cert_chain: List[Any], trusted_roots: List[Any]) -> bool:
+        """Verify a certificate chain against an explicit trust store.
+
+        A loop over `range(len(chain) - 1)` alone is not a validator: for an empty or
+        single-certificate chain it performs zero iterations and returns True, so an
+        expired or self-signed certificate supplied by the peer is accepted. Every
+        check below is required for the result to mean anything.
+        """
+        if len(cert_chain) < 2:
+            # Nothing was verified - refuse rather than report success.
+            return False
+        if not trusted_roots:
+            raise ValueError("a trust store is required; chain validity is not self-evident")
+
+        now = datetime.now(timezone.utc)
         try:
+            for i, cert in enumerate(cert_chain):
+                # Validity period.
+                if not (cert.not_valid_before_utc <= now <= cert.not_valid_after_utc):
+                    return False
+                # Every certificate above the leaf must be a CA able to sign.
+                if i > 0:
+                    basic = cert.extensions.get_extension_for_class(x509.BasicConstraints)
+                    if not basic.value.ca:
+                        return False
+
             for i in range(len(cert_chain) - 1):
                 current_cert = cert_chain[i]
                 issuer_cert = cert_chain[i + 1]
-                
-                # Verify signature
+
+                # Issuer name must actually match the next link.
+                if current_cert.issuer != issuer_cert.subject:
+                    return False
+
                 issuer_public_key = issuer_cert.public_key()
                 issuer_public_key.verify(
                     current_cert.signature,
@@ -518,8 +544,13 @@ class CertificateManager:
                     asym_padding.PKCS1v15(),
                     current_cert.signature_hash_algorithm
                 )
-            
-            return True
+
+            # The chain must terminate in a root we already trust.
+            root = cert_chain[-1]
+            trusted_fingerprints = {
+                trusted.fingerprint(hashes.SHA256()) for trusted in trusted_roots
+            }
+            return root.fingerprint(hashes.SHA256()) in trusted_fingerprints
         except Exception:
             return False
 ```
@@ -541,6 +572,7 @@ from contextlib import contextmanager
 import logging
 from functools import wraps
 import bcrypt
+import pyotp
 import redis
 from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -793,7 +825,7 @@ class JWTManager:
             'username': user.username,
             'email': user.email,
             'roles': [role.value for role in user.roles],
-            'permissions': list(user.permissions),
+            'permissions': [permission.value for permission in user.permissions],
             'iat': now,
             'exp': expires,
             'type': 'access'
@@ -898,6 +930,18 @@ class AuthenticationManager:
         """Verify password against hash"""
         return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
     
+    def verify_mfa_code(self, user: User, code: str) -> bool:
+        """Verify a TOTP second factor.
+
+        `valid_window=1` tolerates one 30-second step of clock skew. Widen it further
+        only with a matching replay guard - a large window multiplies the codes an
+        attacker may guess.
+        """
+        if not user.mfa_secret or not code:
+            return False
+        totp = pyotp.TOTP(user.mfa_secret)
+        return totp.verify(code, valid_window=1)
+    
     def register_user(self, username: str, email: str, password: str, 
                      roles: List[UserRole] = None) -> Dict[str, Any]:
         """Register new user"""
@@ -940,9 +984,10 @@ class AuthenticationManager:
             'password_strength': validation['strength_level']
         }
     
-    def authenticate_user(self, username: str, password: str, 
+    def authenticate_user(self, username: str, password: str,
+                         mfa_code: str = None,
                          ip_address: str = None, user_agent: str = None) -> Dict[str, Any]:
-        """Authenticate user credentials"""
+        """Authenticate user credentials, including the second factor when required."""
         
         # Find user
         user = None
@@ -986,6 +1031,30 @@ class AuthenticationManager:
         if not user.is_verified:
             return {'success': False, 'error': 'Account is not verified'}
         
+        # Second factor - checked BEFORE any token is issued. Verifying the password and
+        # then handing out an access token leaves `enforce_mfa` advertised but inert: a
+        # stolen password alone completes the login.
+        if self.config.enforce_mfa or user.mfa_enabled:
+            if not user.mfa_secret:
+                return {
+                    'success': False,
+                    'error': 'MFA enrollment required',
+                    'mfa_required': True,
+                    'mfa_enrolled': False,
+                }
+            if not mfa_code:
+                # No token here - the caller must come back with the code.
+                return {
+                    'success': False,
+                    'error': 'MFA code required',
+                    'mfa_required': True,
+                    'mfa_enrolled': True,
+                }
+            if not self.verify_mfa_code(user, mfa_code):
+                user.failed_login_attempts += 1
+                logger.warning(f"Authentication failed: invalid MFA code - {username}")
+                return {'success': False, 'error': 'Invalid credentials'}
+
         # Reset failed attempts on successful login
         user.failed_login_attempts = 0
         user.account_locked_until = None
@@ -1031,8 +1100,21 @@ class AuthenticationManager:
         logger.info("User logged out successfully")
     
     def get_current_user(self, token: str) -> User:
-        """Get current user from token"""
+        """Get current user from an ACCESS token.
+
+        The token type must be checked, not just the signature. Refresh tokens are
+        issued by this same manager with a much longer lifetime, so accepting one
+        here turns it into a long-lived bearer credential: it bypasses the short
+        access lifetime and the access-token blacklist entirely.
+        """
         payload = self.jwt_manager.verify_token(token)
+
+        if payload.get('type') != 'access':
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type for this endpoint",
+            )
+
         user_id = payload.get('sub')
         
         with self.lock:
@@ -1199,7 +1281,11 @@ class SecurityConfig:
     csp_img_src: List[str] = field(default_factory=lambda: ["'self'", "data:", "https:"])
     
     # CSRF Protection
-    csrf_token_length: int = 32
+    # Shared by every worker - load from configuration/secret storage, never generate
+    # per process, or tokens minted on one worker fail validation on another.
+    csrf_secret_key: str = field(
+        default_factory=lambda: os.environ["CSRF_SECRET_KEY"]
+    )
     csrf_cookie_name: str = "csrf_token"
     csrf_header_name: str = "X-CSRF-Token"
     
@@ -1476,66 +1562,88 @@ class InputValidator:
         return sanitized
     
     def _is_executable_content(self, content: bytes) -> bool:
-        """Check if content appears to be executable"""
-        # Check for common executable file signatures
-        executable_signatures = [
+        """Check if content appears to be executable.
+
+        Binary magic must be compared against the *original* bytes. `content.lower()`
+        rewrites the ASCII magic of a PE (`MZ` -> `mz`) and an ELF (`\x7fELF` ->
+        `\x7felf`), so those signatures could never match and renamed executables
+        passed this screen. Only the textual signatures are case-insensitive.
+        """
+        head = content[:1024]  # Check first 1KB
+
+        # Compared byte-for-byte, no case folding.
+        binary_signatures = [
             b'\x4d\x5a',  # PE executable (Windows)
             b'\x7f\x45\x4c\x46',  # ELF executable (Linux)
             b'\xfe\xed\xfa',  # Mach-O executable (macOS)
             b'\xca\xfe\xba\xbe',  # Java class file
+        ]
+        if any(signature in head for signature in binary_signatures):
+            return True
+
+        # Genuinely textual markers - fold case for these only.
+        textual_signatures = [
             b'#!/bin/',  # Shell script
             b'<?php',  # PHP script
             b'<script',  # JavaScript
         ]
-        
-        content_lower = content[:1024].lower()  # Check first 1KB
-        
-        for signature in executable_signatures:
-            if signature in content_lower:
-                return True
-        
-        return False
+        head_lower = head.lower()
+        return any(signature in head_lower for signature in textual_signatures)
 
 class CSRFProtection:
-    """CSRF token generation and validation"""
-    
+    """Session-bound, stateless CSRF tokens.
+
+    Two properties a token table cannot provide:
+
+    1. **Binding.** A server-side set of issued tokens records only *that* a token
+       exists, not *who* it was issued to. `validate_token(token)` with no identity
+       argument therefore accepts an attacker's own token on a victim's request,
+       which is exactly the boundary CSRF is supposed to enforce.
+    2. **Portability.** An in-memory dict is per-process. Behind more than one worker
+       (or across a restart) a token minted on worker A is unknown to worker B, so
+       valid submissions are rejected nondeterministically.
+
+    Signing the session id and issue time with an HMAC fixes both: the token carries
+    its own binding and expiry, every worker sharing the secret can verify it, and
+    nothing needs to be stored.
+    """
+
     def __init__(self, config: SecurityConfig):
         self.config = config
-        self.tokens: Dict[str, float] = {}  # token -> timestamp
-    
-    def generate_token(self, user_id: str = None) -> str:
-        """Generate CSRF token"""
-        token_data = f"{user_id or 'anonymous'}:{time.time()}:{secrets.token_urlsafe(16)}"
-        token = hashlib.sha256(token_data.encode()).hexdigest()[:self.config.csrf_token_length]
-        
-        # Store token with timestamp
-        self.tokens[token] = time.time()
-        
-        # Clean up old tokens (older than 1 hour)
-        cutoff_time = time.time() - 3600
-        self.tokens = {t: ts for t, ts in self.tokens.items() if ts > cutoff_time}
-        
-        return token
-    
-    def validate_token(self, token: str, max_age: int = 3600) -> bool:
-        """Validate CSRF token"""
-        if not token or token not in self.tokens:
+        # Must be the same secret in every worker; load it from configuration, not
+        # from per-process randomness.
+        self._secret = config.csrf_secret_key.encode('utf-8')
+
+    def _sign(self, session_id: str, issued_at: str, nonce: str) -> str:
+        message = f"{session_id}:{issued_at}:{nonce}".encode('utf-8')
+        return hmac.new(self._secret, message, hashlib.sha256).hexdigest()
+
+    def generate_token(self, session_id: str) -> str:
+        """Mint a token bound to this session."""
+        if not session_id:
+            raise ValueError("CSRF tokens must be bound to a session or principal")
+        issued_at = str(int(time.time()))
+        nonce = secrets.token_urlsafe(16)
+        signature = self._sign(session_id, issued_at, nonce)
+        return f"{issued_at}.{nonce}.{signature}"
+
+    def validate_token(self, token: str, session_id: str, max_age: int = 3600) -> bool:
+        """Validate a token *for this session*. The session argument is required."""
+        if not token or not session_id:
             return False
-        
-        token_time = self.tokens.get(token)
-        if not token_time:
+
+        try:
+            issued_at, nonce, signature = token.split('.')
+            issued_at_ts = int(issued_at)
+        except (ValueError, AttributeError):
             return False
-        
-        # Check if token is expired
-        if time.time() - token_time > max_age:
-            del self.tokens[token]
+
+        expected = self._sign(session_id, issued_at, nonce)
+        # Constant-time: a timing oracle here would leak the signature byte by byte.
+        if not hmac.compare_digest(expected, signature):
             return False
-        
-        return True
-    
-    def invalidate_token(self, token: str):
-        """Invalidate CSRF token"""
-        self.tokens.pop(token, None)
+
+        return 0 <= time.time() - issued_at_ts <= max_age
 
 class SecurityHeaders:
     """Security HTTP headers management"""
@@ -1729,8 +1837,8 @@ def security_framework_example():
     
     # CSRF protection
     csrf = CSRFProtection(config)
-    token = csrf.generate_token("user123")
-    is_valid = csrf.validate_token(token)
+    token = csrf.generate_token(session_id="session-abc123")
+    is_valid = csrf.validate_token(token, session_id="session-abc123")
     print(f"CSRF token validation: {is_valid}")
     
     # IP filtering

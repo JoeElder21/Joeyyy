@@ -354,6 +354,55 @@ class OrderService
   end
 end
 
+# The job OrderService enqueues above. It has to exist here: the enqueue happens
+# after the transaction commits, so a missing constant surfaces as a NameError that
+# the service rescues as an ordinary failure while the order, the inventory decrement
+# and the cart deletion are already committed and no payment is ever captured.
+class CapturePaymentJob < ApplicationJob
+  queue_as :payments
+
+  retry_on PaymentGateway::TransientError, wait: :exponentially_longer, attempts: 5
+  discard_on ActiveRecord::RecordNotFound
+
+  def perform(order_id)
+    order = Order.find(order_id)
+
+    # Idempotent on the order id: a retry after a timeout must never charge twice.
+    return if order.payment_captured?
+
+    result = PaymentGateway.capture(
+      amount: order.total,
+      customer: order.user,
+      idempotency_key: "order-#{order.id}"
+    )
+
+    if result.success?
+      order.update!(status: 'paid', payment_captured_at: Time.current,
+                    payment_reference: result.reference)
+      OrderMailer.confirmation(order).deliver_later
+    else
+      # A hard decline is final - reconcile rather than retry.
+      reconcile_failed_order(order, result.message)
+    end
+  rescue PaymentGateway::TransientError
+    # Let retry_on handle it; reconcile only once the attempts are exhausted.
+    raise
+  end
+
+  # Called by retry_on when every attempt has failed, and by the decline path above.
+  # Without this the order sits 'pending' forever with its stock still reserved.
+  def reconcile_failed_order(order, reason)
+    ActiveRecord::Base.transaction do
+      order.update!(status: 'payment_failed', failure_reason: reason)
+      order.order_items.each do |item|
+        Product.where(id: item.product_id)
+               .update_all("stock = stock + #{item.quantity.to_i}")
+      end
+    end
+    OrderMailer.payment_failed(order).deliver_later
+  end
+end
+
 # Usage in controller
 class OrdersController < ApplicationController
   def create
@@ -401,9 +450,16 @@ class ProcessUploadJob < ApplicationJob
     )
     
     UploadMailer.completed(upload).deliver_later
+  rescue ActiveRecord::RecordNotFound
+    # Let it through untouched. `upload` is still nil here - the lookup is what
+    # raised - so the broad rescue below would call `failed!` on nil and replace
+    # RecordNotFound with NoMethodError. `discard_on ActiveRecord::RecordNotFound`
+    # would then never fire, and `retry_on StandardError` would keep re-running the
+    # job for a record that no longer exists.
+    raise
   rescue StandardError => e
-    upload.failed!
-    upload.update!(error_message: e.message)
+    upload&.failed!
+    upload&.update!(error_message: e.message)
     raise
   end
   
@@ -537,7 +593,17 @@ class UserRegistrationForm
   
   attr_accessor :email, :password, :password_confirmation,
                 :first_name, :last_name, :company_name,
-                :subscribe_newsletter, :terms_accepted
+                :terms_accepted
+  
+  # NOT a bare attr_accessor. Rails form helpers pair a checkbox with a hidden field,
+  # so an *unchecked* box submits the string "0" - and every string is truthy in Ruby,
+  # so `if subscribe_newsletter` enqueued the subscription for users who declined.
+  # ActiveModel's Boolean type maps "0", "false", "" and nil to false.
+  attr_reader :subscribe_newsletter
+  
+  def subscribe_newsletter=(value)
+    @subscribe_newsletter = ActiveModel::Type::Boolean.new.cast(value)
+  end
   
   validates :email, presence: true, email: true
   validates :password, presence: true, length: { minimum: 8 }
