@@ -307,7 +307,12 @@ class MissionRunner:
         # a mission cannot land in the promotion record while leaving no trace of
         # what it cost Joe.
         self.value_ledger = ValueLedger(value_ledger_path or DEFAULT_VALUE_LEDGER)
-        self.value_policy = value_policy or ValuePolicy.load()
+        # Load the policy from *this* runner's root. Using the module-global
+        # default meant a runner pointed at a staged or temporary checkout was
+        # measured against the policy of a different repository.
+        self.value_policy = value_policy or ValuePolicy.load(
+            root / "config" / "value_policy.toml"
+        )
 
     # ---------------------------------------------------------------- prepare
 
@@ -504,15 +509,14 @@ class MissionRunner:
             "notes": notes,
         }
 
-        # Persist the value observation, fail-closed. A mission whose cost cannot
-        # be recorded does not get to count toward promotion: otherwise a mode
-        # could accumulate lifecycle evidence while its value stayed invisible.
+        # Validate the observation up front, but do not persist it yet: the two
+        # ledgers must land together. Writing value first and then failing to
+        # write the mission record would leave reportable value credit behind
+        # for a mission that officially never completed.
         value_recorded = False
+        pending_observation = None
         try:
-            self.value_ledger.record(
-                build_observation(self.value_policy, value_observation)
-            )
-            value_recorded = True
+            pending_observation = build_observation(self.value_policy, value_observation)
         except ObservationRejected as rejection:
             errors.append(f"value observation rejected: {rejection}")
 
@@ -534,7 +538,30 @@ class MissionRunner:
             completed_at=completed_at,
         )
 
+        # Ordering matters in both directions. Writing value first risks value
+        # credit for a mission with no completion record; writing the mission
+        # record first with the flag already unset means the reconstructed
+        # evidence never qualifies. So the flag is set to what the write is
+        # about to achieve, the mission record lands first, and a failure to
+        # record value emits a compensating entry that revokes the claim.
+        evidence.value_recorded = pending_observation is not None
         evidence.ledger_entry = self.ledger.append("mission_completed", evidence.to_json())
+
+        if pending_observation is not None:
+            try:
+                self.value_ledger.record(pending_observation)
+            except OSError as failure:
+                evidence.value_recorded = False
+                evidence.errors.append(f"value ledger write failed: {failure}")
+                self.ledger.append(
+                    "value_record_failed",
+                    {
+                        "delegation_id": evidence.delegation_id,
+                        "mission_id": evidence.mission_id,
+                        "mode": evidence.mode,
+                        "error": str(failure),
+                    },
+                )
         return evidence
 
     def contract_sha(self, agent: str) -> str:
@@ -562,6 +589,7 @@ class MissionRunner:
         if not self.ledger.path.exists():
             return []
         recovered: list[MissionEvidence] = []
+        revoked: set[str] = set()
         for raw in self.ledger.path.read_text(encoding="utf-8").splitlines():
             raw = raw.strip()
             if not raw:
@@ -569,6 +597,9 @@ class MissionRunner:
             try:
                 entry = json.loads(raw)
             except json.JSONDecodeError:
+                continue
+            if entry.get("event") == "value_record_failed":
+                revoked.add(entry.get("detail", {}).get("delegation_id"))
                 continue
             if entry.get("event") != "mission_completed":
                 continue
@@ -594,7 +625,10 @@ class MissionRunner:
                     completed_at=detail.get("completed_at", ""),
                 )
             )
-        return recovered
+        # Drop missions whose value record was later revoked by a compensation.
+        return [
+            evidence for evidence in recovered if evidence.delegation_id not in revoked
+        ]
 
     # ---------------------------------------------------------------- helpers
 
@@ -657,8 +691,13 @@ class MissionRunner:
         Reports the gap honestly: a mode with no qualifying mission is listed as
         uncovered, not omitted. Silence about missing coverage reads as coverage.
         """
+        ledger_errors: list[str] = []
         if evidences is None:
-            evidences = self.evidence_from_ledger()
+            # A broken hash chain means the evidence store has been rewritten.
+            # Granting coverage from it would let an edited record promote a
+            # mode, so fail closed and grant nothing.
+            ledger_errors = self.ledger.verify()
+            evidences = [] if ledger_errors else self.evidence_from_ledger()
 
         qualifying: dict[str, list[str]] = {}
         stale: list[str] = []
@@ -666,9 +705,9 @@ class MissionRunner:
             if not evidence.qualifies_mode:
                 continue
             current = self.contract_sha(evidence.agent) if evidence.agent in self.roster else ""
-            if evidence.contract_sha and current and evidence.contract_sha != current:
-                # The contract changed after this run, so the behaviour it
-                # evidenced is no longer the behaviour that would run today.
+            # An absent hash is stale, not exempt. Defaulting it to "" and then
+            # skipping the comparison failed open on the exact binding it added.
+            if not evidence.contract_sha or evidence.contract_sha != current:
                 stale.append(f"{evidence.agent}:{evidence.mode}")
                 continue
             qualifying.setdefault(evidence.agent, []).append(evidence.mode)
@@ -694,6 +733,8 @@ class MissionRunner:
             name for name, entry in report["agents"].items() if entry["all_modes_covered"]
         )
         report["stale_contract_evidence"] = sorted(set(stale))
+        report["ledger_verification_errors"] = ledger_errors
+        report["ledger_trustworthy"] = not ledger_errors
         return report
 
 

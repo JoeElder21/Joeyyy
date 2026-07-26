@@ -214,8 +214,10 @@ class CompleteTests(RunnerHarness):
         self.assertIsNotNone(prepared and self.runner.ledger.path)
         self.assertEqual(self.runner.ledger.verify(), [])
         lines = self.runner.ledger.path.read_text(encoding="utf-8").strip().splitlines()
-        # One prepare entry and one completion entry.
+        # One prepare entry and one completion entry; value recording succeeds
+        # and therefore emits no compensating entry.
         self.assertEqual(len(lines), 2)
+        self.assertNotIn("value_record_failed", "".join(lines))
 
     def test_rewriting_a_chained_entry_is_detected(self):
         prepared = self.runner.prepare(spec())

@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 from typing import Any
@@ -22,6 +21,21 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = ROOT / ".state" / "trusted_launcher_ledger.json"
+
+# Fixed search path for allowlisted executables.
+#
+# Resolving through the inherited PATH — even to an absolute path — still lets
+# whoever controls the environment choose the binary a signed grant executes.
+# The grant authorizes a tool, not "whatever is first on PATH", so resolution
+# ignores the environment entirely.
+TRUSTED_BIN_DIRS = (
+    Path("/usr/local/bin"),
+    Path("/usr/bin"),
+    Path("/bin"),
+    Path("/usr/local/sbin"),
+    Path("/usr/sbin"),
+    Path("/sbin"),
+)
 
 
 def _utcnow() -> datetime:
@@ -219,14 +233,19 @@ class TrustedLauncher:
         resolved = list(command)
         executable = resolved[0]
         if Path(executable).is_absolute():
-            if not Path(executable).exists():
+            if not Path(executable).is_file():
                 raise GrantDeniedError(f"allowlisted executable not found: {executable}")
             return resolved
-        found = shutil.which(executable)
-        if not found:
-            raise GrantDeniedError(f"allowlisted executable not found on PATH: {executable}")
-        resolved[0] = str(Path(found).resolve())
-        return resolved
+        for directory in TRUSTED_BIN_DIRS:
+            candidate = directory / executable
+            if candidate.is_file():
+                resolved[0] = str(candidate)
+                return resolved
+        raise GrantDeniedError(
+            f"allowlisted executable {executable!r} was not found in the trusted "
+            f"bin directories {[str(d) for d in TRUSTED_BIN_DIRS]}; PATH is "
+            "deliberately not consulted"
+        )
 
     def _used_grants(self) -> set[str]:
         if not self.ledger_path.exists():

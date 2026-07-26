@@ -166,14 +166,26 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(verdict.verdict, VERDICT_BELOW)
         self.assertFalse(verdict.value_proven)
 
-    def test_very_weak_savings_trigger_demotion(self):
+    def test_very_weak_savings_demote_a_mode_that_previously_passed(self):
+        verdict = evaluate_mode(
+            "delivery_control",
+            self.observations(self.policy.min_observations, review_minutes=50),
+            self.policy,
+            now=NOW,
+            previously_met=True,
+        )
+        self.assertEqual(verdict.verdict, VERDICT_DEMOTE)
+
+    def test_a_mode_that_never_passed_is_not_demoted(self):
+        """Demotion is a move down from a stage the mode actually reached."""
         verdict = evaluate_mode(
             "delivery_control",
             self.observations(self.policy.min_observations, review_minutes=50),
             self.policy,
             now=NOW,
         )
-        self.assertEqual(verdict.verdict, VERDICT_DEMOTE)
+        self.assertEqual(verdict.verdict, VERDICT_BELOW)
+        self.assertIn("nothing to demote it from", " ".join(verdict.reasons))
 
     def test_low_first_pass_acceptance_blocks_a_pass_on_minutes_alone(self):
         # Strong minutes, but Joe rarely accepts the first answer.
@@ -291,3 +303,16 @@ class MeasurementIntegrityTests(unittest.TestCase):
         )
         verdict = evaluate_mode("delivery_control", observations, self.policy, now=NOW)
         self.assertEqual(verdict.verdict, VERDICT_BLOCKED)
+
+
+class ReportCoverageTests(unittest.TestCase):
+    def test_a_fresh_ledger_still_reports_configured_modes(self):
+        """Otherwise the documented no_baseline verdict never appears."""
+        policy = ValuePolicy.load()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ValueLedger(Path(tmp) / "value.jsonl")
+            report = ledger.report(policy, now=NOW)
+            reported = {entry["mode"] for entry in report["modes"]}
+            self.assertTrue(reported)
+            self.assertTrue(set(policy.baselines).issubset(reported))
+            self.assertEqual(report["value_proven_modes"], [])

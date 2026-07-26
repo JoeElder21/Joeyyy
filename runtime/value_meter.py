@@ -279,6 +279,7 @@ def evaluate_mode(
     observations: Iterable[Observation],
     policy: ValuePolicy,
     now: datetime | None = None,
+    previously_met: bool = False,
 ) -> ModeVerdict:
     """Return the verdict the evidence supports for one mode."""
     now = now or datetime.now(timezone.utc)
@@ -361,11 +362,23 @@ def evaluate_mode(
         return verdict
 
     if verdict.mean_ratio < policy.demotion_ratio:
-        verdict.verdict = VERDICT_DEMOTE
-        verdict.reasons.append(
-            f"Mean net saving {verdict.mean_ratio:.0%} is below the demotion floor "
-            f"{policy.demotion_ratio:.0%}."
-        )
+        # Demotion is a lifecycle move *down* from a stage the mode reached.
+        # A brand-new shadow mode has nothing to be demoted from, so weak first
+        # results are reported as below-threshold rather than recommending an
+        # impossible transition.
+        if previously_met:
+            verdict.verdict = VERDICT_DEMOTE
+            verdict.reasons.append(
+                f"Mean net saving {verdict.mean_ratio:.0%} is below the demotion floor "
+                f"{policy.demotion_ratio:.0%} after previously meeting the threshold."
+            )
+        else:
+            verdict.verdict = VERDICT_BELOW
+            verdict.reasons.append(
+                f"Mean net saving {verdict.mean_ratio:.0%} is below the demotion floor "
+                f"{policy.demotion_ratio:.0%}, but this mode has never met the "
+                "threshold, so there is nothing to demote it from."
+            )
         return verdict
 
     if verdict.mean_ratio < threshold:
@@ -413,7 +426,14 @@ class ValueLedger:
         now: datetime | None = None,
     ) -> dict[str, Any]:
         observations = self.observations(policy)
-        target_modes = sorted(set(modes) if modes else {o.mode for o in observations})
+        # Deriving targets only from recorded observations meant a fresh ledger
+        # reported no modes at all, so the documented `no_baseline` verdict never
+        # appeared until after a run. Configured modes are always in scope.
+        target_modes = sorted(
+            set(modes)
+            if modes
+            else {o.mode for o in observations} | set(policy.baselines)
+        )
         verdicts = [
             evaluate_mode(mode, observations, policy, now=now).to_json()
             for mode in target_modes
