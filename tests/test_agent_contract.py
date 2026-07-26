@@ -301,6 +301,61 @@ class AwesomeCopilotLayerTests(unittest.TestCase):
                 with self.subTest(agent=name, tool=tool):
                     self.assertNotIn(tool, tools_line)
 
+    def test_workflow_actions_are_sha_pinned_or_recorded_as_unpinned(self):
+        """The vendored CI standard requires full commit-SHA pins.
+
+        `github-actions-ci-cd-best-practices.instructions.md` applies to
+        `.github/workflows/*.yml` by its own `applyTo`, and says a mutable tag
+        can be moved to a compromised commit. `validate-agent.yml` runs
+        `actions/checkout@v4` and `actions/setup-python@v5` before any gate in
+        this repository executes, so a moved tag changes CI without a reviewed
+        commit here.
+
+        Resolving those two SHAs needs network access to `actions/*`, which
+        this environment denies (the GitHub tool is scoped to Joe's own
+        repositories and the API returns 403). Rather than invent a SHA or
+        leave the standard unenforced, the two known references are recorded
+        below with the command that resolves them. Any NEW unpinned action
+        fails immediately.
+        """
+        import re
+
+        # Recorded, not tolerated: each entry is a known gap with an owner.
+        # Resolve with:
+        #   gh api repos/actions/checkout/git/ref/tags/v4 --jq .object.sha
+        UNPINNED_PENDING_RESOLUTION = {
+            "actions/checkout@v4",
+            "actions/setup-python@v5",
+        }
+
+        workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+        self.assertTrue(workflows, "no workflows found; test is vacuous")
+
+        unpinned = []
+        for workflow in workflows:
+            for line in workflow.read_text(encoding="utf-8").splitlines():
+                match = re.search(r"uses:\s*(\S+)", line)
+                if not match:
+                    continue
+                reference = match.group(1)
+                if "@" not in reference:
+                    unpinned.append(reference)
+                    continue
+                _, _, version = reference.partition("@")
+                if not re.fullmatch(r"[0-9a-f]{40}", version):
+                    unpinned.append(reference)
+
+        self.assertEqual(
+            sorted(set(unpinned) - UNPINNED_PENDING_RESOLUTION), [],
+            "a workflow action is pinned to a mutable tag and is not on the "
+            "recorded-gap list; pin it to a full commit SHA")
+        # The recorded list must not outlive the gap: once an entry is pinned,
+        # it has to be deleted from here rather than left as a standing excuse.
+        self.assertEqual(
+            sorted(UNPINNED_PENDING_RESOLUTION - set(unpinned)), [],
+            "a recorded gap is no longer present in any workflow; remove it "
+            "from UNPINNED_PENDING_RESOLUTION")
+
     def test_the_prescribed_privacy_command_sees_untracked_files(self):
         """The template told you to run the blind form of the gate.
 

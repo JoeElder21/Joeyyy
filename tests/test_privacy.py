@@ -1435,6 +1435,147 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         # a rule that flags ordinary repository paths.
         self.assertEqual(scan_repository(ROOT), [])
 
+    @needs_yaml
+    def test_the_walk_is_bounded_by_work_not_only_by_emitted_values(self):
+        """A budget that counts only leaves bounds nothing.
+
+        `x: &x {a: *x, b: *x}` emits no scalars at all, so the emitted-value
+        budget never decremented — while keying visits on (identity, path),
+        which round 25 added to stop an aliased credential being suppressed,
+        made every alias branch a distinct visit. The depth cap then enumerated
+        an exponential tree and the gate hung on a one-line file. Work is
+        charged per node popped now, which is the only quantity that bounds a
+        graph walk."""
+        import time
+
+        cycles = {
+            "two-way scalar-free cycle": "x: &x {a: *x, b: *x}\n",
+            "three-way cycle": "x: &x {a: *x, b: *x, c: *x}\n",
+            "cycle referenced again": "x: &x {a: *x, b: *x}\ny: *x\nz: *x\n",
+            "self-referential mapping": "a: &a\n  self: *a\n",
+        }
+        for label, body in cycles.items():
+            started = time.time()
+            emitted = yaml_reconstructed_values(body)
+            with self.subTest(case=label):
+                self.assertLess(time.time() - started, 15,
+                                f"{label}: the walk did not terminate promptly")
+                self.assertIsInstance(emitted, str)
+
+        # Bounding must not have cost ordinary reconstruction.
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        self.assertIn(secret, yaml_reconstructed_values(
+            "payload: &s %s\n%s: *s\n" % (secret, cred)))
+
+    @needs_yaml
+    def test_an_unexpected_node_shape_degrades_instead_of_raising(self):
+        """The gate reports; it never aborts.
+
+        A complex mapping key -- `? [a, b]` -- composes to a SequenceNode, and
+        putting it into the path made the tuple unhashable, so the visited-set
+        lookup raised TypeError straight out of the privacy gate. An untrusted
+        intake file must not be able to stop the scan running; the worst it
+        should achieve is an incomplete-scan finding."""
+        secret = "Xy7Q" + "secretValue0192"
+        cred = "AZURE" + "_CLIENT_SECRET"
+        shapes = {
+            "complex sequence key": "? [a, b]\n: {x: y}\n",
+            "complex mapping key": "? {a: b}\n: value\n",
+            "complex key beside a credential":
+                "outer:\n  ? [a, b]\n  : {%s: %s}\n" % (cred, secret),
+            "complex key at the root with an alias":
+                "? &k [a, b]\n: *k\n",
+        }
+        for label, body in shapes.items():
+            with self.subTest(case=label):
+                # The contract is "returns a string", never "raises".
+                self.assertIsInstance(yaml_reconstructed_values(body), str)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            probe = root / "complex.yaml"
+            probe.write_text(shapes["complex key beside a credential"],
+                             encoding="utf-8")
+            # And a credential sitting next to the odd shape is still found.
+            self.assertTrue(
+                any("credential assignment" in finding
+                    for finding in scan_paths([probe], root=root)))
+
+    @needs_yaml
+    def test_json_is_covered_by_the_completeness_check(self):
+        """JSON is a subset of YAML, so the YAML reader is authoritative for it.
+
+        The format gate added last round listed `.yaml`, `.yml` and `.toml` and
+        omitted `.json`, so a JSON connector config with an escaped credential
+        key and a syntax error after it fell through to raw patterns that
+        cannot decode the escapes, and read clean. The patterns already claim
+        explicit JSON support; the completeness check has to cover the same
+        formats the patterns do."""
+        secret = "Xy7Q" + "secretValue0192"
+        escaped = '"AZURE\\u005fCLIENT\\u005fSECRET"'
+        cases = {
+            "escaped key plus trailing garbage":
+                ("a.json", '{%s:"%s"} garbage\n' % (escaped, secret), True),
+            "escaped key, valid json":
+                ("b.json", '{%s:"%s"}\n' % (escaped, secret), True),
+            "unparseable json": ("c.json", "{not json\n", True),
+            "ordinary json": ("d.json", '{"name":"governance"}\n', False),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for label, (name, body, expected) in cases.items():
+                probe = root / name
+                probe.write_text(body, encoding="utf-8")
+                with self.subTest(case=label):
+                    self.assertEqual(
+                        bool(scan_paths([probe], root=root)), expected, label)
+
+    def test_a_filename_cannot_become_a_scanner_option(self):
+        """A path argument must be a path, whatever it is named.
+
+        The changed-file invocation the template prescribes is built from
+        filenames, so a repository file called `--help` landed as the scanner's
+        first argument: it printed usage, exited 0, and scanned none of the
+        remaining paths. A green gate over an unscanned tree, chosen by whoever
+        named the file. `--` ends option parsing."""
+        import scripts.privacy_guard as guard
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "--help").write_text("harmless\n", encoding="utf-8")
+            planted = "API" + "_KEY" + ' = "' + "an" + 'ActualPrivateCredential"'
+            (root / "leaky.toml").write_text(planted + "\n", encoding="utf-8")
+
+            # Without `--`, the option-looking name is still interpreted --
+            # which is why the template must pass it.
+            self.assertEqual(guard.main(["--help"]), 0)
+
+            # With `--`, both are treated as paths and the credential is found.
+            # Assert on the REPORT, not just the exit code: without `--`
+            # handling, `--` itself is taken as a path and the run exits 1
+            # because that path is unreadable -- the right number for the wrong
+            # reason, which is how the first version of this test passed
+            # against the unfixed commit.
+            import contextlib
+            import io
+
+            captured = io.StringIO()
+            with contextlib.redirect_stdout(captured):
+                code = guard.main(
+                    ["--", str(root / "--help"), str(root / "leaky.toml")])
+            report = captured.getvalue()
+
+            self.assertEqual(code, 1,
+                             "the scan must fail, not print usage and exit 0")
+            self.assertIn("credential assignment", report,
+                          "the planted credential must be reported")
+            self.assertIn("leaky.toml", report)
+            self.assertNotIn("usage: privacy_guard.py", report)
+            # `--` must have been consumed as the separator, never scanned as a
+            # path of its own.
+            self.assertNotIn("unreadable", report)
+
     def test_placeholder_stripping_requires_whole_token_boundaries(self):
         """A placeholder is only approved as a complete lexical unit.
 

@@ -304,6 +304,13 @@ MAX_KEY_DEPTH = 64
 # Suffix forms emitted per leaf, counted from the leaf end -- the credential
 # name is always near it, never near the root.
 MAX_KEY_FORMS = 8
+# Total nodes either walker may VISIT. The emitted-value budget counts only
+# leaves, so a branching alias cycle -- `x: &x {a: *x, b: *x}` -- emits nothing
+# and was bounded by nothing: keying visits on (identity, path) makes every
+# alias branch a distinct visit, and the depth cap then enumerates an
+# exponential tree. A tiny hostile file hung the gate outright. Work is charged
+# per node popped, which is the only quantity that actually bounds the walk.
+MAX_NODE_VISITS = 200_000
 
 
 def _yaml_loader():
@@ -382,41 +389,63 @@ def yaml_reconstructed_values(text: str) -> str:
     # limit raised RecursionError and took the whole gate down instead of
     # producing a bounded finding, which is a way to stop the scan running.
     stack = [(document, ()) for document in reversed(documents)]
-    while stack:
-        if budget[0] <= 0:
-            truncated[0] = True
-            break
-        node, path = stack.pop()
-        if len(path) > MAX_KEY_DEPTH:
-            truncated[0] = True
-            continue
-        if isinstance(node, yaml.ScalarNode):
-            if path and node.value:
-                emit(path, node.value)
-            continue
-        # Key the visit on (identity, KEY PATH), not identity alone. An alias
-        # composes to the SAME node object, so a mapping first reached under an
-        # innocuous key and later aliased beneath a credential-forming one is
-        # one object at two paths -- and suppressing the second dropped the
-        # only path that would have matched.
-        marker = (id(node), path)
-        if marker in seen:
-            continue
-        seen.add(marker)
-        if isinstance(node, yaml.MappingNode):
-            # node.value is a LIST of (key, value) pairs, so duplicate keys are
-            # all present here.
-            for key_node, value_node in node.value:
-                child = getattr(key_node, "value", None)
-                stack.append(
-                    (value_node, path + (child,) if child else path))
-        elif isinstance(node, yaml.SequenceNode):
-            for item in node.value:
-                stack.append((item, path))
+    visits = MAX_NODE_VISITS
+    try:
+        while stack:
+            # Charge EVERY node, not just emitted scalars.
+            visits -= 1
+            if visits <= 0 or budget[0] <= 0:
+                truncated[0] = True
+                break
+            node, path = stack.pop()
+            if len(path) > MAX_KEY_DEPTH:
+                truncated[0] = True
+                continue
+            if isinstance(node, yaml.ScalarNode):
+                if path and node.value:
+                    emit(path, node.value)
+                continue
+            # Key the visit on (identity, KEY PATH), not identity alone. An
+            # alias composes to the SAME node object, so a mapping first
+            # reached under an innocuous key and later aliased beneath a
+            # credential-forming one is one object at two paths -- and
+            # suppressing the second dropped the only path that would have
+            # matched.
+            marker = (id(node), path)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            if isinstance(node, yaml.MappingNode):
+                # node.value is a LIST of (key, value) pairs, so duplicate keys
+                # are all present here.
+                for key_node, value_node in node.value:
+                    stack.append((value_node, path + (_path_part(key_node),)))
+            elif isinstance(node, yaml.SequenceNode):
+                for item in node.value:
+                    stack.append((item, path))
+    except Exception:  # noqa: BLE001 - the gate reports, it never aborts
+        # A shape no branch anticipated (a complex mapping key, a node type
+        # added upstream) must degrade to "this file was not fully
+        # reconstructed", never to a traceback out of the privacy gate. An
+        # untrusted intake file must not be able to stop the scan running.
+        truncated[0] = True
 
     if truncated[0] or budget[0] <= 0:
         lines.append(TRUNCATION_MARKER)
     return "\n".join(line for line in lines if line)
+
+
+def _path_part(key_node) -> str:
+    """A hashable, bounded path component for any YAML key node.
+
+    A complex key -- `? [a, b]` -- composes to a SequenceNode, and putting it
+    straight into the path made the tuple unhashable, so the visited-set lookup
+    raised TypeError out of the gate. Keys like this carry no credential name,
+    so a stable placeholder preserves the path shape without pretending to
+    reconstruct them.
+    """
+    value = getattr(key_node, "value", None)
+    return value if isinstance(value, str) else "?"
 
 
 def _key_forms(path) -> list[str]:
@@ -493,8 +522,10 @@ def toml_reconstructed_values(text: str) -> str:
     # ordinary valid TOML and must not be able to raise RecursionError out of
     # the privacy gate.
     stack: list[tuple[object, tuple]] = [(document, ())]
+    visits = MAX_NODE_VISITS
     while stack:
-        if budget[0] <= 0:
+        visits -= 1
+        if visits <= 0 or budget[0] <= 0:
             truncated = True
             break
         node, path = stack.pop()
@@ -1004,8 +1035,16 @@ def _scan_files(
         # reconstruction", which is a false finding, and a noisy gate is one
         # people learn to override.
         suffix = relative.suffix.lower()
+        # JSON is a SUBSET of YAML, so the YAML reconstruction is the
+        # authoritative reader for a .json file -- and this gate omitted it, so
+        # a JSON connector config with an escaped credential key and a syntax
+        # error after it fell through to raw patterns that cannot decode the
+        # escapes, and read clean. The scanner has explicit JSON support in its
+        # patterns; the completeness check has to cover the same formats the
+        # patterns claim.
         declared = (
-            (suffix in {".yaml", ".yml"} and TRUNCATION_MARKER in yaml_values)
+            (suffix in {".yaml", ".yml", ".json"}
+             and TRUNCATION_MARKER in yaml_values)
             or (suffix == ".toml" and TRUNCATION_MARKER in toml_values)
         )
         reconstructions = [value.replace(TRUNCATION_MARKER, "")
@@ -1086,6 +1125,27 @@ def scan_paths(
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+
+    # `--` ends option parsing: everything after it is a PATH, whatever it is
+    # named. Without it, a repository file called `--help` handed to this
+    # scanner printed usage and exited 0 -- a green gate that scanned nothing,
+    # from a filename an untrusted contributor chooses. The session template's
+    # changed-file invocation relies on this.
+    if "--" in argv:
+        marker = argv.index("--")
+        options, literal_paths = argv[:marker], argv[marker + 1:]
+    else:
+        options, literal_paths = argv, []
+
+    if literal_paths:
+        findings = scan_paths([Path(arg) for arg in literal_paths])
+        if findings:
+            print("\n".join(findings))
+            return 1
+        print(f"Privacy guard passed for {len(literal_paths)} given path(s).")
+        return 0
+
+    argv = options
     if argv and argv[0] in ("-h", "--help"):
         print(
             "usage: privacy_guard.py [PATH ...] [--as DEST]\n\n"
