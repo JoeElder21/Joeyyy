@@ -36,6 +36,15 @@ def canonical_key(owner_brain: str, write_target: str, resource_id: str) -> str:
     Gate 8: whitespace anywhere, non-ASCII, or text that changes under NFKC
     normalization (a Unicode alias) is rejected outright — aliases cannot
     collide because they cannot enter.
+
+    The ``resource_id`` is case-folded to match ``PacketGuard._canonical_identifier``
+    (NFKC + casefold). Without this, ``"Playbook"`` and ``"playbook"`` produced
+    two distinct keys here but a single canonical resource in PacketGuard's
+    lease-ledger collision check, so the registry — the sole single-writer gate
+    on the ``memory_layer``/``lease_queue`` write path — would issue two active
+    leases on one resource. The reject checks above guarantee each part is
+    already whitespace-free and NFKC-stable, so casefold is the only remaining
+    transform needed to align the two canonical forms.
     """
     parts = (owner_brain, write_target, resource_id)
     for part in parts:
@@ -49,7 +58,7 @@ def canonical_key(owner_brain: str, write_target: str, resource_id: str) -> str:
             raise LeaseError(f"whitespace in lease key part rejected: {part!r}")
     if owner_brain not in _BRAINS:
         raise LeaseError(f"unknown owner brain: {owner_brain!r}")
-    return "/".join(parts)
+    return "/".join((owner_brain, write_target, resource_id.casefold()))
 
 
 @dataclass

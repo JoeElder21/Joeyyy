@@ -445,6 +445,27 @@ def _grant_scope(mount: str) -> str:
         return ""
 
 
+def _claim_nonce_exclusively(ledger: AuditLedger, nonce: str) -> None:
+    """Take an exclusive on-disk claim on a nonce before consuming it.
+
+    The consumed-nonce check (`_consumed_nonces`) and the ledger append that
+    records consumption are two separate steps, with `check_agent`'s manifest
+    reads in between, so two concurrent launches of the same grant could both
+    pass the replay check before either appended — executing one single-use
+    grant twice and opening two write-capable connector sessions. An O_EXCL
+    claim file makes the winner unambiguous; the loser gets `FileExistsError`
+    and is denied. `runtime/trusted_launcher.py` guards the identical race the
+    same way; this closes the gap in the scripts launcher. The claim name is a
+    hash of the (already signature-authenticated) nonce so no nonce value can
+    escape the ledger directory.
+    """
+    ledger.path.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+    claim = ledger.path.parent / f".{ledger.path.name}.claim-{digest}"
+    fd = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    os.close(fd)
+
+
 def _consumed_nonces(ledger: AuditLedger) -> set[str]:
     if not ledger.path.exists():
         return set()
@@ -642,6 +663,16 @@ def authorize(
     check_agent(spec, signed_agent)
     authorized["agent"] = signed_agent
     authorized["agent_source"] = "signed-grant"
+
+    # Claim the nonce atomically now that every validation has passed and we are
+    # about to record consumption. Doing this only here means a denied attempt
+    # (expiry, lifecycle, identity mismatch) never consumes the grant, while a
+    # concurrent second launch of the same grant loses the O_EXCL race and is
+    # denied instead of slipping through the window before the append lands.
+    try:
+        _claim_nonce_exclusively(ledger, payload["nonce"])
+    except FileExistsError as error:
+        raise deny("grant already being consumed (single-use)") from error
 
     ledger.append(
         "launch_authorized",
