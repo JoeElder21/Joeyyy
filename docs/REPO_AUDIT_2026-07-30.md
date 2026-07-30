@@ -51,6 +51,44 @@ re-measured before being acted on. The lesson is recorded rather than
 explained away: an audit is only as current as its fetch, and this one did not
 fetch first.
 
+### The full-stack CI job was attempted and withdrawn
+
+Finding 16 proposed a CI job installing the whole runtime stack so the
+dependency-gated tests would run somewhere. It was written, pushed, and failed:
+
+```
+ERROR: Cannot install -r requirements/lock-2026-07-24.txt (line 36)
+and posthog==7.29.0 because these package versions have conflicting dependencies.
+    The user requested posthog==7.29.0
+    chromadb 1.1.1 depends on posthog<6.0.0 and >=2.4.0
+```
+
+`requirements/lock-2026-07-24.txt` is **not installable**, and main already
+knew: `docs/DEPENDENCY_AUDIT_2026-07-25.md` records the same conflict and lists
+regenerating the lockfile as an open remedy. That is why the `validate` job
+installs the per-tier `lock-runtime-root` and `lock-runtime-contracts` instead.
+
+So the finding is sharper than first recorded, and it is not a CI-configuration
+gap:
+
+- There is **no committed lock that resolves the orchestration, memory, or
+  observability tiers.** The only one that tried cannot be installed by any
+  resolver, so the full stack has never been installed anywhere — not in CI,
+  not on a workstation.
+- `langgraph` is in that unresolvable set. The lifecycle `StateGraph` in
+  `scripts/orchestration_graphs.py` therefore executes in no automated
+  environment, which is how it carried divergent gate logic (finding 1)
+  invisibly.
+- Closing this needs a real dependency decision — regenerate the lock, which
+  likely means pinning `posthog<6` or dropping whichever tier pulls `chromadb`
+  (crewai). That is a scope and architecture call, not a mechanical fix, and it
+  belongs to whoever owns the dependency policy.
+
+The job was removed rather than left red or weakened into something that passes
+without proving anything. `verify_runtime_stack.py --require-tier` was kept: it
+is what such a job would need, and it makes the absence checkable the moment a
+resolvable lock exists.
+
 ## Part 1 — What the repository is
 
 A governance and contract repository, not an application. It defines a
