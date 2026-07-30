@@ -68,6 +68,16 @@ VALID_EVIDENCE_SENSITIVITY = {"public", "internal", "confidential", "restricted"
 # Scheme-prefixed tokens are the shape a real connector locator takes.
 LOCATOR_PATTERN = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s\"'<>,;)\]]+")
 
+# The generated form: uuid4().hex[:12]. A pinned run_id must match it exactly,
+# because ids are composed as `<kind>:<agent>:<run_id>` and split back on ":".
+RUN_ID_PATTERN = re.compile(r"[0-9a-f]{12}")
+
+# Statuses whose return can carry benefit against the human baseline. The
+# baseline measures a completed task; `blocked` and `boundary_blocked` produced
+# no deliverable, so they carry their full cost and zero benefit rather than
+# drawing against a workload nobody performed.
+STATUSES_WITH_DELIVERABLE_VALUE = {"completed", "partial"}
+
 
 class MissionRejected(ValueError):
     """The mission cannot run as specified. Fail closed; never downgrade to a guess."""
@@ -369,6 +379,17 @@ class MissionRunner:
         spec.validated_against(meta)
 
         brain = meta["brain"]
+        if spec.run_id is not None and not RUN_ID_PATTERN.fullmatch(spec.run_id):
+            # Every id below is built as `<kind>:<agent>:<run_id>`, and the ids
+            # are split back apart on ":" to recover the run. A run_id carrying
+            # a colon, whitespace, or arbitrary length would silently produce
+            # ids that no longer parse to what they were built from, so it is
+            # refused rather than normalised -- a mission whose identity cannot
+            # be recovered is worse than a mission that never started.
+            raise MissionRejected(
+                f"{spec.agent}: run_id {spec.run_id!r} must be 12 lowercase hex "
+                "characters, matching the generated form"
+            )
         run_id = spec.run_id or uuid.uuid4().hex[:12]
         mission_id = spec.mission_id or f"mission:{spec.agent}:{spec.mode}:{run_id}"
         resource_id = spec.resource_id or f"resource:{spec.agent}:{run_id}"
@@ -413,6 +434,23 @@ class MissionRunner:
             },
         }
 
+        # The policy owns the baseline's provenance as well as its size.
+        # Checking only the minutes let a mission adopt the configured 240 while
+        # declaring `baseline_source = "measured"`, and the observation was then
+        # persisted as measured evidence -- silently upgrading Joe's declaration
+        # into a measurement nobody took.
+        configured = self.value_policy.baselines.get(spec.mode) or {}
+        configured_source = configured.get("source")
+        if (
+            configured_source in self.value_policy.baseline_sources
+            and spec.baseline_source != configured_source
+        ):
+            raise MissionRejected(
+                f"{spec.agent}: mode {spec.mode!r} has a {configured_source!r} baseline "
+                f"on record; this mission claims {spec.baseline_source!r}. Change the "
+                "provenance in config/value_policy.toml, not per mission"
+            )
+
         established = self._established_baseline(spec.mode)
         if established is not None and established != spec.baseline_minutes:
             # A baseline that moves per run lets the same mode reach 35% by
@@ -435,6 +473,22 @@ class MissionRunner:
                 f"{spec.agent}: delegation refused admission: {rejection}"
             ) from rejection
 
+        # Pinning a run_id reuses an identity, so it must not be allowed to
+        # reuse it for a DIFFERENT packet. Without this, a retry could keep the
+        # id while changing the objective, evidence, allowed actions or
+        # criteria, and the ledger would hold two delegations that are
+        # indistinguishable by identity while meaning different things --
+        # exactly the "byte-identical" guarantee the run_id comment claims.
+        packet_digest = self._packet_digest(delegation)
+        if spec.run_id is not None:
+            prior = self._prepared_packet_digest(delegation["delegation_id"])
+            if prior is not None and prior != packet_digest:
+                raise MissionRejected(
+                    f"{spec.agent}: run_id {spec.run_id!r} was already prepared for a "
+                    "different packet; pinning reuses an identity and may only "
+                    "reproduce the packet it was minted for"
+                )
+
         self.ledger.append(
             "mission_prepared",
             {
@@ -444,6 +498,7 @@ class MissionRunner:
                 "brain": brain,
                 "evidence_count": len(spec.evidence),
                 "baseline_minutes": spec.baseline_minutes,
+                "packet_digest": packet_digest,
             },
         )
 
@@ -576,8 +631,20 @@ class MissionRunner:
         # see MissionEvidence.qualifies_mode. A partial mission may be valuable
         # to Joe and still not count toward promoting a mode to active. Those
         # are two different questions and this is the one about value.
+        # Ignoring status ENTIRELY was an over-correction, and it opened a
+        # larger hole than the one it closed. A schema-valid `blocked` return
+        # with no artifacts and every criterion untested is trustworthy by this
+        # test, so an accepting caller would have credited it the full workload
+        # baseline; five of those reach meets_threshold without the workload
+        # ever being done. The baseline measures a completed task, so only a
+        # return that actually produced the deliverable may draw against it.
+        produced_deliverable = status in STATUSES_WITH_DELIVERABLE_VALUE and any(
+            artifact.get("records")
+            for artifact in handoff.get("artifacts", [])
+            if isinstance(artifact, dict)
+        )
         return_trustworthy = not errors
-        if not return_trustworthy:
+        if not return_trustworthy or not produced_deliverable:
             accepted_first_pass = False
             output_rejected = True
 
@@ -658,6 +725,52 @@ class MissionRunner:
                     },
                 )
         return evidence
+
+    @staticmethod
+    def _packet_digest(delegation: dict[str, Any]) -> str:
+        """Fingerprint the material content of a delegation packet.
+
+        The identity fields are excluded on purpose: two packets that differ
+        only by run id are the same assignment, and two that share a run id but
+        differ in substance are the case this exists to catch.
+        """
+        material = {
+            key: value
+            for key, value in delegation.items()
+            if key not in {"delegation_id", "mission_id", "resource_id"}
+        }
+        return hashlib.sha256(
+            json.dumps(material, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()[:32]
+
+    def _prepared_packet_digest(self, delegation_id: str) -> str | None:
+        """The digest recorded when this delegation id was first prepared."""
+        if not self.ledger.path.exists():
+            return None
+        for line in self.ledger.path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            # AuditLedger.append stores the body under "detail". Reading a key
+            # that does not exist made this guard fail OPEN -- it found no prior
+            # digest and cheerfully accepted a mismatched packet -- so the
+            # lookup is asserted by a test that reuses an id for a different
+            # packet, not merely by inspection.
+            detail = entry.get("detail")
+            if not isinstance(detail, dict):
+                continue
+            if (
+                entry.get("event") == "mission_prepared"
+                and detail.get("delegation_id") == delegation_id
+                and detail.get("packet_digest")
+            ):
+                return detail["packet_digest"]
+        return None
 
     def _established_baseline(self, mode: str) -> int | None:
         """The baseline this mode has already been measured against, if any.

@@ -30,7 +30,7 @@ before — they existed only as Codex TOML prompts with nothing to execute them.
 | Before | Now |
 | --- | --- |
 | Specialists were `.codex/agents/*.toml` prompts; nothing invoked them in Claude Code | `.claude/agents/*.md` projections generated from the same canonical contracts, callable via the `Task` tool |
-| Connector isolation was prose ("never call a connector directly") | Enforced by the tool list: specialists have **no tools at all** — no connector, no shell, no writer, not even a filesystem read (which would have let a JEOS specialist open `brains/apex/**`) |
+| Connector isolation was prose ("never call a connector directly") | Enforced by the frontmatter: specialists hold **`Read` and nothing else**, with `disallowedTools` denying `mcp__*`, the shell, both writers, delegation and the web. `Read` is there so a specialist can open its own packet and the return schema. It does leave repository reads physically possible, so the brain lock is enforced at return time instead — `MissionRunner.complete()` fails any return citing a source the packet did not carry |
 | No controlled-mission machinery | `runtime/mission_runner.py` brackets each mission and writes evidence |
 | Section 17's 35% value threshold had no policy file | `config/value_policy.toml` + `runtime/value_meter.py` |
 
@@ -172,9 +172,11 @@ touches professional liability.
 
 1. **All ten specialists are `shadow`.** They analyze and propose. They do not
    execute canonical writes. Agent 007 performs any mutation and reads it back.
-2. **No mode has value evidence yet.** Every mode reports `no_baseline` or
-   `insufficient_data` until you have run it about five times with a baseline.
-   Expect roughly a week before any verdict means something.
+2. **No mode has a value verdict yet.** `delivery_control` holds one recorded
+   observation and a declared baseline; every other mode reports `no_baseline`.
+   The policy requires five observations, so `delivery_control` reports
+   `insufficient_data` and will keep doing so until four more accepted runs
+   land. Expect roughly a week before any verdict means something.
 3. **Nothing here is licensed judgment.** For permits, grading, quantities, and
    cost, output is analysis for your review. Never sign, seal, submit, or
    certify anything on an agent's say-so. Final permit or agency submission is
@@ -188,7 +190,7 @@ touches professional liability.
    re-anchors onto tampered content. Recorded in `tests/test_mission_runner.py`.
 6. **A mission only counts once its result is read back.** `readback_performed`
    is part of the gate, so a run you never verified does not cover its mode.
-7. **Evidence must carry its content.** Specialists have no tools at all, so a
+7. **Evidence must carry its content.** Specialists hold no connector, so a
    bare `gmail://` locator is unusable to them. Agent 007 puts the minimized
    excerpt in the packet; a real-connector evidence record with no content is
    refused at prepare time.

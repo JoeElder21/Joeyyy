@@ -88,7 +88,7 @@ mode = "delivery_control"
 agent = "apex_delivery_commander"
 baseline_minutes = 240
 source = "joe_declared"
-note = "Joe declared 2026-07-30, asked directly how long a full Citation Centre submittal-status pass takes him by hand: about half a day, from reading the folder through reconciling permit rows to writing the tracker. Set once here so it is not re-declared per mission."
+note = "Declared by Joe on 2026-07-30 when asked directly how long one full delivery-status pass takes him by hand. Set once here so it is not re-declared per mission. The project it was measured against, and the run that used it, are machine-local evidence and are deliberately not named in this public file."
 
 [[baseline]]
 mode = "pipeline_triage"

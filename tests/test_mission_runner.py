@@ -147,6 +147,43 @@ class PrepareTests(RunnerHarness):
             self.runner.prepare(spec(evidence=[]))
         self.assertIn("evidence", str(caught.exception))
 
+    def test_a_declared_baseline_cannot_be_relabelled_as_measured(self):
+        """The policy owns provenance, not just magnitude.
+
+        Checking only the minutes let a mission adopt the configured value while
+        declaring a stronger source, and the observation was then persisted as
+        measured evidence for a measurement nobody took.
+        """
+        policy_baselines = self.runner.value_policy.baselines
+        declared = [
+            mode
+            for mode, entry in policy_baselines.items()
+            if entry.get("source") == "joe_declared"
+        ]
+        self.assertTrue(declared, "fixture expects at least one joe_declared baseline")
+        for mode in declared:
+            entry = policy_baselines[mode]
+            with self.subTest(mode=mode), self.assertRaises(MissionRejected):
+                self.runner.prepare(
+                    spec(
+                        agent=entry["agent"],
+                        mode=mode,
+                        baseline_minutes=int(entry["baseline_minutes"]),
+                        baseline_source="measured",
+                        evidence=[
+                            EvidenceRecord(
+                                source_ref=SOURCE,
+                                source_type="connector_record",
+                                content="evidence body",
+                                owner_brain=self.runner.roster[entry["agent"]]["brain"],
+                            )
+                        ],
+                        required_artifact_types=[
+                            self.runner.roster[entry["agent"]]["artifact_types"][0]
+                        ],
+                    )
+                )
+
     def test_agent_supplied_baseline_is_refused(self):
         with self.assertRaises(MissionRejected) as caught:
             self.runner.prepare(spec(baseline_source="agent_estimated"))
@@ -176,6 +213,61 @@ class RunIdentityTests(RunnerHarness):
         self.assertEqual(
             first.delegation["allowed_evidence"], second.delegation["allowed_evidence"]
         )
+
+    def test_a_pinned_run_id_cannot_be_reused_for_a_different_packet(self):
+        """Pinning reuses an identity; it may not relabel a different mission.
+
+        The first version of this guard read the ledger entry body under the
+        wrong key, found no prior digest, and failed OPEN -- it accepted the
+        mismatched packet. Hence this test rather than inspection.
+        """
+        pinned = spec(run_id="0123456789ab")
+        self.runner.prepare(pinned)
+        # Same packet, same identity: fine.
+        self.runner.prepare(spec(run_id="0123456789ab"))
+        # Materially different packet under the same identity: refused.
+        for changed in (
+            spec(run_id="0123456789ab", objective="A materially different objective."),
+            spec(
+                run_id="0123456789ab",
+                definition_of_done=["Something else entirely."],
+                definition_of_done_ids=["other-criterion"],
+            ),
+            spec(
+                run_id="0123456789ab",
+                evidence=[
+                    EvidenceRecord(
+                        source_ref="fixture/jeos/a-different-source",
+                        source_type="connector_record",
+                        content="different evidence",
+                        owner_brain="JEOS",
+                    )
+                ],
+            ),
+        ):
+            with (
+                self.subTest(changed=changed.objective[:30]),
+                self.assertRaises(MissionRejected),
+            ):
+                self.runner.prepare(changed)
+
+    def test_a_malformed_run_id_is_refused_rather_than_normalised(self):
+        """Ids are composed as `<kind>:<agent>:<run_id>` and split back on ":".
+
+        A run_id carrying a colon, whitespace, or arbitrary length produces ids
+        that no longer parse to what they were built from, so the mission's own
+        identity becomes unrecoverable from its ledger record.
+        """
+        for bad in (
+            "has:colon",
+            "has space",
+            "UPPERCASE12",
+            "",
+            "0123456789abcdef0123",
+            "nothexadecim",
+        ):
+            with self.subTest(run_id=bad), self.assertRaises(MissionRejected):
+                self.runner.prepare(spec(run_id=bad))
 
     def test_an_unpinned_run_still_gets_a_fresh_identity(self):
         """Pinning must be opt-in; two ordinary runs must not collide."""
@@ -264,6 +356,44 @@ class CompleteTests(RunnerHarness):
         self.assertGreater(observation.net_time_saved(self.runner.value_policy), 0)
         # The promotion gate is a different question and still says no.
         self.assertFalse(evidence.qualifies_mode)
+
+    def test_a_blocked_return_cannot_draw_against_the_workload_baseline(self):
+        """Five accepted blockers must not reach meets_threshold.
+
+        The baseline measures a completed task. A schema-valid `blocked` return
+        with no artifacts did no part of that task, so crediting it
+        `baseline - costs` would manufacture savings from work nobody did.
+        """
+        for status in ("blocked", "boundary_blocked"):
+            with self.subTest(status=status):
+                prepared = self.runner.prepare(spec())
+                evidence = self.runner.complete(
+                    prepared,
+                    handoff_for(
+                        prepared,
+                        status=status,
+                        blockers=["UPSTREAM_EVIDENCE_MISSING"],
+                        artifacts=[],
+                        criterion_validation=[],
+                    ),
+                    **{**COSTS, "accepted_first_pass": True, "readback_performed": True},
+                )
+                observation = self.runner.value_ledger.observations(self.runner.value_policy)[-1]
+                self.assertTrue(observation.output_rejected)
+                self.assertFalse(observation.accepted_first_pass)
+                self.assertLess(observation.net_time_saved(self.runner.value_policy), 0)
+                self.assertFalse(evidence.qualifies_mode)
+
+    def test_a_partial_with_no_artifacts_earns_no_benefit(self):
+        """`partial` is not a password; it still has to have produced something."""
+        prepared = self.runner.prepare(spec())
+        self.runner.complete(
+            prepared,
+            handoff_for(prepared, status="partial", artifacts=[]),
+            **{**COSTS, "accepted_first_pass": True, "readback_performed": True},
+        )
+        observation = self.runner.value_ledger.observations(self.runner.value_policy)[-1]
+        self.assertTrue(observation.output_rejected)
 
     def test_an_invalid_return_is_still_forced_to_rejected(self):
         """The fail-closed override must survive the partial-status relaxation."""
