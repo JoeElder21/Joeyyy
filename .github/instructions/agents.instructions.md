@@ -976,8 +976,8 @@ Each level can override settings from previous levels.
 - [Your First Custom Agent Tutorial](https://docs.github.com/en/copilot/tutorials/customization-library/custom-agents/your-first-custom-agent)
 
 ### Related Files
-- [Prompt Files Guidelines](./prompt.instructions.md) - For creating prompt files
-- [Instructions Guidelines](./instructions.instructions.md) - For creating instruction files
+- [Prompt Files Guidelines](https://github.com/github/awesome-copilot/blob/aa280f28b1b73f9b6e6917b607eb92127b67b419/instructions/prompt.instructions.md) - For creating prompt files (upstream; not vendored here)
+- [Instructions Guidelines](https://github.com/github/awesome-copilot/blob/aa280f28b1b73f9b6e6917b607eb92127b67b419/instructions/instructions.instructions.md) - For creating instruction files (upstream; not vendored here)
 
 ## Version Compatibility Notes
 
