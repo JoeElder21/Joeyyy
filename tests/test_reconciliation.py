@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import tomllib
 import unittest
@@ -42,6 +43,49 @@ class ReconciliationTests(unittest.TestCase):
         self.assertIn("def ", debate)
         self.assertIn("challenge", debate.lower())
         self.assertTrue((ROOT / "scripts" / "autogen_challenge_pair.py").exists())
+
+    def test_every_autogen_module_targets_the_pinned_api(self):
+        """A module that exists is not a module that runs.
+
+        Ticket 4 was closed against `scripts/group_debate.py` for six days while
+        it imported `autogen_agentchat` (AutoGen 0.4+) and the repository pinned
+        `autogen-agentchat<0.3`, which provides `autogen`. No installation of the
+        declared set could execute it, and the existence check above could not
+        tell. `autogen_ext`, which its tests also needed, was in no manifest.
+
+        This locks the whole repository onto one AutoGen line: whichever line the
+        root manifest pins, every module must import. Splitting them again fails
+        here rather than six days later.
+        """
+        pin = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+        legacy_pin = "autogen-agentchat>=0.2.35,<0.3" in pin.replace(" ", "")
+        self.assertTrue(
+            legacy_pin,
+            "requirements.txt no longer pins the 0.2 line; update this lock and "
+            "migrate every autogen module together rather than one at a time",
+        )
+
+        # Compiled with re.M rather than passed to assertNotRegex, which uses
+        # re.search with no flags: `^` would then match only the start of the
+        # whole file, so an indented import inside a try: block — which is
+        # exactly how every one of these modules imports autogen — could never
+        # be detected. The first version of this lock had that bug and passed
+        # against a deliberately reintroduced regression.
+        any_autogen = re.compile(r"^\s*(from|import)\s+autogen", re.M)
+        forbidden = re.compile(r"^\s*(from|import)\s+(autogen_agentchat|autogen_ext)\b", re.M)
+
+        modules = sorted([*(ROOT / "runtime").glob("*.py"), *(ROOT / "scripts").glob("*.py")])
+        importers = [p for p in modules if any_autogen.search(p.read_text(encoding="utf-8"))]
+        self.assertTrue(importers, "no module imports autogen at all")
+
+        for path in importers:
+            with self.subTest(module=path.name):
+                hit = forbidden.search(path.read_text(encoding="utf-8"))
+                self.assertIsNone(
+                    hit,
+                    f"{path.name} imports {hit.group(2) if hit else ''}, which the "
+                    "pinned 0.2 distribution does not provide",
+                )
 
     def test_lifecycle_gate_parity(self):
         """scripts/ must not re-implement or under-implement the gate logic.

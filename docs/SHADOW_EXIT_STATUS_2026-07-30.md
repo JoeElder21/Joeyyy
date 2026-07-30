@@ -55,9 +55,11 @@ infrastructure that could not run at all; that is no longer true.
 | The mission harness works | **Yes** — `tests/test_mission_runner.py`, 50 tests, all pass |
 | The lifecycle gate is trustworthy | **Yes** — the `scripts/` graph no longer carries divergent gate logic, so it can no longer promote without gates 7 and 8 |
 | The evidence ledger is intact | **Yes** — `ledger_trustworthy: True` |
+| The challenge-pair debates can run | **Yes** — AutoGen API split resolved; a registered pair produces a real transcript offline |
 
-Dependency-gated tests went from **31 skipped to 6**. The 6 that remain have a
-single cause, below.
+Dependency-gated tests went from **31 skipped to 6**, and then to **0** once the
+AutoGen API split was resolved (§4 below). Every test in the suite now runs on
+the installed stack.
 
 ## What is not cleared, and why
 
@@ -92,29 +94,64 @@ Joe's behalf, and the change that accompanies this record exists precisely to
 guarantee that: `scripts/orchestration_graphs.py` previously could promote
 `shadow → active` without it.
 
-### 4. The challenge-pair mechanism cannot run — a decision, not a task
+### 4. The challenge-pair mechanism — RESOLVED 2026-07-30
 
-The 6 remaining test skips have one cause. The repository declares two
-incompatible AutoGen APIs:
+The repository had declared two incompatible AutoGen APIs:
 
-| Module | Imports | Needs |
+| Module | Imported | Needed |
 | --- | --- | --- |
 | `runtime/autogen_orchestrator.py` | `from autogen import ...` | AutoGen **0.2** (as pinned) |
 | `runtime/autogen_groupchat.py` | `from autogen import ...` | AutoGen **0.2** |
 | `scripts/group_debate.py` | `from autogen_agentchat.agents import ...` | AutoGen **0.4+** |
 
 `autogen-agentchat>=0.2.35,<0.3` provides `autogen`, never `autogen_agentchat`,
-and `autogen_ext` is in no manifest at all. `scripts/group_debate.py` therefore
-cannot run under any installation of the declared set — confirmed with the full
-stack present.
+and `autogen_ext` was in no manifest at all — so `scripts/group_debate.py`, the
+module `docs/RECONCILIATION_2026-07-24.md` closes build ticket 4 with, could not
+run under any installation of the declared set. The registered challenge pairs
+were unsatisfiable rather than dormant.
 
-`docs/RECONCILIATION_2026-07-24.md` closes build ticket 4 as delivered by that
-module. The registered challenge pairs are one of the system's core quality
-mechanisms; as configured they are unsatisfiable, not merely dormant.
+**Converged on 0.2**, the pinned line. `scripts/group_debate.py` now imports
+`autogen` and builds `GroupChat`/`GroupChatManager`; `RoundRobinGroupChat`
+becomes `speaker_selection_method="round_robin"` over a manifest-ordered agent
+list, and `SelectorGroupChat` becomes `"auto"` selection.
 
-Resolving it means migrating `runtime/autogen_*.py` to the 0.4 API and adding
-`autogen-ext`, or rewriting `scripts/group_debate.py` against 0.2. Both rewrite
-working code and belong to the orchestration owner.
+Why this direction rather than moving the other two modules to 0.4: they carry
+the governed, packet-validating, currently-passing path, including a custom
+speaker-selection guard that *raises* when a transcript violates the manifest
+order — which 0.4 has no direct equivalent for. Converging on 0.2 rewrote 179
+lines of code that had never run; the alternative rewrote 454 lines that work.
+
+Two governance rules were carried across in the process, neither of which the
+0.4 version had:
+
+- `llm_config` may not carry `tools` or `functions`. A model-side tool grant
+  would route straight around `packet_only_no_direct_connectors`; a specialist's
+  tool surface is its MCP mounts. Same rule the orchestrator already enforced.
+- A selector chat with `llm_config=False` is refused rather than silently
+  degrading to round-robin. There is no model to select with, and a fallback
+  that still calls itself dynamic selection is the quiet-degradation pattern
+  this repository keeps removing.
+
+The tests now run, fully offline, using the `llm_config=False` +
+`default_auto_reply` pattern already proven by
+`tests/test_autogen_orchestrator.py` — no model, no network, and no replay
+client from an unmanifested package. A registered APEX pair produces a real
+adversarial transcript:
+
+```
+apex_chief_of_staff:     Debate: is campaign two the right focus?
+apex_war_architect:      Campaign two is the highest-leverage move.
+apex_intelligence_forge: Two of three cited opportunities are stale.
+```
+
+**Dependency-gated skips are now zero.** No test in the suite probes a module
+absent from the installed stack.
+
+Remaining, and deliberately not done here: AutoGen 0.2 is the legacy line, and
+migrating all three modules to the maintained 0.4 API is worth doing on its own
+schedule. It is a single coordinated migration — including a 0.4 replacement for
+the orchestrator's speaker-order guard and adding `autogen-ext` to a manifest —
+not a side effect of repairing the split.
 
 ## Honest summary
 

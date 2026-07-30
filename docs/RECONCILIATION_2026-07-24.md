@@ -42,3 +42,25 @@ The convergence this record ordered above ("`scripts/orchestration_graphs.py` �
 `scripts/orchestration_graphs.py` now owns only the vocabulary a caller types into graph state (`SHADOW_GATE_FIELDS`, `ACTIVE_AGENT_GATE_FIELDS`, `MODE_GATE_FIELDS`) and projects it onto `runtime.lifecycle` through `to_runtime_state()`. Promotion, refusal, and administrative moves are all adjudicated by the runtime gates. Two behaviors improved as a consequence: gate 21 now fires in the graph, and `retired` is honored as terminal instead of being silently overwritten by a restriction.
 
 Drift lock 4 above is what keeps it converged. Note for the record: `runtime.lifecycle` defaults `evidence_source` to `"none"`, so gate 21 fires only when a caller explicitly records `"harness"`. Tightening that default is a separate decision and was not made here.
+
+## Ticket 4 reopened and closed for real — 2026-07-30
+
+The absorption recorded above named `scripts/group_debate.py` as the delivery.
+That module could not run. It imported `autogen_agentchat` (AutoGen 0.4+) while
+this repository pins `autogen-agentchat>=0.2.35,<0.3`, which provides `autogen`
+and never `autogen_agentchat`; `autogen_ext`, which its tests also needed, was
+in no manifest at all. So build ticket 4 was closed against code that no
+installation of the declared dependency set could execute, and drift lock 2
+above — which asserts only that the module exists and defines builders — could
+not tell the difference.
+
+Nothing detected this for six days because the full runtime stack had never been
+installed anywhere; installing it on 2026-07-30 surfaced it immediately.
+
+`scripts/group_debate.py` is now on the 0.2 line, matching the pin and the other
+two AutoGen modules. Its tests run offline and a registered challenge pair
+produces a real transcript. Ticket 4 is closed against working code.
+
+Rule this adds: a drift lock that checks a module *exists* is not a lock that it
+*runs*. Where a record claims a capability is delivered, the lock should
+exercise the capability.

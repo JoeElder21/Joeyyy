@@ -120,7 +120,7 @@ Two were fixed; the third is a decision.
    got a `JSONDecodeError`. Fixed: import side effects are redirected to
    stderr. The contract had held only because nothing was ever installed.
 
-3. **The repository declares two mutually exclusive AutoGen APIs — open.**
+3. **Two mutually exclusive AutoGen APIs — resolved 2026-07-30.**
 
    | Module | Imports | Requires |
    | --- | --- | --- |
@@ -142,10 +142,26 @@ Two were fixed; the third is a decision.
    against dated evidence. As configured, that mechanism is not merely inert:
    it is **unsatisfiable**.
 
-   Resolving it is a real choice, not a typo fix: migrate
-   `runtime/autogen_*.py` to the 0.4 API and add `autogen-ext`, or rewrite
-   `scripts/group_debate.py` against 0.2. Either is a rewrite of working code
-   and belongs to whoever owns the orchestration layer.
+   Converged on **0.2**, the pinned line: `scripts/group_debate.py` now imports
+   `autogen` and builds `GroupChat`/`GroupChatManager`. The other two modules
+   carry the governed, packet-validating, currently-passing path — including a
+   speaker-selection guard that raises on a manifest-order violation, which 0.4
+   has no direct equivalent for — so converging on 0.2 rewrote 179 lines that
+   had never run instead of 454 lines that work.
+
+   Two governance rules were added in the process, neither present in the 0.4
+   version: `llm_config` may not carry `tools` or `functions` (a model-side
+   tool grant bypasses `packet_only_no_direct_connectors`), and a selector chat
+   with no model is refused rather than silently degrading to round-robin.
+
+   Its tests now run fully offline via `llm_config=False` plus
+   `default_auto_reply`, the pattern `tests/test_autogen_orchestrator.py`
+   already proved — no model, no network, no unmanifested replay client. A
+   registered APEX pair produces a real adversarial transcript. **Dependency-
+   gated skips across the whole suite are now zero.**
+
+   Migrating all three modules to the maintained 0.4 line remains worthwhile and
+   is recorded as its own decision in `docs/SHADOW_EXIT_STATUS_2026-07-30.md`.
 
 ## Part 1 — What the repository is
 
