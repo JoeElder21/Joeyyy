@@ -97,13 +97,13 @@ Ordered by how much each unblocks. Decisions 2, 3, 4, and 6 only become concrete
 4. **Does cadence run on a schedule, and where?** Cron specs exist; no deployment does. *Recommendation: defer Prefect; a scheduled invocation of the host from decision 1 achieves the same outcome with far less infrastructure.*
 5. **Implement the nominal integrations, or strike them?** mem0, dspy, guardrails-ai, and Phoenix are named but uncalled. *Recommendation: strike them from the README and requirements tiers.*
 6. **Do writer leases become durable?** *Recommendation: persist to SQLite or a lockfile, converting the single-writer guarantee from aspiration to fact.*
-7. **Who fixes the standing red CI checks?** The test and contract surface is green; four checks are not, none of them caused by repository code changes under review:
-   - `Locks match their manifests` (3.11 and 3.12) — upstream drift against `lock-runtime-evaluation.txt`, already recorded in `docs/DEPENDENCY_AUDIT_2026-07-25.md`. A reconciliation is in flight in PR #57, so this may already be handled.
-   - `zizmor` — two `ref-version-mismatch` findings on pinned action version comments.
-   - `.github/dependabot.yml` — an invalid `semver-major-days` property, unsupported for the `github-actions` ecosystem. **Dependabot is not running for this repository at all** until it is removed.
-   - `claude-review` — its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment, so the action exits in ~19s having produced no review. This one is **not fixable in a pull request**; it needs a repository secret or a different supported auth method.
+7. **Who fixes the standing red CI checks?** The test and contract surface is green. Of the four checks that were red when this audit ran, two have since been fixed upstream and two remain:
+   - `Locks match their manifests` (3.11 and 3.12) — **fixed**. PR #57 merged 2026-07-30T16:02Z, seeding each pair's own committed lock so `uv` preserves pins that still satisfy the manifest, instead of resolving against latest and losing to the cooldown window.
+   - `zizmor` — **fixed**. `main` now pins `anthropics/claude-code-action` to `c3d45e8e941e…`, which is the commit its `# v1.0.99` comment actually names, so the `ref-version-mismatch` findings are resolved.
+   - `.github/dependabot.yml` — **open**. An invalid `semver-major-days` property under the `github-actions` ecosystem (`updates[3]`), where the schema does not allow it. **Dependabot is not running for this repository at all** until that one line is removed; the same property is valid in the other three ecosystem blocks and should stay.
+   - `claude-review` — **open, and not fixable in a pull request**. Its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment, so the action exits in ~19s having produced no review. It needs a repository secret or a different supported auth method.
 
-   *Recommendation: one separate infrastructure PR for the first three, after checking PR #57 for overlap; the fourth is a repository-settings action. None of these belong in a documentation change.*
+   *Recommendation: a one-line infrastructure PR for the Dependabot property; the last is a repository-settings action for Joe. Neither belongs in a documentation change.*
 
 ## Rollback
 
