@@ -58,7 +58,9 @@ The repository systematically refuses to claim capability it cannot demonstrate.
 
 ### What exists today, in one paragraph
 
-A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 38-document architectural record, and 1,080 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
+A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 38-document architectural record, and 1,089 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, and no memory backend has been selected.
+
+One real controlled mission has now been run end to end (2026-07-30): `submittal_status` to `apex_delivery_commander`, against live Drive and Calendar evidence retrieved by Agent 007 through credentialed connectors, returning a schema-valid typed 2.1 handoff with connector isolation verified and a value observation recorded. It does **not** promote the mode. The specialist returned `partial` rather than `completed`, because the newest hard data point in its evidence predated the run by 77 days, and `qualifies_mode` requires a completed status. One observation also cannot produce a value verdict: `config/value_policy.toml` requires five, so the mode reports `insufficient_data`.
 
 ---
 
