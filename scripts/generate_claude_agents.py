@@ -166,8 +166,7 @@ def _frontmatter(
     ]
     if disallowed_tools:
         lines.append(
-            f"disallowedTools: "
-            f"[{', '.join(_yaml_scalar(tool) for tool in disallowed_tools)}]"
+            f"disallowedTools: [{', '.join(_yaml_scalar(tool) for tool in disallowed_tools)}]"
         )
     lines.append("---")
     return "\n".join(lines)

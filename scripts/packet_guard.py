@@ -673,26 +673,16 @@ class PacketGuard:
             # sensitivity, as_of) must still match exactly.
             def _attestation(record: dict[str, Any]) -> tuple:
                 return tuple(
-                    sorted(
-                        (key, value)
-                        for key, value in record.items()
-                        if key != "content"
-                    )
+                    sorted((key, value) for key, value in record.items() if key != "content")
                 )
 
-            allowed_attestations = {
-                _attestation(record): record for record in allowed_evidence
-            }
+            allowed_attestations = {_attestation(record): record for record in allowed_evidence}
             for item in packet["evidence"]:
                 delegated = allowed_attestations.get(_attestation(item))
                 if delegated is None:
-                    errors.append(
-                        "handoff evidence does not exactly match delegated evidence"
-                    )
+                    errors.append("handoff evidence does not exactly match delegated evidence")
                 elif "content" in item and item["content"] != delegated.get("content"):
-                    errors.append(
-                        "handoff evidence content does not match the delegated record"
-                    )
+                    errors.append("handoff evidence content does not match the delegated record")
                 if item["owner_brain"] != packet["owner_brain"]:
                     errors.append("handoff evidence crosses the owner brain")
                 if SENSITIVITY[item["sensitivity"]] > SENSITIVITY[packet["sensitivity"]]:

@@ -173,15 +173,15 @@ class RunIdentityTests(RunnerHarness):
         self.assertEqual(first.delegation["delegation_id"], second.delegation["delegation_id"])
         self.assertEqual(first.delegation["mission_id"], second.delegation["mission_id"])
         self.assertEqual(first.delegation["resource_id"], second.delegation["resource_id"])
-        self.assertEqual(first.delegation["allowed_evidence"], second.delegation["allowed_evidence"])
+        self.assertEqual(
+            first.delegation["allowed_evidence"], second.delegation["allowed_evidence"]
+        )
 
     def test_an_unpinned_run_still_gets_a_fresh_identity(self):
         """Pinning must be opt-in; two ordinary runs must not collide."""
         first = self.runner.prepare(spec())
         second = self.runner.prepare(spec())
-        self.assertNotEqual(
-            first.delegation["delegation_id"], second.delegation["delegation_id"]
-        )
+        self.assertNotEqual(first.delegation["delegation_id"], second.delegation["delegation_id"])
 
 
 class CompleteTests(RunnerHarness):

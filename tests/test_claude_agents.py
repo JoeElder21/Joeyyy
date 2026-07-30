@@ -105,6 +105,10 @@ class GeneratedCorpsTests(unittest.TestCase):
                     "an empty tools list is inherit-everything, not no-tools",
                 )
                 denied = set(parsed.get("disallowedTools", []))
+                # Assert against the source constant, not just a literal, so a
+                # tool removed from the denial list fails here rather than
+                # silently narrowing what specialists are refused.
+                self.assertEqual(denied, set(SPECIALIST_DISALLOWED_TOOLS))
                 self.assertIn(
                     "mcp__*",
                     denied,

@@ -249,32 +249,24 @@ class PacketContractTests(unittest.TestCase):
             record["content"] = "the delegated body the specialist analyzed"
 
         # Echo without content: valid.
-        self.assertValid(
-            "handoff_packet.schema.json", handoff, delegations=[delegation]
-        )
+        self.assertValid("handoff_packet.schema.json", handoff, delegations=[delegation])
 
         # Echo that repeats the content faithfully: also valid.
         faithful = deepcopy(handoff)
         for record in faithful["evidence"]:
             record["content"] = "the delegated body the specialist analyzed"
-        self.assertValid(
-            "handoff_packet.schema.json", faithful, delegations=[delegation]
-        )
+        self.assertValid("handoff_packet.schema.json", faithful, delegations=[delegation])
 
         # Echo that rewrites the content: refused. This is the tamper case the
         # exact-equality check existed for, and it must survive the relaxation.
         tampered = deepcopy(handoff)
         tampered["evidence"][0]["content"] = "a body the delegation never carried"
-        self.assertInvalid(
-            "handoff_packet.schema.json", tampered, delegations=[delegation]
-        )
+        self.assertInvalid("handoff_packet.schema.json", tampered, delegations=[delegation])
 
         # An identity field is still compared exactly.
         relabelled = deepcopy(handoff)
         relabelled["evidence"][0]["scope_verified_by"] = "someone_else"
-        self.assertInvalid(
-            "handoff_packet.schema.json", relabelled, delegations=[delegation]
-        )
+        self.assertInvalid("handoff_packet.schema.json", relabelled, delegations=[delegation])
 
     def test_candidate_lease_collides_with_ledgered_active_lease(self):
         candidate = deepcopy(self.lease)
