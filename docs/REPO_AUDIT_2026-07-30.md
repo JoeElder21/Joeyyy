@@ -100,10 +100,10 @@ Ordered by how much each unblocks. Decisions 2, 3, 4, and 6 only become concrete
 7. **Who fixes the standing red CI checks?** The test and contract surface is green. Of the four checks that were red when this audit ran, two have since been fixed upstream and two remain:
    - `Locks match their manifests` (3.11 and 3.12) — **fixed**. PR #57 merged 2026-07-30T16:02Z, seeding each pair's own committed lock so `uv` preserves pins that still satisfy the manifest, instead of resolving against latest and losing to the cooldown window.
    - `zizmor` — **fixed**. `main` now pins `anthropics/claude-code-action` to `c3d45e8e941e…`, which is the commit its `# v1.0.99` comment actually names, so the `ref-version-mismatch` findings are resolved.
-   - `.github/dependabot.yml` — **open**. An invalid `semver-major-days` property under the `github-actions` ecosystem (`updates[3]`), where the schema does not allow it. **Dependabot is not running for this repository at all** until that one line is removed; the same property is valid in the other three ecosystem blocks and should stay.
+   - `.github/dependabot.yml` — **fixed**. PR #65 removed an invalid `semver-major-days` property from the `github-actions` ecosystem (`updates[3]`), where the schema does not allow it. Because one invalid property invalidates the whole file, Dependabot had been running for **no** ecosystem — not `pip`, not either `npm` block. The property remains in the three blocks where it is valid, and `default-days: 7` is retained for actions.
    - `claude-review` — **open, and not fixable in a pull request**. Its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment, so the action exits in ~19s having produced no review. It needs a repository secret or a different supported auth method.
 
-   *Recommendation: a one-line infrastructure PR for the Dependabot property; the last is a repository-settings action for Joe. Neither belongs in a documentation change.*
+   *Recommendation: three of the four are closed. The remaining one is a repository-settings action for Joe, not a code change, and it will keep every pull request in this repository showing one red check until it is done.*
 
 ## Rollback
 
