@@ -81,9 +81,11 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # No semver-major-days here: Dependabot's schema rejects that property for
+    # the github-actions ecosystem, and one invalid property invalidates the
+    # whole file, so Dependabot stops running for every ecosystem above too.
     cooldown:
       default-days: 7
-      semver-major-days: 14
     groups:
       github-actions:
         patterns: ["*"]

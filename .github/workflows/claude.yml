@@ -48,7 +48,7 @@ jobs:
         # so pinning one keeps exactly the mutability that SHA-pinning exists to
         # remove. Resolve any future bump with `git ls-remote --tags` and take
         # the `^{}` line.
-        uses: anthropics/claude-code-action@c3d45e8e941e1b2ad7b278c57482d9c5bf1f35b3 # v1.0.99
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Deliberately no --allowedTools here. This job is reachable from
