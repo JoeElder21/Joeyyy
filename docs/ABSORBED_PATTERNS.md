@@ -248,6 +248,26 @@ For batch operations across many drawings, use headless AutoCAD Core Console (`A
 
 A home-grown APEX skill to build later, on this pipeline: convert the request into a short brief covering outline dimensions, layers, units, output path, and validation targets; then write a Python source where every meaningful dimension is a named parameter and a `gen_dxf()` function returns an ezdxf document (ezdxf is a Python DXF read/write library). Run the source through a small launcher script that owns output paths and writes the .dxf; never hard-code output paths in the generator. Set units explicitly on the document and keep boundary geometry, easements, and annotation on separate named layers so downstream tools classify them correctly. Validate programmatically — entity counts by layer, closed-polyline flags on parcel and boundary loops, drawing extents, and each briefed dimension — and report only checks that ran. Keep the generator .py and its .dxf output side by side with the same basename so every exhibit regenerates from source instead of hand edits.
 
+## 11. Agent-runtime governance primitives — from google/antigravity-sdk-python
+
+Absorbed 2026-07-30 from Google's Antigravity SDK (Apache-2.0, `google-antigravity` 0.1.8, Development Status: Alpha). Intake verdict: **absorb, do not deploy.** Running it would add a third agent runtime beside Claude Code and Codex, against the two-runtime ruling, and its engine ships as a compiled binary that cannot be inspected — a poor fit for the rule that runs must be explainable from artifacts. Its *design*, however, is the closest external match yet found to this system's governance model: the permission framework and approval gates this repository states in prose, expressed as executable code.
+
+### Policy as composable primitives, not prose — the highest-value pattern here
+
+Express the permission framework as a small set of named, composable policy primitives that a runtime evaluates, rather than as a prose table an agent must interpret. Antigravity's set is instructive: `allow` / `deny` for explicit verdicts, `ask_user` for a decision that must escalate to the human, `confirm_run_command` for the narrower "this specific command needs confirmation," `workspace_only` for a scope fence, `safe_defaults` for the conservative baseline, and `allow_all` / `deny_all` as the endpoints. Each returns a `Decision`, and decisions compose into a `Policy`. Mapped onto this repository, `safe_defaults` plus `workspace_only` is the L1 posture, `ask_user` is the L4 gate, and `deny` is a high-impact boundary. The gain over prose is that a policy becomes testable: a permission level can have unit tests, and a boundary breach becomes a failing assertion rather than a judgment call.
+
+### Three-way hook taxonomy: inspect, decide, transform
+
+Classify every interception point by what it is allowed to do, and enforce that classification rather than trusting the hook to behave. Antigravity's taxonomy: **inspect** hooks are read-only and non-blocking — observability and logging only, run concurrently, and cannot delay the main flow; **decide** hooks are read-only but blocking — they return an allow/deny verdict and are the correct shape for a permission check or approval gate, but may not modify the data they judge; **transform** hooks may modify data and block, and fail closed when they error — the right shape for sanitization and error recovery. The separation matters because a check that can also rewrite its input is a check that can be talked out of its own verdict. This sharpens the approval-gate pattern in §2 and the writer-lease discipline: a gate should be a decide hook, never a transform hook. The upstream design also treats the read-then-act window as a TOCTOU concern, which is the same hazard the one-designated-writer rule addresses at the resource level.
+
+### Triggers and hooks are different things, and triggers may not block
+
+Keep lifecycle interception and external-event reaction as separate mechanisms with different powers. Hooks fire at a single dispatch point inside the agent's own lifecycle, run inline, and may block or modify. Triggers are long-lived background tasks that live for the whole session, react to outside events — cron schedules, file changes, webhooks — and **may only send a message into the session; they can never block or modify execution.** That asymmetry is the safety property: an external event can ask for attention but cannot seize control. This is the missing constraint on the named-automations pattern in §7 and on `docs/BRAIN_CADENCE_RUNBOOK.md` — a scheduled job may raise a mission, never execute one as a side effect of firing.
+
+### Read-only by default, capability opt-in at construction
+
+Default the agent to read-only and require an explicit capabilities object to enable writes, granted where the agent is constructed rather than where a tool is called. Independent convergence with the specialist contract: specialists are read-only by default and gain write targets only through the registry. Worth noting as external validation of a rule this system arrived at on its own.
+
 ## Rollback
 
 This file is additive. Rolling back the absorption is deleting this file and the registry's candidate-infrastructure references to it; no existing governance rule was modified by this record.
