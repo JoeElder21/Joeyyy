@@ -27,11 +27,14 @@ import argparse
 import importlib
 import importlib.metadata
 import json
-from pathlib import Path
 import sys
 import tomllib
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.privacy_guard import gitlink_paths, is_vendored, tracked_paths  # noqa: E402
 
 RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
     "contracts": [
@@ -130,8 +133,45 @@ def enforce_toml() -> tuple[list[str], list[str]]:
 
     checked: list[str] = []
     errors: list[str] = []
+    # Both resolved once: is_vendored() otherwise spawns two git processes per
+    # path, and the tracked set is needed per path below.
+    gitlinks = gitlink_paths(ROOT)
+    tracked = tracked_paths(ROOT)
     for toml_path in sorted(ROOT.rglob("*.toml")):
-        if ".git" in toml_path.parts:
+        relative = toml_path.relative_to(ROOT)
+        # Match against the repository-relative path: an absolute-path test
+        # would skip every file when the checkout itself happens to sit under
+        # a directory named .git or node_modules, silently reporting `valid`
+        # with nothing checked.
+        #
+        # node_modules is excluded as *installed dependency content*, which is
+        # not the same as "any path containing node_modules". A file the index
+        # tracks is this repository's regardless of where it sits, so it stays
+        # validated; only untracked installed content is skipped.
+        #
+        # With no index to consult (tracked is None — an extracted archive, or
+        # no git binary) the exclusion is not applied at all. A git archive
+        # contains only tracked files, so everything present is
+        # repository-owned; skipping on the path name alone there would drop
+        # genuinely repository-owned TOML and report valid.
+        if ".git" in relative.parts:
+            continue
+        # as_posix(), not str(): git ls-files emits forward slashes on every
+        # platform, while str() uses the native separator. On Windows the two
+        # never match, so every path looks untracked and the exclusion skips
+        # repository-owned TOML that happens to sit under node_modules.
+        if (
+            tracked is not None
+            and "node_modules" in relative.parts
+            and relative.as_posix() not in tracked
+        ):
+            continue
+        # Vendored submodules under vendor/ carry the upstream project's TOML
+        # contract, not this repository's, and are never committed here beyond
+        # the gitlink commit. Installed npm trees are excluded for the same
+        # reason: an upstream package shipping malformed TOML must not fail
+        # this repository's contract check.
+        if is_vendored(toml_path, ROOT, gitlinks):
             continue
         try:
             parse(toml_path.read_text(encoding="utf-8"))

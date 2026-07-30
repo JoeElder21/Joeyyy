@@ -30,6 +30,17 @@
 - Prohibited targets:
 - Professional or privacy risks:
 
+## Provenance and supply chain
+
+Complete before any candidate file is read for absorption or any code is run.
+
+- Canonical repository URL verified directly:
+- Owning org/user confirmed as canonical author:
+- Age and contributor history reviewed:
+- Checked against typosquats and predecessor redirects:
+- Pre-install `snyk/agent-scan` result (MCP servers, skills, agent applications):
+- Scan scope confirmed candidate-only, not Joe's configured estate:
+
 ## Compatibility review
 
 - Duplicate or overlapping agents:

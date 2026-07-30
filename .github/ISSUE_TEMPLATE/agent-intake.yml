@@ -1,0 +1,112 @@
+name: Agent intake
+description: Register and validate a new agent before active use
+title: "[intake] "
+labels: ["agent-intake"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Structured form for `templates/agent-intake.md`. Follow
+        `docs/AGENT_COMMUNITY_PROTOCOL.md`. A new agent is not usable until it is
+        registered in `docs/AGENT_REGISTRY.md` and validated.
+
+  - type: input
+    id: agent-name
+    attributes:
+      label: Agent name
+      description: Native definition name, e.g. `apex_war_architect`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Owning brain
+      description: >
+        APEX and JEOS specialists may not communicate across brains. Only Agent 007
+        is cross-brain.
+      options:
+        - APEX
+        - JEOS
+        - Cross-brain (Agent 007 only)
+    validations:
+      required: true
+
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose and bounded scope
+      description: What this agent does, and explicitly what it does not do.
+    validations:
+      required: true
+
+  - type: input
+    id: write-targets
+    attributes:
+      label: Proposed write targets
+      description: >
+        Canonical brain/target/resource paths. One designated writer per shared
+        resource — name the current writer if one already exists.
+    validations:
+      required: true
+
+  # ONE required question, because two of them could contradict each other.
+  #
+  # The previous version had a `stage` dropdown and a separate
+  # "are the active gates complete?" dropdown. GitHub issue forms do not
+  # cross-validate fields, so a submission could request `active` and also
+  # select "Not applicable -- requesting shadow only", recording an active
+  # intake with no controlled-mission, connector-isolation, or writer-lease
+  # evidence. Splitting the decision across two enforceable answers made
+  # neither of them enforce the thing that mattered.
+  #
+  # Merged, the stage selection IS the attestation and there is no second field
+  # left to disagree with it.
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Requested lifecycle stage
+      description: >
+        Selecting an active stage attests that every active-stage gate below has
+        passed with evidence. Record the evidence in the checkboxes and the
+        rollback section.
+      options:
+        - "shadow — read-only analysis and proposed writes; active-stage gates not claimed"
+        - "active — controlled mission, connector isolation, and writer-lease compliance all verified with evidence"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: shadow-gates
+    attributes:
+      label: Shadow-entry gates
+      description: >
+        Per `docs/SPECIALIST_ACCEPTANCE_TESTS.md`. Required for every intake,
+        whichever stage is requested.
+      options:
+        - label: Static gate — definition parses; `validate_specialist_corps.py` passes
+          required: true
+        - label: Registry entry drafted for `docs/AGENT_REGISTRY.md`
+          required: true
+        - label: Brain isolation verified — no cross-brain route or shared namespace
+          required: true
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Active-stage gates
+      description: Evidence for the answer above. Leave blank when requesting shadow.
+      options:
+        - label: Shadow gate — controlled real mission completed with evidence
+        - label: Connector isolation verified at runtime (`packet_only_no_direct_connectors`)
+        - label: Writer-lease compliance verified; readback recorded where a mutation occurred
+
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback point
+      description: >
+        Required by the change standards in `AGENTS.md`. How this agent is removed
+        and what state that restores.
+    validations:
+      required: true

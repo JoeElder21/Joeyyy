@@ -1,0 +1,12 @@
+# Civil-engineering domain tooling vendored under vendor/.
+# Canonical sources: QuantumNovice/awesome-civil-engineering.
+#
+# These install into the shared runtime environment safely: the constraints
+# below are compatible with the `pydantic` already declared in
+# requirements/runtime-contracts.txt.
+#
+# Scope: enough to run vendor/awesome-civil-engineering/generate.py, which
+# renders data/resources.json through templates/ into the list README. The
+# vendored list itself is reference data, not an importable package.
+Jinja2>=3.1,<4
+pydantic>=2.12,<3

@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
-from pathlib import Path
 import tomllib
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from scripts.packet_guard import PacketGuard
@@ -55,9 +55,7 @@ def load_roster(root: Path = ROOT) -> dict[str, dict[str, Any]]:
         with path.open("rb") as source:
             data = tomllib.load(source)
         name = data["name"]
-        brain = "cross-brain" if name == CHIEF else (
-            "APEX" if name.startswith("apex_") else "JEOS"
-        )
+        brain = "cross-brain" if name == CHIEF else ("APEX" if name.startswith("apex_") else "JEOS")
         roster[name] = {
             "brain": brain,
             "description": data.get("description", ""),
@@ -100,7 +98,7 @@ class AuditLedger:
 
     def append(self, event: str, detail: dict[str, Any]) -> dict[str, Any]:
         entry = {
-            "at": datetime.now(timezone.utc).isoformat(),
+            "at": datetime.now(UTC).isoformat(),
             "detail": detail,
             "event": event,
             "prev_hash": self._last_hash(),
@@ -159,20 +157,22 @@ def admit_delegation(
                 f"brain lock: packet owner_brain {packet.get('owner_brain')!r} "
                 f"does not match {target!r} brain {target_brain!r}"
             ]
+    # Correlation keys, identical on the span attributes (scripts/observability.py)
+    # so a ledger entry and its span match each other and both group back to
+    # the mission. Identifiers only — never packet content.
+    keys = {
+        "mission_id": packet.get("mission_id"),
+        "resource_id": packet.get("resource_id"),
+        "delegation_id": packet.get("delegation_id"),
+        "owner_brain": packet.get("owner_brain"),
+        "target": target,
+    }
     if errors:
         if ledger is not None:
-            ledger.append(
-                "handoff_rejected",
-                {"target": target, "errors": errors,
-                 "delegation_id": packet.get("delegation_id")},
-            )
+            ledger.append("handoff_rejected", {**keys, "errors": errors})
         raise HandoffRejected(target, errors)
     if ledger is not None:
-        ledger.append(
-            "handoff_admitted",
-            {"target": target, "delegation_id": packet.get("delegation_id"),
-             "mode": packet.get("mode")},
-        )
+        ledger.append("handoff_admitted", {**keys, "mode": packet.get("mode")})
 
 
 def validate_specialist_return(
@@ -185,15 +185,23 @@ def validate_specialist_return(
 ) -> list[str]:
     """Validate a specialist's returned handoff packet; log the outcome."""
     errors = guard.validate(
-        "handoff_packet.schema.json", handoff_packet, leases,
+        "handoff_packet.schema.json",
+        handoff_packet,
+        leases,
         delegations=delegations,
     )
     if ledger is not None:
         ledger.append(
             "return_validated" if not errors else "return_rejected",
-            {"agent": handoff_packet.get("agent"),
-             "delegation_id": handoff_packet.get("delegation_id"),
-             "status": handoff_packet.get("status"), "errors": errors},
+            {
+                "mission_id": handoff_packet.get("mission_id"),
+                "resource_id": handoff_packet.get("resource_id"),
+                "delegation_id": handoff_packet.get("delegation_id"),
+                "agent": handoff_packet.get("agent"),
+                "owner_brain": handoff_packet.get("owner_brain"),
+                "status": handoff_packet.get("status"),
+                "errors": errors,
+            },
         )
     return errors
 

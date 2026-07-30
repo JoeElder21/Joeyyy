@@ -1,0 +1,91 @@
+# Local gates that run before a commit exists, rather than after it is pushed.
+#
+# Install once:  python -m pip install pre-commit && pre-commit install
+# Run manually:  pre-commit run --all-files
+#
+# Every hook here is offline. Nothing in this file transmits repository content
+# to a third party, per docs/PRIVACY_AND_DATA_BOUNDARIES.md.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      # Maintained corpus of provider credential formats. Complements — does not
+      # replace — scripts/privacy_guard.py, which encodes the house-specific
+      # rules (Drive links, personal identifiers, binary artifacts).
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      # Enabled 2026-07-25, after the one mechanical reformat commit. Safe as a
+      # hook now that the tree is format-clean: it only touches files a commit
+      # already changes.
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-json
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      # Generated fixtures are excluded from the whitespace hooks. The DXF is
+      # produced by connectors/aps/testdata/make_test_model.py via ezdxf, which
+      # emits trailing spaces inside LTYPE description fields; letting the hook
+      # strip them means the hook and the generator overwrite each other on every
+      # regeneration. Whitespace in a generated file is the generator's business.
+      - id: end-of-file-fixer
+        exclude: ^connectors/aps/testdata/
+      - id: trailing-whitespace
+        # `--markdown-linebreak-ext=md` preserves the two trailing spaces that
+        # encode a hard line break in Markdown. Without it this hook silently
+        # collapsed the Date/Governor/verified-parent block in
+        # docs/ROSTER_MIGRATION_2026-07-23.md into one rendered paragraph and
+        # flattened the templates' empty numbered slots -- a formatting hook
+        # rewriting the meaning of dated records, which .editorconfig already
+        # said to leave alone.
+        args: [--markdown-linebreak-ext=md]
+        # templates/ is excluded because its empty numbered slots (`1. `) are
+        # the fill-in structure. `--markdown-linebreak-ext` only preserves the
+        # DOUBLE trailing space of a hard break, so a single trailing space on
+        # an empty slot was still stripped, turning `1. ` into `1.` -- which
+        # renders as literal text rather than an empty list item.
+        exclude: ^(connectors/aps/testdata/|templates/)
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: ^connectors/aps/testdata/
+
+  - repo: local
+    hooks:
+      # The house gates, run locally. AGENTS.md requires these before every
+      # commit; a hook is the difference between a rule and an enforced rule.
+      - id: privacy-guard
+        name: privacy guard (public-repository boundary)
+        entry: python scripts/privacy_guard.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: validate-specialist-corps
+        name: validate specialist corps contracts
+        entry: python scripts/validate_specialist_corps.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # AGENTS.md requires the test suite before every commit, and this block
+      # claimed to be the house gate while omitting it -- so a contributor
+      # following the documented `pre-commit install` path could commit failing
+      # contract tests and only learn of it from CI. ~2.5s for 300+ tests is
+      # well worth paying locally.
+      - id: unit-suite
+        name: contract and runtime test suite
+        entry: python -m unittest discover -s tests
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -24,6 +24,7 @@ execution) is activation-gated and never called here.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,19 @@ from scripts.agent_runtime import (
 from scripts.packet_guard import PacketGuard
 
 ROOT = Path(__file__).resolve().parents[1]
+
+TELEMETRY_OPT_OUTS = {
+    # crewAI ships opt-out-by-default telemetry that POSTs spans to
+    # telemetry.crewai.com. Mission data is APEX/JEOS content and must not
+    # leave the runtime, so these are set before crewai is imported — the
+    # library reads them at import time. setdefault, so an explicit
+    # environment decision by Joe still wins.
+    "CREWAI_DISABLE_TELEMETRY": "true",
+    "CREWAI_TELEMETRY_OPT_OUT": "true",
+    "OTEL_SDK_DISABLED": "true",
+}
+for _name, _value in TELEMETRY_OPT_OUTS.items():
+    os.environ.setdefault(_name, _value)
 
 try:  # degrade cleanly when the runtime stack is not installed
     from crewai import Agent as CrewAgent
@@ -88,25 +102,21 @@ if CREWAI_AVAILABLE:
         guard: PacketGuard | None = None,
         ledger: AuditLedger | None = None,
         root: Path = ROOT,
-    ) -> "Crew":
+    ) -> Crew:
         """Build one single-brain sequential crew from admitted packets."""
         guard = guard or PacketGuard(root)
         roster = load_roster(root)
-        wrong = [p.get("agent") for p in packets
-                 if roster.get(p.get("agent", ""), {}).get("brain") != brain]
-        if wrong:
-            raise HandoffRejected(
-                brain, [f"crew is {brain}-only; packets address {wrong}"]
-            )
-        agents = {
-            name: crew_agent(name, meta)
-            for name, meta in roster.items()
-            if meta["brain"] == brain
-        }
-        tasks = [
-            task_from_packet(packet, agents, roster, guard, ledger)
-            for packet in packets
+        wrong = [
+            p.get("agent")
+            for p in packets
+            if roster.get(p.get("agent", ""), {}).get("brain") != brain
         ]
+        if wrong:
+            raise HandoffRejected(brain, [f"crew is {brain}-only; packets address {wrong}"])
+        agents = {
+            name: crew_agent(name, meta) for name, meta in roster.items() if meta["brain"] == brain
+        }
+        tasks = [task_from_packet(packet, agents, roster, guard, ledger) for packet in packets]
         return Crew(
             agents=list(agents.values()),
             tasks=tasks,

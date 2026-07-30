@@ -1,0 +1,34 @@
+# Knowledge-graph report-generation research stack vendored under vendor/.
+# Canonical source: Kimi-chuheng/Multi-Agent-AI-in-Civil-Engineering
+# (verbatim from that repository's own `requirements` file).
+#
+# DO NOT install into the shared runtime environment.
+#
+# Recorded conflict: this stack pins `llama-index==0.10.42`, which contradicts
+# `llama-index>=0.11` in requirements-runtime.txt and the `llama-index-core`
+# declared in requirements/runtime-memory.txt. Installing it alongside the
+# runtime stack downgrades llama-index and breaks the declared memory tier.
+# Per the house rule on preserving unresolved conflicts, the pin is recorded
+# here rather than reconciled by guesswork.
+#
+# Install only into a dedicated virtual environment for running the vendored
+# notebooks, and only after the Neo4j and OpenAI prerequisites in
+# vendor/multi-agent-ai-in-civil-engineering/README.md are separately
+# authorized. Those are external services; declaring a package here grants no
+# credential or connector access.
+llama-index==0.10.42
+llama-index-core==0.10.42
+llama-index-embeddings-openai
+llama-index-postprocessor-flag-embedding-reranker
+llama-index-graph-stores-neo4j
+llama-parse
+pymupdf
+nest-asyncio
+openai
+python-dotenv
+neo4j
+pandas
+matplotlib
+seaborn
+ipywidgets
+jupyter

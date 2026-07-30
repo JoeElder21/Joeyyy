@@ -28,24 +28,76 @@
     "recommended_next_handoff"
   ],
   "properties": {
-    "schema_version": {"enum": ["2.0", "2.1"]},
-    "delegation_id": {"type": ["string", "null"]},
-    "mission_id": {"type": "string", "minLength": 1},
-    "resource_id": {"type": "string", "minLength": 1},
-    "agent": {"type": "string", "minLength": 1},
-    "owner_brain": {"enum": ["APEX", "JEOS"]},
-    "memory_namespace": {"type": "string", "minLength": 1},
-    "invocation_mode": {"enum": ["delegated", "direct_read_only"]},
-    "external_actions_performed": {"const": false},
-    "status": {"enum": ["completed", "partial", "blocked", "boundary_blocked"]},
-    "findings": {"type": "array", "items": {"type": "string"}},
-    "mode": {"type": "string", "minLength": 1},
+    "schema_version": {
+      "enum": [
+        "2.0",
+        "2.1"
+      ]
+    },
+    "delegation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mission_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "owner_brain": {
+      "enum": [
+        "APEX",
+        "JEOS"
+      ]
+    },
+    "memory_namespace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invocation_mode": {
+      "enum": [
+        "delegated",
+        "direct_read_only"
+      ]
+    },
+    "external_actions_performed": {
+      "const": false
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "blocked",
+        "boundary_blocked"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "mode": {
+      "type": "string",
+      "minLength": 1
+    },
     "artifacts": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["artifact_type", "records"],
+        "required": [
+          "artifact_type",
+          "records"
+        ],
         "properties": {
           "artifact_type": {
             "type": "string",
@@ -82,18 +134,47 @@
                 },
                 "source_refs": {
                   "type": "array",
-                  "items": {"type": "string", "minLength": 1}
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 },
-                "as_of": {"type": ["string", "null"]},
-                "source_locator": {"type": ["string", "null"]},
-                "revision": {"type": ["string", "null"]},
+                "as_of": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "source_locator": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "content_hash": {
-                  "type": ["string", "null"],
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "pattern": "[0-9a-f]{64}"
                 },
-                "fields": {"type": "object"},
+                "fields": {
+                  "type": "object"
+                },
                 "confidence": {
-                  "enum": ["confirmed", "source-backed", "judgment", "assumption", "unknown"]
+                  "enum": [
+                    "confirmed",
+                    "source-backed",
+                    "judgment",
+                    "assumption",
+                    "unknown"
+                  ]
                 }
               }
             }
@@ -114,20 +195,77 @@
           "sensitivity"
         ],
         "properties": {
-          "source_ref": {"type": "string", "minLength": 1},
-          "owner_brain": {"enum": ["APEX", "JEOS"]},
-          "source_type": {
-            "enum": ["attachment", "runtime_record", "connector_record", "synthetic", "cross_brain_constraint", "brain_private_constraint"]
+          "source_ref": {
+            "type": "string",
+            "minLength": 1
           },
-          "scope_verified_by": {"const": "apex_chief_of_staff"},
-          "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]}
+          "owner_brain": {
+            "enum": [
+              "APEX",
+              "JEOS"
+            ]
+          },
+          "source_type": {
+            "enum": [
+              "attachment",
+              "runtime_record",
+              "connector_record",
+              "synthetic",
+              "cross_brain_constraint",
+              "brain_private_constraint"
+            ]
+          },
+          "scope_verified_by": {
+            "const": "apex_chief_of_staff"
+          },
+          "sensitivity": {
+            "enum": [
+              "public",
+              "internal",
+              "confidential",
+              "restricted"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "Echo of the minimized excerpt supplied in the delegation packet. Specialists hold no connector, so evidence travels as content."
+          },
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the source record was retrieved or last revised."
+          }
         }
       }
     },
-    "tests": {"type": "array", "items": {"type": "string"}},
-    "assumptions": {"type": "array", "items": {"type": "string"}},
-    "blockers": {"type": "array", "items": {"type": "string"}},
-    "challenges": {"type": "array", "items": {"type": "string"}},
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "challenges": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "proposed_writes": {
       "type": "array",
       "maxItems": 1,
@@ -143,14 +281,38 @@
           "writer_lease_id"
         ],
         "properties": {
-          "target": {"type": "string", "minLength": 1},
-          "expected_state": {"type": "string", "minLength": 1},
-          "validation_readback": {"type": "string", "minLength": 1},
-          "rollback": {"type": "string", "minLength": 1},
-          "writer_agent": {"type": "string", "minLength": 1},
-          "writer_lease_id": {"type": "string", "minLength": 1},
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "validation_readback": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rollback": {
+            "type": "string",
+            "minLength": 1
+          },
+          "writer_agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "writer_lease_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "operation": {
-            "enum": ["append", "upsert", "patch", "replace", "disable"]
+            "enum": [
+              "append",
+              "upsert",
+              "patch",
+              "replace",
+              "disable"
+            ]
           },
           "record_type": {
             "type": "string",
@@ -171,24 +333,45 @@
             "minLength": 1,
             "pattern": "[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"
           },
-          "expected_version": {"type": ["string", "null"]}
+          "expected_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     },
-    "validation": {"type": "array", "items": {"type": "string"}},
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "criterion_validation": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["criterion_id", "status", "evidence_record_ids", "note"],
+        "required": [
+          "criterion_id",
+          "status",
+          "evidence_record_ids",
+          "note"
+        ],
         "properties": {
           "criterion_id": {
             "type": "string",
             "minLength": 1,
             "pattern": "[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"
           },
-          "status": {"enum": ["passed", "failed", "not_tested"]},
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "not_tested"
+            ]
+          },
           "evidence_record_ids": {
             "type": "array",
             "items": {
@@ -197,12 +380,34 @@
               "pattern": "[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"
             }
           },
-          "note": {"type": "string"}
+          "note": {
+            "type": "string"
+          }
         }
       }
     },
-    "confidence": {"enum": ["confirmed", "source-backed", "judgment", "assumption", "unknown"]},
-    "sensitivity": {"enum": ["public", "internal", "confidential", "restricted"]},
-    "recommended_next_handoff": {"type": ["string", "null"]}
+    "confidence": {
+      "enum": [
+        "confirmed",
+        "source-backed",
+        "judgment",
+        "assumption",
+        "unknown"
+      ]
+    },
+    "sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ]
+    },
+    "recommended_next_handoff": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
   }
 }

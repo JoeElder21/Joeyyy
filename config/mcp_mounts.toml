@@ -10,6 +10,24 @@
 # server in-container and list its tools with no credentials.
 # activation = "..."     -> what unlocks the mount when credentials or a
 # workstation are required.
+# expected_tools = [...] -> the tools this mount must actually offer. A
+# completed handshake proved only that a process started; verification
+# reported success whatever list_tools() returned, including an empty one.
+# Declaring the contract makes a regressed tool registration a CI failure
+# rather than a green check.
+# tools_are_exhaustive = true -> expected_tools is the COMPLETE surface, so an
+# undeclared tool fails verification too. Checking only for missing tools let a
+# server add anything and stay green; on a mount granted to agents = ["*"] that
+# is a new capability reaching the whole corps unreviewed. Set it where this
+# repository owns the server and the list is the full contract; leave it off
+# where the list is the subset we depend on from an upstream release.
+# env = [...]            -> the ONLY variables the launcher forwards to this
+# mount. Anything not listed is withheld, including variables the server reads
+# with a silent default, so a mount must declare every one it depends on.
+# network = true         -> the mount fetches its own package or image, so the
+# launcher also forwards proxy and CA-bundle variables. Kept off by default:
+# a proxy URL can carry credentials, and a purely local mount has no use for
+# one.
 
 [[mounts]]
 name = "governance"
@@ -17,11 +35,43 @@ command = ["python", "scripts/governance_mcp_server.py"]
 agents = ["*"]
 purpose = "Packet validation, fail-closed admission, return validation, audit verification, roster."
 verify_offline = true
+# This repository's own server, so the contract is exact: these five are the
+# governance surface every agent depends on. Mounted to every agent, which is
+# why the list is closed rather than a floor -- a sixth tool appearing here
+# reaches the entire corps.
+tools_are_exhaustive = true
+expected_tools = [
+  "admit_delegation_packet",
+  "list_registered_roster",
+  "validate_handoff_return",
+  "validate_packet",
+  "verify_audit_ledger",
+]
 
 [[mounts]]
 name = "filesystem"
 require_grant = true
-command = ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
+grant_scope = "Full read/write on every path the server is started against. A grant does not narrow it to a subtree."
+network = true
+# Version-pinned. `npx -y @modelcontextprotocol/server-filesystem` with no
+# `@<version>` fetches and executes whatever the registry currently serves, so
+# an unchanged commit could run different code on every CI run and on Joe's
+# workstation. That is the FakeGit-class exposure recorded in
+# docs/FRONTIER_REPO_SCAN_2026-07-24.md, applied to a package this repository
+# launches on purpose. Bumping this pin is a reviewed change, not a silent one.
+command = ["npx", "-y", "@modelcontextprotocol/server-filesystem@2026.7.10", "."]
+# The subset this mount exists to provide. Deliberately not the full listing:
+# naming every tool an upstream release happens to ship would turn any additive
+# upstream change into a CI failure. These are the ones a scoped file mount is
+# useless without.
+expected_tools = [
+  "create_directory",
+  "directory_tree",
+  "edit_file",
+  "list_directory",
+  "read_text_file",
+  "write_file",
+]
 agents = ["apex_systems_blacksmith", "jeos_lifestyle_systems_builder", "apex_chief_of_staff"]
 purpose = "Scoped file read/write through MCP instead of direct OS access; path-scoped to the mounted directory."
 verify_offline = true
@@ -29,7 +79,10 @@ verify_offline = true
 [[mounts]]
 name = "github"
 require_grant = true
+grant_scope = "Every tool the GitHub server exposes under the supplied token, including writes. A grant does not narrow it to reads; the token's own scopes are the only limit."
+network = true
 command = ["docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
+env = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
 agents = ["apex_systems_blacksmith", "apex_chief_of_staff"]
 purpose = "Repo reads/writes through a proper MCP interface, not raw git in prompts."
 verify_offline = false
@@ -38,6 +91,8 @@ activation = "GITHUB_PERSONAL_ACCESS_TOKEN in the runtime env store."
 [[mounts]]
 name = "postgres"
 require_grant = true
+grant_scope = "Every statement the supplied role may execute. A grant does not narrow it to SELECT; the role's grants are the only limit."
+network = true
 command = ["npx", "-y", "@modelcontextprotocol/server-postgres"]
 agents = ["apex_intelligence_forge", "apex_deal_engine", "apex_chief_of_staff"]
 purpose = "Structured data (opportunity pipeline, project register, evidence sources) queryable via one MCP interface."
@@ -47,7 +102,10 @@ activation = "Postgres connection string appended to the command at mount time."
 [[mounts]]
 name = "gdrive"
 require_grant = true
+grant_scope = "Every file the supplied credential can reach. A grant does not narrow it to one folder."
+network = true
 command = ["npx", "-y", "@modelcontextprotocol/server-gdrive"]
+env = ["GDRIVE_CREDENTIALS_PATH"]
 agents = ["apex_intelligence_forge", "apex_chief_of_staff"]
 purpose = "Google Drive documents through MCP; pairs with the Drive command-center records."
 verify_offline = false
@@ -56,8 +114,34 @@ activation = "One-time OAuth flow on Joe's machine (GDRIVE_CREDENTIALS_PATH); th
 [[mounts]]
 name = "civil3d"
 require_grant = true
+grant_scope = "Every command the running Civil 3D instance accepts, including model mutation. A grant does not narrow it to reads."
 command = ["node", "build/index.js"]
+env = ["CIVIL3D_HOST", "CIVIL3D_PORT", "CIVIL3D_COMMAND_TIMEOUT", "LOG_LEVEL"]
 agents = ["apex_delivery_commander", "apex_systems_blacksmith", "apex_chief_of_staff"]
 purpose = "Live Civil 3D session access; see docs/CIVIL3D_MCP_BUILDOUT.md."
 verify_offline = false
-activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session scheduled)."
+activation = "Workstation build per docs/CIVIL3D_MCP_BUILDOUT.md (session scheduled), reading CIVIL3D_HOST / CIVIL3D_PORT / CIVIL3D_COMMAND_TIMEOUT / LOG_LEVEL from the launcher env; each has a server-side default, so an undeclared one silently changes behaviour rather than failing."
+
+[[mounts]]
+name = "terraform"
+require_grant = true
+grant_scope = "Registry lookup AND Terraform Enterprise/HCP workspace operations, including runs and variable writes. A grant does not narrow it to registry search; TFE_TOKEN's own permissions are the only limit."
+network = true
+command = ["docker", "run", "-i", "--rm", "-e", "TFE_TOKEN", "-e", "TFE_ADDRESS", "hashicorp/terraform-mcp-server:1.1.0@sha256:312d63756b5474df384b1844af55b58ca48cbe0996871e1d6c4239bfcd6fcd29"]
+agents = ["apex_chief_of_staff"]
+env = ["TFE_TOKEN", "TFE_ADDRESS"]
+purpose = "Infrastructure-as-code surface: provider/module registry lookup and Terraform Enterprise / HCP workspace operations. Agent 007 only while the APEX specialists remain in shadow; see docs/TERRAFORM_AZURE_MCP_BUILDOUT.md."
+verify_offline = false
+activation = "Docker daemon on Joe's machine, plus TFE_TOKEN and TFE_ADDRESS in the runtime env store for workspace tools; the bare -e flags forward them from the launcher env into the container without baking values into this file. Registry-search tools need no credential; workspace tools do."
+
+[[mounts]]
+name = "azure"
+require_grant = true
+grant_scope = "The entire Azure MCP surface under the supplied credential — discovery AND management, including deletion, RBAC and credential tools. A grant does not narrow it to inventory; the service principal's RBAC role assignment is the only limit."
+network = true
+command = ["npx", "-y", "@azure/mcp@2.0.5", "server", "start"]
+agents = ["apex_chief_of_staff"]
+env = ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_CONFIG_DIR"]
+purpose = "Azure resource discovery and management through the official Microsoft MCP server; the cloud target Terraform plans against. Agent 007 only while the APEX specialists remain in shadow; see docs/TERRAFORM_AZURE_MCP_BUILDOUT.md."
+verify_offline = false
+activation = "`az login` on Joe's machine (DefaultAzureCredential), or AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET in the runtime env store for headless use."

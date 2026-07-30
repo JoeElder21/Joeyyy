@@ -17,6 +17,16 @@ __pycache__/
 runtime-memory/
 private-memory/
 brain-memory/
+
+# Hash-chained launcher/audit ledgers: machine-local runtime evidence, not
+# source. Regenerated per machine; publishing them would leak operational
+# activity from a public repository.
+audit/*.jsonl
+
+# Generated report artifacts. privacy_guard.py rejects non-source artifact
+# types and non-UTF-8 files in this public tree, so the PDF stays untracked;
+# scripts/build_awesome_copilot_report.py is the tracked source of truth.
+docs/reports/
 secrets/
 credentials/
 *.sqlite
@@ -30,3 +40,30 @@ brains/jeos/memory/*
 
 # Node vendored dependencies (connectors)
 node_modules/
+
+# Evaluation run results. These publish to the Evaluations folder on Drive, never
+# into this public tree — evaluation inputs and transcripts are exactly what
+# docs/PRIVACY_AND_DATA_BOUNDARIES.md keeps out. See evals/README.md.
+evals/output/
+
+# Rendered deliverables. scripts/privacy_guard.py rejects binary artifacts in
+# this public tree; keep the Markdown source in docs/ and render out-of-band.
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+
+# Mission and value ledgers hold live operational evidence: mission ids, free-form
+# notes, error text, and measured value. AGENTS.md sections 4 and 12 keep private
+# evaluation inputs, transcripts, and results out of public Git, so the ledgers
+# are machine-local and never tracked.
+audit/
+
+# Trusted-launcher replay ledger and grant claim files: consumed grant ids and
+# operational state from a real workstation. Machine-local, never tracked.
+.state/
+
+# Uploaded screenshots and binaries never belong in this public repo
+*.png
+*.jpg
+*.jpeg
