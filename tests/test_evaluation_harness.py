@@ -1175,10 +1175,6 @@ class DirtyTreeEvidenceTests(unittest.TestCase):
         self.assertNotIn("git", source.split('record["tree_dirty"]')[-1])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TelemetryOrderingTests(unittest.TestCase):
     """The opt-out must precede the import that probes for the SDK.
 
@@ -1429,3 +1425,12 @@ class OutputRootPermissionTests(unittest.TestCase):
                 self.assertEqual(modes[0].value, 0o700)
                 return
         self.fail("no out_dir.mkdir call found")
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_evaluation_harness` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()
