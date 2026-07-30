@@ -73,6 +73,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/INTEGRATION_BUILDOUT_2026-07-24.md` — runtime integration record: installed stack tiers, registered workstation deployments, flagged items, and first build tickets.
 - `requirements/` — tiered runtime-stack manifests (`runtime-*.txt`), vendored-repo manifests (`vendor-*.txt`), and the resolved version lock.
 - `vendor/` — external repositories installed as pinned git submodules; provenance, declared dependencies, and boundaries in `vendor/README.md`. Fetch with `git submodule update --init --recursive`.
+- `repos/` — first-party JoeElder21 repositories pinned as git submodules, making this repository the umbrella for the account; pin table in `repos/README.md`.
 - `connectors/relay/` — declared `agent-relay` dependency for the vendored Agent Relay transport; a declaration only, with no relay server configured.
 - `scripts/verify_runtime_stack.py` — dependency audit plus jsonschema/rtoml contract enforcement; degrades to stdlib cleanly.
 - `scripts/agent_runtime.py` — governed-handoff runtime bridge on the OpenAI Agents SDK: fail-closed packet admission, brain-locked topology, hash-chained audit ledger.
@@ -108,6 +109,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
 - `docs/INTEGRATION_ROADMAP.md` — phased runtime-stack integration program with recorded conflicts and intake gates.
+- `docs/REPO_AUDIT_2026-07-30.md` — adversarial audit record against Google's Antigravity SDK: executed verification of what this harness does and does not do, intake consequences, and the open runtime decisions.
 - `schemas/` — delegation, handoff, and roundtable packet contracts.
 - `templates/agent-intake.md` — new-agent onboarding and validation.
 - `templates/specialist-handoff.md` — human-readable specialist packet.

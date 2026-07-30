@@ -10,3 +10,9 @@
 [submodule "vendor/relay"]
 	path = vendor/relay
 	url = https://github.com/AgentWorkforce/relay.git
+[submodule "repos/elder-command-center"]
+	path = repos/elder-command-center
+	url = https://github.com/JoeElder21/Elder-Command-Center.git
+[submodule "repos/antigravity-sdk-python"]
+	path = repos/antigravity-sdk-python
+	url = https://github.com/JoeElder21/antigravity-sdk-python.git

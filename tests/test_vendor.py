@@ -85,6 +85,16 @@ EXPECTED_SUBMODULES = {
     "vendor/relay": "https://github.com/AgentWorkforce/relay.git",
 }
 
+# First-party JoeElder21 repositories pinned under repos/ so this repository
+# can serve as the umbrella without merging their trees. They follow the same
+# gitlink discipline as vendor/ but carry no upstream-dependency records: their
+# provenance table lives in repos/README.md and they are governed by their own
+# repositories, not by this one's contracts.
+FIRST_PARTY_SUBMODULES = {
+    "repos/elder-command-center": ("https://github.com/JoeElder21/Elder-Command-Center.git"),
+    "repos/antigravity-sdk-python": ("https://github.com/JoeElder21/antigravity-sdk-python.git"),
+}
+
 
 def _git_available() -> bool:
     """Whether a git executable exists at all.
@@ -134,12 +144,12 @@ class VendorSubmoduleTests(unittest.TestCase):
         declared = {
             parser.get(section, "path"): parser.get(section, "url") for section in parser.sections()
         }
-        self.assertEqual(declared, EXPECTED_SUBMODULES)
+        self.assertEqual(declared, EXPECTED_SUBMODULES | FIRST_PARTY_SUBMODULES)
 
     def test_every_submodule_is_a_pinned_gitlink_not_committed_content(self) -> None:
         self._require_index()
         listing = subprocess.run(
-            ["git", "ls-files", "-s", "--", "vendor"],
+            ["git", "ls-files", "-s", "--", "vendor", "repos"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -151,7 +161,7 @@ class VendorSubmoduleTests(unittest.TestCase):
             mode, sha, _stage = metadata.split()
             if mode == "160000":
                 gitlinks[path] = sha
-        self.assertEqual(set(gitlinks), set(EXPECTED_SUBMODULES))
+        self.assertEqual(set(gitlinks), set(EXPECTED_SUBMODULES | FIRST_PARTY_SUBMODULES))
         for path, sha in gitlinks.items():
             with self.subTest(submodule=path):
                 self.assertRegex(sha, r"^[0-9a-f]{40}$")
@@ -442,7 +452,9 @@ class VendorScannerExclusionTests(unittest.TestCase):
         cls.has_git_index = _git_available() and _inside_git_worktree()
 
     def test_submodule_paths_are_read_from_gitmodules(self) -> None:
-        self.assertEqual(submodule_paths(ROOT), frozenset(EXPECTED_SUBMODULES))
+        self.assertEqual(
+            submodule_paths(ROOT), frozenset(EXPECTED_SUBMODULES | FIRST_PARTY_SUBMODULES)
+        )
 
     def test_declared_and_index_proven_submodules_agree(self) -> None:
         """`.gitmodules` declares; the index proves. Drift between them is a bug.
@@ -541,7 +553,7 @@ class VendorScannerExclusionTests(unittest.TestCase):
     def test_upstream_files_are_excluded_from_the_privacy_contract(self) -> None:
         if not self.has_git_index:
             self.skipTest("no Git index here (source archive); CI checkout validates this gate")
-        for submodule in EXPECTED_SUBMODULES:
+        for submodule in EXPECTED_SUBMODULES | FIRST_PARTY_SUBMODULES:
             with self.subTest(submodule=submodule):
                 self.assertTrue(is_vendored(ROOT / submodule / "README.md", ROOT))
 
