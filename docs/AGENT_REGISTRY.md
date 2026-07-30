@@ -218,15 +218,18 @@ Registered on Joe's direct instruction and refined the same day per his decision
 
 Third-party agents vendored from `github/awesome-copilot` into `.github/agents/`, pinned at upstream `aa280f28`. Manifest and provenance: `.github/AWESOME-COPILOT.md`.
 
-These are **editor-plane** agents: they are invoked by GitHub Copilot inside a session and hold no brain ownership, memory namespace, write target, writer lease, route, or cadence. They are not members of the mirrored corps, they cannot be delegated a typed packet, and they never execute a governed mutation. Agent 007 remains the sole write-capable native agent. They are registered here because `AGENTS.md` requires every new agent to be registered and validated before active use, and so registry-based audit can account for them.
+These are **editor-plane** agents: they are invoked by GitHub Copilot inside a session and hold no brain ownership, memory namespace, writer lease, route, or cadence. They are not members of the mirrored corps, they cannot be delegated a typed packet, and they never execute a governed mutation. Agent 007 remains the sole write-capable native agent. They are registered here because `AGENTS.md` requires every new agent to be registered and validated before active use, and so registry-based audit can account for them.
+
+Three of the four hold no write target at all. `dotnet-self-learning-architect` is the exception: its `tools` list is upstream's, so it keeps file-editing and terminal tools, and its instructions direct it to write `.github/Lessons/` and `.github/Memories/`. Those are editor-plane scratch directories outside every brain namespace, so no governed resource is reachable through them and no writer lease applies — but the blanket "no write target" claim does not hold for this agent and is therefore not made about it.
 
 | Agent | Owner plane | Purpose | Tools | Status | Known limits |
 |---|---|---|---|---|---|
 | `prompt-engineer` | editor / cross-brain neutral | Treats every input as a prompt to analyse and rewrite | `tools: []` — **local override**, see below | candidate | Rewrites text only; no repository or connector effect |
 | `task-planner` | editor / APEX-leaning | Composes implementation plans destined for `.copilot-tracking/`; returns them for Agent 007 to persist | **Local, not upstream** — declared: `agent`, `read`, `changes`, `search/codebase`, `fetch`, `findTestFiles`, `githubRepo`, `problems`, `search`, `search/searchResults`, `usages`, `terraform`, `Microsoft Docs`, `azure_get_schema_for_Bicep`, `context7`. **Added:** `agent`, `read`. **Removed:** `edit/editFiles`, `runCommands`, terminal access, `runTests`, `runNotebooks`, `extensions`, `vscodeAPI`, `new`, `openSimpleBrowser` | candidate | No write tool, so it can mutate nothing; its artifacts are returned, not written. The `terraform`, `Microsoft Docs`, `azure_get_schema_for_Bicep` and `context7` names are **not** wired into any Copilot MCP configuration; unrecognized names are silently ignored, so those four are unavailable in a normal collaborator session. Requires `task-researcher`. |
 | `task-researcher` | editor / APEX-leaning | Companion research pass the planner mandates before planning; returns its document rather than writing it | **Local, not upstream** — same declared list as `task-planner` minus `agent`. **Added:** `read`. **Removed:** the same editing and execution tools | candidate | Same no-write-tool and unwired-tool limitations |
+| `dotnet-self-learning-architect` | editor / cross-brain neutral | Principal-level .NET architect: selects parallel vs orchestrated subagent execution, and maintains versioned lessons/memories under `.github/Lessons/` and `.github/Memories/` | **Tools are upstream's, unnarrowed** — retains `edit/editFiles`, `execute/runInTerminal`, `execute/runTask`, `execute/createAndRunTask`, `agent`, `search`, `web`, plus VS Code, GitHub PR, Azure and Python extension tools. **Local override:** `user-invocable: false`, `disable-model-invocation: true` | candidate | The only vendored Copilot agent that keeps file-editing and terminal tools, and the only one with a write target. Spawns subagents. Its `model:` list is unverified here. .NET-specific in a Python repository. See the tool-surface note below. |
 
-Lifecycle: **all three are `candidate`.** An earlier version of this entry marked
+Lifecycle: **all four are `candidate`.** An earlier version of this entry marked
 `prompt-engineer` active on the reasoning that it is self-contained. Review rejected that,
 correctly: `docs/AGENT_COMMUNITY_PROTOCOL.md` gates `active` on controlled real-mission
 evidence, realistic behaviour tests, boundary and accuracy evidence, and a runtime-isolation
@@ -238,7 +241,43 @@ exactly the unsupported-capability claim the contract forbids.
 Terraform/Azure/Docs tool names are reachable in the invoking client, since until then the
 planner runs without the capabilities its instructions assume.
 
+### Tool surface — `dotnet-self-learning-architect`
+
+Recorded because it diverges from every other agent in this section, and the divergence was
+not a decision anyone made — it is what vendoring upstream's `tools` list unchanged produces.
+
+The other three had their file-editing and execution tools deliberately stripped. This one
+keeps `edit/editFiles`, `execute/runInTerminal`, `execute/runTask`, `execute/createAndRunTask`
+and `agent`, so within a Copilot session it can edit files, run terminal commands, and spawn
+subagents. That is a strictly larger blast radius than the rest of the section, and the
+reasoning that justified stripping the others — an editor-plane agent should not be able to
+mutate the tree — applies to it equally.
+
+**The open question is whether to narrow `tools` to match the other three.** It is left open
+rather than settled unilaterally: this agent was requested as an exact upstream copy, and its
+whole purpose — maintaining lessons and memories — presumes it can write something, so
+stripping its editing tools is a change of function, not just of permission. Until that is
+decided, treat the declared surface as real and do not rely on this agent for unattended work.
+
+What is **not** left open is reachability. Both invocation doors are closed
+(`user-invocable: false`, `disable-model-invocation: true`), because
+`tests/test_agent_contract.py` enforces that for every agent the registry lists as
+`candidate` — and this agent failed that test the moment it was registered, having been
+installed with neither flag. Model-routing was the door that mattered: nothing human-visible
+happens when one agent routes to another, and this is the section's only agent that both
+spawns subagents and holds edit and terminal tools. Flip both flags on promotion, not one.
+
+Two further limits, neither blocking at `candidate`:
+
+- Its `model:` frontmatter names four specific models. Availability is a property of the
+  invoking Copilot client, not of this repository, and has not been verified here.
+- It is a .NET/C# architect. This repository is Python, so most of its domain expertise
+  (EF Core, ASP.NET, Azure Functions) has nothing to bite on. Its transferable parts are the
+  mode-selection policy and the versioned-pattern governance model.
+
 ### Local overrides (intentional divergence from upstream)
+
+`dotnet-self-learning-architect.agent.md` adds `user-invocable: false` and `disable-model-invocation: true`, which upstream omits. Both are lifecycle gates, not capability changes: they are what `candidate` means here, and they come off together on promotion. Its `tools` list is untouched — see the tool-surface note above for the open question there.
 
 `prompt-engineer.agent.md` adds `tools: []`, which upstream omits. Per `.github/instructions/agents.instructions.md`, an omitted `tools` field grants every available built-in and MCP tool. That agent consumes arbitrary user-supplied text, so leaving all tools enabled would let prompt injection reach the repository and connected systems. The override is deliberate and must be preserved. **Do not treat a drift report on this file as expected.** Each discovery skill normalizes the overrides recorded in `.github/AWESOME-COPILOT.md` out of both sides before comparing every remaining byte, so anything still reported after normalization is a genuine upstream or local change and must be investigated. Dismissing it wholesale is how a real upstream update hides behind a local override. Never "fix" the override itself by reverting to upstream.
 
