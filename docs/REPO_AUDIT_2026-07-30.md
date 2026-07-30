@@ -1,282 +1,112 @@
-# Repository Audit — 2026-07-30
+# External Audit — Agent 007 vs Google Antigravity SDK — 2026-07-30
 
-Full-tree audit of the Agent 007 repository: architecture inventory and an
-evidence-backed inefficiency review. Every claim below was checked by running
-the code, not by reading it alone. Findings are ordered by severity; the
-remediation status column reflects work landed in the same change as this
-record.
+A five-agent adversarial audit compared this repository against Google's `antigravity-sdk-python` on one question: which is usable for daily work today. Both repositories were read at line level **and executed**. This record captures what was verified, what the repository does not do, and the decisions that stand between this harness and a system that actually runs.
 
-Measurements taken at commit `c546e4f` on Python 3.11.15.
+The comparison is not apples-to-apples, and that is the finding. This repository is a governance harness with no runtime; the Antigravity SDK is a runtime with no auditable core. Neither is a complete daily system on its own.
 
-## Correction — the audit ran against a stale tree
+## Measurement points — read this before citing any number below
 
-**Read this before trusting any measurement below.** The working clone was
-`c546e4f` when this audit ran. `origin/main` was already ~200 commits ahead:
-constitution adoption, a vendored agent corps, ruff and gitleaks gates,
-restructured per-tier locks, `runtime/mission_runner.py`, `runtime/value_meter.py`,
-the Market Operator agent, and four CI workflows. Every scale figure in Part 1
-is therefore understated, and several Part 2 findings were fixed on main before
-this record was written.
+This audit was executed against a session clone of `main` at **2026-07-25**. By the time the record was written, `main` had advanced **235 commits**. Every claim was then **re-verified against `main` at `4c0f46e` (2026-07-30)**, and the numbers below are stated per measurement point rather than merged into one figure. Where the two disagree, the current-`main` figure governs, per `AGENTS.md` §1.
 
-Re-verified against `origin/main` at `4c0f46e`:
+| Measured | 07-25 snapshot | Current `main` (`4c0f46e`) |
+| --- | --- | --- |
+| Test suite | 241 tests, 2.769s, `OK (skipped=27)`, 0 failures | 1,080 tests, `OK (skipped=23)`, 0 failures in CI |
+| Test corpus | 4,349 lines / 24 files | 21,622 lines / 35 files |
+| `scripts/packet_guard.py` | 1,321 lines | 1,228 lines |
+| LICENSE | absent | **Apache-2.0 present** (`LICENSE`, `NOTICE`, `CITATION.cff`) |
 
-| Claim below | Actual on current main |
+A note on where numbers come from, because this audit got it wrong once. Running the suite inside the audit sandbox produced two failures in `tests/test_orchestration.py` on the Azure MCP grant-scope verifier, reproducible there against a clean `origin/main` worktree. **They do not reproduce in CI**, which runs the same 1,080 tests green (`OK (skipped=23)`, 166s, both 3.11 and 3.12). The verifier launches MCP servers through `npx`, which the sandbox restricts, so the most likely reading is a sandbox artifact rather than repository state. An earlier revision of this document reported those two failures as the current condition of `main`. That was wrong: **`main` is green on tests**, and CI is authoritative for that claim over any single local environment.
+
+## Method and verification honesty
+
+- Four assessor agents ran in parallel — one deep-read and one execution agent per repository — followed by one adversarial cross-examiner that re-checked every claim against the files on disk and corrected the assessors.
+- Verification levels used below:
+  - **Executed** — the command was run and its output recorded.
+  - **Read-verified** — the claim was confirmed against a specific file and line in `main` at `4c0f46e`.
+- Stated limits of this audit:
+  - The SDK's supported path (`pip install google-antigravity`, which delivers the compiled binary, plus model credentials) was **not** exercised. Every claim about its daily usability is inference from source, not measurement.
+  - **No mission was run.** This audit measures the harness, its contracts, and its honesty. It proves nothing about output quality, and nothing here upgrades any specialist out of shadow stage.
+  - The audit was performed by AI agents on a repository substantially built by AI agents. The cross-examiner exists because of that, not despite it.
+  - The audit ran against a stale base. That is itself a finding: it is precisely the failure mode `AGENTS.md` §1 warns about, and it was caught only when CI surfaced files the snapshot did not contain.
+
+## Verdict summary
+
+On the 07-25 snapshot this repository ran fully green in under three seconds with zero dependencies installed, while the Antigravity SDK did not import from a clone at all. Reverse the frame to live agent work and the result inverts: the SDK can act today and this repository cannot, because nothing here constructs a model client. That remains true on current `main` — `runtime/mission_runner.py` exists, but no model client is constructed anywhere in the tree.
+
+The honest one-line summary is that this is a well-tested governance layer waiting for a runtime, and the runtime decision (below) is the only one that unblocks the rest.
+
+## What this repository verifiably does
+
+| Claim | Verification | Evidence |
+| --- | --- | --- |
+| Dependency degradation is engineered, not skip-decorated dead code | Executed | On the 07-25 snapshot, installing `pydantic`/`jsonschema`/`mcp` converted 7 skips into passing tests (27 → 20) with all 241 still passing |
+| Every skip names its missing dependency | Executed | langgraph ×5, pydantic ×4, openai-agents ×4, autogen ×4, prefect ×3, mcp ×2, and one each for jsonschema, crewai, celery, llama-index-core, opentelemetry |
+| Validators pass | Executed | `privacy_guard.py` → `Privacy guard passed.`; `validate_specialist_corps.py` → `valid: true`, 10 contract packets, 10 boundary rejections; `verify_runtime_stack.py` → exit 0 |
+| Every module imports cleanly on stdlib alone | Executed | 10/10 in `runtime/`, 19/19 in `scripts/` (as `scripts.X` from the repo root) — measured on the 07-25 snapshot |
+| PacketGuard is substantive, portable validation | Read-verified | 1,228 stdlib-only lines: NFKC identifier canonicalization (`scripts/packet_guard.py:1117-1118`) and non-canonical rejection (`:1135`), `boundary_blocked` emptiness so refused content cannot leak (`:581-608`), validate dispatch (`:100`), working CLI (`:1192`) |
+| The governance MCP server is deployable now | Executed | `build_server()` constructed a live FastMCP instance with `mcp` installed (`scripts/governance_mcp_server.py`) |
+| Fail-closed paths genuinely raise | Read-verified | `PermissionError` on disallowed lifecycle transitions (`runtime/lifecycle.py:196`); `HandoffRejected` before control transfer (`scripts/agent_runtime.py:135,173`); ledgered `grant_denied` on launch refusal (`scripts/trusted_launcher.py:318,344,463`) |
+| Anti-fabrication discipline is enforced in code | Read-verified | `CadenceRun.status` returns `partial` unless steps executed (`runtime/cadence.py:80`); `memory_trial.run_trial()` returns `blocked` with named missing preconditions (`runtime/memory_trial.py:67`); the corps validator emits `named_agents_invoked: false`, `real_missions_completed: false` |
+
+For a repository built in roughly four days largely by parallel AI agents, machinery that refuses to simulate success is the most transferable idea here.
+
+## What this repository verifiably does not do
+
+All rows re-verified against `main` at `4c0f46e`.
+
+| Gap | Evidence |
 | --- | --- |
-| 241 tests, ~2s | **1,083 tests, ~157s**, 36 test modules |
-| 27 docs, 3,305 prose lines | **40 docs** |
-| CI never runs `verify_runtime_stack.py` (finding 17) | **Already fixed** — it is a step in the `validate` job |
-| The 269-package lock is exercised by nothing (finding 13) | **Largely fixed** — CI installs `lock-runtime-root` and `lock-runtime-contracts`, and a `locks` job re-resolves each manifest with pinned `uv` to catch drift |
-| `runtime/autogen_groupchat.py` is legacy (finding 8) | **Withdrawn** — main's README documents it as a live brain-private planning adapter |
-| `privacy_guard.py` has no allowlist (finding 22) | **Superseded** — the guard now carries basename and per-pattern allowlists and is far larger |
-| No `.claude/` directory or skills (Part 1) | **Superseded** — `.claude/agents/` now holds the corps projected into Claude Code subagents |
+| No model client is constructed anywhere — no mission can run | Grep across the tree finds no `Anthropic(`, `OpenAI(`, or `genai.Client(` construction outside `vendor/`. `scripts/claude_runtime.py:156` holds a live `client.messages.stream()` call whose own docstring says it is "never called by anything else in this module". `runtime/mission_runner.py` does not construct one either; `evals/test_specialist_modes.py:316` raises `NotImplementedError` |
+| The corps has never left shadow stage | Corps-wide `deployed_stage = "shadow"` (`config/specialist_corps.toml:36`) |
+| Operational history is a single line | `trial/output/cadence-log.md` — one TICKET-005 hygiene sweep, 2026-07-24 |
+| Writer leases do not survive across processes | In-memory registry with no persistence (`runtime/writer_lease.py:56`, `MutationAdmission` at `:158`); two processes can each believe they hold the same lease |
+| Enforcement is largely opt-in | `scripts/policy_enforcement.py` is the intended single enforcement point; the README itself records it as "built and tested, not yet wired". It now has call sites in `scripts/issue_instruction.py:47` and `evals/harness.py:42`, so this gap is narrowing but not closed |
+| Write targets have no bound storage | `scripts/evidence_index.py:74` holds documents in a Python list in RAM |
+| Four integrations remain nominal | `mem0` is never imported anywhere — `scripts/memory_layer.py` is a stdlib keyword store described as "on the mem0 scope model"; `dspy` and `guardrails-ai` still have zero call sites; Phoenix export "changes no call sites" by its own comment (`scripts/observability.py:10-11`) |
+| Parallel-stream duplication persists | Two lifecycle engines (`runtime/lifecycle.py` vs `scripts/orchestration_graphs.py`), two Prefect layers, three AutoGen adapters, pinned by drift-lock tests rather than removed |
+| Some tests assert prose, not behavior | `tests/test_reconciliation.py` and `tests/test_governance_docs.py` check that phrases exist in Markdown — useful drift locks, but they inflate the apparent test count |
 
-Findings re-confirmed as still live on `4c0f46e`:
+## Findings on antigravity-sdk-python
 
-- **Finding 1** — the lifecycle-gate bypass. `scripts/orchestration_graphs.py`
-  on main still carries its own `ACTIVE_GATES` with no `joe_approved_activation`
-  and no gate-21 check, and `runtime/lifecycle.py`'s `active_gate` is unchanged.
-  Fixed by the change that carries this record.
-- **Finding 10** — the seam is still inverted, and worse than recorded:
-  `packet_guard.py` remains in `scripts/`, and `runtime/` now imports from
-  `scripts/` in two modules (`autogen_orchestrator.py`, `mission_runner.py`)
-  rather than one.
-- **Finding 5** — the .NET Self-Learning Architect is still unregistered in
-  `docs/AGENT_REGISTRY.md`.
-- **Finding 7** — roster data is still stated across the corps config and both
-  brain manifests.
-- **Finding 18** — `trial/output/cadence-log.md` still has exactly one line.
+Recorded as the comparison basis, and because two findings bear on our own intake protocol.
 
-Findings not re-verified are marked by their original date and should be
-re-measured before being acted on. The lesson is recorded rather than
-explained away: an audit is only as current as its fetch, and this one did not
-fetch first.
+- **The Python package is a wire-protocol client around a closed Go binary.** `localharness` owns the model loop, the system prompt, all builtin tools including command execution and its sandboxing, MCP, subagents, and session storage. Every backend — including the local Ollama and LiteRT paths — subclasses `LocalConnectionStrategy`, whose constructor resolves the binary and raises without it. The components a security-conscious operator most needs to audit are precisely the ones that cannot be audited.
+- **The repository does not import from a clone.** Generated protobuf modules are absent from git and the regeneration step is documented nowhere for external users. Once derived, 681 of 715 tests pass in 8.28 seconds, with failures decomposing into 22 binary-dependent tests and harness artifacts (`policy_test.py` passes 74/74 under its intended runner). The pure-Python layer is genuinely well made.
+- **The GitHub repository is a one-way mirror, not an open-source project.** Every commit is a squashed export with no description, and the only CI triggers on tag push and tests the published wheel rather than the repository's code.
+- **Documentation rot has reached a safety claim.** The README states the agent runs read-only by default; the verified default enables all file-write tools with command execution denied, and the README's suggested remedy is a no-op because it is already the default.
+- **Alpha churn is real:** eight releases in eight weeks, a default model swapped in a patch release, transports removed within weeks, and one advertised feature with no Python surface.
 
-### The full-stack CI job was attempted and withdrawn
+**Intake consequences for this system.** Two house rules gain evidence. First, our provenance rule should extend to first-party vendor repositories: a Google-owned mirror still failed to import, still shipped a wrong safety default, and still could not be built from source — vendor identity is not a substitute for verification. Second, any dependency whose enforcement lives inside an unauditable binary cannot satisfy our connector-isolation policy on its own; it would have to be wrapped, not trusted.
 
-Finding 16 proposed a CI job installing the whole runtime stack so the
-dependency-gated tests would run somewhere. It was written, pushed, and failed:
+## Corrections to earlier records
 
-```
-ERROR: Cannot install -r requirements/lock-2026-07-24.txt (line 36)
-and posthog==7.29.0 because these package versions have conflicting dependencies.
-    The user requested posthog==7.29.0
-    chromadb 1.1.1 depends on posthog<6.0.0 and >=2.4.0
-```
+The cross-examiner corrected the assessors, and the re-verification against current `main` corrected the record again:
 
-`requirements/lock-2026-07-24.txt` is **not installable**, and main already
-knew: `docs/DEPENDENCY_AUDIT_2026-07-25.md` records the same conflict and lists
-regenerating the lockfile as an open remedy. That is why the `validate` job
-installs the per-tier `lock-runtime-root` and `lock-runtime-contracts` instead.
+- The build window is **2026-07-22 through 2026-07-25** (91 commits, 22 on the first day), not the 07-23 start reported mid-audit.
+- The `83%` figure in `docs/AGENT_RUNTIME_BRIDGE.md` was initially flagged as a measurement dressed up from a step count. On re-reading, the section is titled "Efficiency, measured honestly", defines the metric in its first sentence, and disclaims wall-clock and model-quality effects. The hedge is headline-level; the record is not dishonest.
+- An earlier draft of this document asserted that the repository has no LICENSE file and listed licensing as an open decision. **That was wrong on current `main`**, which ships Apache-2.0 with `NOTICE` and `CITATION.cff`. The decision is closed and has been removed.
+- An earlier draft described the repository as running fully green. That held for the 07-25 snapshot only; current `main` has two failing orchestration tests.
 
-So the finding is sharper than first recorded, and it is not a CI-configuration
-gap:
+## Open decisions — Joe
 
-- There is **no committed lock that resolves the orchestration, memory, or
-  observability tiers.** The only one that tried cannot be installed by any
-  resolver, so the full stack has never been installed anywhere — not in CI,
-  not on a workstation.
-- `langgraph` is in that unresolvable set. The lifecycle `StateGraph` in
-  `scripts/orchestration_graphs.py` therefore executes in no automated
-  environment, which is how it carried divergent gate logic (finding 1)
-  invisibly.
-- Closing this needs a real dependency decision — regenerate the lock, which
-  likely means pinning `posthog<6` or dropping whichever tier pulls `chromadb`
-  (crewai). That is a scope and architecture call, not a mechanical fix, and it
-  belongs to whoever owns the dependency policy.
+Ordered by how much each unblocks. Decisions 2, 3, 4, and 6 only become concrete once decision 1 is made.
 
-The job was removed rather than left red or weakened into something that passes
-without proving anything. `verify_runtime_stack.py --require-tier` was kept: it
-is what such a job would need, and it makes the absence checkable the moment a
-resolvable lock exists.
+1. **Which runtime hosts Agent 007?** Nothing here constructs a model client, so no mission can run until this is answered. Three surfaces are already half-built: `scripts/claude_runtime.py` (typed Anthropic tool definitions), `scripts/agent_runtime.py` (OpenAI Agents SDK), and `.codex/agents/*.toml` (Codex CLI), with `runtime/mission_runner.py` now waiting above them. *Recommendation: an MCP-capable host with `scripts/governance_mcp_server.py` mounted as the enforcement layer — shortest path from here to something that executes.*
+2. **Where do write targets physically land?** Options: in-repo directories, a Logseq graph, external storage, or SQLite. *Recommendation: in-repo directories first, since git and the privacy guard already provide audit and rollback.*
+3. **What clears the activation gate, and who signs?** The gate demands evidence no in-repo code can produce, which is a closed loop; the evals harness now makes the backlog measurable (39 modes) but still raises `NotImplementedError` at dispatch. *Recommendation: promote exactly one specialist on one real mission with Joe's manual sign-off.*
+4. **Does cadence run on a schedule, and where?** Cron specs exist; no deployment does. *Recommendation: defer Prefect; a scheduled invocation of the host from decision 1 achieves the same outcome with far less infrastructure.*
+5. **Implement the nominal integrations, or strike them?** mem0, dspy, guardrails-ai, and Phoenix are named but uncalled. *Recommendation: strike them from the README and requirements tiers.*
+6. **Do writer leases become durable?** *Recommendation: persist to SQLite or a lockfile, converting the single-writer guarantee from aspiration to fact.*
+7. **Who fixes the standing red CI checks?** The test and contract surface is green. Of the four checks that were red when this audit ran, two have since been fixed upstream and two remain:
+   - `Locks match their manifests` (3.11 and 3.12) — **fixed**. PR #57 merged 2026-07-30T16:02Z, seeding each pair's own committed lock so `uv` preserves pins that still satisfy the manifest, instead of resolving against latest and losing to the cooldown window.
+   - `zizmor` — **fixed**. `main` now pins `anthropics/claude-code-action` to `c3d45e8e941e…`, which is the commit its `# v1.0.99` comment actually names, so the `ref-version-mismatch` findings are resolved.
+   - `.github/dependabot.yml` — **fixed**. PR #65 removed an invalid `semver-major-days` property from the `github-actions` ecosystem (`updates[3]`), where the schema does not allow it. Because one invalid property invalidates the whole file, Dependabot had been running for **no** ecosystem — not `pip`, not either `npm` block. The property remains in the three blocks where it is valid, and `default-days: 7` is retained for actions.
+   - `claude-review` — **open, and not fixable in a pull request**. Its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment, so the action exits in ~19s having produced no review. It needs a repository secret or a different supported auth method.
 
-### Resolved 2026-07-30 — and what installing it exposed
+   *Recommendation: three of the four are closed. The remaining one is a repository-settings action for Joe, not a code change, and it will keep every pull request in this repository showing one red check until it is done.*
 
-On Joe's instruction the lock was regenerated. The conflict was not inherent to
-the stack; it was an artifact of the lock having **no manifest behind it**. No
-resolver had ever been asked to solve the set, so nothing forced `posthog` to
-respect `chromadb`'s ceiling. Given a manifest
-(`requirements/runtime-full.txt`), `uv` resolves it cleanly at `posthog==5.4.0`.
+## Rollback
 
-The old file was also **radically incomplete**: 269 pinned packages against a
-true resolution of **1,053**. It could not have installed the full stack even
-without the conflict.
+This change adds one document and two index lines (`README.md`, `docs/README.md`). No code, schema, configuration, or test behavior was modified, and no agent lifecycle stage changed. To reverse: delete `docs/REPO_AUDIT_2026-07-30.md` and remove its index entries, or revert the commit. Nothing in this record grants authority, promotes an agent, or activates a capability.
 
-`pip install -r requirements/lock-2026-07-24.txt` now completes, and
-`verify_runtime_stack.py --require-tier all` reports `valid: true`,
-`installed_count: 20`, `missing: []` — the first environment in this
-repository's history where every declared runtime dependency imports.
-
-Installing it immediately surfaced three defects that absence had been hiding.
-Two were fixed; the third is a decision.
-
-1. **`verify_runtime_stack.py` probed the wrong module for AutoGen.** It looked
-   for `autogen_agentchat`; the pinned `autogen-agentchat>=0.2.35,<0.3` exposes
-   `autogen`. The audit reported an installed, correctly-pinned dependency as
-   missing. Fixed: the probe accepts either name.
-
-2. **The same command's stdout contract broke under a real stack.** It emits a
-   JSON document, but importing the stack writes to stdout — nltk downloads a
-   corpus, dspy and typer emit `DeprecationWarning`. Callers parsing the output
-   got a `JSONDecodeError`. Fixed: import side effects are redirected to
-   stderr. The contract had held only because nothing was ever installed.
-
-3. **Two mutually exclusive AutoGen APIs — resolved 2026-07-30.**
-
-   | Module | Imports | Requires |
-   | --- | --- | --- |
-   | `runtime/autogen_orchestrator.py` | `from autogen import ConversableAgent, GroupChat, GroupChatManager` | AutoGen **0.2** |
-   | `runtime/autogen_groupchat.py` | same | AutoGen **0.2** |
-   | `scripts/group_debate.py` | `from autogen_agentchat.agents import AssistantAgent` | AutoGen **0.4+** |
-
-   `autogen-agentchat<0.3` cannot provide `autogen_agentchat`, and `autogen_ext`
-   — which `scripts/group_debate.py`'s tests also require — appears in **no
-   manifest at all**. So `scripts/group_debate.py` cannot run under the declared
-   dependency set, and its tests skip permanently even with the full stack
-   installed.
-
-   That matters more than a skipped test. `docs/RECONCILIATION_2026-07-24.md`
-   closes build ticket 4 as "delivered by the Codex stream:
-   `scripts/group_debate.py` (challenge-pair debates, cadence chats, dynamic
-   selector per brain)". The registered challenge pairs are one of the system's
-   core quality mechanisms — the adversarial review that keeps strategy honest
-   against dated evidence. As configured, that mechanism is not merely inert:
-   it is **unsatisfiable**.
-
-   Converged on **0.2**, the pinned line: `scripts/group_debate.py` now imports
-   `autogen` and builds `GroupChat`/`GroupChatManager`. The other two modules
-   carry the governed, packet-validating, currently-passing path — including a
-   speaker-selection guard that raises on a manifest-order violation, which 0.4
-   has no direct equivalent for — so converging on 0.2 rewrote 179 lines that
-   had never run instead of 454 lines that work.
-
-   Two governance rules were added in the process, neither present in the 0.4
-   version: `llm_config` may not carry `tools` or `functions` (a model-side
-   tool grant bypasses `packet_only_no_direct_connectors`), and a selector chat
-   with no model is refused rather than silently degrading to round-robin.
-
-   Its tests now run fully offline via `llm_config=False` plus
-   `default_auto_reply`, the pattern `tests/test_autogen_orchestrator.py`
-   already proved — no model, no network, no unmanifested replay client. A
-   registered APEX pair produces a real adversarial transcript. **Dependency-
-   gated skips across the whole suite are now zero.**
-
-   Migrating all three modules to the maintained 0.4 line remains worthwhile and
-   is recorded as its own decision in `docs/SHADOW_EXIT_STATUS_2026-07-30.md`.
-
-## Part 1 — What the repository is
-
-A governance and contract repository, not an application. It defines a
-cross-brain Chief of Staff (`apex_chief_of_staff`, alias Agent 007) governing
-two isolated brains — APEX (professional) and JEOS (personal) — each staffed by
-five brain-locked specialists, and it ships executable enforcement for the rules
-that bind them.
-
-### Inventory
-
-| Layer | Contents | Size |
-| --- | --- | --- |
-| Agents | 1 governor (`workspace-write`) + 10 specialists (all `shadow`, read-only) + 11 retired with lineage | 11 native TOML definitions, 922 lines |
-| Charter modes | 40 dream-team roles as modes of the ten specialists | `config/dream_team_roster.toml`, 364 lines |
-| Contracts | 8 JSON schemas: delegation, handoff, writer lease, mutation result, memory record, roundtable memo, cross-brain constraint, brain-private constraint | 700 lines |
-| Manifests | corps routing, 2 brain manifests, MCP mounts, project config | 2,213 lines TOML |
-| Enforcement | `scripts/packet_guard.py` — fail-closed relational validation | 1,321 lines |
-| Runtime (stdlib-pure) | lifecycle, cadence, writer leases + their graph/flow/queue layers, memory trial | `runtime/`, ~1,280 lines |
-| Integration | governed dispatch (OpenAI + Anthropic), MCP server, evidence/memory/crew gateways, debates, observability, trusted launcher, validators | `scripts/`, ~4,220 lines |
-| Connectors | 6 MCP mounts (2 offline-verifiable) + APS Node validation harness | `config/mcp_mounts.toml`, `connectors/aps/` |
-| Tests | 24 files, 241 tests | 4,349 lines |
-| Docs | 27 in `docs/` + README + AGENTS.md + a 1,102-line master plan | 3,305 lines |
-
-There are **no skills in this repository** — no `.claude/` directory, no
-`SKILL.md`, no hooks, no `settings.json`. The "Agent 007 skill" referenced in
-`AGENTS.md` supplies cross-chat activation from outside this tree.
-
-### What the design does well
-
-Six mechanisms carry the quality claim, and they are real in code:
-
-1. **Adversarial by construction** — 16 registered same-brain challenge pairs
-   force strategy to defend itself against dated evidence and capacity reality.
-2. **Evidence-bound artifacts** — a criterion cannot be marked `passed` without
-   artifact record IDs, and artifact records cannot cite evidence that was not
-   delegated. Confident fabrication is structurally rejected.
-3. **Proof of mutation** — "done" means observed state exactly equals expected
-   state, plus a verified rollback test with evidence.
-4. **Fail-closed everywhere** — missing ledger, missing or expired lease,
-   opposite-brain reference, downgraded sensitivity, legacy schema version: all
-   reject before control transfers.
-5. **Anti-self-promotion** — gate 21 in `runtime/lifecycle.py` refuses to let a
-   validation-harness pass promote an agent, and activation additionally
-   requires Joe's explicit approval.
-6. **Tamper-evident audit** — SHA-256 hash-chained JSONL whose `verify()`
-   detects any rewrite of history.
-
-The repository is also unusually honest about what it has not proven:
-`scripts/validate_specialist_corps.py` self-reports `named_agents_invoked:
-false`, `connectors_called: false`, `real_missions_completed: false`.
-
-## Part 2 — Inefficiencies
-
-Root cause for most of what follows: 93 commits in four days across four
-authors on parallel streams. `docs/RECONCILIATION_2026-07-24.md` was written to
-resolve the resulting collisions and only partly succeeded.
-
-### Tier 1 — correctness and trust
-
-| # | Finding | Evidence | Status |
-| --- | --- | --- | --- |
-| 1 | **Two lifecycle engines; the `scripts/` one omitted the human checkpoint.** `scripts/orchestration_graphs.py` defined its own six-flag `ACTIVE_GATES` with no `joe_approved_activation` and no gate-21 harness-honesty check, so it could promote `shadow → active` with no human approval. `RECONCILIATION` ordered convergence "in its next change"; it had not converged, and `tests/test_reconciliation.py` locked cadence order but not gate parity. | Local gate tuple vs `runtime/lifecycle.py:115` | **Fixed** — graph now projects onto `runtime.lifecycle`; three parity tests added |
-| 2 | **Zero of 20 runtime dependencies installed, and the audit could not fail on absence.** `verify_runtime_stack.py` returned `valid: true` with `installed_count: 0`; ~3,000 lines of integration code were inert. | Command output | **Partly fixed** — `--require-tier` added; host decided in `docs/RUNTIME_HOST_DECISION.md`; install is a workstation action |
-| 3 | **Promotion deadlock.** `active` requires real missions; real missions require a runtime; no runtime existed. All ten specialists frozen in `shadow` since 2026-07-23 with no self-serviceable exit. | `validate_specialist_corps.py` output | **Unblocked, not resolved** — needs the workstation install and a pilot decision |
-| 4 | **No memory layer is active**, with three competing approaches in-tree: mem0 gateway, graphiti trial, and the `.github/Lessons|Memories` markdown model. Reflection, weekly audit, error ledger, and durable learning all depend on it. | `RECONCILIATION_2026-07-24.md` | Open — Joe's decision |
-| 5 | **An agent was installed in violation of the repository's own intake rule.** The .NET Self-Learning Architect appears nowhere except its own doc — not in `AGENT_REGISTRY.md`, corps config, README, or CI, against `AGENTS.md` "register every new agent". | Repository-wide grep | Open — register or remove |
-| 6 | **`packet_guard.py` silently ignores unsupported JSON Schema keywords.** Its hand-rolled validator handles 12; the current 8 schemas use only those, so it is adequate today. The hazard is the failure mode: an unsupported keyword is ignored, not rejected, and the `jsonschema` cross-check was skipped everywhere. | Keyword audit of `schemas/` | **Mitigated** — the full-stack CI job now runs the `jsonschema` check |
-
-### Tier 2 — maintenance drag
-
-| # | Finding | Status |
-| --- | --- | --- |
-| 7 | Roster data stated four times: corps config, two brain manifests, and registry prose. One roster change is four coordinated edits. Challenge pairs written out twice verbatim. | Open — needs a source-of-truth decision |
-| 8 | Four AutoGen modules with three separate `GroupChatPlan` classes, one self-described "legacy". | **Fixed** — legacy adapter and its test removed |
-| 9 | Two cadence implementations kept in sync by a dedicated drift test rather than merged. | Open |
-| 10 | Architectural seam inverted: `packet_guard.py`, the core enforcement engine, lives in `scripts/`, and `runtime/autogen_orchestrator.py` imports from it — against the seam rule in `RECONCILIATION`. | Open |
-| 11 | Policy text duplicated across the chief's prompt, `AGENTS.md`, and `docs/`, with no consistency check. | Open |
-| 12 | Doc sprawl: 3,305 prose lines against 5,593 code lines; six overlapping external-adoption docs; four same-day dated records; a 1,102-line master plan with no stated relationship to current state. | Open |
-| 13 | Three conflicting dependency declarations and a 269-package lock exercised by nothing. | **Partly fixed** — the lock is now installed and gated by the full-stack CI job |
-| 14 | `packet_guard.py` at 1,321 lines: single class, eight-way dispatch, a ~260-line `_handoff_errors`, no property-based coverage. | Open |
-
-### Tier 3 — latent friction
-
-| # | Finding | Status |
-| --- | --- | --- |
-| 15 | 241 tests run in ~2s and validate configuration, not behavior. A green build says the config is internally consistent and little else. | Open by design; the full-stack job narrows it |
-| 16 | 27 skipped tests (11%) were exactly the integration proofs — including those that would have surfaced finding 1. | **Fixed** — full-stack CI job refuses dependency-skipped tests |
-| 17 | CI ran three of the four documented `validate` steps; `verify_runtime_stack.py` never ran. | **Fixed** |
-| 18 | The "recurring" cadence has one log line ever (2026-07-24); the hygiene sweep shells out to the full test suite from a module the tests import. | Open |
-| 19 | Trusted launcher: every denial path proven by tests, zero mounts currently reachable. | Open — first grant is a workstation action |
-| 20 | 40 charter modes registered with a knowingly truncated JEOS list, already used to justify amending the team-sizing rule. | Open |
-| 21 | A fully specified five-ticket execution-layer trial with no installed candidate and no decision; one ticket is definitionally blocked. | Open |
-| 22 | `privacy_guard.py` blanket-bans every binary and document format with no allowlist, so the repository cannot hold a diagram or screenshot as evidence. | Open |
-| 23 | `.codex/config.toml` sets `max_concurrent_threads_per_session = 8` with no scheduler, queue, or runner. | Open |
-| 24 | The `runtime/` ↔ `scripts/` seam rule is prose with no linter or CI check; findings 1 and 10 were both invisible to the build. | **Partly fixed** — gate parity is now tested; general import direction is not |
-| 25 | The README is a hand-maintained 60-line file index, already drifting, untested. | Open |
-
-### Corrected during the audit
-
-`tests/fixtures/shadow_missions.json` carries `schema_version: "2.0"`. This was
-initially read as a stale packet-contract stamp. It is not: the field is the
-fixture file's own format version, the file contains mission descriptions
-rather than packets, and `tests/test_specialist_corps.py` pins it deliberately.
-No change was warranted.
-
-## Assessment
-
-The architecture is not the problem. Fail-closed admission, tamper-evident
-audit, readback-proof mutations, and anti-self-promotion gates are better than
-most systems of this kind ever get, and the refusal to overclaim is rarer than
-the code quality. The problem is that four parallel authors building at 23
-commits a day produced three implementations of the lifecycle contract, four of
-the debate layer, and four copies of the roster, on top of a runtime with none
-of its dependencies installed.
-
-Consolidation and one working install were the whole gap. This change closes
-the safety-critical half of it.
+`requirements/lock-runtime-evaluation.txt` is named in this record only as the subject of a pre-existing CI failure inherited from `main`. This change does **not** modify it, regenerate it, or alter any pin, so reverting this record leaves it exactly as it stands and nothing about that failure is undone here. Fixing it remains open decision 7, and belongs to a separate infrastructure change.

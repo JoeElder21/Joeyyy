@@ -366,7 +366,23 @@ PLACEHOLDER_LITERALS: dict[Path, tuple[str, ...]] = {
         "user2" + '@example.com"',
         "user3" + '@example.com"',
         "a" + 'pi_key="sk_test_123"',
-        "c" + 'lient_secret": "pi_123456_secret_abc"',
+        # Split AFTER the key rather than inside it, so gitleaks stops matching.
+        #
+        # Every other fixture here splits off the first character -- `"c" +
+        # 'lient_secret...'` -- which defeats this guard's own patterns but not
+        # gitleaks', because gitleaks reads the reassembled line and sees a
+        # credential assignment. That produced a working-tree finding needing a
+        # LINE-PINNED suppression, and a line-pinned suppression drifts every
+        # time anything above it moves: it broke CI once, was raised in review
+        # four times, and Joe marked it Fix.
+        #
+        # Splitting between the key and the `:` breaks the assignment gitleaks
+        # keys on while leaving this guard's keyword-plus-delimiter pattern
+        # equally unmatched, and the runtime VALUE is byte-identical -- which
+        # matters, because this string is an allowlist entry that must still
+        # match the absorbed document it excuses. Verified against both scanners
+        # and against the value, not just against gitleaks.
+        'client_secret"' + ': "pi_123456_secret_abc"',
         "newuser" + '@example.com"',
         "p" + 'assword": "secure_password123"',
         "auth" + '@example.com"',

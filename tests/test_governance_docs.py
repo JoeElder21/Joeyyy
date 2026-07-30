@@ -101,10 +101,6 @@ class EcosystemGovernanceDocTests(unittest.TestCase):
                 self.assertIn(name, text)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class OverviewMeasurementTests(unittest.TestCase):
     """The overview presents its figures as measured evidence, so a stale one
     is a false claim rather than a cosmetic slip."""
@@ -279,3 +275,12 @@ class OverviewSnapshotTests(unittest.TestCase):
                     f"prose claims {figure} passing tests while the table declares "
                     f"{table.group(1)}",
                 )
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_governance_docs` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

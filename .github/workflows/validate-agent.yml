@@ -126,11 +126,36 @@ jobs:
           set -euo pipefail
           status=0
           check() {
-            # uv reads a pre-existing output file, so a stale one from the
-            # previous call can fail the compile rather than the comparison.
-            rm -f /tmp/resolved.txt
-            uv pip compile "$1" -o /tmp/resolved.txt \
-              --python-version "${{ matrix.python-version }}" --no-header -q
+            # Seed the output with THIS pair's committed lock rather than
+            # deleting it. uv reads a pre-existing output file and keeps pins
+            # that still satisfy the manifest, so seeding answers the question
+            # the gate is actually for -- "does the lock still satisfy its
+            # manifest?" -- instead of "is the lock identical to whatever PyPI
+            # published most recently?"
+            #
+            # Deleting it asked the second question, and that put this gate in
+            # permanent conflict with the cooldown in .github/dependabot.yml:
+            # every upstream release inside the 7-day window turned it red, so
+            # the only way to green was to adopt versions published hours ago --
+            # exactly what the cooldown exists to prevent. A gate that is red
+            # most of the week teaches people to ignore it.
+            #
+            # Seeding does not weaken it. Verified against uv 0.8.17 before the
+            # change: a manifest that gains a package still diffs, and a
+            # manifest that tightens past the pin still moves the pin and diffs.
+            # Only a pin that continues to satisfy its manifest is left alone.
+            # Copying per pair also keeps the previous pair's resolution out of
+            # this one, which is what the removal was guarding against.
+            cp "$2" /tmp/resolved.txt
+            # Explicit failure handling, because the seed is now a valid lock:
+            # if the compile failed and left the seed untouched, the comparison
+            # below would diff clean and report a green that proved nothing.
+            if ! uv pip compile "$1" -o /tmp/resolved.txt \
+              --python-version "${{ matrix.python-version }}" --no-header -q; then
+              echo "::error file=$1::resolving $1 failed; the comparison below would pass on the unmodified seed"
+              status=1
+              return
+            fi
             resolved=$(grep -vc '^#\|^$' /tmp/resolved.txt || true)
             committed=$(grep -vc '^#\|^$' "$2" || true)
             # Say what was compared and how big it was. Passing silently in
