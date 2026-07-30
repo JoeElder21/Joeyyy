@@ -62,6 +62,38 @@ class WorkflowSecurityTests(unittest.TestCase):
                         "with the version in a trailing comment",
                     )
 
+    # A tag OBJECT's sha is 40 hex characters too, so the test above passed
+    # while `anthropics/claude-code-action` was pinned to the annotated tag
+    # v1.0.99 rather than to the commit that tag points at. Being a full sha is
+    # necessary and NOT sufficient: a tag object can be deleted and re-created
+    # against different code, which is the same mutability a floating tag has
+    # and exactly what pinning is supposed to remove. zizmor's
+    # ref-version-mismatch audit caught it; this records the ones already
+    # identified so a revert cannot quietly restore them.
+    #
+    # Resolving an arbitrary pin needs the network (`git ls-remote --tags <repo>`
+    # and take the `^{}` line), so this cannot be a general check offline. It is
+    # a denylist of the specific objects this repository has been burned by.
+    KNOWN_TAG_OBJECTS = {
+        "12310e4417c3473095c957cb311b3cf59a38d659": (
+            "anthropics/claude-code-action v1.0.99 tag object; "
+            "the commit is c3d45e8e941e1b2ad7b278c57482d9c5bf1f35b3"
+        ),
+    }
+
+    def test_no_action_is_pinned_to_a_known_tag_object(self):
+        for path in self._workflow_files():
+            text = path.read_text(encoding="utf-8")
+            for reference in USES_PATTERN.findall(text):
+                _, _, ref = reference.rpartition("@")
+                with self.subTest(workflow=path.name, action=reference):
+                    self.assertNotIn(
+                        ref.lower(),
+                        self.KNOWN_TAG_OBJECTS,
+                        f"{path.name}: {reference!r} pins a tag object, not a commit — "
+                        f"{self.KNOWN_TAG_OBJECTS.get(ref.lower(), '')}",
+                    )
+
     def test_checkout_never_persists_credentials(self):
         for path in self._workflow_files():
             text = path.read_text(encoding="utf-8")
@@ -1467,6 +1499,46 @@ class RuntimeMajorBoundaryTests(unittest.TestCase):
         self.assertIn("mcp.server.fastmcp", entrypoint, "the error names no cause")
 
 
+class SuiteCollectionTests(unittest.TestCase):
+    """A module must run every test it defines, however it is invoked."""
+
+    def test_no_test_module_defines_anything_after_its_main_guard(self):
+        # `if __name__ == "__main__": unittest.main()` sitting mid-module means a
+        # direct `python -m tests.<module>` run calls main() and exits BEFORE the
+        # classes below it are defined -- so it runs a subset and prints "OK".
+        # `unittest discover` imports the module instead of executing it as
+        # __main__, so the hidden tests DO run in CI and nothing ever says the
+        # two disagree. Nine modules had it; test_policy_enforcement was hiding
+        # eleven classes and reported success on 248-of-248 only under discovery.
+        #
+        # Static rather than executed: running every module twice to compare
+        # counts takes minutes, and the property is a source-layout one.
+        offenders = {}
+        for path in sorted((ROOT / "tests").glob("test_*.py")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            guard = next(
+                (i for i, line in enumerate(lines) if line.startswith('if __name__ == "__main__"')),
+                None,
+            )
+            if guard is None:
+                # No guard at all is fine -- the module is simply not directly
+                # runnable, and discovery still collects it.
+                continue
+            hidden = [
+                f"{i + 1}: {lines[i].split('(')[0]}"
+                for i in range(guard + 1, len(lines))
+                if lines[i].startswith(("class ", "def "))
+            ]
+            if hidden:
+                offenders[path.name] = hidden
+        self.assertEqual(
+            offenders,
+            {},
+            "these modules define tests after their __main__ guard, so a direct "
+            f"run silently skips them and still reports OK: {offenders}",
+        )
+
+
 class SecretScanScopeTests(unittest.TestCase):
     """Each event gets the range it is responsible for."""
 
@@ -1503,10 +1575,6 @@ class SecretScanScopeTests(unittest.TestCase):
         for expression in ("${{ github.event.before }}", "${{ github.event_name }}"):
             with self.subTest(expression=expression):
                 self.assertNotIn(expression, script)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PrivacyGuardFixtureShapeTests(unittest.TestCase):
@@ -1565,8 +1633,15 @@ class PrivacyGuardFixtureShapeTests(unittest.TestCase):
         # document, the guard starts reporting that document as a real leak.
         import sys
 
+        # Push/pop rather than a bare insert, matching test_runtime_stack.py. A
+        # leaked entry stays on sys.path for every test that runs after this
+        # one, which is an order-dependent import bug waiting for an unrelated
+        # module to shadow a stdlib name.
         sys.path.insert(0, str(ROOT))
-        from scripts.privacy_guard import PLACEHOLDER_LITERALS
+        try:
+            from scripts.privacy_guard import PLACEHOLDER_LITERALS
+        finally:
+            sys.path.pop(0)
 
         document = Path(".claude/agents/awesome-claude-agents/specialized/python/testing-expert.md")
         literals = PLACEHOLDER_LITERALS[document]
@@ -1578,3 +1653,15 @@ class PrivacyGuardFixtureShapeTests(unittest.TestCase):
             "the re-split fixture no longer matches the document it exempts, so the "
             "guard will report that document as a real leak",
         )
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# above PrivacyGuardFixtureShapeTests -- so `python -m tests.test_repo_hygiene`
+# called unittest.main() and exited BEFORE that class was defined, running 65 of
+# 68 tests and reporting "OK". `unittest discover` imports the module rather than
+# executing it as __main__, so the same three tests ran there and the gap was
+# invisible from CI. A suite that silently omits checks and reports success is
+# the exact failure this file exists to catch, committed in the file itself.
+# Anything appended below this line is not collected on a direct run.
+if __name__ == "__main__":
+    unittest.main()

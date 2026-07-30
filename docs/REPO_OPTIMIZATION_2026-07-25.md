@@ -2076,12 +2076,20 @@ this string is an allowlist entry that must still match the absorbed document it
 excuses. All three properties were verified rather than reasoned about, including
 that the value still appears in that document.
 
-So `scripts/privacy_guard.py` now has **no working-tree fingerprint**, and no
-future edit to it can create one — the line-drift class that broke CI once and was
-raised four times is closed for the one file in that list this repository actually
-wrote. The remaining five entries are absorbed vendor documents whose sample text
-must keep looking like the credential it warns about, so they cannot be rewritten
-the same way and stay exempted per line.
+So `scripts/privacy_guard.py` now has **no working-tree fingerprint** — the
+line-drift class that broke CI once and was raised four times no longer has a
+live instance in the one file on that list this repository actually wrote.
+
+That is a claim about the current tree, not a permanent guarantee. A later edit
+to the fixture, or a change to gitleaks' own rule set, can reintroduce a match;
+nothing here prevents that, and an earlier draft of this section said "no future
+edit to it can create one", which was an absolute this change cannot support.
+The durable part is the **remedy**, not the impossibility: when a match comes
+back, re-split the literal so the scanner stops matching it rather than adding
+another line-pinned suppression. Exemptions are the fallback for text that
+cannot be rewritten — which is exactly why the remaining five are absorbed
+vendor documents whose sample text must keep looking like the credential it
+warns about, and why this repository's own fixture is not among them.
 
 `PrivacyGuardFixtureShapeTests` holds all three properties: no working-tree entry
 may name the guard, the history entry must still be present and commit-pinned

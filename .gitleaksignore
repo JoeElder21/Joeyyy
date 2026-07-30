@@ -26,7 +26,15 @@
 # What was removable was the cause of new findings: the fixture that produced the
 # working-tree entry has been re-split so gitleaks no longer matches it at all
 # (see the note at that line). `scripts/privacy_guard.py` therefore has no
-# working-tree fingerprint below, and no future edit to it can create one.
+# working-tree fingerprint below.
+#
+# That is a statement about the tree as it stands, NOT a guarantee about the
+# future -- a later edit to the fixture, or a change to gitleaks' own rules, can
+# reintroduce a match, and this comment cannot prevent either. What it does say
+# is what to do when that happens: re-split the literal so the scanner stops
+# matching it, rather than adding another line-pinned suppression here. An
+# exemption is the fallback for text that cannot be rewritten, which is why the
+# five below are absorbed vendor documents and this file's own fixture is not.
 03cb44399f6ed4f5904ffc4ac33dfadfb164a759:scripts/privacy_guard.py:generic-api-key:321
 
 # Kubernetes Secret manifests in an absorbed agent's documentation. The values
