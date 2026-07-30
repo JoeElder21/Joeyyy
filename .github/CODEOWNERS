@@ -1,0 +1,17 @@
+# Joe is final authority (AGENTS.md, chain of command). Default owner for everything.
+*                       @JoeElder21
+
+# Governance surfaces where an unreviewed change would silently alter the operating
+# contract rather than the implementation. Listed explicitly so they stay visible in
+# review even as the default rule above already covers them.
+/AGENTS.md              @JoeElder21
+/CLAUDE.md              @JoeElder21
+/.codex/                @JoeElder21
+/.github/               @JoeElder21
+/brains/                @JoeElder21
+/config/                @JoeElder21
+/schemas/               @JoeElder21
+/scripts/privacy_guard.py       @JoeElder21
+/scripts/packet_guard.py        @JoeElder21
+/scripts/trusted_launcher.py    @JoeElder21
+/runtime/writer_lease.py        @JoeElder21

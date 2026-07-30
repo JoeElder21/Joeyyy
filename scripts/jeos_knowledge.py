@@ -124,9 +124,7 @@ class JeosKnowledgeGraph:
     ) -> list[dict[str, Any]]:
         """All pages carrying #tag, optionally within the last N days."""
         self._check_reader(agent)
-        cutoff = (
-            dt.date.today() - dt.timedelta(days=since_days) if since_days else None
-        )
+        cutoff = dt.date.today() - dt.timedelta(days=since_days) if since_days else None
         results = []
         for path in sorted((self.graph_dir / "pages").glob("*.md")):
             text = path.read_text(encoding="utf-8")

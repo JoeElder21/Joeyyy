@@ -35,6 +35,9 @@ Before the bridge, one lawful delegation required six manual steps: (1) compose 
 python -m unittest tests.test_agent_runtime -v
 
 # full stack: install the orchestration tier, then everything runs
+# NOTE: this manifest is unlocked, so unlike the root, contracts, and
+# evaluation tiers there is no resolved lock for it and osv-scanner does not
+# audit what this installs. Locking the optional tiers is a pending decision.
 pip install -r requirements/runtime-orchestration.txt
 python -m unittest tests.test_agent_runtime -v
 ```

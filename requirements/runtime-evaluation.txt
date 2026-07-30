@@ -1,0 +1,21 @@
+# Behavioral evaluation stack. Opt-in; never required for repository validation.
+#
+# Approved 2026-07-25 on Joe's instruction, closing Finding 1 of
+# docs/REPO_OPTIMIZATION_2026-07-25.md.
+#
+# Operating conditions, not preferences:
+#   - Runs on the workstation, never in public CI. Judge metrics need a model
+#     credential, and this repository holds none.
+#   - Confident AI cloud logging must be disabled before any real mission is
+#     evaluated. DeepEval auto-logs results to its hosted platform by default;
+#     evaluation inputs are precisely the material
+#     docs/PRIVACY_AND_DATA_BOUNDARIES.md protects.
+#   - Results publish to the Evaluations folder on Drive, never into this tree.
+deepeval>=3.0
+# >=9.0.3, not >=8.0: PYSEC-2026-1845 / GHSA-6w46-j5rx-g56g (CVSS 6.8) affects
+# pytest 8.0 and is fixed in 9.0.3. Found the first time osv-scanner was pointed
+# at this file rather than only at requirements/lock-2026-07-24.txt — the audit
+# had been reporting clean while a documented install path carried a known
+# vulnerability. deepeval declares `pytest` with no upper bound, so the floor
+# moves without a conflict.
+pytest>=9.0.3

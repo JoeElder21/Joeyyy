@@ -1,0 +1,95 @@
+# Resolved lock for requirements/root.txt — generated 2026-07-25.
+#
+# Exists because osv-scanner cannot audit a floating manifest without
+# resolving it over the network, and that resolution failed in CI with
+# 'rpc error: code = Unavailable' while still reporting 0 packages and
+# 0 vulnerabilities — a scan that scanned nothing and would have read
+# as clean on a green exit. A lock is the resolved set, so scanning it
+# needs no resolver and cannot go quiet when a third-party service is.
+#
+# Regenerate with:
+#   uv pip compile <source manifest> -o <this file> --python-version 3.12 --no-header
+#
+# Not a dated evidence record like lock-2026-07-24.txt: this file is
+# meant to be regenerated, and pins here may be edited to take a fix.
+annotated-types==0.8.0
+    # via pydantic
+anyio==4.14.2
+    # via
+    #   httpx
+    #   openai
+autogen-agentchat==0.2.40
+    # via -r requirements.txt
+certifi==2026.7.22
+    # via
+    #   httpcore
+    #   httpx
+    #   requests
+charset-normalizer==3.4.9
+    # via requests
+diskcache==5.6.3
+    # via autogen-agentchat
+distro==1.9.0
+    # via openai
+docker==7.2.0
+    # via autogen-agentchat
+flaml==2.6.0
+    # via autogen-agentchat
+h11==0.16.0
+    # via httpcore
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via openai
+idna==3.18
+    # via
+    #   anyio
+    #   httpx
+    #   requests
+jiter==0.16.0
+    # via openai
+numpy==1.26.4
+    # via
+    #   autogen-agentchat
+    #   flaml
+openai==2.48.0
+    # via autogen-agentchat
+packaging==26.2
+    # via autogen-agentchat
+pydantic==2.13.4
+    # via
+    #   autogen-agentchat
+    #   openai
+pydantic-core==2.46.4
+    # via pydantic
+python-dotenv==1.2.2
+    # via autogen-agentchat
+pyyaml==6.0.3
+    # via -r requirements.txt
+regex==2026.7.19
+    # via tiktoken
+requests==2.34.2
+    # via
+    #   docker
+    #   tiktoken
+sniffio==1.3.1
+    # via openai
+termcolor==3.3.0
+    # via autogen-agentchat
+tiktoken==0.13.0
+    # via autogen-agentchat
+tqdm==4.69.1
+    # via openai
+typing-extensions==4.16.0
+    # via
+    #   anyio
+    #   openai
+    #   pydantic
+    #   pydantic-core
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via pydantic
+urllib3==2.7.0
+    # via
+    #   docker
+    #   requests

@@ -1,0 +1,552 @@
+"""Evaluation runner: reports coverage, executes available cases, writes results.
+
+Results are written to `evals/output/<run-id>/` — gitignored — and published to
+the **Evaluations** folder on Joe's Drive by Agent 007 through the approved Drive
+connector.
+
+Results deliberately never land in this repository. Evaluation inputs and
+transcripts are the private material that `docs/PRIVACY_AND_DATA_BOUNDARIES.md`
+exists to keep out of a public tree, and this script holds no Drive credential of
+its own — publication is a connector action under the packet-only policy, not a
+library call. That is the same boundary every other write in this system crosses.
+
+Usage:
+    python evals/run_evaluations.py --coverage        # inventory only, no model
+    python evals/run_evaluations.py --run-id <mission-id>   # run cases (needs deepeval)
+
+`--run-id` is required for a run: results are evidence, and an unnamed run
+overwrites the previous one in place. The earlier form of this line omitted it,
+so an operator following the module's own usage block was refused before
+anything executed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from importlib import metadata
+from pathlib import Path
+from typing import Any
+from xml.etree import ElementTree
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from harness import (  # noqa: E402 - path shim above is deliberate
+    METRIC_CONTRACT,
+    build_coverage,
+    deepeval_available,
+    load_cases,
+    metrics_for,
+)
+
+OUTPUT_ROOT = Path(__file__).resolve().parent / "output"
+DRIVE_FOLDER_NAME = "Evaluations"
+
+
+class UnsafeRun(Exception):
+    """The run cannot proceed without destroying evidence or leaking data."""
+
+
+def run_id(stamp: str | None) -> str:
+    """Run identifier. Passed in rather than read from the clock so a run is
+    reproducible and a re-run can be pinned to the mission it evidences.
+
+    Required, not defaulted. An earlier version fell back to `unstamped`, so two
+    runs without `--run-id` wrote to the same directory and the second silently
+    overwrote the first — destroying the evidence and the rollback trail that
+    the acceptance gate depends on. Evidence that can be overwritten in place is
+    not evidence.
+    """
+    if not stamp or not stamp.strip():
+        raise UnsafeRun(
+            "--run-id is required: name the run after the mission it evidences. "
+            "Without it, a second run overwrites the first's results in place."
+        )
+    # Replacing only "/" left "\" live as a separator on the documented Windows
+    # workstation, so `--run-id ..\..\name` escaped the gitignored output tree and
+    # could drop coverage and JUnit evidence — carrying private mission context —
+    # anywhere in a public repository. Reject every separator and traversal
+    # component rather than sanitising one of them.
+    cleaned = stamp.strip()
+    if any(part in cleaned for part in ("/", "\\", "..", "\0")) or Path(cleaned).is_absolute():
+        raise UnsafeRun(
+            f"--run-id {stamp!r} contains a path separator or traversal component. "
+            "Run results carry private mission context and must stay inside "
+            "evals/output/."
+        )
+    if cleaned in {".", ".."} or cleaned.startswith("."):
+        raise UnsafeRun(f"--run-id {stamp!r} is not a usable directory name")
+    # Windows filename rules, enforced on every platform.
+    #
+    # The natural identifier for a run is a timestamp, and `2026-07-25T12:00`
+    # contains a colon -- legal on Linux, forbidden on Windows. It passed every
+    # check above and then raised an uncaught `OSError` from `mkdir()` on the
+    # documented workstation: a crash instead of evidence or a stated refusal.
+    #
+    # Applied everywhere rather than gated on `sys.platform`, because a run id
+    # that works on one machine and crashes on another is worse than one
+    # refused consistently -- and these results are meant to be portable
+    # evidence, not per-host artifacts. The refusal names the offending
+    # character so the fix is obvious.
+    invalid = {character for character in cleaned if character in '<>:"|?*'}
+    if invalid or any(ord(character) < 32 for character in cleaned):
+        raise UnsafeRun(
+            f"--run-id {stamp!r} contains {''.join(sorted(invalid)) or 'a control character'}, "
+            "which cannot be a directory name on Windows. Use hyphens: "
+            "2026-07-25T12-00 rather than 2026-07-25T12:00."
+        )
+    # Trailing dot only: Windows also forbids a trailing space, but `.strip()`
+    # above has already removed it, so checking for one here would be a branch
+    # that can never run.
+    if cleaned.endswith("."):
+        raise UnsafeRun(f"--run-id {stamp!r} may not end in a dot on Windows")
+    # `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9` are device names
+    # at any extension, so `NUL.json` is still the null device.
+    reserved = {"con", "prn", "aux", "nul"}
+    reserved |= {f"com{digit}" for digit in range(1, 10)}
+    reserved |= {f"lpt{digit}" for digit in range(1, 10)}
+    if cleaned.split(".", 1)[0].lower() in reserved:
+        raise UnsafeRun(f"--run-id {stamp!r} is a reserved Windows device name")
+    return cleaned
+
+
+def assert_telemetry_disabled() -> None:
+    """Refuse to run while DeepEval would upload evaluation data.
+
+    `requirements/runtime-evaluation.txt` records cloud logging as a condition,
+    not a preference, and `docs/PRIVACY_AND_DATA_BOUNDARIES.md` treats mission
+    context as exactly the material that must not leave. But a condition written
+    in a requirements comment enforces nothing: the runner previously proceeded
+    the moment the package imported, so following the documented command was
+    enough to ship private mission context to Confident AI.
+
+    Opting out is set here rather than merely checked, because a run that
+    silently uploads is worse than a run that refuses. `setdefault` semantics
+    are deliberate — an explicit contrary choice by Joe still wins, and is
+    reported rather than overridden.
+    """
+    for name in ("DEEPEVAL_TELEMETRY_OPT_OUT", "DEEPEVAL_DISABLE_PROGRESS_BAR"):
+        os.environ.setdefault(name, "YES")
+    if os.environ.get("DEEPEVAL_TELEMETRY_OPT_OUT", "").upper() not in {"YES", "1", "TRUE"}:
+        raise UnsafeRun(
+            "DEEPEVAL_TELEMETRY_OPT_OUT is explicitly disabled; refusing to run. "
+            "Evaluation inputs are the private material the data boundary protects."
+        )
+    if os.environ.get("CONFIDENT_API_KEY"):
+        raise UnsafeRun(
+            "CONFIDENT_API_KEY is set, so results would be logged to the Confident AI "
+            "cloud. Unset it, or record an explicit decision to disclose before running."
+        )
+    # The environment is not the only place a login lives. `deepeval login`
+    # PERSISTS its key to a store on disk, and a later process picks it up
+    # without any variable being set -- so checking `CONFIDENT_API_KEY` alone
+    # cleared a workstation that was, in fact, logged in and would upload the
+    # run. `DEEPEVAL_TELEMETRY_OPT_OUT` does not cover this either: it governs
+    # anonymous telemetry, not authenticated result logging. Two opt-outs that
+    # both sound like the right one, neither of which is.
+    #
+    # Refuse on a persisted session rather than trying to suppress it: logging
+    # out is a deliberate act the operator can take and verify, whereas
+    # unsetting something we guessed at is exactly the kind of "probably
+    # disabled" this record keeps finding.
+    for store in _persisted_login_paths():
+        # `is_file()`, not `exists()`. `~/.deepeval` is normally the DIRECTORY
+        # holding the store, so `read_text()` raised an uncaught
+        # IsADirectoryError and the runner crashed instead of deciding whether
+        # it was safe to run -- a safety check that aborts before reaching a
+        # verdict is not a safety check. The directory's contents are covered by
+        # the explicit path inside it.
+        if store.is_file() and store.read_text(encoding="utf-8", errors="ignore").strip():
+            raise UnsafeRun(
+                f"a persisted Confident AI session is present at {store}. "
+                "DeepEval will upload results through it regardless of the environment. "
+                "Run `deepeval logout` (or remove that file) before evaluating real "
+                "mission material."
+            )
+
+
+def _persisted_login_paths() -> list[Path]:
+    """Where DeepEval keeps a login that outlives the shell.
+
+    Enumerated rather than probed through DeepEval's API deliberately: this
+    check has to work when the package is NOT importable, because the refusal
+    must happen before anything loads cases into memory. Both the legacy
+    `.deepeval` dotfile in the working tree and the newer home-directory store
+    are covered; an unknown future location would not be, which is why the
+    accompanying test asserts against the paths rather than the behaviour.
+    """
+    return [
+        Path.cwd() / ".deepeval",
+        Path.home() / ".deepeval" / ".deepeval",
+        Path.home() / ".deepeval",
+    ]
+
+
+# The worktree readings a proven claim depends on. Named in one place so the
+# sampling sites and the gate that reads them cannot fall out of step.
+TREE_SAMPLES = ("tree_dirty", "tree_dirty_after")
+
+
+def tree_dirty() -> bool | str:
+    """Whether the worktree differs from its commit, or `"unknown"`.
+
+    Extracted so it can be asked TWICE. `provenance()` samples it before the
+    run, and a sample taken before pytest cannot see a worktree that the run
+    itself modified -- a dispatched specialist writing a file, a tool call
+    leaving a scratch artifact. The pre-run sample said "clean", the artifact
+    recorded the commit, and the code that actually passed was no longer the
+    code at that commit.
+
+    `"unknown"` outside a checkout, never `False`. Absence of evidence that the
+    tree is dirty is not evidence that it is clean, and the caller compares
+    against `False` identically rather than for truthiness.
+    """
+    try:
+        return bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=Path(__file__).resolve().parent,
+            ).stdout.strip()
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def provenance() -> dict:
+    """What produced this result, recorded so a score stays interpretable.
+
+    A run directory previously held the case inventory and a caller-chosen id
+    and nothing about the implementation that generated it. After a prompt
+    edit, a model-alias change, or a deepeval upgrade, a passing artifact could
+    not say which specialist and which judge it attested to — so it could not
+    serve as the rollback evidence the acceptance gate treats it as.
+
+    Everything here is read from the environment rather than declared, and
+    anything that cannot be established is recorded as unknown rather than
+    guessed. `dispatch_wired: false` is the load-bearing entry today: it says
+    in the artifact itself that no specialist was actually invoked.
+    """
+    record: dict[str, Any] = {
+        "python": sys.version.split()[0],
+        "platform": sys.platform,
+        "dispatch_wired": False,
+    }
+    try:
+        record["commit"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parent,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        # A result produced outside a checkout is still a result; it just
+        # cannot claim a commit. Saying so beats omitting the field.
+        record["commit"] = "unknown"
+    # Sampled through the same helper the post-run check uses, so the two
+    # readings cannot disagree about what "dirty" means.
+    record["tree_dirty"] = tree_dirty()
+
+    for package in ("deepeval", "pytest"):
+        try:
+            record[f"{package}_version"] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            record[f"{package}_version"] = "not installed"
+
+    # The judge model is whatever DeepEval resolves from the environment. It is
+    # recorded, never defaulted -- an artifact that names the wrong judge is
+    # worse than one that admits it does not know.
+    record["judge_model"] = os.environ.get("DEEPEVAL_JUDGE_MODEL") or os.environ.get(
+        "OPENAI_MODEL_NAME", "unset (deepeval default)"
+    )
+    record["specialist_model"] = "n/a (dispatch not wired)"
+    return record
+
+
+def coverage_report() -> dict:
+    # The opt-out is established BEFORE anything imports the SDK.
+    #
+    # `deepeval_available()` at the end of this function imports `deepeval` as
+    # its probe, and `execute()` called `assert_telemetry_disabled()` only after
+    # `coverage_report()` returned. So the package was imported -- and any
+    # hosted-logging client it initializes from environment or persisted login
+    # state at import time was constructed -- while telemetry was still enabled.
+    # The later check could refuse the RUN, but the boundary it exists to
+    # establish was already crossed by the probe.
+    #
+    # Called here rather than only in `execute()` because this function is the
+    # one that imports, and a control placed anywhere other than before the
+    # import is documentation. It is idempotent: `setdefault` on the variables,
+    # and the refusals raise on the same inputs every time.
+    assert_telemetry_disabled()
+    coverage = build_coverage()
+    cases = load_cases()
+    report = coverage.summary()
+    report["provenance"] = provenance()
+    report["metric_contract"] = METRIC_CONTRACT
+    report["cases"] = {
+        key: {
+            "title": case.get("title", ""),
+            "source": case.get("_source", ""),
+            "metrics": list(metrics_for(case)),
+            "provenance": case.get("provenance", ""),
+        }
+        for key, case in sorted(cases.items())
+    }
+    report["deepeval_available"] = deepeval_available()
+    return report
+
+
+def execute(stamp: str | None) -> int:
+    """Execute the available cases. Refuses to fabricate a result without a
+    runtime — an unproven mode must read as unproven, not as passing."""
+    report = coverage_report()
+    if not report["deepeval_available"]:
+        print(
+            # The LOCK, matching evals/README.md. The documentation was pointed
+            # at the audited lock and this printed command was left naming the
+            # floating manifest -- so the one instruction an operator sees at
+            # the moment they need it was the one that installs an unscanned
+            # resolution. A command a program PRINTS is documentation too, and
+            # scanning only *.md is how this survived the sweep that fixed the
+            # rest.
+            "No evaluation runtime installed. Install with:\n"
+            "    python -m pip install -r requirements/lock-runtime-evaluation.txt\n"
+            "and provide a model for the judge metrics. Coverage inventory below.\n",
+            file=sys.stderr,
+        )
+        print(json.dumps(report, indent=2))
+        return 2
+
+    # Both of these raise rather than warn. A run that uploads private mission
+    # context, or one that overwrites the previous run's evidence, is worse than
+    # no run at all — and neither is recoverable after the fact.
+    #
+    # Kept here as well as in `coverage_report()`, deliberately. The call there
+    # is the load-bearing one because it precedes the import; this one keeps the
+    # refusal on the execution path even if `execute()` is ever changed to build
+    # its report differently, and it re-raises for an environment mutated
+    # between the two. Two calls to an idempotent refusal cost nothing; a single
+    # call in the wrong place cost the whole boundary.
+    assert_telemetry_disabled()
+    identifier = run_id(stamp)
+
+    # Executed by pytest so DeepEval owns metric evaluation, caching, and
+    # thresholds rather than this script reimplementing them.
+    import pytest
+
+    target = Path(__file__).resolve().parent / "test_specialist_modes.py"
+    out_dir = OUTPUT_ROOT / identifier
+    # The containment check resolved BOTH sides, which makes it vacuous when
+    # OUTPUT_ROOT is itself a symlink: `evals/output -> docs/leak` resolves the
+    # root to `docs/leak` and the run directory to `docs/leak/<id>`, which is
+    # duly "inside" it. Evidence containing private mission context would then
+    # land in the public, non-gitignored tree while this check reported
+    # containment. The root has to be a real directory under `evals/` before
+    # resolving anything means anything.
+    if OUTPUT_ROOT.is_symlink() or (OUTPUT_ROOT.exists() and not OUTPUT_ROOT.is_dir()):
+        raise UnsafeRun(
+            f"{OUTPUT_ROOT} is not a real directory. Evaluation evidence is only "
+            "gitignored at its declared location; refusing to follow it elsewhere."
+        )
+    if OUTPUT_ROOT.resolve() != (Path(__file__).resolve().parent / "output"):
+        raise UnsafeRun(f"{OUTPUT_ROOT} resolves outside evals/; refusing to write evidence")
+    # Belt and braces: even with the name validated, confirm the resolved path
+    # is genuinely inside the gitignored tree before anything is written.
+    if not out_dir.resolve().is_relative_to(OUTPUT_ROOT.resolve()):
+        raise UnsafeRun(f"{out_dir} resolves outside {OUTPUT_ROOT}; refusing to write evidence")
+    # Claimed with exclusive creation, not checked-then-created. The previous
+    # form tested `exists() and any(iterdir())` and then created with
+    # `exist_ok=True`, so two runs sharing a `--run-id` could both observe the
+    # directory as absent and both proceed to write the same coverage.json and
+    # results.xml -- corrupting the very evidence the mandatory run id exists to
+    # preserve. `mkdir(exist_ok=False)` makes the claim the check.
+    # The ROOT, not only each run directory. Each run is 0700, and the parent was
+    # created at 0755 under the common umask -- so another local user could not
+    # read a run's contents but could LIST the root and learn every `--run-id`,
+    # which the documented command derives from the mission being evaluated.
+    # Directory metadata is disclosure: the names are the private material here.
+    #
+    # `chmod` after `mkdir` rather than `mkdir(mode=...)`, deliberately and unlike
+    # the run directory below, because `exist_ok=True` leaves the mode of a root
+    # that already exists -- and an `evals/output` created once by an earlier
+    # version is exactly the case that needs tightening. The window this opens is
+    # on the empty root, before any run directory or evidence exists inside it.
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    OUTPUT_ROOT.chmod(0o700)
+    try:
+        # Owner-only. Under the common 0022 umask this created a 0755
+        # directory, and the JUnit report inside it deliberately retains
+        # passing-test output -- model responses and private mission context --
+        # so on a shared workstation any other local user could read evaluation
+        # evidence before it reached the authorized private store. The mode is
+        # passed to mkdir rather than chmod'ed after, so the directory is never
+        # briefly world-readable while the results are being written into it.
+        out_dir.mkdir(mode=0o700, exist_ok=False)
+    except FileExistsError:
+        raise UnsafeRun(
+            f"{out_dir} already exists. Choose a new --run-id rather than "
+            "overwriting or racing recorded evidence."
+        ) from None
+    # Written before the run so a crashed run still leaves its inventory, and
+    # rewritten afterwards from the actual results -- see below.
+    (out_dir / "coverage.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    results = out_dir / "results.xml"
+    # `-o junit_logging=all` is the load-bearing flag. pytest's default is
+    # `junit_logging=no`, which omits captured output for PASSING tests -- so
+    # every judge score and reason on a successful run was discarded, while
+    # evals/README.md described the published directory as the scored result.
+    # A run artifact that records "passed" and not what it scored cannot serve
+    # as the promotion evidence the acceptance gate asks for.
+    code = pytest.main(
+        [
+            str(target),
+            "-q",
+            f"--junitxml={results}",
+            "-o",
+            "junit_logging=all",
+            "-o",
+            "junit_log_passing_tests=True",
+        ]
+    )
+
+    # The second worktree sample, taken AFTER pytest and before anything is
+    # recorded as proven. `evals/output/` is gitignored, so writing the run's
+    # own results cannot trip this; what it catches is the run modifying the
+    # repository -- which is exactly what a wired specialist dispatch will be
+    # able to do.
+    report.setdefault("provenance", {})["tree_dirty_after"] = tree_dirty()
+
+    # Without this, every published run reported `modes_proven: 0` permanently:
+    # coverage.json was written before pytest and nothing read results.xml
+    # afterwards, so the harness could never record the passing-run evidence its
+    # own gate demands. A gate whose evidence can never be produced is not a
+    # gate, it is a wall.
+    report = _record_passes(report, results, identifier)
+    (out_dir / "coverage.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    print(
+        f"\nResults written to {out_dir}.\n"
+        f"{report['modes_proven']}/{report['modes_total']} material modes have a "
+        f"recorded passing run in {identifier}.\n"
+        f"Publish this directory to the '{DRIVE_FOLDER_NAME}' folder on Drive "
+        "through the approved connector; do not commit it.",
+    )
+    return int(code)
+
+
+def _record_passes(report: dict, results: Path, identifier: str) -> dict:
+    """Fold the run's actual outcomes back into the coverage summary.
+
+    Reads the JUnit XML pytest just wrote, so a pass is recorded because a test
+    passed rather than because a case file exists. A test that errored, failed,
+    or was skipped records nothing: `skipped` matters here because the whole
+    suite skips when no evaluation runtime is installed, and counting a skip as
+    a pass would let an uninstalled dependency attest the corps.
+    """
+    coverage = build_coverage()
+    # A dirty tree cannot produce acceptance evidence.
+    #
+    # `provenance()` recorded `tree_dirty: true` and the run went on to mark
+    # modes as proven anyway. But the artifact preserves the commit, not the
+    # diff -- so the exact implementation that passed cannot be reproduced from
+    # what was written down, and the acceptance gate treats these records as
+    # rollback evidence. "Which code passed?" has no answer, and an unanswerable
+    # provenance question is the same defect as an unrun check reporting green.
+    #
+    # Refused rather than annotated: a warning in a file nobody re-reads is how
+    # the earlier `promotion_ready` flag overstated what it measured. The run
+    # still executes and still writes its results -- only the PROVEN claim is
+    # withheld, so a dirty-tree run remains useful for iteration and simply
+    # cannot be cited for promotion.
+    #
+    # BOTH samples, before and after pytest. The pre-run reading cannot see a
+    # worktree the run itself modified -- a dispatched specialist writing a
+    # file, a tool call leaving a scratch artifact -- so a run that started
+    # clean and ended dirty was credited to a commit whose code is no longer
+    # what passed. Enumerated rather than checked one at a time: a third
+    # sample added later must be a one-line change here, not a third branch
+    # someone forgets to write.
+    #
+    # A MISSING sample is not a clean one. `_record_passes` is reachable
+    # directly, and a caller that omits the post-run reading would otherwise
+    # get the proven claim for free -- the same "absent means permitted"
+    # shape the policy gate has removed repeatedly.
+    provenance_record = report.get("provenance", {})
+    samples = {name: provenance_record.get(name, "missing") for name in TREE_SAMPLES}
+    unclean = {name: value for name, value in samples.items() if value is not False}
+    if unclean:
+        dirty = ", ".join(f"{name}={value!r}" for name, value in sorted(unclean.items()))
+        report["modes_proven"] = 0
+        # `False`, not `[]`. `Coverage.summary()` emits this key as a BOOLEAN
+        # (`bool(self.modes) and not self.unproven`), and the withholding path
+        # replaced it with an empty list. Both are falsy in Python, so nothing
+        # here noticed -- but the artifact is JSON read by other things, and a
+        # consumer doing `proven is False`, `proven == False`, or any typed
+        # deserialization sees a type it was never promised. A withheld claim has
+        # to be the same shape as the claim it withholds, or "false" and
+        # "absent" become indistinguishable downstream.
+        report["behavioral_modes_proven"] = False
+        report["evidence_withheld"] = (
+            f"{dirty}: the worktree could not be shown to match its commit both "
+            "before and after the run, so no mode can be recorded as proven. "
+            "A 'missing' sample was never taken; True means the tree differed. "
+            "Commit or stash, then re-run."
+        )
+        return report
+    if results.exists():
+        for case in ElementTree.parse(results).getroot().iter("testcase"):
+            key = _mode_key_from(case.get("name") or "")
+            if not key:
+                continue
+            if any(child.tag in {"failure", "error", "skipped"} for child in case):
+                continue
+            coverage.passed[key] = identifier
+    updated = coverage.summary()
+    # Preserve the descriptive sections the pre-run report carried.
+    for extra in ("metric_contract", "cases", "deepeval_available", "provenance"):
+        if extra in report:
+            updated[extra] = report[extra]
+    updated["run_id"] = identifier
+    return updated
+
+
+def _mode_key_from(test_name: str) -> str:
+    """Recover the mode key from a parametrized test id, e.g. `test_x[apex/a/b]`."""
+    if "[" not in test_name or not test_name.rstrip().endswith("]"):
+        return ""
+    return test_name[test_name.index("[") + 1 : test_name.rindex("]")]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--coverage",
+        action="store_true",
+        help="Print the mode-coverage inventory and exit without running cases.",
+    )
+    parser.add_argument(
+        "--run-id",
+        dest="stamp",
+        help="Required. Run identifier used for the output directory, e.g. a mission id.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.coverage:
+        print(json.dumps(coverage_report(), indent=2))
+        return 0
+    try:
+        return execute(args.stamp)
+    except UnsafeRun as refusal:
+        print(f"refusing to run: {refusal}", file=sys.stderr)
+        return 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

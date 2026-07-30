@@ -54,14 +54,11 @@ class KeywordMemoryBackend:
 
     def _save(self, entries: list[dict[str, Any]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps(entries, indent=1, sort_keys=True), encoding="utf-8"
-        )
+        self.path.write_text(json.dumps(entries, indent=1, sort_keys=True), encoding="utf-8")
 
     def add(self, text: str, **scopes: Any) -> dict[str, Any]:
         entries = self._load()
-        entry = {"id": str(uuid.uuid4()), "memory": text,
-                 **{k: v for k, v in scopes.items() if v}}
+        entry = {"id": str(uuid.uuid4()), "memory": text, **{k: v for k, v in scopes.items() if v}}
         entries.append(entry)
         self._save(entries)
         return entry
@@ -69,8 +66,7 @@ class KeywordMemoryBackend:
     def get_all(self, **scopes: Any) -> list[dict[str, Any]]:
         wanted = {k: v for k, v in scopes.items() if v}
         return [
-            entry for entry in self._load()
-            if all(entry.get(k) == v for k, v in wanted.items())
+            entry for entry in self._load() if all(entry.get(k) == v for k, v in wanted.items())
         ]
 
     @staticmethod
@@ -146,18 +142,16 @@ class GovernedMemory:
             if errors:
                 self._log("memory_write_denied", {"writer": writer, "errors": errors})
                 raise MemoryAccessDenied("; ".join(errors))
-        duplicates = self.backend.search(
-            text, agent_id=agent_id, user_id=user_id, run_id=run_id
-        )
+        duplicates = self.backend.search(text, agent_id=agent_id, user_id=user_id, run_id=run_id)
         if any(entry["memory"] == text for entry in duplicates):
             raise MemoryAccessDenied(
                 "verify-before-write: identical memory exists; choose update or skip"
             )
-        entry = self.backend.add(
-            text, agent_id=agent_id, user_id=user_id, run_id=run_id
+        entry = self.backend.add(text, agent_id=agent_id, user_id=user_id, run_id=run_id)
+        self._log(
+            "memory_write",
+            {"writer": writer, "agent_id": agent_id, "user_id": user_id, "id": entry.get("id")},
         )
-        self._log("memory_write", {"writer": writer, "agent_id": agent_id,
-                                   "user_id": user_id, "id": entry.get("id")})
         return entry
 
     def search(
@@ -178,6 +172,8 @@ class GovernedMemory:
                     f"cross-brain reads route through {CHIEF}"
                 )
         results = self.backend.search(query, limit=limit, agent_id=agent_id, user_id=user_id)
-        self._log("memory_read", {"reader": reader, "agent_id": agent_id,
-                                  "user_id": user_id, "hits": len(results)})
+        self._log(
+            "memory_read",
+            {"reader": reader, "agent_id": agent_id, "user_id": user_id, "hits": len(results)},
+        )
         return results
