@@ -82,8 +82,14 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     cooldown:
+      # No semver-major-days here. Dependabot rejects the whole config file
+      # with "not supported for the package ecosystem 'github-actions'",
+      # because action releases are tracked by tag rather than by a semver
+      # range it can reason about. The key was accepted by the schema for pip
+      # and npm above and silently poisoned the entire file for every
+      # ecosystem, so the cooldown it was meant to add was in fact removing
+      # the cooldown from all four.
       default-days: 7
-      semver-major-days: 14
     groups:
       github-actions:
         patterns: ["*"]
