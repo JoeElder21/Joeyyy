@@ -190,6 +190,12 @@ Registered on Joe's direct instruction and refined the same day per his decision
 - Charter modes carry no write targets, connectors, or routes of their own; brain locks, writer leases, and specialist stages apply exactly as before.
 - Seven dream-team names (5 APEX, 2 JEOS listed before truncation) are the v2.1 specialists themselves; the other three v2.1 JEOS specialists remain rostered unchanged.
 
+## Runtime host (2026-07-30)
+
+Decided and recorded in `docs/RUNTIME_HOST_DECISION.md`: **Joe's workstation is the only governed execution host**; GitHub Actions is a proving host holding no credentials, grants, or writer leases. No cloud or container runtime is authorized. Installing the stack satisfies none of the `active` gates — it only makes earning them possible.
+
+Open decisions this record does not resolve, carried from `docs/REPO_AUDIT_2026-07-30.md`: the memory-layer selection, the execution-layer trial, the roster source-of-truth consolidation, and the registration-or-removal of the .NET Self-Learning Architect (installed under `.github/agents/` and, against the intake rule below, never registered here).
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

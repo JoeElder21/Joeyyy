@@ -11,6 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from runtime.cadence import build_cadence_run  # noqa: E402
+from runtime.lifecycle import (  # noqa: E402
+    AgentLifecycleState,
+    ModeEvidence,
+    Stage,
+    evaluate_promotion,
+)
+from scripts import orchestration_graphs  # noqa: E402
 
 
 class ReconciliationTests(unittest.TestCase):
@@ -35,6 +42,80 @@ class ReconciliationTests(unittest.TestCase):
         self.assertIn("def ", debate)
         self.assertIn("challenge", debate.lower())
         self.assertTrue((ROOT / "scripts" / "autogen_challenge_pair.py").exists())
+
+    def test_lifecycle_gate_parity(self):
+        """scripts/ must not re-implement or under-implement the gate logic.
+
+        Locks the seam rule: runtime/lifecycle.py is the sole gate authority.
+        Every field the runtime gates read must be reachable from a graph gate
+        flag, so a gate added in runtime/ cannot be silently ignored here.
+        """
+        mapped = set(orchestration_graphs.AGENT_GATE_FIELDS.values())
+        mode_mapped = set(orchestration_graphs.MODE_GATE_FIELDS.values())
+
+        # Fields the runtime shadow -> active gate actually consults.
+        required_agent_fields = set(
+            orchestration_graphs.ACTIVE_AGENT_GATE_FIELDS.values()
+        ) | {"connector_isolation_runtime_verified", "joe_approved_activation"}
+        required_mode_fields = {
+            "real_mission_completed",
+            "boundary_behavior_verified",
+            "handoff_schema_valid",
+            "writer_lease_compliant",
+            "readback_verified",
+        }
+        self.assertTrue(
+            required_agent_fields.issubset(mapped),
+            f"graph drops runtime agent gates: {sorted(required_agent_fields - mapped)}",
+        )
+        self.assertTrue(
+            required_mode_fields.issubset(mode_mapped),
+            f"graph drops runtime mode gates: {sorted(required_mode_fields - mode_mapped)}",
+        )
+
+        # Every mapped field must exist on the runtime dataclasses.
+        for field in mapped:
+            self.assertIn(field, AgentLifecycleState.__dataclass_fields__)
+        for field in mode_mapped:
+            self.assertIn(field, ModeEvidence.__dataclass_fields__)
+
+        # Stage vocabulary and promotion table are derived, not restated.
+        self.assertEqual(
+            orchestration_graphs.LIFECYCLE_STAGES, [stage.value for stage in Stage]
+        )
+
+    def test_graph_projection_agrees_with_runtime_verdict(self):
+        """Every gate flag must be load-bearing on both promotions."""
+        cases = (
+            ("candidate", orchestration_graphs.SHADOW_GATES),
+            ("shadow", orchestration_graphs.ACTIVE_GATES),
+        )
+        for stage, required in cases:
+            for dropped in (None, *required):
+                gates = {gate: gate != dropped for gate in required}
+                projected = orchestration_graphs.to_runtime_state(
+                    {"agent": "apex_war_architect", "brain": "APEX",
+                     "stage": stage, "gates": gates}
+                )
+                self.assertEqual(
+                    evaluate_promotion(projected).allowed,
+                    dropped is None,
+                    f"from {stage}: dropping {dropped!r} must block promotion",
+                )
+
+    def test_graph_cannot_promote_without_joe_approval(self):
+        """The regression this parity lock exists to prevent."""
+        gates = {gate: True for gate in orchestration_graphs.ACTIVE_GATES}
+        gates["joe_approved_activation"] = False
+        state = orchestration_graphs.to_runtime_state(
+            {"agent": "apex_war_architect", "brain": "APEX", "stage": "shadow",
+             "gates": gates}
+        )
+        result = evaluate_promotion(state)
+        self.assertFalse(result.allowed)
+        self.assertTrue(
+            any("Joe's explicit approval" in failure for failure in result.failures)
+        )
 
     def test_reconciliation_record_names_the_canonical_homes(self):
         record = (ROOT / "docs" / "RECONCILIATION_2026-07-24.md").read_text(

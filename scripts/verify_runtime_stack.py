@@ -11,13 +11,19 @@ Three honest checks, each reported independently:
 3. TOML enforcement — every tracked ``.toml`` file parses with ``rtoml`` when
    available, falling back to stdlib ``tomllib``.
 
-Exit code is non-zero only when an installed validator finds a real contract
-violation. Missing optional dependencies degrade the report, not the build:
-CI runs on stdlib and must stay green without the stack installed.
+Exit code is non-zero when an installed validator finds a real contract
+violation. By default, missing optional dependencies degrade the report rather
+than the build: the stdlib CI job must stay green without the stack installed.
+
+``--require-tier`` inverts that for an environment that claims to have the
+stack. Without it this command cannot fail on absence, so it reports on an
+empty environment and still exits 0 — useful as a report, useless as a gate.
+The full-stack CI job passes ``--require-tier all``.
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import importlib.metadata
 import json
@@ -135,7 +141,35 @@ def enforce_toml() -> tuple[list[str], list[str]]:
     return checked, errors
 
 
-def main() -> int:
+def missing_in_tiers(
+    dependency_report: dict[str, dict[str, str | None]], tiers: list[str]
+) -> list[str]:
+    """Distributions absent from the named tiers ('all' selects every tier)."""
+    selected = RUNTIME_STACK if "all" in tiers else {
+        tier: RUNTIME_STACK[tier] for tier in tiers
+    }
+    return [
+        dist
+        for tier in selected
+        for dist, version in dependency_report[tier].items()
+        if version is None
+    ]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Audit the Agent 007 runtime stack.")
+    parser.add_argument(
+        "--require-tier",
+        action="append",
+        choices=[*sorted(RUNTIME_STACK), "all"],
+        default=None,
+        help=(
+            "Fail when any package in this tier is not importable. Repeatable. "
+            "Without it, absence is reported but never fails the build."
+        ),
+    )
+    args = parser.parse_args(argv)
+
     dependency_report = audit_dependencies()
     schemas_checked, schema_errors = enforce_schemas()
     toml_checked, toml_errors = enforce_toml()
@@ -152,14 +186,21 @@ def main() -> int:
         for dist, version in tier.items()
         if version is None
     ]
+    required_tiers = args.require_tier or []
+    absent_errors = [
+        f"required tier dependency not importable: {dist}"
+        for dist in missing_in_tiers(dependency_report, required_tiers)
+    ]
+    errors = schema_errors + toml_errors + absent_errors
     result = {
         "dependency_tiers": dependency_report,
         "installed_count": len(installed),
         "missing": missing,
+        "required_tiers": required_tiers,
         "schemas_enforced_with_jsonschema": schemas_checked,
         "toml_files_checked": len(toml_checked),
-        "errors": schema_errors + toml_errors,
-        "valid": not (schema_errors or toml_errors),
+        "errors": errors,
+        "valid": not errors,
     }
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["valid"] else 1

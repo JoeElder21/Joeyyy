@@ -9,6 +9,8 @@ permissions:
   contents: read
 
 jobs:
+  # Contract validation on stdlib alone. Must stay green with none of the
+  # runtime stack installed — this is the floor, not the ceiling.
   validate:
     runs-on: ubuntu-latest
     strategy:
@@ -28,4 +30,40 @@ jobs:
         run: |
           python scripts/privacy_guard.py
           python scripts/validate_specialist_corps.py
+          python scripts/verify_runtime_stack.py
           python -m unittest discover -s tests -v
+
+  # Full runtime stack from the resolved lock. This job is what proves the
+  # integration surface: without it the ~27 dependency-gated tests never run
+  # anywhere, and a divergence between runtime/ and scripts/ ships unnoticed.
+  full-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements/lock-2026-07-24.txt
+      - name: Install the resolved runtime stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/lock-2026-07-24.txt
+      - name: Gate on the runtime stack actually being present
+        run: python scripts/verify_runtime_stack.py --require-tier all
+      - name: Validate contracts against the full stack
+        run: |
+          python scripts/privacy_guard.py
+          python scripts/validate_specialist_corps.py
+      - name: Run the suite and refuse dependency-skipped tests
+        run: |
+          python -m unittest discover -s tests -v 2>&1 | tee suite.log
+          if grep -Eq "skipped '.*(not installed|SDK not installed)" suite.log; then
+            echo "::error::A test skipped for a missing dependency in the full-stack job."
+            grep -E "skipped '" suite.log
+            exit 1
+          fi
+      - name: Verify the offline-verifiable MCP mounts
+        run: python scripts/verify_mcp_mounts.py

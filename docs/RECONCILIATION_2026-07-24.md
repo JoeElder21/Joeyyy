@@ -33,3 +33,12 @@ Decision rule (unchanged from the frontier scan and the roadmap's kody criteria)
 1. For all six cadence routes, `runtime.cadence.build_cadence_run` order equals the manifest order `scripts/cadence_flows.py` consumes — the two streams cannot silently diverge on who runs when.
 2. The ticket-4 absorption is real: the Codex debate modules exist and expose their builders.
 3. Lease dicts from `runtime/writer_lease.py` carry every field `schemas/writer_lease.schema.json` requires.
+4. **Lifecycle gate parity** (added 2026-07-30): every field the `runtime.lifecycle` gates consult is reachable from a `scripts/orchestration_graphs.py` gate flag, every mapped flag exists on the runtime dataclasses, the stage vocabulary and promotion table are derived rather than restated, and the two sides return the same verdict for every gate subset on both promotions.
+
+## Convergence closed — 2026-07-30
+
+The convergence this record ordered above ("`scripts/orchestration_graphs.py` … must converge on `runtime.lifecycle` gate functions in its next change") is done. Until it landed, the graph carried its own six-flag `ACTIVE_GATES` that omitted **`joe_approved_activation`** and the **gate-21 harness-honesty check** — so the LangGraph lifecycle machine could promote `shadow → active` with no human checkpoint, while `runtime/lifecycle.py` treated both as mandatory.
+
+`scripts/orchestration_graphs.py` now owns only the vocabulary a caller types into graph state (`SHADOW_GATE_FIELDS`, `ACTIVE_AGENT_GATE_FIELDS`, `MODE_GATE_FIELDS`) and projects it onto `runtime.lifecycle` through `to_runtime_state()`. Promotion, refusal, and administrative moves are all adjudicated by the runtime gates. Two behaviors improved as a consequence: gate 21 now fires in the graph, and `retired` is honored as terminal instead of being silently overwritten by a restriction.
+
+Drift lock 4 above is what keeps it converged. Note for the record: `runtime.lifecycle` defaults `evidence_source` to `"none"`, so gate 21 fires only when a caller explicitly records `"harness"`. Tightening that default is a separate decision and was not made here.
