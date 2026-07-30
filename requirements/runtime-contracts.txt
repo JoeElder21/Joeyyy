@@ -4,5 +4,12 @@
 pydantic
 jsonschema
 rtoml
-mcp
+# Bounded below 2.0 deliberately. mcp 2.0.0 breaks the mount launcher in
+# scripts/verify_mcp_mounts.py: on 1.28.1 the governance mount probes
+# `verified`, and on 2.0.0 the same probe fails with a TaskGroup sub-exception,
+# reproducibly and on an unchanged tree. The bound is what keeps a lock refresh
+# from silently carrying that break in -- an unbounded manifest turns any
+# upstream major release into a broken build nobody chose. Lift it by porting
+# the launcher to the 2.x client API, not by widening the pin.
+mcp<2
 anthropic

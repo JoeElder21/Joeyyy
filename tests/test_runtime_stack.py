@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -46,8 +47,14 @@ class RuntimeStackTests(unittest.TestCase):
         for tier, packages in verify_runtime_stack.RUNTIME_STACK.items():
             requirements = ROOT / "requirements" / f"runtime-{tier}.txt"
             self.assertTrue(requirements.exists(), f"missing {requirements}")
+            # Split on the first PEP 508 specifier character rather than on the
+            # two operators that happened to be in use. `==` and `>=` alone left
+            # `mcp<2` reading as a distribution literally named "mcp<2", so
+            # adding an upper bound to a manifest failed this check instead of
+            # the check seeing a bounded `mcp` -- and the same hole was waiting
+            # for `<=`, `!=`, `~=`, an extras suffix, or an environment marker.
             declared = {
-                line.split("==")[0].split(">=")[0].strip().lower()
+                re.split(r"[<>=!~;\[]", line)[0].strip().lower()
                 for line in requirements.read_text(encoding="utf-8").splitlines()
                 if line.strip() and not line.startswith("#")
             }
