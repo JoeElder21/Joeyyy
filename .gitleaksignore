@@ -74,6 +74,6 @@ d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/sp
 # verified at the lines cited.
 .github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
 .github/instructions/code-review-generic.instructions.md:stripe-access-token:142
-.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:461
-.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:462
-.claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:592
+.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:478
+.claude/agents/awesome-claude-agents/specialized/python/devops-cicd-expert.md:generic-api-key:479
+.claude/agents/awesome-claude-agents/specialized/python/testing-expert.md:generic-api-key:600

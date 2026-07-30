@@ -345,19 +345,38 @@ class OptimizeProductsTable < ActiveRecord::Migration[7.0]
     add_index :orders, :user_id, where: "status = 'pending'"
   end
   
+  # Every operation in `up` is undone here, in reverse order. Leaving the GIN index,
+  # the two partial indexes and the replaced composite primary key in place meant a
+  # rollback produced a half-migrated schema, and re-running `up` then failed on
+  # already-existing indexes and an already-replaced key.
   def down
-    remove_index :products, :slug
-    remove_index :products, :category_id
-    remove_index :products, [:published, :created_at]
-    remove_index :products, :price
-    remove_index :products, [:category_id, :published, :price]
-    remove_column :categories, :products_count
+    # Partial indexes
+    remove_index :orders, :user_id, where: "status = 'pending'"
+    remove_index :products, :featured, where: "featured = true"
+    
+    # Restore the original single-column primary key on the join table
+    execute <<-SQL
+      ALTER TABLE products_categories
+      DROP CONSTRAINT products_categories_pkey,
+      ADD PRIMARY KEY (id)
+    SQL
+    
+    # JSONB index
+    remove_index :products, :metadata
     
     execute <<-SQL
       ALTER TABLE products
       DROP CONSTRAINT price_positive,
       DROP CONSTRAINT stock_non_negative
     SQL
+    
+    remove_column :categories, :products_count
+    
+    remove_index :products, [:category_id, :published, :price]
+    remove_index :products, :price
+    remove_index :products, [:published, :created_at]
+    remove_index :products, :category_id
+    remove_index :products, :slug
   end
 end
 
@@ -433,17 +452,27 @@ module BulkOperations
       )
     end
     
+    # `insert_all` bypasses model validations, so nothing downstream will catch a bad
+    # row: parse strictly here or the importer silently persists corrupted records.
+    # `"abc".to_f` is 0.0 and `nil.to_i` is 0 - a missing price becomes a free product
+    # rather than an error.
     def bulk_import_from_csv(file_path)
       records = []
+      errors = []
       
-      CSV.foreach(file_path, headers: true) do |row|
-        records << {
-          name: row['name'],
-          price: row['price'].to_f,
-          stock: row['stock'].to_i,
-          created_at: Time.current,
-          updated_at: Time.current
-        }
+      CSV.foreach(file_path, headers: true).with_index(2) do |row, line|
+        begin
+          records << {
+            name: parse_required_string!(row['name'], 'name'),
+            price: parse_decimal!(row['price'], 'price', min: 0),
+            stock: parse_integer!(row['stock'], 'stock', min: 0),
+            created_at: Time.current,
+            updated_at: Time.current
+          }
+        rescue ArgumentError, TypeError => e
+          errors << "line #{line}: #{e.message}"
+          next
+        end
         
         # Insert in batches
         if records.size >= 1000
@@ -454,6 +483,31 @@ module BulkOperations
       
       # Insert remaining records
       insert_all(records) if records.any?
+      
+      # Rejected rows are reported, not rounded to zero and stored.
+      { imported: true, errors: errors }
+    end
+    
+    private
+    
+    def parse_required_string!(value, field)
+      raise ArgumentError, "#{field} is required" if value.blank?
+      value.strip
+    end
+    
+    def parse_decimal!(value, field, min: nil)
+      raise ArgumentError, "#{field} is required" if value.blank?
+      # Kernel#Float raises on junk; String#to_f returns 0.0.
+      parsed = BigDecimal(Float(value).to_s)
+      raise ArgumentError, "#{field} must be >= #{min}" if min && parsed < min
+      parsed
+    end
+    
+    def parse_integer!(value, field, min: nil)
+      raise ArgumentError, "#{field} is required" if value.blank?
+      parsed = Integer(value, 10)
+      raise ArgumentError, "#{field} must be >= #{min}" if min && parsed < min
+      parsed
     end
   end
 end
@@ -617,13 +671,17 @@ end
 # Using multiple databases
 class OrdersController < ApplicationController
   def index
+    # Connection switching is defined on ActiveRecord::Base or on the abstract class
+    # that established the connection - calling it on a concrete model such as `Order`
+    # raises NotImplementedError before any query runs.
+    
     # Read from replica
-    @orders = Order.connected_to(role: :reading) do
+    @orders = ApplicationRecord.connected_to(role: :reading) do
       current_user.orders.recent
     end
     
     # Write to primary
-    Order.connected_to(role: :writing) do
+    ApplicationRecord.connected_to(role: :writing) do
       current_user.orders.create!(order_params)
     end
   end

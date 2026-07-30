@@ -148,6 +148,9 @@ test = [
     "httpx>=0.27.0",
     "pytest-mock>=3.14.0",
     "factory-boy>=3.3.0",
+    # Pilote DBAPI de "sqlite+aiosqlite://", l'URL utilisée par le moteur de test.
+    # Sans lui, la création de la base échoue à l'import sur une installation neuve.
+    "aiosqlite>=0.20.0",
 ]
 docs = [
     "mkdocs>=1.6.0",
@@ -1316,7 +1319,7 @@ from src.mon_projet.models.user import User, UserRole
 class TestUserModel:
     """Tests pour le modèle User."""
     
-    def test_user_creation(self, db_session):
+    async def test_user_creation(self, db_session):
         """Tester la création d'un utilisateur."""
         user = User(
             email="test@example.com",
@@ -1325,6 +1328,13 @@ class TestUserModel:
             hashed_password="hashed_password",
             role=UserRole.USER,
         )
+        
+        # Les valeurs par défaut de `mapped_column(default=...)` sont appliquées à
+        # l'INSERT, pas à la construction : sur un objet transitoire `is_active` et
+        # `is_verified` valent None et les deux dernières assertions échouent
+        # systématiquement. Il faut donc passer par le flush.
+        db_session.add(user)
+        await db_session.flush()
         
         assert user.email == "test@example.com"
         assert user.username == "testuser"
@@ -1544,6 +1554,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
 
 
 # src/mon_projet/core/cache.py
+import hashlib
 import json
 import pickle
 from typing import Any, Optional, Union
@@ -1632,13 +1643,31 @@ class CacheManager:
 cache = CacheManager()
 
 
+def _cache_key(key_prefix: str, func, args, kwargs) -> str:
+    """Clé déterministe, stable entre processus et entre redémarrages.
+
+    `hash()` de Python est randomisé par processus (PYTHONHASHSEED) pour les chaînes :
+    deux workers calculent des clés différentes pour des arguments identiques, aucun ne
+    profite du cache de l'autre, et les entrées écrites avant un redémarrage deviennent
+    inatteignables jusqu'à leur expiration. Un digest explicite d'une sérialisation
+    canonique n'a aucun de ces défauts.
+    """
+    payload = json.dumps(
+        {"args": args, "kwargs": kwargs},
+        sort_keys=True,
+        default=repr,  # objets non sérialisables : représentation stable
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+    return f"{key_prefix}:{func.__module__}.{func.__qualname__}:{digest}"
+
+
 def cached(expire: int = 3600, key_prefix: str = ""):
     """Décorateur pour mettre en cache le résultat d'une fonction."""
     def decorator(func):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             # Générer une clé de cache
-            cache_key = f"{key_prefix}:{func.__name__}:{hash(str(args) + str(kwargs))}"
+            cache_key = _cache_key(key_prefix, func, args, kwargs)
             
             # Essayer de récupérer depuis le cache
             result = cache.get(cache_key)
@@ -1653,7 +1682,7 @@ def cached(expire: int = 3600, key_prefix: str = ""):
         
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
-            cache_key = f"{key_prefix}:{func.__name__}:{hash(str(args) + str(kwargs))}"
+            cache_key = _cache_key(key_prefix, func, args, kwargs)
             
             result = cache.get(cache_key)
             if result is not None:

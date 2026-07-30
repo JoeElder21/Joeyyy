@@ -37,8 +37,12 @@ Turn complex code and architecture into clear, actionable documentation that acc
    | Deep code insight needed | @agent-code-archaeologist | “Need structure overview of X for docs.” |
    | Endpoint details missing | @agent-api-architect      | “Provide spec for /v1/payments.”         |
 
-6. **Write/Update Files**
-   • Create or update `README.md`, `docs/api.md`, `docs/architecture.md`, etc. using `Write` or `Edit`.
+6. **Return Proposed File Contents**
+   • You are a read-only candidate agent: you have `LS`, `Read`, `Grep`, and `Glob`, and no
+     file-mutation tools. Do **not** attempt `Write` or `Edit`.
+   • Instead, emit the finished content for each target path (`README.md`, `docs/api.md`,
+     `docs/architecture.md`, …) as a fenced block labelled with that path, so Agent 007 can
+     apply it under the repository's writer lease.
 
 ## Templates
 

@@ -133,12 +133,29 @@ class ProductQueryOptimizer:
             product=OuterRef('pk')
         ).order_by('-created_at').values('rating')[:1]
         
+        # Every one-to-many aggregate goes through its OWN subquery. Annotating
+        # `reviews__*` and `orderitem__*` on the same queryset makes Django join both
+        # tables at once: a product with 2 reviews and 3 order items produces 6 rows,
+        # so review_count reports 6 instead of 2 and revenue is counted twice. Subqueries
+        # aggregate each relation independently, with no cross product.
+        review_stats = Review.objects.filter(
+            product=OuterRef('pk')
+        ).values('product').annotate(
+            avg=Avg('rating'), n=Count('id')
+        )
+        
         # Subquery for order count
         order_count = OrderItem.objects.filter(
             product=OuterRef('pk')
         ).values('product').annotate(
             count=Count('*')
         ).values('count')
+        
+        order_revenue = OrderItem.objects.filter(
+            product=OuterRef('pk')
+        ).values('product').annotate(
+            total=Sum(F('quantity') * F('price'), output_field=DecimalField())
+        ).values('total')
         
         return Product.objects.select_related(
             'category',
@@ -151,15 +168,15 @@ class ProductQueryOptimizer:
             )
         ).annotate(
             # Review statistics
-            avg_rating=Avg('reviews__rating'),
-            review_count=Count('reviews'),
+            avg_rating=Subquery(review_stats.values('avg')),
+            review_count=Coalesce(Subquery(review_stats.values('n')), 0),
             latest_rating=Subquery(latest_review),
             
             # Sales statistics
             total_sold=Coalesce(Subquery(order_count), 0),
-            revenue=Sum(
-                F('orderitem__quantity') * F('orderitem__price'),
-                output_field=DecimalField()
+            revenue=Coalesce(
+                Subquery(order_revenue, output_field=DecimalField()),
+                Decimal('0'),
             ),
             
             # Inventory status
@@ -323,6 +340,10 @@ class AnalyticsQueries:
     @staticmethod
     def product_sales_ranking():
         """Rank products by sales with window functions"""
+        # Both aggregates come from `orderitem` alone, so a single join is safe here.
+        # Adding a second one-to-many relation (reviews, images, ...) to this same
+        # annotate() would multiply the rows and inflate every figure below - use a
+        # Subquery per relation, as get_products_with_stats() does.
         return Product.objects.annotate(
             total_quantity_sold=Sum('orderitem__quantity'),
             total_revenue=Sum(
@@ -518,19 +539,26 @@ def create_order_partitions():
             ) PARTITION BY RANGE (created_at);
         """)
         
-        # Create monthly partitions
+        # Create monthly partitions.
+        # The upper bound must be computed as a *date*, not as `(month % 12) + 1` with a
+        # fixed year: in December that yields 2024-12-01 -> 2024-01-01, an upper bound
+        # below the lower bound, which PostgreSQL rejects and which aborts the setup
+        # before the twelfth partition exists.
+        year = 2024
         for month in range(1, 13):
+            start = datetime.date(year, month, 1)
+            end = datetime.date(year + 1, 1, 1) if month == 12 else datetime.date(year, month + 1, 1)
             cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS orders_2024_{month:02d} 
+                CREATE TABLE IF NOT EXISTS orders_{year}_{month:02d} 
                 PARTITION OF orders
-                FOR VALUES FROM ('2024-{month:02d}-01') 
-                TO ('2024-{(month%12)+1:02d}-01');
+                FOR VALUES FROM ('{start:%Y-%m-%d}') 
+                TO ('{end:%Y-%m-%d}');
             """)
             
             # Create indexes on partition
             cursor.execute(f"""
-                CREATE INDEX idx_orders_2024_{month:02d}_user 
-                ON orders_2024_{month:02d}(user_id);
+                CREATE INDEX idx_orders_{year}_{month:02d}_user 
+                ON orders_{year}_{month:02d}(user_id);
             """)
 ```
 
@@ -554,16 +582,21 @@ class QueryProfiler:
         list(queryset)
         execution_time = time.time() - start_time
         
-        # Get SQL
-        sql = str(queryset.query)
+        # `str(queryset.query)` is a human-readable rendering: it interpolates values
+        # without database-side quoting, so feeding it back as SQL is both unreliable
+        # (dates and strings can render as invalid literals) and an injection vector
+        # for any value that came from user input. Take the SQL and its parameters
+        # separately and let the driver bind them.
+        sql, params = queryset.query.sql_with_params()
         
         # Get query plan (PostgreSQL)
         with connection.cursor() as cursor:
-            cursor.execute(f"EXPLAIN ANALYZE {sql}")
+            cursor.execute(f"EXPLAIN ANALYZE {sql}", params)
             plan = cursor.fetchall()
         
         return {
             'sql': sql,
+            'params': params,
             'execution_time': execution_time,
             'query_plan': plan
         }
@@ -642,12 +675,16 @@ class BulkOperations:
         
         for i in range(0, len(objects), batch_size):
             batch = objects[i:i + batch_size]
-            Product.objects.bulk_create(
+            # `ignore_conflicts=True` skips rows that violate a unique constraint, so
+            # len(batch) counts *attempts*, not inserts, and callers were told records
+            # existed that were silently dropped. On PostgreSQL bulk_create returns the
+            # objects it actually wrote (they carry a PK); count those.
+            created = Product.objects.bulk_create(
                 batch,
                 batch_size=batch_size,
                 ignore_conflicts=True
             )
-            created_count += len(batch)
+            created_count += sum(1 for obj in created if obj.pk is not None)
             
         return created_count
     
@@ -715,7 +752,10 @@ class RawSQLQueries:
                     h.revenue,
                     h.revenue / NULLIF(h.order_count, 0) as avg_order_value
                 FROM hourly_sales h
-                CROSS JOIN day_names d
+                -- Joined on the day, not crossed. `CROSS JOIN` paired every hourly
+                -- bucket with all seven generate_series rows, so each result came back
+                -- seven times and every consumer overcounted orders and revenue.
+                JOIN day_names d ON d.day_num = h.day_of_week
                 ORDER BY h.day_of_week, h.hour_of_day
             """, [timezone.now() - timedelta(days=30)])
             
@@ -730,21 +770,32 @@ class RawSQLQueries:
         """Update denormalized fields efficiently"""
         with connection.cursor() as cursor:
             cursor.execute("""
+                -- A correlated subquery, not an inner join. Joining against a
+                -- GROUP BY over `reviews` visits only products that still have at
+                -- least one review, so a product whose last review was deleted keeps
+                -- its old review_count and avg_rating forever. COALESCE resets it.
                 UPDATE products p
                 SET 
-                    review_count = r.count,
-                    avg_rating = r.avg_rating
+                    review_count = agg.count,
+                    avg_rating = agg.avg_rating
                 FROM (
-                    SELECT 
-                        product_id,
-                        COUNT(*) as count,
-                        AVG(rating) as avg_rating
-                    FROM reviews
-                    GROUP BY product_id
-                ) r
-                WHERE p.id = r.product_id
-                    AND (p.review_count != r.count 
-                         OR p.avg_rating != r.avg_rating)
+                    SELECT
+                        p2.id AS product_id,
+                        COALESCE(r.count, 0) AS count,
+                        r.avg_rating AS avg_rating
+                    FROM products p2
+                    LEFT JOIN (
+                        SELECT 
+                            product_id,
+                            COUNT(*) as count,
+                            AVG(rating) as avg_rating
+                        FROM reviews
+                        GROUP BY product_id
+                    ) r ON r.product_id = p2.id
+                ) agg
+                WHERE p.id = agg.product_id
+                    AND (p.review_count IS DISTINCT FROM agg.count
+                         OR p.avg_rating IS DISTINCT FROM agg.avg_rating)
             """)
             
             return cursor.rowcount

@@ -443,8 +443,21 @@ class DataProcessor:
         X = df.drop(columns=[target_column])
         
         # Identifier les types de colonnes
-        numeric_features = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
-        categorical_features = X.select_dtypes(include=['object', 'category']).columns.tolist()
+        # `include=[np.number]` couvre tous les dtypes numériques (float32, int32,
+        # int8...). Lister 'int64'/'float64' nommément laissait ces colonnes hors des
+        # deux groupes, et ColumnTransformer les supprimait silencieusement.
+        numeric_features = X.select_dtypes(include=[np.number]).columns.tolist()
+        # Les entiers/flottants nullables de pandas (Int64, Float64) ne sont pas
+        # np.number ; on les récupère explicitement.
+        nullable_numeric = X.select_dtypes(include=['Int64', 'Int32', 'Float64', 'Float32'])
+        numeric_features += [c for c in nullable_numeric.columns if c not in numeric_features]
+        categorical_features = X.select_dtypes(
+            include=['object', 'category', 'string', 'bool', 'boolean']
+        ).columns.tolist()
+        
+        dropped = set(X.columns) - set(numeric_features) - set(categorical_features)
+        if dropped:
+            logger.warning(f"Colonnes non classées, exclues du preprocessing : {sorted(dropped)}")
         
         # Pipeline pour les features numériques
         numeric_pipeline = Pipeline([
@@ -488,23 +501,35 @@ class DataProcessor:
         y = df_clean[target_column]
         
         # Encoder la target si catégorielle
-        if y.dtype == 'object':
+        is_classification = y.dtype == 'object' or pd.api.types.is_categorical_dtype(y)
+        if is_classification:
             self.target_encoder = LabelEncoder()
             y = self.target_encoder.fit_transform(y)
+        elif pd.api.types.is_integer_dtype(y) and y.nunique() <= 20:
+            # Petit nombre de valeurs entières distinctes : classes déjà encodées.
+            is_classification = True
+        
+        # La stratification n'a de sens que pour la classification. Sur une cible
+        # continue, `stratify=y` traite chaque valeur comme une classe distincte et
+        # train_test_split échoue ("least populated class has only 1 member").
+        stratify_temp = y if is_classification else None
         
         # Créer le preprocessor
         self.preprocessor = self.create_preprocessing_pipeline(df_clean, target_column)
         
         # Split train/validation/test
         X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=settings.RANDOM_STATE, stratify=y
+            X, y,
+            test_size=test_size,
+            random_state=settings.RANDOM_STATE,
+            stratify=stratify_temp,
         )
         
         X_train, X_val, y_train, y_val = train_test_split(
             X_temp, y_temp, 
             test_size=validation_size/(1-test_size),
             random_state=settings.RANDOM_STATE,
-            stratify=y_temp
+            stratify=y_temp if is_classification else None
         )
         
         # Appliquer le preprocessing
@@ -982,6 +1007,7 @@ class EnsembleModel(BaseModel):
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+import copy
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -1048,7 +1074,10 @@ class NeuralNetworkTF(BaseModel):
                 loss = 'binary_crossentropy'
                 metrics = ['accuracy']
             else:
-                loss = 'categorical_crossentropy'
+                # prepare_data() encodes multiclass targets with LabelEncoder, producing
+                # scalar class ids. 'categorical_crossentropy' expects one-hot rows of
+                # width output_units and would fail on shape mismatch.
+                loss = 'sparse_categorical_crossentropy'
                 metrics = ['accuracy']
         else:
             loss = 'mse'
@@ -1228,13 +1257,19 @@ class NeuralNetworkPyTorch(BaseModel, nn.Module):
         batch_size = batch_size or settings.BATCH_SIZE
         learning_rate = learning_rate or settings.LEARNING_RATE
         
-        # Conversion en tensors PyTorch
+        # Conversion en tensors PyTorch.
+        # CrossEntropyLoss (multiclasse) attend des *indices de classe* entiers ; un
+        # FloatTensor déclenche une erreur de dtype dès le premier batch. BCELoss
+        # (binaire) et MSELoss (régression) attendent au contraire des flottants.
+        multiclass = self.problem_type == 'classification' and self.output_dim > 1
+        target_tensor = torch.LongTensor if multiclass else torch.FloatTensor
+        
         X_train_tensor = torch.FloatTensor(X_train)
-        y_train_tensor = torch.FloatTensor(y_train)
+        y_train_tensor = target_tensor(y_train)
         
         if X_val is not None:
             X_val_tensor = torch.FloatTensor(X_val)
-            y_val_tensor = torch.FloatTensor(y_val)
+            y_val_tensor = target_tensor(y_val)
         
         # DataLoader
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
@@ -1299,8 +1334,12 @@ class NeuralNetworkPyTorch(BaseModel, nn.Module):
                     if val_loss < best_val_loss:
                         best_val_loss = val_loss
                         patience_counter = 0
-                        # Sauvegarder le meilleur modèle
-                        best_model_state = self.state_dict().copy()
+                        # Sauvegarder le meilleur modèle.
+                        # `.copy()` ne duplique que le dictionnaire : ses tenseurs
+                        # restent les paramètres vivants, que les steps suivants
+                        # modifient. Le "meilleur" checkpoint deviendrait alors le
+                        # dernier état, dégradé. deepcopy fige les valeurs.
+                        best_model_state = copy.deepcopy(self.state_dict())
                     else:
                         patience_counter += 1
                     
@@ -1323,6 +1362,23 @@ class NeuralNetworkPyTorch(BaseModel, nn.Module):
             
             # Log du modèle
             mlflow.pytorch.log_model(self, "model")
+    
+    def train(self, *args, **kwargs):
+        """Satisfait deux contrats qui partagent malheureusement un nom.
+
+        - `BaseModel.train` est abstraite : sans implémentation, instancier cette
+          classe lève `TypeError: Can't instantiate abstract class ... with abstract
+          method train`, puisque la sous-classe ne définissait que `train_model`.
+        - `nn.Module.train(mode: bool = True)` bascule le module en mode
+          entraînement, et `self.eval()` l'appelle avec `False`. Une signature
+          `(X_train, y_train)` casserait donc `eval()` et tout `self.train()` interne.
+
+        On distingue les deux par la forme de l'appel : mode booléen (ou aucun
+        argument) -> comportement `nn.Module` ; données -> entraînement complet.
+        """
+        if not args or isinstance(args[0], bool):
+            return nn.Module.train(self, *args, **kwargs)
+        return self.train_model(*args, **kwargs)
     
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Prédictions."""
