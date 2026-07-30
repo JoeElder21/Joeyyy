@@ -80,7 +80,7 @@ Bulleted list with file references and impact.
 |----------|--------|-----------------|
 | P0 | Encrypt API keys | python-security-expert |
 | P1 | Enable CSRF & rate limiting | python-security-expert |
-| P2 | Add frontend tests | testing-specialist |
+| P2 | Add frontend tests | python-testing-expert |
 | … | … | … |
 
 ## 10. Open Questions / Unknowns

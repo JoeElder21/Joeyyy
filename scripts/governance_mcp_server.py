@@ -67,16 +67,13 @@ def _tool_functions(
             packet = json.loads(packet_json)
             admit_delegation(packet, target, roster, guard, ledger)
         except HandoffRejected as rejection:
-            return json.dumps(
-                {"admitted": False, "errors": rejection.errors}, sort_keys=True
-            )
+            return json.dumps({"admitted": False, "errors": rejection.errors}, sort_keys=True)
         except json.JSONDecodeError as error:
             return json.dumps(
                 {"admitted": False, "errors": [f"invalid JSON: {error}"]}, sort_keys=True
             )
         return json.dumps(
-            {"admitted": True, "target": target,
-             "delegation_id": packet.get("delegation_id")},
+            {"admitted": True, "target": target, "delegation_id": packet.get("delegation_id")},
             sort_keys=True,
         )
 
@@ -87,23 +84,21 @@ def _tool_functions(
             delegations = [json.loads(delegation_json)] if delegation_json else None
         except json.JSONDecodeError as error:
             return json.dumps({"valid": False, "errors": [f"invalid JSON: {error}"]})
-        errors = validate_specialist_return(
-            handoff_packet, guard, ledger, delegations=delegations
-        )
+        errors = validate_specialist_return(handoff_packet, guard, ledger, delegations=delegations)
         return json.dumps({"valid": not errors, "errors": errors}, sort_keys=True)
 
     def verify_audit_ledger() -> str:
         """Verify the hash chain of this server's audit ledger."""
         violations = ledger.verify()
-        return json.dumps(
-            {"intact": not violations, "violations": violations}, sort_keys=True
-        )
+        return json.dumps({"intact": not violations, "violations": violations}, sort_keys=True)
 
     def list_registered_roster() -> str:
         """List the native agent roster with brains and descriptions."""
         return json.dumps(
-            {name: {"brain": meta["brain"], "description": meta["description"]}
-             for name, meta in roster.items()},
+            {
+                name: {"brain": meta["brain"], "description": meta["description"]}
+                for name, meta in roster.items()
+            },
             sort_keys=True,
         )
 
@@ -118,9 +113,7 @@ def _tool_functions(
 
 if MCP_AVAILABLE:
 
-    def build_server(
-        root: Path = ROOT, ledger_path: Path = DEFAULT_LEDGER
-    ) -> "FastMCP":
+    def build_server(root: Path = ROOT, ledger_path: Path = DEFAULT_LEDGER) -> FastMCP:
         """Build the governance MCP server; construction is offline."""
         guard = PacketGuard(root)
         roster = load_roster(root)
@@ -132,4 +125,19 @@ if MCP_AVAILABLE:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    # `MCP_AVAILABLE = False` leaves `build_server` undefined, so calling it
+    # bare raised `NameError: name 'build_server' is not defined` -- which names
+    # neither the missing dependency nor the remedy. The import above says it
+    # degrades cleanly; at the one place that mattered it degraded into a
+    # mystery. An incompatible `mcp` reads exactly like an absent one, and this
+    # is how a major-version bump reached CI as a NameError rather than as the
+    # ImportError it was.
+    if not MCP_AVAILABLE:
+        raise SystemExit(
+            "governance_mcp_server needs the `mcp` runtime: "
+            "`mcp.server.fastmcp` could not be imported. Install it with "
+            "`python -m pip install -r requirements/lock-runtime-contracts.txt`. "
+            "Note that mcp 2.x removes `mcp.server.fastmcp`; this server "
+            "requires the 1.x line, which the manifest pins."
+        )
     build_server().run()

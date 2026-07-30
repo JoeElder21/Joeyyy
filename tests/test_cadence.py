@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import datetime
 import importlib.util
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -98,9 +98,7 @@ class CadenceEngineTests(unittest.TestCase):
         self.assertIn("unittest=pass", line)
 
 
-@unittest.skipUnless(
-    importlib.util.find_spec("prefect") is not None, "prefect not installed"
-)
+@unittest.skipUnless(importlib.util.find_spec("prefect") is not None, "prefect not installed")
 class CadenceFlowTests(unittest.TestCase):
     def test_cadence_flow_builds_plan_and_reports_partial(self):
         from prefect.testing.utilities import prefect_test_harness

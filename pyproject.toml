@@ -1,4 +1,42 @@
 [tool.taskipy.tasks]
-validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python -m unittest discover -s tests -v"
+# Includes lint. `task validate` is advertised in CONTRIBUTING.md as the
+# alternative to the full manual sequence, and that sequence ends with
+# `ruff check` and `ruff format --check` -- so a shortcut omitting them
+# passes locally and fails the required CI lint job. This is the same
+# aggregate-vs-hand-run divergence recorded twice already: the mount
+# verifier was made strict in one place and left permissive in the other,
+# and the formatter was added to three documents and this file's `lint`
+# task while `validate` -- the command people actually run -- was missed.
+validate = "python scripts/privacy_guard.py && python scripts/validate_specialist_corps.py && python scripts/verify_runtime_stack.py && python scripts/verify_mcp_mounts.py --strict && ruff check . && ruff format --check . && python -m unittest discover -s tests -v"
 test = "python -m unittest discover -s tests -v"
+# Both, because CI runs both: `ruff check` does not verify formatting, so a
+# `task lint` that stops there passes locally and fails the required
+# `ruff format --check --diff .` step.
+lint = "ruff check . && ruff format --check ."
 autogen-preflight = "python scripts/autogen_challenge_pair.py --brain APEX --agents apex_war_architect apex_intelligence_forge --mission-id synthetic-autogen-preflight --evidence-ref synthetic://apex/challenge-input"
+
+# House Python standard for agent-generated code, per the conclusion recorded in
+# docs/ECOSYSTEM_REPO_ANALYSIS.md ("PEP 8 + a linter step in CI").
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# Submodule working trees (vendor/ third-party, repos/ first-party) are other
+# repositories' code: lint them in their own repositories, not here. CI never
+# initializes them; this keeps local runs with initialized submodules identical.
+extend-exclude = ["connectors/aps/node_modules", "vendor", "repos"]
+
+[tool.ruff.lint]
+# Enforced in CI and clean across the tree, so the gate is real rather than
+# aspirational. Widened from ["E", "F", "W"] on 2026-07-25: import order (I),
+# modernization (UP), likely-bug patterns (B), comprehension clarity (C4), and
+# simplification (SIM).
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    # ruff-format owns line length; the linter flagging it too is just noise.
+    "E501",
+]
+
+[tool.ruff.format]
+# Enabled 2026-07-25. Applied as one mechanical commit so the reformat is
+# reviewable on its own rather than buried in a behavior change.
+docstring-code-format = true

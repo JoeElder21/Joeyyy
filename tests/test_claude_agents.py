@@ -5,10 +5,10 @@ These tests fail if a projection is hand-edited, falls behind its source, or
 quietly gains a tool that would break connector isolation or the brain lock.
 """
 
-from pathlib import Path
-from typing import Any
 import tomllib
 import unittest
+from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -146,13 +146,10 @@ class ContractProjectionFidelityTests(unittest.TestCase):
         roster = load_manifests()
         for name, meta in roster.items():
             with self.subTest(agent=name):
-                contract = tomllib.loads(
-                    (ROOT / meta["native_file"]).read_text(encoding="utf-8")
-                )
+                contract = tomllib.loads((ROOT / meta["native_file"]).read_text(encoding="utf-8"))
                 instructions = contract["developer_instructions"].strip()
                 content = expected[OUTPUT_DIR / f"{name}.md"]
                 self.assertIn(instructions, content)
-
 
 
 class BrainSeparationTests(unittest.TestCase):
@@ -165,9 +162,7 @@ class BrainSeparationTests(unittest.TestCase):
         def fake_loads(text):
             data = original(text)
             if data.get("brain") == "JEOS":
-                data["agents"]["apex_war_architect"] = dict(
-                    next(iter(data["agents"].values()))
-                )
+                data["agents"]["apex_war_architect"] = dict(next(iter(data["agents"].values())))
             return data
 
         module.tomllib.loads = fake_loads
@@ -177,9 +172,6 @@ class BrainSeparationTests(unittest.TestCase):
             self.assertIn("both brain manifests", str(caught.exception))
         finally:
             module.tomllib.loads = original
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class FrontmatterParsesAsYamlTests(unittest.TestCase):
@@ -197,3 +189,12 @@ class FrontmatterParsesAsYamlTests(unittest.TestCase):
         """`Agent 007: Joe ...` is the exact string that broke the first version."""
         chief = build()[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
         self.assertIn("Agent 007:", frontmatter(chief)["description"])
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_claude_agents` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

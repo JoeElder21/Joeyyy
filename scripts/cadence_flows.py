@@ -10,8 +10,9 @@ below is the activation step.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from scripts.agent_runtime import AuditLedger
 from scripts.orchestration_graphs import load_manifest
@@ -45,9 +46,7 @@ if PREFECT_AVAILABLE:
     ):
         """One cadence route as a Prefect flow (manifest order, integrator last)."""
         manifest = load_manifest(brain, root)
-        route = next(
-            item for item in manifest["cadence_routes"] if item["cadence"] == cadence
-        )
+        route = next(item for item in manifest["cadence_routes"] if item["cadence"] == cadence)
         order = list(route["order"]) + [route["integrator"]]
 
         @task(name=f"{brain}-{cadence}-step")
@@ -68,8 +67,11 @@ if PREFECT_AVAILABLE:
             if ledger is not None:
                 ledger.append(
                     "cadence_complete",
-                    {"brain": brain, "cadence": cadence,
-                     "agents": [step["agent"] for step in state["steps"]]},
+                    {
+                        "brain": brain,
+                        "cadence": cadence,
+                        "agents": [step["agent"] for step in state["steps"]],
+                    },
                 )
             return state
 
@@ -81,10 +83,12 @@ if PREFECT_AVAILABLE:
         for brain in ("apex", "jeos"):
             manifest = load_manifest(brain, root)
             for route in manifest.get("cadence_routes", []):
-                specs.append({
-                    "flow": f"{brain}-{route['cadence']}-cadence",
-                    "cron": CADENCE_SCHEDULES.get(route["cadence"], ""),
-                    "timezone": "America/New_York",
-                    "order": list(route["order"]) + [route["integrator"]],
-                })
+                specs.append(
+                    {
+                        "flow": f"{brain}-{route['cadence']}-cadence",
+                        "cron": CADENCE_SCHEDULES.get(route["cadence"], ""),
+                        "timezone": "America/New_York",
+                        "order": list(route["order"]) + [route["integrator"]],
+                    }
+                )
         return specs

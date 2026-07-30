@@ -41,6 +41,11 @@ brains/jeos/memory/*
 # Node vendored dependencies (connectors)
 node_modules/
 
+# Evaluation run results. These publish to the Evaluations folder on Drive, never
+# into this public tree — evaluation inputs and transcripts are exactly what
+# docs/PRIVACY_AND_DATA_BOUNDARIES.md keeps out. See evals/README.md.
+evals/output/
+
 # Rendered deliverables. scripts/privacy_guard.py rejects binary artifacts in
 # this public tree; keep the Markdown source in docs/ and render out-of-band.
 *.pdf
@@ -60,3 +65,7 @@ audit/
 
 # skill-up reports can contain prompts, transcripts, and model output.
 *-workspace/
+# Uploaded screenshots and binaries never belong in this public repo
+*.png
+*.jpg
+*.jpeg

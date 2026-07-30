@@ -7,10 +7,9 @@ into the repository tree.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -78,7 +77,7 @@ class SchwabSettings:
         cls,
         env: dict[str, str] | None = None,
         dotenv_path: Path | None = None,
-    ) -> "SchwabSettings":
+    ) -> SchwabSettings:
         """Build settings from the environment, layered over an optional .env.
 
         Real environment variables win over `.env` entries so a scheduled run
@@ -109,8 +108,7 @@ class SchwabSettings:
         return cls(
             app_key=key,
             app_secret=secret,
-            callback_url=source.get("SCHWAB_CALLBACK_URL", "").strip()
-            or DEFAULT_CALLBACK_URL,
+            callback_url=source.get("SCHWAB_CALLBACK_URL", "").strip() or DEFAULT_CALLBACK_URL,
             token_path=Path(token_path) if token_path else cls.token_path,
             policy_path=Path(policy_path) if policy_path else cls.policy_path,
             report_dir=Path(report_dir) if report_dir else cls.report_dir,

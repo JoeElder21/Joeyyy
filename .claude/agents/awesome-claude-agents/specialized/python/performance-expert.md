@@ -797,11 +797,14 @@ async def optimized_data_processing_example():
         await asyncio.sleep(0.1)
         return [{'processed': item['url']} for item in batch if item.get('success')]
     
-    # Add all results to queue
+    # Workers first. `self.queue` is bounded, so awaiting add_tasks_batch() to
+    # completion before any consumer exists deadlocks the moment the batch exceeds the
+    # queue's capacity: put() blocks and nothing is draining.
+    await processor.start_processing(process_batch)
+    
+    # Now production and consumption overlap.
     await processor.add_tasks_batch(all_results)
     
-    # Start processing and wait for completion
-    await processor.start_processing(process_batch)
     processed_results = await processor.wait_completion()
     
     return processed_results
@@ -823,8 +826,12 @@ from collections import defaultdict
 import psutil
 import os
 from contextlib import contextmanager
+import logging
 import pickle
 import mmap
+import struct
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class MemoryStats:
@@ -1006,6 +1013,12 @@ class MemoryEfficientDataStructures:
 class MmapDict:
     """Memory-mapped dictionary for handling large datasets"""
     
+    # A fixed-width length prefix. NUL is NOT a usable terminator here: a binary pickle
+    # legitimately contains NUL bytes (protocol 5 frames put one within the first few
+    # bytes of the header), so scanning for the first NUL truncates valid payloads, the
+    # unpickle fails, and the except branch silently replaces the stored dict with {}.
+    HEADER = struct.Struct('<Q')  # 8-byte unsigned payload length
+
     def __init__(self, filename: str, size: int):
         self.filename = filename
         self.size = size
@@ -1024,26 +1037,34 @@ class MmapDict:
         self._load_data()
     
     def _load_data(self):
-        """Load data from memory-mapped file"""
+        """Load data from the memory-mapped file using its explicit length prefix."""
         try:
             self.mmap.seek(0)
-            data_bytes = self.mmap.read()
-            # Find end of actual data
-            null_pos = data_bytes.find(b'\x00')
-            if null_pos > 0:
-                actual_data = data_bytes[:null_pos]
-                if actual_data:
-                    self.data = pickle.loads(actual_data)
-        except (pickle.PickleError, EOFError):
+            header = self.mmap.read(self.HEADER.size)
+            if len(header) < self.HEADER.size:
+                self.data = {}
+                return
+            (payload_length,) = self.HEADER.unpack(header)
+            if payload_length == 0:
+                self.data = {}  # never written
+                return
+            if payload_length > self.size - self.HEADER.size:
+                raise ValueError(f"length prefix {payload_length} exceeds the mapping")
+            self.data = pickle.loads(self.mmap.read(payload_length))
+        except (pickle.PickleError, EOFError, ValueError, struct.error):
+            # Corruption is a real condition worth logging rather than hiding: silently
+            # resetting to {} is how a full dictionary disappears without a trace.
+            logger.exception("Could not load %s; starting empty", self.filename)
             self.data = {}
     
     def _save_data(self):
         """Save data to memory-mapped file"""
         serialized_data = pickle.dumps(self.data)
-        if len(serialized_data) >= self.size:
+        if len(serialized_data) + self.HEADER.size > self.size:
             raise ValueError("Data too large for memory-mapped file")
         
         self.mmap.seek(0)
+        self.mmap.write(self.HEADER.pack(len(serialized_data)))
         self.mmap.write(serialized_data)
         self.mmap.flush()
     
@@ -1396,6 +1417,10 @@ class OptimizedProcessPool:
 class ProducerConsumerQueue:
     """High-performance producer-consumer queue system"""
     
+    # A private object, so a legitimate `None` data item can never be mistaken for the
+    # end-of-stream marker.
+    SENTINEL = object()
+
     def __init__(self, config: ConcurrencyConfig):
         self.config = config
         self.queue = queue.Queue(maxsize=config.queue_size)
@@ -1418,9 +1443,6 @@ class ProducerConsumerQueue:
                 with self.lock:
                     self.errors.append(e)
                 logger.error(f"Producer error: {e}")
-            finally:
-                # Signal end of production
-                self.queue.put(None)
         
         producer_thread = threading.Thread(target=producer_wrapper)
         self.producers.append(producer_thread)
@@ -1428,27 +1450,29 @@ class ProducerConsumerQueue:
     def add_consumer(self, consumer_fn: Callable, *args, **kwargs):
         """Add consumer function"""
         def consumer_wrapper():
-            while self.running.is_set():
+            # NOT `while self.running.is_set()`. A consumer that exits the moment the
+            # flag clears abandons whatever is still queued, and the queue.join() in
+            # stop_and_wait() then blocks forever because nothing calls task_done()
+            # for those items. Consumers run until they receive their own sentinel.
+            while True:
                 try:
                     item = self.queue.get(timeout=1.0)
-                    
-                    if item is None:  # End signal
-                        self.queue.task_done()
-                        break
-                    
-                    result = consumer_fn(item, *args, **kwargs)
-                    
-                    with self.lock:
-                        self.results.append(result)
-                    
-                    self.queue.task_done()
-                    
                 except queue.Empty:
                     continue
+                
+                if item is self.SENTINEL:
+                    self.queue.task_done()
+                    break
+                
+                try:
+                    result = consumer_fn(item, *args, **kwargs)
+                    with self.lock:
+                        self.results.append(result)
                 except Exception as e:
                     with self.lock:
                         self.errors.append(e)
                     logger.error(f"Consumer error: {e}")
+                finally:
                     self.queue.task_done()
         
         consumer_thread = threading.Thread(target=consumer_wrapper)
@@ -1466,19 +1490,37 @@ class ProducerConsumerQueue:
             consumer.start()
     
     def stop_and_wait(self, timeout: Optional[float] = None):
-        """Stop processing and wait for completion"""
-        # Signal stop
-        self.running.clear()
-        
-        # Wait for queue to be processed
-        self.queue.join()
-        
-        # Wait for all threads to complete
+        """Drain the queue, then stop. Order matters.
+
+        Clearing `running` first is the bug this avoids: producers stop mid-stream and
+        consumers exit before draining, so queue.join() waits on items that will never
+        be acknowledged. Producers finish, each consumer gets exactly one sentinel, the
+        queue drains, and only then is the run marked stopped.
+        """
+        # 1. Let production finish naturally.
         for producer in self.producers:
             producer.join(timeout=timeout)
         
+        # 2. One sentinel per consumer - a single None would retire only one thread and
+        #    leave the rest blocked on an empty queue.
+        for _ in self.consumers:
+            self.queue.put(self.SENTINEL)
+        
+        # 3. Every item, sentinels included, is acknowledged before this returns.
+        self.queue.join()
+        
+        # 4. Consumers have broken out of their loops by now.
         for consumer in self.consumers:
             consumer.join(timeout=timeout)
+        
+        self.running.clear()
+        
+        with self.lock:
+            return {
+                'total_processed': len(self.results),
+                'results': list(self.results),
+                'errors': list(self.errors),
+            }
         
         return {
             'results': self.results.copy(),
@@ -1576,34 +1618,40 @@ class ConcurrencyPatterns:
     
     @staticmethod
     def pipeline_parallel(stages: List[Callable], data_stream, buffer_size: int = 100):
-        """Pipeline parallel processing pattern"""
-        queues = [queue.Queue(maxsize=buffer_size) for _ in range(len(stages))]
+        """Pipeline parallel processing pattern.
+
+        One queue per *boundary*, so there are len(stages) + 1 of them and stage i reads
+        queues[i] and writes queues[i + 1]. The offset-by-one wiring this replaces gave
+        stages 0 and 1 the same input queue: they competed for raw items, stage 0's
+        output was consumed by whichever thread grabbed it, and the collector saw a mix
+        of half-transformed and fully-transformed values.
+        """
+        queues = [queue.Queue(maxsize=buffer_size) for _ in range(len(stages) + 1)]
         threads = []
         
         def stage_worker(stage_func, input_queue, output_queue):
             while True:
                 try:
                     item = input_queue.get(timeout=1.0)
-                    if item is None:  # Poison pill
-                        output_queue.put(None)
-                        break
-                    
-                    result = stage_func(item)
-                    output_queue.put(result)
-                    input_queue.task_done()
-                    
                 except queue.Empty:
                     continue
+                
+                try:
+                    if item is None:  # Poison pill
+                        # Pass it along so the next stage retires too, then stop.
+                        output_queue.put(None)
+                        break
+                    output_queue.put(stage_func(item))
                 except Exception as e:
                     logger.error(f"Stage error: {e}")
+                finally:
                     input_queue.task_done()
         
         # Create stage threads
         for i, stage in enumerate(stages):
-            input_q = queues[i] if i == 0 else queues[i-1]
-            output_q = queues[i] if i == len(stages)-1 else queues[i+1]
-            
-            thread = threading.Thread(target=stage_worker, args=(stage, input_q, output_q))
+            thread = threading.Thread(
+                target=stage_worker, args=(stage, queues[i], queues[i + 1])
+            )
             threads.append(thread)
             thread.start()
         
@@ -1611,7 +1659,7 @@ class ConcurrencyPatterns:
         def data_feeder():
             for item in data_stream:
                 queues[0].put(item)
-            queues[0].put(None)  # Poison pill
+            queues[0].put(None)  # Poison pill, forwarded down the whole pipeline
         
         feeder_thread = threading.Thread(target=data_feeder)
         feeder_thread.start()
@@ -1681,21 +1729,26 @@ class ConcurrencyPatterns:
         
         return RateLimitedExecutor(calls_per_second, executor)
 
+# Module scope, not nested inside the test. ProcessPoolExecutor pickles the callable to
+# send it to a worker, and a function defined inside another function is not picklable -
+# submitting one raises "Can't pickle local object" instead of running the benchmark.
+def cpu_intensive_task(n: int) -> int:
+    """CPU-intensive task for testing"""
+    result = 0
+    for i in range(n):
+        result += i * i
+    return result
+
+
+def io_intensive_task(duration: float) -> str:
+    """I/O-intensive task simulation"""
+    time.sleep(duration)
+    return f"Completed after {duration}s"
+
+
 # Performance testing for concurrency patterns
 def concurrency_performance_test():
     """Test performance of different concurrency patterns"""
-    
-    def cpu_intensive_task(n: int) -> int:
-        """CPU-intensive task for testing"""
-        result = 0
-        for i in range(n):
-            result += i * i
-        return result
-    
-    def io_intensive_task(duration: float) -> str:
-        """I/O-intensive task simulation"""
-        time.sleep(duration)
-        return f"Completed after {duration}s"
     
     # Test data
     cpu_tasks = [10000] * 20

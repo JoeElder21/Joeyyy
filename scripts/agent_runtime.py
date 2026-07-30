@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
-from pathlib import Path
 import tomllib
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from scripts.packet_guard import PacketGuard
@@ -55,9 +55,7 @@ def load_roster(root: Path = ROOT) -> dict[str, dict[str, Any]]:
         with path.open("rb") as source:
             data = tomllib.load(source)
         name = data["name"]
-        brain = "cross-brain" if name == CHIEF else (
-            "APEX" if name.startswith("apex_") else "JEOS"
-        )
+        brain = "cross-brain" if name == CHIEF else ("APEX" if name.startswith("apex_") else "JEOS")
         roster[name] = {
             "brain": brain,
             "description": data.get("description", ""),
@@ -100,7 +98,7 @@ class AuditLedger:
 
     def append(self, event: str, detail: dict[str, Any]) -> dict[str, Any]:
         entry = {
-            "at": datetime.now(timezone.utc).isoformat(),
+            "at": datetime.now(UTC).isoformat(),
             "detail": detail,
             "event": event,
             "prev_hash": self._last_hash(),
@@ -187,18 +185,23 @@ def validate_specialist_return(
 ) -> list[str]:
     """Validate a specialist's returned handoff packet; log the outcome."""
     errors = guard.validate(
-        "handoff_packet.schema.json", handoff_packet, leases,
+        "handoff_packet.schema.json",
+        handoff_packet,
+        leases,
         delegations=delegations,
     )
     if ledger is not None:
         ledger.append(
             "return_validated" if not errors else "return_rejected",
-            {"mission_id": handoff_packet.get("mission_id"),
-             "resource_id": handoff_packet.get("resource_id"),
-             "delegation_id": handoff_packet.get("delegation_id"),
-             "agent": handoff_packet.get("agent"),
-             "owner_brain": handoff_packet.get("owner_brain"),
-             "status": handoff_packet.get("status"), "errors": errors},
+            {
+                "mission_id": handoff_packet.get("mission_id"),
+                "resource_id": handoff_packet.get("resource_id"),
+                "delegation_id": handoff_packet.get("delegation_id"),
+                "agent": handoff_packet.get("agent"),
+                "owner_brain": handoff_packet.get("owner_brain"),
+                "status": handoff_packet.get("status"),
+                "errors": errors,
+            },
         )
     return errors
 

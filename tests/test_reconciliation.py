@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import tomllib
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -37,9 +37,7 @@ class ReconciliationTests(unittest.TestCase):
         self.assertTrue((ROOT / "scripts" / "autogen_challenge_pair.py").exists())
 
     def test_reconciliation_record_names_the_canonical_homes(self):
-        record = (ROOT / "docs" / "RECONCILIATION_2026-07-24.md").read_text(
-            encoding="utf-8"
-        )
+        record = (ROOT / "docs" / "RECONCILIATION_2026-07-24.md").read_text(encoding="utf-8")
         for phrase in (
             "runtime/lifecycle.py",
             "runtime/cadence.py",

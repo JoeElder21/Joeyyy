@@ -113,6 +113,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Avg, Count
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
 from .models import Product, Category, Review
 from .serializers import (
     ProductSerializer, ProductDetailSerializer, 
@@ -170,10 +171,28 @@ class ProductViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
     
-    @method_decorator(cache_page(60 * 15))  # Cache for 15 minutes
     def list(self, request, *args, **kwargs):
-        """Cached list view"""
-        return super().list(request, *args, **kwargs)
+        """Cache the public list only.
+
+        `cache_page` keys on the request URL, but this response is not a function of
+        the URL: `get_queryset()` adds unpublished products for staff, and
+        `is_favorited` is per-user. Decorating `list` directly meant the first staff
+        request populated the shared entry, and every anonymous caller for the next 15
+        minutes received staff-visible drafts and another user's favourites.
+
+        Authenticated responses therefore bypass the page cache entirely; only the
+        anonymous representation, which is identical for every caller, is shared.
+        """
+        if request.user.is_authenticated:
+            return super().list(request, *args, **kwargs)
+        return self._cached_public_list(request, *args, **kwargs)
+    
+    @method_decorator(vary_on_headers('Authorization'))
+    @method_decorator(cache_page(60 * 15))  # Cache for 15 minutes
+    def _cached_public_list(self, request, *args, **kwargs):
+        # vary_on_headers is belt-and-braces: should a future caller reach this path
+        # with credentials, the entry is still split by them rather than shared.
+        return super(ProductViewSet, self).list(request, *args, **kwargs)
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def add_review(self, request, pk=None):
@@ -225,6 +244,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from .models import Product, Category, Review, ProductImage
 
 User = get_user_model()
@@ -334,6 +354,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         
         return product
     
+    @transaction.atomic
     def update(self, instance, validated_data):
         images_data = validated_data.pop('images', None)
         
@@ -342,15 +363,24 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         
-        # Update images if provided
+        # Update images if provided.
+        # Deleting first and creating afterwards is destructive: if any create fails -
+        # an invalid file, a storage error - the request errors out having already
+        # removed every existing image, and an unrelated field update can therefore
+        # destroy valid data. Build the replacements first, and wrap the swap in a
+        # transaction so a failure leaves the original set intact.
         if images_data is not None:
-            instance.images.all().delete()
-            for index, image in enumerate(images_data):
-                ProductImage.objects.create(
+            replacements = [
+                ProductImage(
                     product=instance,
                     image=image,
                     is_primary=(index == 0)
                 )
+                for index, image in enumerate(images_data)
+            ]
+            existing_ids = list(instance.images.values_list('pk', flat=True))
+            ProductImage.objects.bulk_create(replacements)
+            ProductImage.objects.filter(pk__in=existing_ids).delete()
         
         return instance
 ```
@@ -482,6 +512,7 @@ import graphene
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from graphql_jwt.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from .models import Product, Category, Order
 
@@ -522,15 +553,39 @@ class Query(graphene.ObjectType):
         query=graphene.String(required=True)
     )
     
-    @login_required
+    @staticmethod
+    def _visible_products(info):
+        """Products the caller may see.
+
+        Every product entry point must go through this. The REST queryset already
+        restricts anonymous callers to published rows; a GraphQL resolver that starts
+        from the default manager reopens draft enumeration through a different door,
+        and DjangoFilterConnectionField even exposes `is_published` as a filter, so an
+        anonymous client can ask for the drafts directly.
+        """
+        user = getattr(info.context, "user", None)
+        if user is not None and user.is_authenticated and user.is_staff:
+            return Product.objects.all()
+        return Product.objects.filter(is_published=True)
+
     def resolve_product(self, info, id):
-        return Product.objects.select_related('category').get(pk=id)
+        return (
+            Query._visible_products(info)
+            .select_related('category')
+            .get(pk=id)
+        )
+    
+    def resolve_products(self, info, **kwargs):
+        # DjangoFilterConnectionField defaults to the model's default manager when no
+        # resolver is defined, which is how the built-in connection leaked drafts even
+        # after the custom search resolver was scoped.
+        return Query._visible_products(info).select_related('category')
     
     def resolve_categories(self, info):
         return Category.objects.all()
     
     def resolve_search_products(self, info, query):
-        return Product.objects.filter(
+        return Query._visible_products(info).filter(
             Q(name__icontains=query) | 
             Q(description__icontains=query)
         ).select_related('category')
@@ -584,6 +639,7 @@ class UpdateProductMutation(graphene.Mutation):
     
     product = graphene.Field(ProductType)
     success = graphene.Boolean()
+    errors = graphene.List(graphene.String)
     
     @login_required
     def mutate(self, info, id, **kwargs):
@@ -599,8 +655,14 @@ class UpdateProductMutation(graphene.Mutation):
                 if value is not None:
                     setattr(product, field, value)
             
+            # `save()` does not run field validators or model clean methods, so without
+            # this the update path would happily persist a negative price that the
+            # create mutation explicitly rejects. full_clean() applies the same rules.
+            product.full_clean()
             product.save()
             return UpdateProductMutation(product=product, success=True)
+        except ValidationError as exc:
+            return UpdateProductMutation(success=False, errors=exc.messages)
         except Product.DoesNotExist:
             return UpdateProductMutation(success=False)
 

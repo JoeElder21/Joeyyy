@@ -4,11 +4,11 @@ tests skip cleanly so stdlib CI stays green."""
 
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
-from pathlib import Path
 import tempfile
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from scripts.agent_runtime import CHIEF, AuditLedger, load_roster
 from scripts.memory_layer import (
@@ -51,19 +51,15 @@ class GovernedMemoryTests(unittest.TestCase):
             memory = self._memory(tmp)
             memory.add(
                 "Campaign one targets permit throughput this quarter.",
-                writer=CHIEF, agent_id=namespace, lease=lease,
+                writer=CHIEF,
+                agent_id=namespace,
+                lease=lease,
             )
-            hits = memory.search(
-                "permit campaign", reader="apex_war_architect", agent_id=namespace
-            )
+            hits = memory.search("permit campaign", reader="apex_war_architect", agent_id=namespace)
             self.assertEqual(len(hits), 1)
             with self.assertRaises(MemoryAccessDenied):
-                memory.search(
-                    "permit campaign", reader="jeos_life_architect", agent_id=namespace
-                )
-            chief_hits = memory.search(
-                "permit campaign", reader=CHIEF, agent_id=namespace
-            )
+                memory.search("permit campaign", reader="jeos_life_architect", agent_id=namespace)
+            chief_hits = memory.search("permit campaign", reader=CHIEF, agent_id=namespace)
             self.assertEqual(len(chief_hits), 1)
 
     def test_writes_require_owner_and_lease(self):
@@ -72,8 +68,7 @@ class GovernedMemoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)
             with self.assertRaises(MemoryAccessDenied):
-                memory.add("x", writer="apex_war_architect",
-                           agent_id=namespace, lease=lease)
+                memory.add("x", writer="apex_war_architect", agent_id=namespace, lease=lease)
             with self.assertRaises(MemoryAccessDenied):
                 memory.add("x", writer=CHIEF, agent_id=namespace, lease=None)
             wrong_lease = deepcopy(lease)
@@ -127,8 +122,7 @@ class CrewTelemetryOptOutTests(unittest.TestCase):
 
         import scripts.crew_bridge as bridge
 
-        for name in ("CREWAI_DISABLE_TELEMETRY", "CREWAI_TELEMETRY_OPT_OUT",
-                     "OTEL_SDK_DISABLED"):
+        for name in ("CREWAI_DISABLE_TELEMETRY", "CREWAI_TELEMETRY_OPT_OUT", "OTEL_SDK_DISABLED"):
             with self.subTest(var=name):
                 self.assertIn(name, bridge.TELEMETRY_OPT_OUTS)
                 self.assertEqual(os.environ.get(name), "true")
@@ -137,8 +131,8 @@ class CrewTelemetryOptOutTests(unittest.TestCase):
 @unittest.skipUnless(_available("crewai"), "crewai not installed")
 class CrewBridgeTests(unittest.TestCase):
     def test_roster_maps_to_crew_and_admission_is_fail_closed(self):
-        from scripts.crew_bridge import build_brain_crew, crew_agent
         from scripts.agent_runtime import HandoffRejected
+        from scripts.crew_bridge import build_brain_crew, crew_agent
 
         roster = load_roster(ROOT)
         agent = crew_agent("apex_war_architect", roster["apex_war_architect"])

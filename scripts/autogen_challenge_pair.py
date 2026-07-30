@@ -12,11 +12,10 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
-from pathlib import Path
 import sys
 import tomllib
+from pathlib import Path
 from typing import Any
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "config" / "specialist_corps.toml"
@@ -35,7 +34,9 @@ def _challenge_pairs(manifest: dict[str, Any]) -> set[tuple[str, ...]]:
     return {tuple(item["agents"]) for item in manifest["challenge_pairs"]}
 
 
-def build_plan(brain: str, agents: list[str], mission_id: str, evidence_refs: list[str]) -> dict[str, Any]:
+def build_plan(
+    brain: str, agents: list[str], mission_id: str, evidence_refs: list[str]
+) -> dict[str, Any]:
     """Return a fail-closed AutoGen execution plan from registered metadata."""
     manifest = _manifest()
     if brain not in {"APEX", "JEOS"}:
@@ -43,7 +44,9 @@ def build_plan(brain: str, agents: list[str], mission_id: str, evidence_refs: li
     if len(agents) < 2 or len(set(agents)) != len(agents):
         raise ChallengePlanError("a challenge needs two or more distinct specialists")
     if not mission_id or not evidence_refs:
-        raise ChallengePlanError("mission_id and one or more packet evidence references are required")
+        raise ChallengePlanError(
+            "mission_id and one or more packet evidence references are required"
+        )
 
     roster = set(manifest[f"{brain.lower()}_roster"])
     unknown_or_cross_brain = [agent for agent in agents if agent not in roster]
@@ -81,7 +84,9 @@ def build_plan(brain: str, agents: list[str], mission_id: str, evidence_refs: li
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--brain", required=True, choices=("APEX", "JEOS"))
-    parser.add_argument("--agents", required=True, nargs="+", help="Registered pair in manifest order")
+    parser.add_argument(
+        "--agents", required=True, nargs="+", help="Registered pair in manifest order"
+    )
     parser.add_argument("--mission-id", required=True)
     parser.add_argument("--evidence-ref", required=True, action="append", dest="evidence_refs")
     args = parser.parse_args(argv)

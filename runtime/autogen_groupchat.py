@@ -8,10 +8,11 @@ on behalf of a specialist.
 
 from __future__ import annotations
 
+import tomllib
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-import tomllib
-from typing import Any, Callable, Iterable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CHIEF_OF_STAFF = "apex_chief_of_staff"
@@ -78,7 +79,9 @@ def build_group_chat(
         )
     )
     specialists = {
-        agent: ConversableAgent(name=agent, system_message=make_message(agent), llm_config=llm_config)
+        agent: ConversableAgent(
+            name=agent, system_message=make_message(agent), llm_config=llm_config
+        )
         for agent in plan.speaker_order
     }
     group = GroupChat(

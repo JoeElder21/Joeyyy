@@ -1,10 +1,9 @@
 """Offline safety checks for the APS validation-gate command surface."""
 
-from pathlib import Path
 import os
 import subprocess
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "connectors" / "aps" / "src" / "gate.mjs"

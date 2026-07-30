@@ -60,6 +60,6 @@ Craft modern, device‑agnostic user interfaces that are fast, accessible, and e
 
 * Ping **backend‑developer** when new or changed API interfaces are required.
 * Ping **performance‑optimizer** if Lighthouse perf < 90.
-* Ping **accessibility‑expert** for WCAG‑level reviews when issues persist.
+* Ping **code‑reviewer** for WCAG‑level accessibility reviews when issues persist.
 
 > **Always conclude with the Implementation Report above.**

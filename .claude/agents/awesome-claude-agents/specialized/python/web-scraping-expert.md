@@ -82,11 +82,23 @@ from pathlib import Path
 import random
 from bs4 import BeautifulSoup
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Statuses worth a second attempt: rate limiting and server-side faults.
+RETRYABLE_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+class TransientHTTPError(Exception):
+    """Raised for a retryable HTTP status so Tenacity re-runs the attempt."""
+
+    def __init__(self, url: str, status: int):
+        super().__init__(f"HTTP {status} for {url}")
+        self.url = url
+        self.status = status
 
 @dataclass
 class ScrapingConfig:
@@ -159,45 +171,69 @@ class AsyncScraper:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10)
     )
-    async def fetch_page(self, url: str, **kwargs) -> Dict[str, Any]:
-        """Fetch a single page with error handling"""
+    async def _fetch_page_once(self, url: str, **kwargs) -> Dict[str, Any]:
+        """One attempt. Raises on failure so Tenacity can retry it.
+
+        Swallowing the exception here and returning a failure dict would make
+        `@retry` dead code: Tenacity only re-runs a call that *raises*, so a
+        caught error looks like a successful return and the remaining two
+        attempts never happen.
+        """
         async with self.semaphore:
             headers = dict(kwargs.pop('headers', {}))
             headers['User-Agent'] = self._get_random_user_agent()
             
-            try:
-                async with self.session.get(url, headers=headers, **kwargs) as response:
-                    # Add delay between requests
-                    await asyncio.sleep(self._get_random_delay())
-                    
-                    if response.status == 200:
-                        content = await response.text()
-                        return {
-                            'url': url,
-                            'status': response.status,
-                            'content': content,
-                            'headers': dict(response.headers),
-                            'success': True
-                        }
-                    else:
-                        logger.warning(f"Non-200 status for {url}: {response.status}")
-                        return {
-                            'url': url,
-                            'status': response.status,
-                            'content': None,
-                            'error': f"HTTP {response.status}",
-                            'success': False
-                        }
-                        
-            except Exception as e:
-                logger.error(f"Error fetching {url}: {str(e)}")
+            async with self.session.get(url, headers=headers, **kwargs) as response:
+                # Add delay between requests
+                await asyncio.sleep(self._get_random_delay())
+                
+                if response.status == 200:
+                    content = await response.text()
+                    return {
+                        'url': url,
+                        'status': response.status,
+                        'content': content,
+                        'headers': dict(response.headers),
+                        'success': True
+                    }
+                
+                logger.warning(f"Non-200 status for {url}: {response.status}")
+                if response.status in RETRYABLE_STATUSES:
+                    # 429/5xx are transient — raise so the backoff applies.
+                    raise TransientHTTPError(url, response.status)
+                # 4xx other than 429 will not change on a retry.
                 return {
                     'url': url,
-                    'status': None,
+                    'status': response.status,
                     'content': None,
-                    'error': str(e),
+                    'error': f"HTTP {response.status}",
                     'success': False
                 }
+    
+    async def fetch_page(self, url: str, **kwargs) -> Dict[str, Any]:
+        """Fetch a single page, converting an exhausted retry into a result dict."""
+        try:
+            return await self._fetch_page_once(url, **kwargs)
+        except RetryError as exc:
+            last = exc.last_attempt.exception()
+            status = getattr(last, 'status', None)
+            logger.error(f"Giving up on {url} after 3 attempts: {last}")
+            return {
+                'url': url,
+                'status': status,
+                'content': None,
+                'error': str(last),
+                'success': False
+            }
+        except Exception as e:
+            logger.error(f"Error fetching {url}: {str(e)}")
+            return {
+                'url': url,
+                'status': None,
+                'content': None,
+                'error': str(e),
+                'success': False
+            }
     
     async def fetch_multiple(self, urls: List[str], **kwargs) -> List[Dict[str, Any]]:
         """Fetch multiple URLs concurrently"""
@@ -1059,12 +1095,20 @@ class ProxyRotator:
     """Proxy rotation for large-scale scraping"""
     
     def __init__(self, proxy_list: List[str]):
-        self.proxies = itertools.cycle(proxy_list)
+        # Keep the original list: `itertools.cycle` is an iterator with no length, and
+        # get_next_proxy() below needs a count to bound its attempts. Storing only the
+        # cycle made every rotation raise AttributeError on `self.proxy_list`.
+        self.proxy_list = list(proxy_list)
+        self.proxies = itertools.cycle(self.proxy_list) if self.proxy_list else None
         self.current_proxy = None
         self.failed_proxies = set()
     
     def get_next_proxy(self) -> Optional[Dict[str, str]]:
         """Get next working proxy"""
+        if not self.proxy_list:
+            logger.warning("No proxies configured")
+            return None
+        
         attempts = 0
         max_attempts = len(self.proxy_list) * 2
         
@@ -1336,7 +1380,15 @@ class DataProcessor:
     
     def extract_dates(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract and parse date information"""
-        date_columns = ['scraped_at', 'published_at', 'updated_at']
+        date_columns = ['published_at', 'updated_at']
+        
+        # `scraped_at` is written with time.time(), i.e. Unix *seconds*. pd.to_datetime
+        # reads a bare number as nanoseconds, which would map every current timestamp to
+        # 1970 - so it needs an explicit unit and cannot go through the generic loop.
+        if 'scraped_at' in df.columns:
+            df['scraped_at_parsed'] = pd.to_datetime(
+                df['scraped_at'], unit='s', errors='coerce'
+            )
         
         for col in date_columns:
             if col in df.columns:

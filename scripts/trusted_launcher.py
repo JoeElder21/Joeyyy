@@ -64,8 +64,7 @@ def _load_mounts() -> dict[str, dict]:
     """
     try:
         with MOUNTS.open("rb") as source:
-            return {mount["name"]: mount
-                    for mount in tomllib.load(source)["mounts"]}
+            return {mount["name"]: mount for mount in tomllib.load(source)["mounts"]}
     except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
         raise ManifestUnavailable(f"{MOUNTS.name}: {error}") from error
 
@@ -123,10 +122,12 @@ def mount_allowlist(spec: dict, mount: str) -> list[str]:
     """
     declared = spec.get("agents", [])
     if not isinstance(declared, (list, tuple)) or not all(
-            isinstance(name, str) and name.strip() for name in declared):
+        isinstance(name, str) and name.strip() for name in declared
+    ):
         raise ManifestUnavailable(
             f"mount {mount!r}: `agents` must be a list of agent names; the "
-            "registry cannot say who is allowed")
+            "registry cannot say who is allowed"
+        )
     return list(declared)
 
 
@@ -157,11 +158,11 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
     rosters = {}
     for key in ("apex_roster", "jeos_roster"):
         value = corps.get(key, [])
-        if not isinstance(value, (list, tuple)) or not all(
-                isinstance(name, str) for name in value):
+        if not isinstance(value, (list, tuple)) or not all(isinstance(name, str) for name in value):
             raise ManifestUnavailable(
                 f"{CORPS.name}: [{key}] must be a list of agent names; the "
-                "registry cannot say who is rostered")
+                "registry cannot say who is rostered"
+            )
         rosters[key] = set(value)
     roster = rosters["apex_roster"] | rosters["jeos_roster"]
     if agent not in roster:
@@ -196,7 +197,8 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
         # route. Ambiguous ownership is an authorization failure.
         raise ManifestUnavailable(
             f"{agent!r} is listed in both the APEX and JEOS rosters; brain "
-            "ownership is ambiguous, so no authoritative stage exists")
+            "ownership is ambiguous, so no authoritative stage exists"
+        )
     manifest_key = "apex_brain_manifest" if in_apex else "jeos_brain_manifest"
     expected_brain = "APEX" if in_apex else "JEOS"
     per_agent = None
@@ -213,7 +215,8 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
         if declared_brain != expected_brain:
             raise ManifestUnavailable(
                 f"{manifest_path} declares brain {declared_brain!r}, not "
-                f"{expected_brain!r}; it cannot speak for {agent!r}")
+                f"{expected_brain!r}; it cannot speak for {agent!r}"
+            )
         agents = manifest.get("agents", {})
         # Valid TOML, wrong shape: `agents = 1` raised a bare AttributeError,
         # and both callers convert only ManifestUnavailable, so a partial
@@ -223,7 +226,8 @@ def specialist_stage(agent: str, corps: dict | None = None) -> str | None:
         if not isinstance(agents, dict):
             raise ManifestUnavailable(
                 f"{manifest_path}: [agents] must be a table; the manifest "
-                "cannot say what stage any agent is at")
+                "cannot say what stage any agent is at"
+            )
         entry = agents.get(agent)
         if isinstance(entry, dict) and entry.get("status"):
             per_agent = entry["status"]
@@ -267,11 +271,15 @@ def connector_stages(corps: dict | None = None) -> frozenset[str]:
     """
     corps = corps if corps is not None else _corps()
     declared = corps.get("lifecycle", {}).get("connector_stages")
-    if (not isinstance(declared, list) or not declared
-            or not all(isinstance(stage, str) and stage for stage in declared)):
+    if (
+        not isinstance(declared, list)
+        or not declared
+        or not all(isinstance(stage, str) and stage for stage in declared)
+    ):
         raise ManifestUnavailable(
             f"{CORPS.name}: [lifecycle] connector_stages must be a non-empty "
-            "list of stage names; connector eligibility cannot be resolved")
+            "list of stage names; connector eligibility cannot be resolved"
+        )
     return frozenset(declared)
 
 
@@ -308,9 +316,13 @@ def _sign(key: bytes, payload: dict) -> str:
 
 
 def issue_grant(
-    mount: str, minutes: int, key_path: Path = DEFAULT_KEY_PATH,
-    out_dir: Path | None = None, now: float | None = None,
-    agent: str | None = None, ledger: AuditLedger | None = None,
+    mount: str,
+    minutes: int,
+    key_path: Path = DEFAULT_KEY_PATH,
+    out_dir: Path | None = None,
+    now: float | None = None,
+    agent: str | None = None,
+    ledger: AuditLedger | None = None,
 ) -> Path:
     """Create a signed, single-use grant file for one mount and one identity.
 
@@ -339,7 +351,8 @@ def issue_grant(
     except ManifestUnavailable as error:
         raise refuse(
             f"cannot read the mount registry: {error}. An unreadable registry "
-            "is an authorization failure, not an empty allowlist.")
+            "is an authorization failure, not an empty allowlist."
+        ) from error
 
     if mount not in mounts:
         raise refuse(f"unknown mount {mount!r}")
@@ -349,7 +362,8 @@ def issue_grant(
     except ManifestUnavailable as error:
         raise refuse(
             f"cannot read the allowlist: {error}. A malformed allowlist is an "
-            "authorization failure, not a wildcard.")
+            "authorization failure, not a wildcard."
+        ) from error
     if "*" not in allowed:
         if agent is None:
             raise refuse(
@@ -358,8 +372,7 @@ def issue_grant(
             )
         if agent not in allowed:
             raise refuse(
-                f"agent {agent!r} is not on {mount!r}'s allowlist "
-                f"({', '.join(allowed) or 'none'})"
+                f"agent {agent!r} is not on {mount!r}'s allowlist ({', '.join(allowed) or 'none'})"
             )
 
     # Being on the allowlist is necessary, not sufficient. Those lists record
@@ -376,7 +389,7 @@ def issue_grant(
             f"cannot resolve the lifecycle stage of {agent!r}: {error}. "
             "An unreadable brain manifest is an authorization failure, not an "
             "absent override."
-        )
+        ) from error
     if not stage_permits_connector(stage):
         raise refuse(
             f"agent {agent!r} is lifecycle stage {stage!r}; a specialist may "
@@ -398,7 +411,8 @@ def issue_grant(
             raise refuse(
                 "this mount declares no readable grant_scope, so the blast "
                 "radius of the signature cannot be shown; refusing to mint a "
-                "grant whose authority cannot be stated")
+                "grant whose authority cannot be stated"
+            )
 
     now = now if now is not None else time.time()
     payload = {
@@ -431,6 +445,27 @@ def _grant_scope(mount: str) -> str:
         return ""
 
 
+def _claim_nonce_exclusively(ledger: AuditLedger, nonce: str) -> None:
+    """Take an exclusive on-disk claim on a nonce before consuming it.
+
+    The consumed-nonce check (`_consumed_nonces`) and the ledger append that
+    records consumption are two separate steps, with `check_agent`'s manifest
+    reads in between, so two concurrent launches of the same grant could both
+    pass the replay check before either appended — executing one single-use
+    grant twice and opening two write-capable connector sessions. An O_EXCL
+    claim file makes the winner unambiguous; the loser gets `FileExistsError`
+    and is denied. `runtime/trusted_launcher.py` guards the identical race the
+    same way; this closes the gap in the scripts launcher. The claim name is a
+    hash of the (already signature-authenticated) nonce so no nonce value can
+    escape the ledger directory.
+    """
+    ledger.path.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+    claim = ledger.path.parent / f".{ledger.path.name}.claim-{digest}"
+    fd = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    os.close(fd)
+
+
 def _consumed_nonces(ledger: AuditLedger) -> set[str]:
     if not ledger.path.exists():
         return set()
@@ -447,7 +482,8 @@ def _consumed_nonces(ledger: AuditLedger) -> set[str]:
 
 
 def authorize(
-    mount: str, grant_path: Path | None,
+    mount: str,
+    grant_path: Path | None,
     key_path: Path = DEFAULT_KEY_PATH,
     ledger: AuditLedger | None = None,
     now: float | None = None,
@@ -497,7 +533,8 @@ def authorize(
     except ManifestUnavailable as error:
         raise deny(
             f"cannot read the mount registry: {error}. An unreadable registry "
-            "is an authorization failure, not an empty allowlist.")
+            "is an authorization failure, not an empty allowlist."
+        ) from error
 
     def check_agent(spec: dict, identity: str | None) -> None:
         """Enforce the mount's `agents` allowlist against a *signed* identity.
@@ -512,7 +549,8 @@ def authorize(
         except ManifestUnavailable as error:
             raise deny(
                 f"cannot read the allowlist: {error}. A malformed allowlist "
-                "is an authorization failure, not a wildcard.")
+                "is an authorization failure, not a wildcard."
+            ) from error
         if "*" in allowed:
             return
         if identity is None:
@@ -539,7 +577,7 @@ def authorize(
                 f"cannot resolve the lifecycle stage of {identity!r}: {error}. "
                 "An unreadable brain manifest is an authorization failure, not "
                 "an absent override."
-            )
+            ) from error
         if not stage_permits_connector(stage):
             raise deny(
                 f"agent {identity!r} is lifecycle stage {stage!r}; a specialist "
@@ -567,13 +605,15 @@ def authorize(
         except ManifestUnavailable as error:
             raise deny(
                 f"cannot read the allowlist: {error}. A malformed allowlist "
-                "is an authorization failure, not a wildcard.")
+                "is an authorization failure, not a wildcard."
+            ) from error
         if "*" not in declared:
             raise deny(
                 "mount is agent-scoped but declares no grant requirement "
                 f"(allowed: {', '.join(declared) or 'none'}). Only a wildcard "
                 "mount may start without a Joe-signed grant; set "
-                "`require_grant = true` or open the allowlist deliberately.")
+                "`require_grant = true` or open the allowlist deliberately."
+            )
         check_agent(spec, agent)
         authorized["agent"] = agent
         authorized["agent_source"] = "caller-supplied" if agent else "not-required"
@@ -585,8 +625,12 @@ def authorize(
         # filed under the authenticated name is worse than no attribution.
         ledger.append(
             "launch_authorized",
-            {"mount": mount, "claimed_agent": agent,
-             "agent_authenticated": False, "grant": "not-required"},
+            {
+                "mount": mount,
+                "claimed_agent": agent,
+                "agent_authenticated": False,
+                "grant": "not-required",
+            },
         )
         return spec
     if grant_path is None:
@@ -595,10 +639,7 @@ def authorize(
         grant = json.loads(Path(grant_path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise deny(f"grant unreadable: {error}") from error
-    payload = {
-        k: grant.get(k)
-        for k in ("mount", "agent", "issued_at", "expires_at", "nonce")
-    }
+    payload = {k: grant.get(k) for k in ("mount", "agent", "issued_at", "expires_at", "nonce")}
     if not key_path.exists():
         raise deny("no signing key exists; only Joe's machine can mint grants")
     expected = _sign(key_path.read_bytes(), payload)
@@ -618,17 +659,29 @@ def authorize(
     # the caller supplied. A passed --agent is only a cross-check.
     signed_agent = payload["agent"]
     if agent is not None and agent != signed_agent:
-        raise deny(
-            f"grant authorizes {signed_agent!r}, but launch claimed {agent!r}"
-        )
+        raise deny(f"grant authorizes {signed_agent!r}, but launch claimed {agent!r}")
     check_agent(spec, signed_agent)
     authorized["agent"] = signed_agent
     authorized["agent_source"] = "signed-grant"
 
+    # Claim the nonce atomically now that every validation has passed and we are
+    # about to record consumption. Doing this only here means a denied attempt
+    # (expiry, lifecycle, identity mismatch) never consumes the grant, while a
+    # concurrent second launch of the same grant loses the O_EXCL race and is
+    # denied instead of slipping through the window before the append lands.
+    try:
+        _claim_nonce_exclusively(ledger, payload["nonce"])
+    except FileExistsError as error:
+        raise deny("grant already being consumed (single-use)") from error
+
     ledger.append(
         "launch_authorized",
-        {"mount": mount, "agent": signed_agent, "nonce": payload["nonce"],
-         "expires_at": payload["expires_at"]},
+        {
+            "mount": mount,
+            "agent": signed_agent,
+            "nonce": payload["nonce"],
+            "expires_at": payload["expires_at"],
+        },
     )
     return spec
 
@@ -636,8 +689,18 @@ def authorize(
 # Variables every child process needs simply to run. Nothing here identifies an
 # account or authorizes anything.
 BASELINE_ENV = (
-    "PATH", "HOME", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "TZ",
-    "SYSTEMROOT", "COMSPEC", "PATHEXT", "USERPROFILE",
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+    "SYSTEMROOT",
+    "COMSPEC",
+    "PATHEXT",
+    "USERPROFILE",
 )
 
 # Outbound transport configuration. A mount that fetches its own package or
@@ -647,9 +710,17 @@ BASELINE_ENV = (
 # BASELINE_ENV: a proxy URL can carry credentials in its userinfo, so only
 # mounts that declare `network = true` in the registry receive them.
 NETWORK_ENV = (
-    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
-    "http_proxy", "https_proxy", "no_proxy", "all_proxy",
-    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "all_proxy",
+    "NODE_EXTRA_CA_CERTS",
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
 )
 
 
@@ -674,11 +745,7 @@ def mount_env(spec: dict) -> dict[str, str]:
     allowed = list(BASELINE_ENV) + list(spec.get("env", []))
     if spec.get("network"):
         allowed += list(NETWORK_ENV)
-    return {
-        name: os.environ[name]
-        for name in allowed
-        if name in os.environ
-    }
+    return {name: os.environ[name] for name in allowed if name in os.environ}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -687,19 +754,24 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("grant", help="Mint a signed one-time grant (Joe only).")
     g.add_argument("--mount", required=True)
     g.add_argument("--minutes", type=int, default=30)
-    g.add_argument("--agent",
-                   help="Identity this grant authorizes. Signed into the grant, "
-                        "so it cannot be changed at launch. Required for any "
-                        "mount whose agents list is not ['*'].")
-    l = sub.add_parser("launch", help="Launch a mount under grant control.")
-    l.add_argument("--mount", required=True)
-    l.add_argument("--grant", type=Path)
-    l.add_argument("--agent",
-                   help="Optional cross-check. The authoritative identity is "
-                        "the one signed into the grant; if this is supplied it "
-                        "must match, otherwise the launch is refused.")
-    l.add_argument("--dry-run", action="store_true",
-                   help="Verify authorization without executing.")
+    g.add_argument(
+        "--agent",
+        help="Identity this grant authorizes. Signed into the grant, "
+        "so it cannot be changed at launch. Required for any "
+        "mount whose agents list is not ['*'].",
+    )
+    launch_p = sub.add_parser("launch", help="Launch a mount under grant control.")
+    launch_p.add_argument("--mount", required=True)
+    launch_p.add_argument("--grant", type=Path)
+    launch_p.add_argument(
+        "--agent",
+        help="Optional cross-check. The authoritative identity is "
+        "the one signed into the grant; if this is supplied it "
+        "must match, otherwise the launch is refused.",
+    )
+    launch_p.add_argument(
+        "--dry-run", action="store_true", help="Verify authorization without executing."
+    )
     args = parser.parse_args(argv)
 
     if args.cmd == "grant":
@@ -714,29 +786,43 @@ def main(argv: list[str] | None = None) -> int:
         # tools, because nothing downstream mediates individual tool calls.
         # Leaving that to be inferred from `purpose` asks Joe to sign a
         # blast radius he was never shown.
-        print(json.dumps({"grant": str(path), "mount": args.mount,
-                          "agent": args.agent, "minutes": args.minutes,
-                          "authorizes": _grant_scope(args.mount)}))
+        print(
+            json.dumps(
+                {
+                    "grant": str(path),
+                    "mount": args.mount,
+                    "agent": args.agent,
+                    "minutes": args.minutes,
+                    "authorizes": _grant_scope(args.mount),
+                }
+            )
+        )
         return 0
 
     try:
         authorized: dict = {}
-        spec = authorize(args.mount, args.grant, agent=args.agent,
-                         authorized=authorized)
+        spec = authorize(args.mount, args.grant, agent=args.agent, authorized=authorized)
     except LaunchDenied as denial:
         print(json.dumps({"authorized": False, "error": str(denial)}))
         return 1
     if args.dry_run:
-        print(json.dumps({"authorized": True, "mount": args.mount,
-                          # The identity that was actually authorized, which for
-                          # the documented launch command comes from the signed
-                          # grant rather than the optional --agent flag. Echoing
-                          # args.agent printed null in exactly the case dry-run
-                          # exists to evidence.
-                          "agent": authorized.get("agent"),
-                          "agent_source": authorized.get("agent_source"),
-                          "command": spec["command"],
-                          "dry_run": True}))
+        print(
+            json.dumps(
+                {
+                    "authorized": True,
+                    "mount": args.mount,
+                    # The identity that was actually authorized, which for
+                    # the documented launch command comes from the signed
+                    # grant rather than the optional --agent flag. Echoing
+                    # args.agent printed null in exactly the case dry-run
+                    # exists to evidence.
+                    "agent": authorized.get("agent"),
+                    "agent_source": authorized.get("agent_source"),
+                    "command": spec["command"],
+                    "dry_run": True,
+                }
+            )
+        )
         return 0
     return subprocess.call(spec["command"], cwd=str(ROOT), env=mount_env(spec))
 
