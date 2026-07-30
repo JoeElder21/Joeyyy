@@ -39,7 +39,7 @@ before — they existed only as Codex TOML prompts with nothing to execute them.
 ## The architecture in one paragraph
 
 **Agent 007 holds the connectors. Specialists never do.** You talk to Agent 007.
-It calls Gmail, Drive, Calendar, Todoist, GitHub, or the web, extracts the
+It calls Gmail, Drive, Calendar, GitHub, or the web, extracts the
 minimum task-relevant records, and hands each specialist a PacketGuard-validated
 delegation packet containing only that evidence. A specialist that cites a source
 which was not in its packet fails connector isolation and its mission does not
@@ -180,7 +180,7 @@ touches professional liability.
    certify anything on an agent's say-so. Final permit or agency submission is
    an always-gated action requiring you live.
 4. **Connector reach is whatever your session actually has.** If Drive, Gmail,
-   Calendar, or Todoist is not authorized in the session, Agent 007 reports the
+   or Calendar is not authorized in the session, Agent 007 reports the
    blocker rather than pretending. It does not silently degrade.
 5. **The evidence ledger is tamper-evident for history, not for the newest
    entry.** `AuditLedger.verify()` catches rewriting of records that already had

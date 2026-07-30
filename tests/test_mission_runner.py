@@ -157,6 +157,33 @@ class PrepareTests(RunnerHarness):
             self.runner.prepare(spec(definition_of_done_ids=["a", "b"]))
 
 
+class RunIdentityTests(RunnerHarness):
+    def test_pinning_the_run_id_reproduces_an_identical_delegation(self):
+        """Re-preparing an unchanged mission must not orphan a valid return.
+
+        Without this, fixing an orchestration bug that never touched the
+        evidence minted a fresh delegation id, so a specialist return already
+        in hand no longer bound to anything and its work had to be discarded
+        and re-run.
+        """
+        first = self.runner.prepare(spec())
+        pinned = spec()
+        pinned.run_id = first.delegation["delegation_id"].rsplit(":", 1)[-1]
+        second = self.runner.prepare(pinned)
+        self.assertEqual(first.delegation["delegation_id"], second.delegation["delegation_id"])
+        self.assertEqual(first.delegation["mission_id"], second.delegation["mission_id"])
+        self.assertEqual(first.delegation["resource_id"], second.delegation["resource_id"])
+        self.assertEqual(first.delegation["allowed_evidence"], second.delegation["allowed_evidence"])
+
+    def test_an_unpinned_run_still_gets_a_fresh_identity(self):
+        """Pinning must be opt-in; two ordinary runs must not collide."""
+        first = self.runner.prepare(spec())
+        second = self.runner.prepare(spec())
+        self.assertNotEqual(
+            first.delegation["delegation_id"], second.delegation["delegation_id"]
+        )
+
+
 class CompleteTests(RunnerHarness):
     def test_clean_run_qualifies_the_mode_and_emits_a_value_observation(self):
         prepared = self.runner.prepare(spec())
@@ -214,6 +241,46 @@ class CompleteTests(RunnerHarness):
             ),
             **COSTS,
         )
+        self.assertFalse(evidence.qualifies_mode)
+
+    def test_an_honest_partial_is_not_scored_as_a_rejected_output(self):
+        """Honest self-reporting must not be cheaper to fake than to do.
+
+        A rejected output carries full cost and zero benefit. Forcing that on
+        any status other than `completed` meant a specialist that truthfully
+        said `partial` -- stale evidence, current state unverifiable -- was
+        recorded as a net loss even when Joe read the output, accepted it, and
+        acted on it. Overclaiming `completed` scored strictly better, which
+        inverts the incentive this whole system exists to protect.
+        """
+        prepared = self.runner.prepare(spec())
+        evidence = self.runner.complete(
+            prepared,
+            handoff_for(prepared, status="partial"),
+            **{**COSTS, "accepted_first_pass": True, "readback_performed": True},
+        )
+        self.assertEqual(evidence.errors, [])
+        observation = self.runner.value_ledger.observations(self.runner.value_policy)[-1]
+        self.assertFalse(observation.output_rejected)
+        self.assertTrue(observation.accepted_first_pass)
+        self.assertGreater(observation.net_time_saved(self.runner.value_policy), 0)
+        # The promotion gate is a different question and still says no.
+        self.assertFalse(evidence.qualifies_mode)
+
+    def test_an_invalid_return_is_still_forced_to_rejected(self):
+        """The fail-closed override must survive the partial-status relaxation."""
+        prepared = self.runner.prepare(spec())
+        broken = handoff_for(prepared)
+        broken["criterion_validation"] = []
+        evidence = self.runner.complete(
+            prepared,
+            broken,
+            **{**COSTS, "accepted_first_pass": True, "readback_performed": True},
+        )
+        self.assertNotEqual(evidence.errors, [])
+        observation = self.runner.value_ledger.observations(self.runner.value_policy)[-1]
+        self.assertTrue(observation.output_rejected)
+        self.assertFalse(observation.accepted_first_pass)
         self.assertFalse(evidence.qualifies_mode)
 
     def test_every_completion_is_recorded_on_an_intact_hash_chain(self):
@@ -323,6 +390,31 @@ class MissionCatalogTests(RunnerHarness):
     def test_catalog_is_not_empty(self):
         self.assertGreaterEqual(len(self.catalog), 7)
 
+    def test_every_entry_delegates_the_challenge_action(self):
+        """The challenge duty must be exerciseable, not just written down.
+
+        PacketGuard refuses a `challenges` field the delegation did not
+        authorize. Granting only analyze and read_packet_evidence made the
+        constitution's challenge duty impossible to satisfy: a specialist that
+        recorded its disagreement produced an invalid packet, and the only way
+        to pass validation was to stay silent about it.
+        """
+        for key, entry in self.catalog.items():
+            with self.subTest(mission=key):
+                established = self.runner.value_policy.usable_baseline(entry.mode)
+                spec = entry.to_spec(
+                    evidence=[
+                        EvidenceRecord(
+                            source_ref=f"fixture/{key}/source-1",
+                            source_type="synthetic",
+                        )
+                    ],
+                    baseline_minutes=established or 30,
+                )
+                self.assertIn("challenge", spec.allowed_actions)
+                prepared = self.runner.prepare(spec)
+                self.assertIn("challenge", prepared.delegation["allowed_actions"])
+
     def test_every_entry_names_a_registered_agent_and_mode(self):
         for key, entry in self.catalog.items():
             with self.subTest(mission=key):
@@ -334,6 +426,12 @@ class MissionCatalogTests(RunnerHarness):
         """A catalog entry that cannot actually be prepared is worthless on Monday."""
         for key, entry in self.catalog.items():
             with self.subTest(mission=key):
+                # Once a mode has an established baseline, prepare() refuses a
+                # mission that supplies a different one -- a baseline is set in
+                # the reviewed policy file, not per mission. So this fixture
+                # must adopt the established value where one exists rather than
+                # hardcode 30 and trip the guard it is not testing.
+                established = self.runner.value_policy.usable_baseline(entry.mode)
                 prepared = self.runner.prepare(
                     entry.to_spec(
                         evidence=[
@@ -342,7 +440,7 @@ class MissionCatalogTests(RunnerHarness):
                                 source_type="synthetic",
                             )
                         ],
-                        baseline_minutes=30,
+                        baseline_minutes=established or 30,
                     )
                 )
                 self.assertEqual(prepared.delegation["mode"], entry.mode)

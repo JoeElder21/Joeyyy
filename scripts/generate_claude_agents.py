@@ -9,11 +9,20 @@ Two properties matter more than convenience:
 
 1. **Connector isolation is enforced by the tool list, not by prose.** Every
    specialist declares ``connector_policy = "packet_only_no_direct_connectors"``,
-   so a generated specialist receives an empty tool list. It cannot reach Gmail,
-   Drive, Calendar, Todoist, the web, a shell, or even the repository filesystem,
-   because it has no tools at all — not because a sentence asks it not to. Agent
-   007 holds the connectors and supplies every permitted record inside a
-   PacketGuard-validated delegation packet.
+   so a generated specialist receives the narrowest grant the runtime will load
+   (``Read``) plus a ``disallowedTools`` denial covering the connector wildcard,
+   both writers, the shell, delegation, and the web. It cannot reach Gmail,
+   Drive, or Calendar because those tools are denied to it — not because a
+   sentence asks it not to. Agent 007 holds the connectors and supplies every
+   permitted record inside a PacketGuard-validated delegation packet.
+
+   Stated precisely, because an earlier version of this docstring claimed more
+   than the mechanism delivered: a specialist CAN still read the repository
+   filesystem, so the brain lock is not structurally enforced against a
+   determined filesystem read. That residual is checked at run time instead —
+   ``MissionRunner.complete()`` fails any return citing a source that was not in
+   the delegation packet. What is structurally enforced is the connector and
+   writer boundary, which is the boundary that matters for external action.
 
 2. **Drift is detectable.** Each generated file records the SHA-256 of the exact
    canonical inputs that produced it. ``tests/test_claude_agents.py``
@@ -95,7 +104,7 @@ SPECIALIST_DISALLOWED_TOOLS = [
 #
 # An earlier version listed only built-in tools. That silently broke the whole
 # architecture in the subagent path: the runbook says Agent 007 retrieves
-# evidence from Gmail, Drive, Calendar, and Todoist, but a subagent whose
+# evidence from Gmail, Drive, and Calendar, but a subagent whose
 # frontmatter omits those tools cannot reach them even when the parent session
 # is authorized. Every catalog mission would have had no evidence to package.
 #
@@ -312,7 +321,7 @@ result (`AGENTS.md` section 6).
 ## What only you may do
 
 1. **Hold the connectors.** Specialists have no connector tools by construction.
-   You retrieve evidence — Drive, Gmail, Calendar, Todoist, GitHub, web — and
+   You retrieve evidence — Drive, Gmail, Calendar, GitHub, web — and
    hand each specialist only the minimum task-relevant records inside a
    schema-valid delegation packet.
 2. **Cross the brains.** Build one valid APEX plan and one valid JEOS plan, then

@@ -86,9 +86,9 @@ note = "Awaiting Joe's measured or declared baseline."
 [[baseline]]
 mode = "delivery_control"
 agent = "apex_delivery_commander"
-baseline_minutes = 0
-source = "unset"
-note = "Awaiting Joe's measured or declared baseline for a delivery-status pass."
+baseline_minutes = 240
+source = "joe_declared"
+note = "Joe declared 2026-07-30, asked directly how long a full Citation Centre submittal-status pass takes him by hand: about half a day, from reading the folder through reconciling permit rows to writing the tracker. Set once here so it is not re-declared per mission."
 
 [[baseline]]
 mode = "pipeline_triage"

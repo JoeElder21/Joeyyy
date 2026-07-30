@@ -693,10 +693,40 @@ class PacketGuard:
             ):
                 errors.append("handoff sensitivity is lower than its delegation")
             allowed_evidence = delegation["allowed_evidence"]
+
+            # The echo attests WHICH delegated records were used and under what
+            # scope and sensitivity. It is not required to repeat `content`.
+            #
+            # Exact dict equality broke when evidence gained a `content` field:
+            # a specialist would have had to copy every delegated record's full
+            # body back into its return to be considered valid, doubling every
+            # packet and adding no security -- anything able to forge the echo
+            # could copy the content verbatim too. So `content` is compared only
+            # when the handoff chooses to include it, in which case it must
+            # match, which is what catches a tampered echo. Every other field
+            # (source_ref, owner_brain, source_type, scope_verified_by,
+            # sensitivity, as_of) must still match exactly.
+            def _attestation(record: dict[str, Any]) -> tuple:
+                return tuple(
+                    sorted(
+                        (key, value)
+                        for key, value in record.items()
+                        if key != "content"
+                    )
+                )
+
+            allowed_attestations = {
+                _attestation(record): record for record in allowed_evidence
+            }
             for item in packet["evidence"]:
-                if item not in allowed_evidence:
+                delegated = allowed_attestations.get(_attestation(item))
+                if delegated is None:
                     errors.append(
                         "handoff evidence does not exactly match delegated evidence"
+                    )
+                elif "content" in item and item["content"] != delegated.get("content"):
+                    errors.append(
+                        "handoff evidence content does not match the delegated record"
                     )
                 if item["owner_brain"] != packet["owner_brain"]:
                     errors.append("handoff evidence crosses the owner brain")

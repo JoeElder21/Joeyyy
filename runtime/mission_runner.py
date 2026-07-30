@@ -157,8 +157,25 @@ class MissionSpec:
     baseline_source: str
     mission_id: str | None = None
     resource_id: str | None = None
+    # Pin the run identity. `mission_id` and `resource_id` were already
+    # overridable while the delegation id was not, so re-preparing an unchanged
+    # mission minted a delegation the specialist's existing return no longer
+    # matched -- the work had to be thrown away and re-run to fix an
+    # orchestration bug that never touched the evidence. Setting this reproduces
+    # a byte-identical packet, which is the only case where reusing a return is
+    # honest: same evidence, same actions, same identity.
+    run_id: str | None = None
     sensitivity: str = "internal"
-    allowed_actions: list[str] = field(default_factory=lambda: ["analyze", "read_packet_evidence"])
+    # `challenge` is delegated by default, not as a convenience. The
+    # constitution requires a specialist to say where it disagrees with the
+    # material it was handed, and PacketGuard refuses a `challenges` field that
+    # the delegation did not authorize. Granting only analyze and
+    # read_packet_evidence therefore made the challenge duty unexerciseable:
+    # a specialist that obeyed the contract produced a packet that failed
+    # validation, and the way to pass was to stay silent.
+    allowed_actions: list[str] = field(
+        default_factory=lambda: ["analyze", "read_packet_evidence", "challenge"]
+    )
     deadline: str | None = None
     # Which artifact types the return must produce. Required, never inferred.
     #
@@ -357,7 +374,7 @@ class MissionRunner:
         spec.validated_against(meta)
 
         brain = meta["brain"]
-        run_id = uuid.uuid4().hex[:12]
+        run_id = spec.run_id or uuid.uuid4().hex[:12]
         mission_id = spec.mission_id or f"mission:{spec.agent}:{spec.mode}:{run_id}"
         resource_id = spec.resource_id or f"resource:{spec.agent}:{run_id}"
 
@@ -553,8 +570,27 @@ class MissionRunner:
         ):
             connector_isolation_verified = False
 
-        mission_sound = status == "completed" and not errors
-        if not mission_sound:
+        # Only an untrustworthy RETURN forces a rejection. A return that failed
+        # validation cannot be said to have been accepted, whatever the caller
+        # passed, so the quality terms are overridden fail-closed.
+        #
+        # Status is deliberately NOT part of this test. It used to be
+        # (`status == "completed" and not errors`), which meant a specialist
+        # that honestly reported `partial` -- because its evidence was stale, or
+        # because it could not verify current state -- had its work scored as
+        # output_rejected, and a rejected output carries full cost and zero
+        # benefit. Joe could read that output, accept it, act on it, and the
+        # meter would still record the run as a net loss. That penalised the
+        # honest self-report and paid a better score for overclaiming
+        # `completed`, which is precisely backwards for a system whose whole
+        # premise is refusing to assert what it cannot show.
+        #
+        # The promotion gate is unchanged and still demands a completed status:
+        # see MissionEvidence.qualifies_mode. A partial mission may be valuable
+        # to Joe and still not count toward promoting a mode to active. Those
+        # are two different questions and this is the one about value.
+        return_trustworthy = not errors
+        if not return_trustworthy:
             accepted_first_pass = False
             output_rejected = True
 

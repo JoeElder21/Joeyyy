@@ -233,6 +233,50 @@ class PacketContractTests(unittest.TestCase):
             delegations=[delegation],
         )
 
+    def test_evidence_echo_attests_identity_without_repeating_content(self):
+        """A specialist must not have to copy the whole packet back to be valid.
+
+        Evidence gained a `content` field so a toolless specialist could
+        actually read its evidence. Exact dict equality on the echo then meant
+        every return had to reproduce every delegated body verbatim, which
+        doubles the packet and secures nothing -- anything able to forge the
+        echo can copy content too. Identity fields must still match exactly,
+        and a content field that IS supplied must still be truthful.
+        """
+        delegation, handoff = self.v21_readonly_pair()
+        delegation = deepcopy(delegation)
+        handoff = deepcopy(handoff)
+        for record in delegation["allowed_evidence"]:
+            record["content"] = "the delegated body the specialist analyzed"
+
+        # Echo without content: valid.
+        self.assertValid(
+            "handoff_packet.schema.json", handoff, delegations=[delegation]
+        )
+
+        # Echo that repeats the content faithfully: also valid.
+        faithful = deepcopy(handoff)
+        for record in faithful["evidence"]:
+            record["content"] = "the delegated body the specialist analyzed"
+        self.assertValid(
+            "handoff_packet.schema.json", faithful, delegations=[delegation]
+        )
+
+        # Echo that rewrites the content: refused. This is the tamper case the
+        # exact-equality check existed for, and it must survive the relaxation.
+        tampered = deepcopy(handoff)
+        tampered["evidence"][0]["content"] = "a body the delegation never carried"
+        self.assertInvalid(
+            "handoff_packet.schema.json", tampered, delegations=[delegation]
+        )
+
+        # An identity field is still compared exactly.
+        relabelled = deepcopy(handoff)
+        relabelled["evidence"][0]["scope_verified_by"] = "someone_else"
+        self.assertInvalid(
+            "handoff_packet.schema.json", relabelled, delegations=[delegation]
+        )
+
     def test_candidate_lease_collides_with_ledgered_active_lease(self):
         candidate = deepcopy(self.lease)
         candidate["lease_id"] = "lease-2"
