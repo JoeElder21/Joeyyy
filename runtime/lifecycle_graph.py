@@ -13,10 +13,10 @@ Usage::
 
     graph = build_lifecycle_graph()
     config = {"configurable": {"thread_id": "apex_war_architect"}}
-    out = graph.invoke({"state": agent_state}, config)   # runs until gate/interrupt
+    out = graph.invoke({"state": agent_state}, config)  # runs until gate/interrupt
     # On an activation attempt the graph interrupts; after Joe approves:
     graph.update_state(config, {"joe_approved_activation": True})
-    out = graph.invoke(None, config)                     # resume
+    out = graph.invoke(None, config)  # resume
 """
 
 from __future__ import annotations
@@ -55,8 +55,7 @@ def _evaluate(graph_state: LifecycleGraphState) -> LifecycleGraphState:
 def _needs_joe(graph_state: LifecycleGraphState) -> str:
     result = graph_state["result"]
     pending_activation = (
-        result.to_stage is Stage.ACTIVE
-        and not graph_state["state"].joe_approved_activation
+        result.to_stage is Stage.ACTIVE and not graph_state["state"].joe_approved_activation
     )
     if pending_activation:
         return "await_joe"
@@ -72,9 +71,7 @@ def _await_joe(graph_state: LifecycleGraphState) -> LifecycleGraphState:
 def _apply(graph_state: LifecycleGraphState) -> LifecycleGraphState:
     apply(graph_state["result"], graph_state["state"])
     log = graph_state.get("log", [])
-    log.append(
-        f"{graph_state['state'].agent_id}: now {graph_state['state'].stage.value}"
-    )
+    log.append(f"{graph_state['state'].agent_id}: now {graph_state['state'].stage.value}")
     return {"log": log}
 
 

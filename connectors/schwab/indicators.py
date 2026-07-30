@@ -10,9 +10,10 @@ Candles are Schwab price-history dicts with ``open``/``high``/``low``/
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Any, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
 Candle = dict[str, Any]
 
@@ -58,14 +59,14 @@ def rsi(values: Sequence[float], window: int = 14) -> float | None:
         return None
     gains: list[float] = []
     losses: list[float] = []
-    for previous, current in zip(values, values[1:]):
+    for previous, current in zip(values, values[1:], strict=False):
         change = current - previous
         gains.append(max(change, 0.0))
         losses.append(max(-change, 0.0))
 
     avg_gain = sum(gains[:window]) / window
     avg_loss = sum(losses[:window]) / window
-    for gain, loss in zip(gains[window:], losses[window:]):
+    for gain, loss in zip(gains[window:], losses[window:], strict=False):
         avg_gain = (avg_gain * (window - 1) + gain) / window
         avg_loss = (avg_loss * (window - 1) + loss) / window
 
@@ -94,9 +95,7 @@ def macd(
         return None
     # The fast series starts earlier; align both to their common tail.
     overlap = min(len(fast_series), len(slow_series))
-    line_series = [
-        fast_series[-overlap:][i] - slow_series[-overlap:][i] for i in range(overlap)
-    ]
+    line_series = [fast_series[-overlap:][i] - slow_series[-overlap:][i] for i in range(overlap)]
     signal_series = ema_series(line_series, signal_window)
     if signal_series is None:
         return None
@@ -107,13 +106,11 @@ def macd(
 
 def true_ranges(candles: Sequence[Candle]) -> list[float]:
     ranges: list[float] = []
-    for previous, current in zip(candles, candles[1:]):
+    for previous, current in zip(candles, candles[1:], strict=False):
         high = float(current["high"])
         low = float(current["low"])
         prior_close = float(previous["close"])
-        ranges.append(
-            max(high - low, abs(high - prior_close), abs(low - prior_close))
-        )
+        ranges.append(max(high - low, abs(high - prior_close), abs(low - prior_close)))
     return ranges
 
 
@@ -131,7 +128,7 @@ def atr(candles: Sequence[Candle], window: int = 14) -> float | None:
 def daily_returns(values: Sequence[float]) -> list[float]:
     return [
         (current / previous) - 1.0
-        for previous, current in zip(values, values[1:])
+        for previous, current in zip(values, values[1:], strict=False)
         if previous
     ]
 

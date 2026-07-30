@@ -7,12 +7,12 @@ is absent so the stdlib CI environment stays green.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from scripts.agent_runtime import (
     CHIEF,
@@ -81,13 +81,15 @@ class AdmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = AuditLedger(Path(tmp) / "audit.jsonl")
             admit_delegation(
-                deepcopy(self.delegation), "apex_war_architect",
-                self.roster, self.guard, ledger,
+                deepcopy(self.delegation),
+                "apex_war_architect",
+                self.roster,
+                self.guard,
+                ledger,
             )
             self.assertEqual(ledger.verify(), [])
             entries = [
-                json.loads(line)
-                for line in ledger.path.read_text(encoding="utf-8").splitlines()
+                json.loads(line) for line in ledger.path.read_text(encoding="utf-8").splitlines()
             ]
             self.assertEqual(entries[-1]["event"], "handoff_admitted")
 
@@ -97,21 +99,20 @@ class AdmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = AuditLedger(Path(tmp) / "audit.jsonl")
             with self.assertRaises(HandoffRejected) as caught:
-                admit_delegation(
-                    legacy, "apex_war_architect", self.roster, self.guard, ledger
-                )
+                admit_delegation(legacy, "apex_war_architect", self.roster, self.guard, ledger)
             self.assertTrue(any("legacy" in item for item in caught.exception.errors))
             entries = [
-                json.loads(line)
-                for line in ledger.path.read_text(encoding="utf-8").splitlines()
+                json.loads(line) for line in ledger.path.read_text(encoding="utf-8").splitlines()
             ]
             self.assertEqual(entries[-1]["event"], "handoff_rejected")
 
     def test_misaddressed_packet_cannot_transfer(self):
         with self.assertRaises(HandoffRejected) as caught:
             admit_delegation(
-                deepcopy(self.delegation), "jeos_life_architect",
-                self.roster, self.guard,
+                deepcopy(self.delegation),
+                "jeos_life_architect",
+                self.roster,
+                self.guard,
             )
         self.assertTrue(
             any("not 'jeos_life_architect'" in item for item in caught.exception.errors)
@@ -121,7 +122,9 @@ class AdmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = AuditLedger(Path(tmp) / "audit.jsonl")
             clean = validate_specialist_return(
-                deepcopy(self.handoff_return), self.guard, ledger,
+                deepcopy(self.handoff_return),
+                self.guard,
+                ledger,
                 delegations=[self.delegation],
             )
             self.assertEqual(clean, [])
@@ -171,9 +174,7 @@ class GovernedGraphTests(unittest.TestCase):
         )
         payload = json.dumps({"packet_json": json.dumps(legacy)})
         with self.assertRaises(HandoffRejected):
-            asyncio.run(
-                governed.on_invoke_handoff(RunContextWrapper(context=None), payload)
-            )
+            asyncio.run(governed.on_invoke_handoff(RunContextWrapper(context=None), payload))
 
     def test_on_handoff_admits_valid_packet(self):
         import asyncio
@@ -185,9 +186,7 @@ class GovernedGraphTests(unittest.TestCase):
             item for item in self.chief.handoffs if item.agent_name == "apex_war_architect"
         )
         payload = json.dumps({"packet_json": json.dumps(delegation)})
-        result = asyncio.run(
-            governed.on_invoke_handoff(RunContextWrapper(context=None), payload)
-        )
+        result = asyncio.run(governed.on_invoke_handoff(RunContextWrapper(context=None), payload))
         self.assertEqual(result.name, "apex_war_architect")
 
 

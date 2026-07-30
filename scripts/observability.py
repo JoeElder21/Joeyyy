@@ -29,7 +29,7 @@ from scripts.packet_guard import PacketGuard
 ROOT = Path(__file__).resolve().parents[1]
 
 try:  # degrade cleanly when the runtime stack is not installed
-    from opentelemetry import trace
+    from opentelemetry import trace  # noqa: F401 - availability probe
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
@@ -117,9 +117,7 @@ if OTEL_AVAILABLE:
             )
             with self._span("delegation.admission", attributes) as record:
                 try:
-                    admit_delegation(
-                        packet, target, roster, guard, self.ledger, **kwargs
-                    )
+                    admit_delegation(packet, target, roster, guard, self.ledger, **kwargs)
                     record.set("outcome", "admitted")
                 except HandoffRejected as rejection:
                     record.set("outcome", "rejected")
@@ -138,9 +136,7 @@ if OTEL_AVAILABLE:
                 parent_id=handoff_packet.get("delegation_id"),
             )
             with self._span("specialist.return", attributes) as record:
-                errors = validate_specialist_return(
-                    handoff_packet, guard, self.ledger, **kwargs
-                )
+                errors = validate_specialist_return(handoff_packet, guard, self.ledger, **kwargs)
                 record.set("outcome", "valid" if not errors else "invalid")
                 return errors
 
@@ -174,10 +170,12 @@ if OTEL_AVAILABLE:
             else:
                 source = "memory"
                 for span in self.exporter.get_finished_spans():
-                    records.append({
-                        "operation": span.name,
-                        **{k: v for k, v in dict(span.attributes or {}).items()},
-                    })
+                    records.append(
+                        {
+                            "operation": span.name,
+                            **dict(span.attributes or {}),
+                        }
+                    )
 
             summary: dict[str, Any] = {
                 "source": source,
@@ -197,10 +195,12 @@ if OTEL_AVAILABLE:
                 brain = record.get("owner_brain", "unknown")
                 summary["by_brain"][brain] = summary["by_brain"].get(brain, 0) + 1
                 if outcome in ("rejected", "invalid"):
-                    summary["rejections"].append({
-                        "mission_id": record.get("mission_id"),
-                        "target": record.get("target") or record.get("agent"),
-                        "owner_brain": record.get("owner_brain"),
-                        "errors": record.get("errors"),
-                    })
+                    summary["rejections"].append(
+                        {
+                            "mission_id": record.get("mission_id"),
+                            "target": record.get("target") or record.get("agent"),
+                            "owner_brain": record.get("owner_brain"),
+                            "errors": record.get("errors"),
+                        }
+                    )
             return summary

@@ -5,10 +5,10 @@ to produce a favourable number is the failure mode AGENTS.md section 17 exists t
 prevent, so the refusal paths carry more coverage than the happy path.
 """
 
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from runtime.value_meter import (
     POLICY_PATH,
@@ -24,7 +24,7 @@ from runtime.value_meter import (
     evaluate_mode,
 )
 
-NOW = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
 
 
 def payload(**overrides):
@@ -117,15 +117,23 @@ class ArithmeticTests(unittest.TestCase):
         # 6 minutes of agent time but 30 minutes of Joe's review: 24/60 = 40%...
         obs = build_observation(
             self.policy,
-            payload(agent_minutes=6, review_minutes=30, correction_minutes=0,
-                    maintenance_share_minutes=0),
+            payload(
+                agent_minutes=6,
+                review_minutes=30,
+                correction_minutes=0,
+                maintenance_share_minutes=0,
+            ),
         )
         self.assertAlmostEqual(obs.ratio(self.policy), 24.0 / 60.0)
         # ...and with a little correction burden it drops under the binding 35%.
         worse = build_observation(
             self.policy,
-            payload(agent_minutes=6, review_minutes=30, correction_minutes=6,
-                    maintenance_share_minutes=0),
+            payload(
+                agent_minutes=6,
+                review_minutes=30,
+                correction_minutes=6,
+                maintenance_share_minutes=0,
+            ),
         )
         self.assertLess(worse.ratio(self.policy), 0.35)
 
@@ -148,9 +156,7 @@ class VerdictTests(unittest.TestCase):
         ]
 
     def test_one_good_run_never_proves_value(self):
-        verdict = evaluate_mode(
-            "delivery_control", self.observations(1), self.policy, now=NOW
-        )
+        verdict = evaluate_mode("delivery_control", self.observations(1), self.policy, now=NOW)
         self.assertEqual(verdict.verdict, VERDICT_INSUFFICIENT)
         self.assertFalse(verdict.value_proven)
 
@@ -259,9 +265,8 @@ class MeasurementIntegrityTests(unittest.TestCase):
     def test_nan_cost_is_refused(self):
         """NaN passes `< 0` and then fails every threshold comparison, landing on 'meets'."""
         for term in self.policy.required_cost_terms:
-            with self.subTest(term=term):
-                with self.assertRaises(ObservationRejected):
-                    build_observation(self.policy, payload(**{term: float("nan")}))
+            with self.subTest(term=term), self.assertRaises(ObservationRejected):
+                build_observation(self.policy, payload(**{term: float("nan")}))
 
     def test_infinite_cost_is_refused(self):
         with self.assertRaises(ObservationRejected):
@@ -334,17 +339,12 @@ class IncidentClearanceTests(unittest.TestCase):
         self.policy = ValuePolicy.load()
 
     def _good(self, count):
-        return [
-            build_observation(self.policy, payload(mission_id=f"M-{i}"))
-            for i in range(count)
-        ]
+        return [build_observation(self.policy, payload(mission_id=f"M-{i}")) for i in range(count)]
 
     def test_an_unresolved_incident_blocks(self):
         obs = self._good(self.policy.min_observations)
         obs.append(
-            build_observation(
-                self.policy, payload(mission_id="M-BAD", boundary_incident=True)
-            )
+            build_observation(self.policy, payload(mission_id="M-BAD", boundary_incident=True))
         )
         verdict = evaluate_mode("delivery_control", obs, self.policy, now=NOW)
         self.assertEqual(verdict.verdict, VERDICT_BLOCKED)
@@ -352,9 +352,7 @@ class IncidentClearanceTests(unittest.TestCase):
     def test_an_appended_clearance_record_resolves_it(self):
         obs = self._good(self.policy.min_observations)
         obs.append(
-            build_observation(
-                self.policy, payload(mission_id="M-BAD", boundary_incident=True)
-            )
+            build_observation(self.policy, payload(mission_id="M-BAD", boundary_incident=True))
         )
         obs.append(
             build_observation(
@@ -372,9 +370,7 @@ class IncidentClearanceTests(unittest.TestCase):
     def test_a_clearance_without_an_approver_does_not_count(self):
         obs = self._good(self.policy.min_observations)
         obs.append(
-            build_observation(
-                self.policy, payload(mission_id="M-BAD", boundary_incident=True)
-            )
+            build_observation(self.policy, payload(mission_id="M-BAD", boundary_incident=True))
         )
         obs.append(
             build_observation(
@@ -439,9 +435,7 @@ class ContradictoryFlagTests(unittest.TestCase):
         """Otherwise rejected runs still raise the acceptance rate."""
         policy = ValuePolicy.load()
         with self.assertRaises(ObservationRejected):
-            build_observation(
-                policy, payload(output_rejected=True, accepted_first_pass=True)
-            )
+            build_observation(policy, payload(output_rejected=True, accepted_first_pass=True))
 
     def test_a_malformed_numeric_cost_is_an_observation_rejection(self):
         """MissionRunner catches ObservationRejected only; a raw ValueError

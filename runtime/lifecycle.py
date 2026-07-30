@@ -28,10 +28,12 @@ human-in-the-loop checkpoint from the integration build-out plan.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class Stage(str, Enum):
+# StrEnum rather than (str, Enum): every call site stringifies through .value
+# explicitly, so this changes no observable output, and 3.11 is the floor anyway.
+class Stage(StrEnum):
     CANDIDATE = "candidate"
     SHADOW = "shadow"
     ACTIVE = "active"
@@ -173,9 +175,7 @@ def evaluate_promotion(state: AgentLifecycleState) -> TransitionResult:
     return TransitionResult(state.agent_id, state.stage, target, not failures, failures)
 
 
-def evaluate_administrative(
-    state: AgentLifecycleState, target: Stage
-) -> TransitionResult:
+def evaluate_administrative(state: AgentLifecycleState, target: Stage) -> TransitionResult:
     """Restrict, deprecate, or retire an agent. Requires a recorded reason.
 
     Retired is terminal: nothing transitions out of it, ever.

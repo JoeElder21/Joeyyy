@@ -8,24 +8,260 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    name: Contracts and tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install the official AutoGen 0.2 runtime
-        run: python -m pip install -r requirements.txt
+        # From the LOCK, not the floating manifest. The security workflow scans
+        # requirements/lock-runtime-*.txt and calls them "the resolved forms of
+        # the sets CI installs" -- but CI installed the ranged manifests, so pip
+        # was free to select a version the scan had never seen. A clean scan of
+        # a lock that nothing installs proves nothing about what ran.
+        #
+        # One lock serves both matrix legs: the resolved sets for 3.11 and 3.12
+        # were compared and are identical, so a version-specific lock would be
+        # two files that must agree rather than one that already does. If they
+        # ever diverge, the drift check below fails and says so.
+        run: python -m pip install -r requirements/lock-runtime-root.txt
+      - name: Install the validators the runtime check depends on
+        # `verify_runtime_stack.enforce_schemas()` returns ([], []) when
+        # jsonschema is absent -- a silent no-op indistinguishable from "every
+        # schema compiled cleanly". requirements.txt supplies pydantic but not
+        # jsonschema or rtoml, so in CI the JSON Schema and TOML enforcement
+        # never ran and an invalid schema could merge with the step green.
+        #
+        # Same configured-vs-executed failure as the MCP mount job two rounds
+        # earlier: the step ran, printed a report, and proved nothing.
+        run: python -m pip install -r requirements/lock-runtime-contracts.txt
       - name: Validate Agent 007 and specialist contracts
         run: |
           python scripts/privacy_guard.py
           python scripts/validate_specialist_corps.py
           python -m unittest discover -s tests -v
+      - name: Verify the runtime stack
+        run: python scripts/verify_runtime_stack.py
+
+  mounts:
+    name: MCP mounts (launched, not assumed)
+    runs-on: ubuntu-latest
+    # Its own job rather than a step in the matrix above, for two reasons: it
+    # needs a dependency set the contract suite deliberately does not, and
+    # probing the filesystem mount fetches an npm package -- so a registry
+    # outage should name itself here rather than failing "Contracts and tests"
+    # twice over on both Python versions.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install the MCP contract runtime
+        # Without the `mcp` package, verify_mcp_mounts.py reported every
+        # offline-verifiable mount as "unverified (mcp package not installed)"
+        # and still exited 0 -- so the CI step launched nothing, listed no
+        # tools, and went green regardless of whether the governance and
+        # filesystem servers worked at all. A verifier that cannot verify has to
+        # be given what it needs or made to fail, not left reporting success.
+        run: python -m pip install -r requirements/lock-runtime-contracts.txt
+      - name: Launch each offline-verifiable mount and list its tools
+        # --strict: with the dependency installed above, "unverified" can only
+        # mean the probe did not happen, and that is a failure rather than a
+        # note in a report nobody reads.
+        run: python scripts/verify_mcp_mounts.py --strict
+
+  locks:
+    name: Locks match their manifests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        # From PyPI rather than a marketplace action: adding one would mean
+        # pinning a third-party action to a commit SHA, and the SHA has to be
+        # looked up rather than assumed. `pip install uv` needs no new pin.
+        #
+        # Pinned to the version that generated the committed locks, so the
+        # drift check compares like with like -- a resolver upgrade changing the
+        # resolution is a real signal, but it should arrive as a deliberate bump
+        # rather than as a mystery failure on an unrelated PR.
+        run: python -m pip install uv==0.8.17
+      - name: Re-resolve each manifest and compare against its committed lock
+        # Installing from the locks is only half the property. The other half is
+        # that the lock still represents its manifest: a dependency release can
+        # make `requirements.txt` resolve to something the lock does not carry,
+        # and then CI installs a stale set that the scan reports as clean
+        # forever. This step fails when the two disagree, on BOTH matrix legs --
+        # which is also what proves the single shared lock stays valid for 3.11
+        # and 3.12 rather than being assumed to.
+        run: |
+          set -euo pipefail
+          status=0
+          check() {
+            # Seed the output with THIS pair's committed lock rather than
+            # deleting it. uv reads a pre-existing output file and keeps pins
+            # that still satisfy the manifest, so seeding answers the question
+            # the gate is actually for -- "does the lock still satisfy its
+            # manifest?" -- instead of "is the lock identical to whatever PyPI
+            # published most recently?"
+            #
+            # Deleting it asked the second question, and that put this gate in
+            # permanent conflict with the cooldown in .github/dependabot.yml:
+            # every upstream release inside the 7-day window turned it red, so
+            # the only way to green was to adopt versions published hours ago --
+            # exactly what the cooldown exists to prevent. A gate that is red
+            # most of the week teaches people to ignore it.
+            #
+            # Seeding does not weaken it. Verified against uv 0.8.17 before the
+            # change: a manifest that gains a package still diffs, and a
+            # manifest that tightens past the pin still moves the pin and diffs.
+            # Only a pin that continues to satisfy its manifest is left alone.
+            # Copying per pair also keeps the previous pair's resolution out of
+            # this one, which is what the removal was guarding against.
+            cp "$2" /tmp/resolved.txt
+            # Explicit failure handling, because the seed is now a valid lock:
+            # if the compile failed and left the seed untouched, the comparison
+            # below would diff clean and report a green that proved nothing.
+            if ! uv pip compile "$1" -o /tmp/resolved.txt \
+              --python-version "${{ matrix.python-version }}" --no-header -q; then
+              echo "::error file=$1::resolving $1 failed; the comparison below would pass on the unmodified seed"
+              status=1
+              return
+            fi
+            resolved=$(grep -vc '^#\|^$' /tmp/resolved.txt || true)
+            committed=$(grep -vc '^#\|^$' "$2" || true)
+            # Say what was compared and how big it was. Passing silently in
+            # under a second is indistinguishable from not running -- which is
+            # exactly the doubt three other gates in this change set earned, and
+            # a green check nobody can audit is the shape this repository keeps
+            # having to re-learn. The counts make the work visible in the log.
+            echo "$1 -> $2: resolved $resolved packages, lock carries $committed"
+            if [ "$resolved" -eq 0 ]; then
+              echo "::error file=$1::resolving $1 produced nothing; the comparison below would pass vacuously"
+              status=1
+              return
+            fi
+            if ! diff -u \
+              <(grep -v '^#\|^$' "$2") \
+              <(grep -v '^#\|^$' /tmp/resolved.txt); then
+              echo "::error file=$2::$2 no longer matches $1 on Python ${{ matrix.python-version }}"
+              status=1
+            fi
+          }
+          # Every manifest/lock pair the security workflow scans. The first
+          # version listed two of the three and omitted
+          # runtime-evaluation.txt, so the documented evaluation install could
+          # drift from the lock osv-scanner audits and nothing would say so --
+          # the same partial fix this record keeps re-learning to avoid.
+          #
+          # Driven from a list, and cross-checked below against what the
+          # security workflow actually scans, so adding a fourth lock there
+          # without adding it here fails rather than passing quietly.
+          check requirements.txt requirements/lock-runtime-root.txt
+          check requirements/runtime-contracts.txt requirements/lock-runtime-contracts.txt
+          check requirements/runtime-evaluation.txt requirements/lock-runtime-evaluation.txt
+          exit "$status"
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        # Pinned to the same version the pre-commit hook uses. Installing
+        # whatever is latest meant an unchanged commit could start failing on a
+        # ruff release, and that a contributor's local gate and CI could
+        # disagree about the same file. Bump both together or not at all.
+        run: python -m pip install ruff==0.14.6
+      - name: Lint agent-generated Python
+        run: ruff check --output-format=github .
+      - name: Check formatting
+        run: ruff format --check --diff .
+
+  connectors:
+    name: APS connector harness (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: connectors/aps/package-lock.json
+      - name: Install pinned connector dependencies
+        working-directory: connectors/aps
+        run: npm ci --ignore-scripts
+      - name: Syntax-check and import-resolve the validation-gate harness
+        working-directory: connectors/aps
+        # `node --check` parses without executing, so it never resolves an
+        # import. The APS SDKs are dynamically imported only after the
+        # credential check, which means an incompatible SDK update left CI green
+        # and failed first on the credentialed workstation gate.
+        #
+        # Importing each declared dependency here resolves its exports on a
+        # credential-free path, so a breaking upstream change fails in CI where
+        # it is cheap to see.
+        run: |
+          set -euo pipefail
+          node --check src/gate.mjs
+          # The exact symbols src/gate.mjs constructs, not merely "the module
+          # has some exports". An SDK release can rename or drop one of these
+          # while keeping the namespace nonempty, which left this job green and
+          # failed first on the credentialed workstation gate -- the same
+          # false-confidence this step was added to remove, one level in.
+          node --input-type=module -e "
+            // Verified against src/gate.mjs by grep, not assumed:
+            // '@aps_sdk/autodesk-sdkmanager' is a declared dependency the gate
+            // never destructures, so it is resolved but no symbol is asserted.
+            // Requiring one would invent a contract the harness does not have.
+            const required = {
+              '@aps_sdk/authentication': ['Scopes', 'AuthenticationClient'],
+              '@aps_sdk/autodesk-sdkmanager': [],
+              '@aps_sdk/data-management': ['DataManagementClient'],
+              '@aps_sdk/model-derivative': ['ModelDerivativeClient'],
+              '@aps_sdk/oss': ['OssClient'],
+            };
+            for (const [name, symbols] of Object.entries(required)) {
+              const mod = await import(name);
+              const missing = symbols.filter((s) => mod[s] === undefined);
+              if (missing.length) {
+                throw new Error(\`\${name} is missing: \${missing.join(', ')}\`);
+              }
+              console.log(\`ok \${name} -> \${symbols.join(', ')}\`);
+            }
+          "

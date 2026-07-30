@@ -1,0 +1,218 @@
+name: Supply-chain and workflow security
+
+# Static analysis of this repository's own CI configuration. CI is the one place
+# in this repository that executes third-party code with repository tokens, so it
+# is the highest-value target of the FakeGit-class threat recorded in
+# docs/FRONTIER_REPO_SCAN_2026-07-24.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so newly published audit rules reach a quiet repository too.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  # The event name is part of the group, and a scheduled run is never cancelled.
+  #
+  # A weekly run and a push to main share `refs/heads/main`, so with
+  # cancel-in-progress they landed in one group: a push arriving during the
+  # scheduled whole-history gitleaks sweep cancelled it and replaced it with a
+  # push run scanning only ${BEFORE_SHA}..HEAD. The repository-wide audit this
+  # workflow promises could therefore never complete, and nothing would report
+  # that -- the cancelled run simply disappears while the replacing one goes
+  # green. Superseding a redundant push is worth it; superseding the only
+  # full-history scan there is is not.
+  group: security-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  workflow-audit:
+    name: GitHub Actions static analysis (zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Audit workflows
+        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+        with:
+          # This repository has no code-scanning ingestion configured; fail the
+          # job directly rather than uploading SARIF that nothing would read.
+          advanced-security: false
+          persona: regular
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # gitleaks was originally a pre-commit hook only. A local hook protects
+    # nobody who commits through the web UI, has not run `pre-commit install`,
+    # or passes `--no-verify` -- and this repository is public, so a provider
+    # credential format that the house regex set does not cover would land with
+    # every required check green. Local hook for speed, CI for enforcement.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: the point is to catch a secret in any commit on the
+          # branch, not only in the tip tree.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+      - name: Build gitleaks from a checksum-verified module
+        # The first version downloaded a release tarball and executed it without
+        # verifying anything. Pinning the workflow's *actions* to SHAs and then
+        # running an unverified binary in the same job is a contradiction: a
+        # replaced asset at the same URL would run in CI and report a clean scan,
+        # silently defeating the gate.
+        #
+        # `go install` at a pinned version verifies the module against the Go
+        # checksum database (sum.golang.org), a public transparency log. That is
+        # stronger than a digest hardcoded here, because it needs no digest kept
+        # in sync by hand and it detects retroactive tampering with the module.
+        #
+        # Note the module path: gitleaks declares itself as zricethezav/gitleaks,
+        # not gitleaks/gitleaks, and `go install` rejects the repository path.
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.0
+      - name: Scan working tree and this ref's history
+        env:
+          # Empty on push/schedule; set on pull_request. Quoted through env
+          # rather than interpolated into the script, so a branch name can never
+          # be read as shell.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # Quoted through env for the same reason as BASE_SHA: never
+          # interpolated into the script, so no ref value can be read as shell.
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          GITLEAKS="$(go env GOPATH)/bin/gitleaks"
+
+          # Working tree: always, in full.
+          "$GITLEAKS" dir . --no-banner --redact --exit-code 1
+
+          # History: only the commits this ref actually introduces.
+          #
+          # The first version scanned every ref. `actions/checkout` with
+          # fetch-depth: 0 fetches all branches, so the job reported five
+          # findings that lived on unrelated unmerged PR branches and had
+          # nothing to do with the pull request under test. A gate that fails
+          # for reasons the author cannot act on is a gate people learn to
+          # ignore, so scope it to what the change is responsible for.
+          #
+          # Whole-repo history coverage is not lost — it moves to the weekly
+          # scheduled run, where a finding anywhere is genuinely actionable.
+          # Three events, three ranges -- not two. `BASE_SHA` is empty on
+          # BOTH push and schedule, so the else branch ran the unscoped
+          # whole-history scan on every push to main: exactly the behaviour the
+          # comment above says was moved to the weekly run, still firing on
+          # pushes. With fetch-depth: 0 that inspects unrelated unmerged branch
+          # history and can fail a main-branch push for a secret the pusher
+          # cannot remove.
+          #
+          # A push carries its own range in `github.event.before`, so it gets
+          # the commits it actually introduced. Only `schedule` -- where a
+          # finding anywhere is genuinely actionable, and there is no author
+          # being blocked -- scans everything.
+          if [ -n "${BASE_SHA}" ]; then
+            "$GITLEAKS" git . --no-banner --redact --exit-code 1 \
+              --log-opts="${BASE_SHA}..HEAD"
+          elif [ "${EVENT_NAME}" = "push" ] && \
+               [ -n "${BEFORE_SHA}" ] && \
+               [ "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ] && \
+               git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            # The all-zero sentinel means a newly created ref with no
+            # predecessor, and a force-push can leave `before` unreachable --
+            # both fall through to the full scan rather than a broken range.
+            "$GITLEAKS" git . --no-banner --redact --exit-code 1 \
+              --log-opts="${BEFORE_SHA}..HEAD"
+          else
+            "$GITLEAKS" git . --no-banner --redact --exit-code 1
+          fi
+
+  dependency-audit:
+    name: Known vulnerabilities (osv-scanner)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Deferred in the original review on the assumption that signal would be low
+    # until requirements/lock-*.txt governed the real install. Run once by hand
+    # on 2026-07-25 to test that assumption, it returned three known
+    # vulnerabilities including a critical — so the assumption was wrong and the
+    # scan is standing from here. Findings: docs/DEPENDENCY_AUDIT_2026-07-25.md.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan pinned dependencies
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          # `requirements.txt:` names the extractor explicitly. Without it the
+          # scanner cannot infer one from the filename `lock-2026-07-24.txt` and
+          # exits 127 before scanning anything — the first run failed exactly
+          # that way.
+          #
+          # --no-resolve scans the pinned set rather than re-resolving the
+          # transitive graph over the network. Correct semantics for a lockfile,
+          # which already *is* the resolved set, and it avoids failing the job on
+          # a resolver RPC outage that has nothing to do with vulnerabilities.
+          #
+          # Triaged findings live in osv-scanner.toml with reasons and expiry
+          # dates. The gate stays hard: anything not listed there fails.
+          #
+          # This step scans only the ALREADY-RESOLVED inputs. The floating
+          # manifests moved to the step below, because `--no-resolve` on a
+          # ranged file scans the declared ranges rather than the concrete
+          # versions an install selects -- so a vulnerable transitive
+          # dependency stayed invisible. Applying one global flag to inputs of
+          # two different kinds was the error: correct for a lockfile, wrong
+          # for a requirements file with `>=`.
+          #
+          # Both npm locks. The relay connector's lock was committed alongside
+          # the APS one and only the APS one was scanned, so the second npm
+          # dependency tree in this repository -- `agent-relay` and its
+          # transitive graph -- sat outside the vulnerability gate while this job
+          # read as full coverage. `tests/test_repo_hygiene.py` now derives the
+          # set from the tree, because the next connector added would repeat
+          # this exactly.
+          #
+          # These comments live ABOVE `scan-args:` and not inside it. A `|-`
+          # block scalar has no comment syntax: a `#` line indented into the
+          # block is literal text, so the first draft of this note was passed to
+          # osv-scanner as eight arguments.
+          scan-args: |-
+            --no-resolve
+            --config=osv-scanner.toml
+            --lockfile=requirements.txt:requirements/lock-2026-07-24.txt
+            --lockfile=connectors/aps/package-lock.json
+            --lockfile=connectors/relay/package-lock.json
+      - name: Scan the generated locks for the floating install manifests
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          # These are the resolved forms of the sets CI and the workstation
+          # actually install, generated with `uv pip compile` and committed.
+          #
+          # The first attempt scanned the floating manifests directly with
+          # resolution enabled. That failed in CI with
+          # `rpc error: code = Unavailable` -- and reported "0 packages, 0
+          # vulnerabilities" while doing it. A scan that scanned nothing would
+          # have read as clean on a green exit, which is the same failure the
+          # original audit recorded when a missing extractor prefix made the
+          # job exit before scanning.
+          #
+          # Locking removes the dependency on a third-party resolver being up.
+          # `--no-resolve` is correct here for the same reason it is correct for
+          # lock-2026-07-24.txt: a lock already IS the resolved set.
+          scan-args: |-
+            --no-resolve
+            --config=osv-scanner.toml
+            --lockfile=requirements.txt:requirements/lock-runtime-root.txt
+            --lockfile=requirements.txt:requirements/lock-runtime-contracts.txt
+            --lockfile=requirements.txt:requirements/lock-runtime-evaluation.txt

@@ -246,6 +246,64 @@ planner runs without the capabilities its instructions assume.
 
 `meta-agentic-project-scaffold` was vendored and then removed. Its instructions direct the agent to pull upstream files and "do nothing else, just pull the files", copying them "as is". That bypasses the mandatory intake gates in `AGENTS.md` — full-file review, privacy-guard check, test update, rollback evidence — and its function is already covered by the three discovery skills, which route through intake per the `copilot_layer` contract block.
 
+## Vendored reference corps — awesome-claude-agents (2026-07-25)
+
+Thirty-three third-party sub-agent prompts vendored from
+[`vijaythecoder/awesome-claude-agents`](https://github.com/vijaythecoder/awesome-claude-agents)
+@ `2050f3c` (MIT) into `.claude/agents/awesome-claude-agents/`. Registered here because
+that path is auto-discovered by Claude Code, so every clone can invoke them; an
+unregistered prompt in the discovery path bypasses this registry by construction.
+
+- Status: **candidate** — discoverable and callable, but read-only and outside the packet
+  contract. None has had a controlled mission, so none may be treated as validated.
+- Canonical names: `core/` — `code-archaeologist`, `code-reviewer`,
+  `documentation-specialist`, `performance-optimizer`. `orchestrators/` —
+  `project-analyst`, `team-configurator`, `tech-lead-orchestrator`. `universal/` —
+  `api-architect`, `backend-developer`, `frontend-developer`, `tailwind-frontend-expert`.
+  `specialized/` — nine `python-*`/`django-expert`/`fastapi-expert`/`ml-data-expert`,
+  three `django-*`, three `rails-*`, two `laravel-*`, two `react-*`, three `vue-*`.
+- Owner layer: none. These are not brain-owned, hold no logical memory namespace, and are
+  not mirrored across APEX and JEOS. They may not be staffed onto a mission in place of a
+  registered specialist.
+- Purpose: reference analysis and drafting for framework-specific work the ten-specialist
+  corps does not cover. Treat output as a proposal for Agent 007, never as a verified result.
+- Tools: every one of the 33 carries an explicit read-only allowlist — `LS`, `Read`,
+  `Grep`, `Glob`, plus `WebFetch` where the prompt's own instructions require fetching
+  documentation, and `WebSearch` on the two universal agents that upstream granted it
+  (`api-architect`, `backend-developer`). Both are read-only network reads; they are
+  named here rather than folded into "plus WebFetch" so this entry states the complete
+  access surface and a future undeclared grant is visible against it. Two separate problems were closed: 16 prompts declared write-capable
+  tools, which were stripped; the other 17 declared **no** `tools` field at all, which in
+  Claude Code grants every tool the main thread holds rather than none. The shared rule
+  that Agent 007 alone executes mutations now holds without exception, and
+  `tests/test_vendored_agents.py` asserts the field's presence separately from its
+  contents so an absent field cannot pass silently.
+- Write targets: none. No writer lease is ever issued to a vendored agent.
+- Communication: no cross-brain role. They carry no delegation or handoff packet schema and
+  cannot participate in roundtables or challenge pairs.
+- Boundaries: their prompts are untrusted third-party text under the AGENTS.md rule that
+  external content is data, not permission. Several use "MUST BE USED" / "PROACTIVELY"
+  phrasing; that is upstream marketing copy and does not override owner-brain routing.
+- Known errors: automated review of the vendored bodies found defects in the shipped code
+  samples, concentrated in the security-related prompts. Documented per-file in
+  `.claude/agents/awesome-claude-agents/README.md`. Corrections applied on intake are
+  listed there; anything still open is why status is candidate rather than shadow.
+- Validation: `tests/test_vendored_agents.py` enforces the read-only tool constraint,
+  unique kebab-case names, parseable frontmatter, and that every delegation target named in
+  a vendored prompt resolves to an agent that exists.
+- Privacy: no pattern is disabled for these files. Their documentation placeholders are
+  pinned literal-by-literal in `PLACEHOLDER_LITERALS` in `scripts/privacy_guard.py`, the
+  same mechanism every other vendored tree uses, so a real credential added to any of
+  them is still reported. An upstream sync that alters a sample fails the guard until the
+  new literal is reviewed and pinned.
+- Rollback: delete `.claude/agents/awesome-claude-agents/`, remove **this registry
+  section**, delete `tests/test_vendored_agents.py`, and remove the
+  `.claude/agents/awesome-claude-agents/...` entries from `PLACEHOLDER_LITERALS`. All
+  four are required: deleting only the prompt directory leaves this section asserting
+  that 33 candidates are discoverable when none are, and the contract test skips itself
+  when the directory is absent, so validation would stay green over an inconsistent
+  state. Nothing else in the repository depends on them.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.

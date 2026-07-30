@@ -14,10 +14,10 @@ from pathlib import Path
 
 import ezdxf
 
-PARCEL_W = 300.0   # ft
-PARCEL_H = 200.0   # ft
-PAD_W = 80.0       # ft
-PAD_H = 50.0       # ft
+PARCEL_W = 300.0  # ft
+PARCEL_H = 200.0  # ft
+PAD_W = 80.0  # ft
+PAD_H = 50.0  # ft
 PAD_OFFSET = (60.0, 60.0)
 EASEMENT_SETBACK = 25.0  # ft from parcel edge
 
@@ -43,13 +43,20 @@ def gen_dxf() -> ezdxf.document.Drawing:
     pad = [(px, py), (px + PAD_W, py), (px + PAD_W, py + PAD_H), (px, py + PAD_H)]
     msp.add_lwpolyline(pad, close=True, dxfattribs={"layer": "V-BLDG-PAD"})
 
-    msp.add_line((EASEMENT_SETBACK, 0), (EASEMENT_SETBACK, PARCEL_H),
-                 dxfattribs={"layer": "V-EASEMENT"})
-    msp.add_line((0, PARCEL_H - EASEMENT_SETBACK), (PARCEL_W, PARCEL_H - EASEMENT_SETBACK),
-                 dxfattribs={"layer": "V-EASEMENT"})
+    msp.add_line(
+        (EASEMENT_SETBACK, 0), (EASEMENT_SETBACK, PARCEL_H), dxfattribs={"layer": "V-EASEMENT"}
+    )
+    msp.add_line(
+        (0, PARCEL_H - EASEMENT_SETBACK),
+        (PARCEL_W, PARCEL_H - EASEMENT_SETBACK),
+        dxfattribs={"layer": "V-EASEMENT"},
+    )
 
-    msp.add_text("APS VALIDATION GATE TEST MODEL — SYNTHETIC, NO PROJECT DATA",
-                 height=8, dxfattribs={"layer": "V-ANNO"}).set_placement((10, PARCEL_H + 15))
+    msp.add_text(
+        "APS VALIDATION GATE TEST MODEL — SYNTHETIC, NO PROJECT DATA",
+        height=8,
+        dxfattribs={"layer": "V-ANNO"},
+    ).set_placement((10, PARCEL_H + 15))
     return doc
 
 
