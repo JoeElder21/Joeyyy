@@ -174,10 +174,6 @@ class BrainSeparationTests(unittest.TestCase):
             module.tomllib.loads = original
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class FrontmatterParsesAsYamlTests(unittest.TestCase):
     """Every shipped projection must load in a strict YAML parser."""
 
@@ -193,3 +189,12 @@ class FrontmatterParsesAsYamlTests(unittest.TestCase):
         """`Agent 007: Joe ...` is the exact string that broke the first version."""
         chief = build()[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
         self.assertIn("Agent 007:", frontmatter(chief)["description"])
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_claude_agents` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

@@ -245,10 +245,6 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(report["value_proven_modes"], [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class MeasurementIntegrityTests(unittest.TestCase):
     """Ways a value verdict could be manufactured without doing the work."""
 
@@ -450,3 +446,12 @@ class LedgerStructuralIntegrityTests(unittest.TestCase):
             self.assertTrue(errors)
             report = ledger.report(policy, now=NOW)
             self.assertFalse(report["ledger_trustworthy"])
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_value_meter` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

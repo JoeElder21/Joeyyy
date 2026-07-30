@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -46,10 +47,15 @@ class RuntimeStackTests(unittest.TestCase):
         for tier, packages in verify_runtime_stack.RUNTIME_STACK.items():
             requirements = ROOT / "requirements" / f"runtime-{tier}.txt"
             self.assertTrue(requirements.exists(), f"missing {requirements}")
+            # Split on every PEP 508 separator, not just `==` and `>=`. Each
+            # manifest entry was bare until `mcp<2` was added, so an entry
+            # carrying any other specifier read as a package literally named
+            # "mcp<2" and the tier it covers looked undeclared. The comparison
+            # is about which distribution is listed, never its version range.
             declared = {
-                line.split("==")[0].split(">=")[0].strip().lower()
+                re.split(r"[<>=!~;\[]", line.split("#", 1)[0], maxsplit=1)[0].strip().lower()
                 for line in requirements.read_text(encoding="utf-8").splitlines()
-                if line.strip() and not line.startswith("#")
+                if line.split("#", 1)[0].strip()
             }
             for _module, dist in packages:
                 self.assertIn(dist.lower(), declared, f"{dist} not declared for tier {tier}")

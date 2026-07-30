@@ -1464,10 +1464,6 @@ class ScriptsTrustedLauncherTests(unittest.TestCase):
                 )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class LedgerDurabilityTests(unittest.TestCase):
     """A torn ledger write bricks every future launch, so the write must be atomic."""
 
@@ -1565,3 +1561,12 @@ class LauncherFailClosedTests(unittest.TestCase):
         self.assertTrue(resolved[0].startswith("/"))
         with self.assertRaises(GrantDeniedError):
             TrustedLauncher._resolved_command(("definitely-not-a-real-binary-xyz",))
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_trusted_launcher` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

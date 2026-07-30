@@ -4,5 +4,12 @@
 pydantic
 jsonschema
 rtoml
-mcp
+# Held below 2.0: `scripts/governance_mcp_server.py` builds its server from
+# `mcp.server.fastmcp`, and 2.0.0 removes that module outright --
+# `ImportError: No module named 'mcp.server.fastmcp'`. The manifest carried a
+# bare `mcp`, so re-resolving the lock crossed the major boundary on its own and
+# the mounts job failed with a bare `NameError: name 'build_server' is not
+# defined`. A range is the honest statement of what this code supports; lifting
+# it is a port of the server, not a version bump.
+mcp<2
 anthropic
