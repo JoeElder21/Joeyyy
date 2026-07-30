@@ -97,7 +97,14 @@ Ordered by how much each unblocks. Decisions 2, 3, 4, and 6 only become concrete
 4. **Does cadence run on a schedule, and where?** Cron specs exist; no deployment does. *Recommendation: defer Prefect; a scheduled invocation of the host from decision 1 achieves the same outcome with far less infrastructure.*
 5. **Implement the nominal integrations, or strike them?** mem0, dspy, guardrails-ai, and Phoenix are named but uncalled. *Recommendation: strike them from the README and requirements tiers.*
 6. **Do writer leases become durable?** *Recommendation: persist to SQLite or a lockfile, converting the single-writer guarantee from aspiration to fact.*
-7. **Who fixes the standing base-branch failures?** Current `main` is red on four independent checks — the lockfile drift already recorded in `docs/DEPENDENCY_AUDIT_2026-07-25.md`, two `zizmor` `ref-version-mismatch` findings on pinned action comments, an invalid `semver-major-days` property in `.github/dependabot.yml` (unsupported for the `github-actions` ecosystem, so Dependabot is not running at all), and the two orchestration test failures above. *Recommendation: one separate infrastructure PR; none of these belong in a documentation change.*
+7. **Who fixes the standing base-branch failures?** Current `main` is red on five independent checks, none of them caused by repository code changes under review:
+   - Lockfile drift, already recorded in `docs/DEPENDENCY_AUDIT_2026-07-25.md`.
+   - Two `zizmor` `ref-version-mismatch` findings on pinned action version comments.
+   - An invalid `semver-major-days` property in `.github/dependabot.yml`, unsupported for the `github-actions` ecosystem — **Dependabot is not running for this repository at all** until it is removed.
+   - The two `tests/test_orchestration.py` grant-scope failures above.
+   - `claude-review` fails because its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment; the action exits in ~19s having produced no review. This one is **not fixable in a pull request** — it needs a repository secret set by Joe, or the workflow moved to another supported auth method.
+
+   *Recommendation: one separate infrastructure PR for the first four; the fifth is a repository-settings action. None of these belong in a documentation change.*
 
 ## Rollback
 
