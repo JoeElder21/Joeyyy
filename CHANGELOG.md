@@ -3,6 +3,26 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-07-30 — Joeyyy becomes the account umbrella
+
+Joe is consolidating everything under the JoeElder21 account. Joeyyy now pins
+his other repositories as first-party submodules instead of merging their
+trees — each keeps its own history, CI, issues, and deployment.
+
+### Added
+
+- `repos/` — first-party submodules `repos/elder-command-center`
+  (`JoeElder21/Elder-Command-Center` @ `946a545`) and
+  `repos/antigravity-sdk-python` (`JoeElder21/antigravity-sdk-python` @
+  `9e47a90`), with a provenance table in `repos/README.md`. A third,
+  `elder-briefing-app`, is planned once the Next.js briefing app transfers
+  from the old account.
+- `tests/test_vendor.py` gains `FIRST_PARTY_SUBMODULES`: the gitlink and
+  `.gitmodules` contracts now cover `repos/` alongside `vendor/`, so a
+  first-party submodule can no more silently become committed content than a
+  vendored one. The upstream-dependency and vendor provenance checks stay
+  scoped to `vendor/`.
+
 ## 2026-07-25 — All five open decisions resolved
 
 Joe answered every open decision from `docs/REPO_OPTIMIZATION_2026-07-25.md` the
