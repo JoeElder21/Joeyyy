@@ -6,6 +6,7 @@ step, unpin an action, or remove a boundary document.
 """
 
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -22,16 +23,23 @@ OPTIMIZATION_RECORD = ROOT / "docs" / "REPO_OPTIMIZATION_2026-07-25.md"
 def _npm_lockfiles() -> list[str]:
     """Every committed npm lock, as a repo-relative POSIX path.
 
-    Derived from the tree rather than listed, because a list is what let the
-    relay connector's lock go unscanned. `node_modules` is excluded: those locks
+    Derived from the index rather than listed, because a list is what let the
+    relay connector's lock go unscanned. Not a directory walk: a walk also finds
+    locks inside checked-out submodules (`vendor/relay` carries two), which
+    belong to their own repositories and are outside this repository's scan and
+    update surface — so the suite failed in any clone that had run
+    `git submodule update --init`. `node_modules` is excluded: those locks
     belong to dependencies, are not committed, and are covered transitively by
     the top-level lock that resolved them.
     """
-    return [
-        path.relative_to(ROOT).as_posix()
-        for path in ROOT.rglob("package-lock.json")
-        if "node_modules" not in path.parts and ".git" not in path.parts
-    ]
+    listing = subprocess.run(
+        ["git", "ls-files", "*package-lock.json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return [path for path in listing if "node_modules" not in path.split("/")]
 
 
 # `uses: owner/repo@ref` — captures the ref so it can be checked for a SHA pin.
