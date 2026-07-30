@@ -163,6 +163,31 @@ jobs:
           check requirements.txt requirements/lock-runtime-root.txt
           check requirements/runtime-contracts.txt requirements/lock-runtime-contracts.txt
           check requirements/runtime-evaluation.txt requirements/lock-runtime-evaluation.txt
+          # lock-2026-07-24.txt had no manifest, so no resolver ever checked it
+          # and it drifted into a state no resolver could satisfy: it pinned
+          # posthog==7.29.0 beside chromadb==1.1.1, which requires posthog<6.
+          # requirements/runtime-full.txt is now its manifest, which is what
+          # lets it be checked here at all.
+          #
+          # 3.12 only, unlike the pairs above. The 3.11 and 3.12 resolutions of
+          # the full stack are NOT identical (3.11 additionally needs
+          # async-timeout via redis), so per docs/RUNTIME_HOST_DECISION.md this
+          # set targets the single workstation interpreter rather than
+          # pretending to serve both.
+          #
+          # Tradeoff, stated rather than discovered later: 1,053 packages drift
+          # far faster than the 81-package root lock. Generating this lock and
+          # re-resolving it thirty minutes later already produced one diff
+          # (cyclopts 4.22.2 -> 4.22.3), so expect this line to red unrelated
+          # PRs until someone regenerates. It is included anyway because an
+          # unchecked lock is precisely how the previous one rotted into a
+          # state no resolver could satisfy. If the noise outweighs that,
+          # narrow it to a scheduled job rather than deleting the check.
+          if [ "${{ matrix.python-version }}" = "3.12" ]; then
+            check requirements/runtime-full.txt requirements/lock-2026-07-24.txt
+          else
+            echo "requirements/runtime-full.txt: 3.12-only lock, skipped on ${{ matrix.python-version }}"
+          fi
           exit "$status"
 
   lint:

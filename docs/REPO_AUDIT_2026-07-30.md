@@ -89,6 +89,64 @@ without proving anything. `verify_runtime_stack.py --require-tier` was kept: it
 is what such a job would need, and it makes the absence checkable the moment a
 resolvable lock exists.
 
+### Resolved 2026-07-30 — and what installing it exposed
+
+On Joe's instruction the lock was regenerated. The conflict was not inherent to
+the stack; it was an artifact of the lock having **no manifest behind it**. No
+resolver had ever been asked to solve the set, so nothing forced `posthog` to
+respect `chromadb`'s ceiling. Given a manifest
+(`requirements/runtime-full.txt`), `uv` resolves it cleanly at `posthog==5.4.0`.
+
+The old file was also **radically incomplete**: 269 pinned packages against a
+true resolution of **1,053**. It could not have installed the full stack even
+without the conflict.
+
+`pip install -r requirements/lock-2026-07-24.txt` now completes, and
+`verify_runtime_stack.py --require-tier all` reports `valid: true`,
+`installed_count: 20`, `missing: []` — the first environment in this
+repository's history where every declared runtime dependency imports.
+
+Installing it immediately surfaced three defects that absence had been hiding.
+Two were fixed; the third is a decision.
+
+1. **`verify_runtime_stack.py` probed the wrong module for AutoGen.** It looked
+   for `autogen_agentchat`; the pinned `autogen-agentchat>=0.2.35,<0.3` exposes
+   `autogen`. The audit reported an installed, correctly-pinned dependency as
+   missing. Fixed: the probe accepts either name.
+
+2. **The same command's stdout contract broke under a real stack.** It emits a
+   JSON document, but importing the stack writes to stdout — nltk downloads a
+   corpus, dspy and typer emit `DeprecationWarning`. Callers parsing the output
+   got a `JSONDecodeError`. Fixed: import side effects are redirected to
+   stderr. The contract had held only because nothing was ever installed.
+
+3. **The repository declares two mutually exclusive AutoGen APIs — open.**
+
+   | Module | Imports | Requires |
+   | --- | --- | --- |
+   | `runtime/autogen_orchestrator.py` | `from autogen import ConversableAgent, GroupChat, GroupChatManager` | AutoGen **0.2** |
+   | `runtime/autogen_groupchat.py` | same | AutoGen **0.2** |
+   | `scripts/group_debate.py` | `from autogen_agentchat.agents import AssistantAgent` | AutoGen **0.4+** |
+
+   `autogen-agentchat<0.3` cannot provide `autogen_agentchat`, and `autogen_ext`
+   — which `scripts/group_debate.py`'s tests also require — appears in **no
+   manifest at all**. So `scripts/group_debate.py` cannot run under the declared
+   dependency set, and its tests skip permanently even with the full stack
+   installed.
+
+   That matters more than a skipped test. `docs/RECONCILIATION_2026-07-24.md`
+   closes build ticket 4 as "delivered by the Codex stream:
+   `scripts/group_debate.py` (challenge-pair debates, cadence chats, dynamic
+   selector per brain)". The registered challenge pairs are one of the system's
+   core quality mechanisms — the adversarial review that keeps strategy honest
+   against dated evidence. As configured, that mechanism is not merely inert:
+   it is **unsatisfiable**.
+
+   Resolving it is a real choice, not a typo fix: migrate
+   `runtime/autogen_*.py` to the 0.4 API and add `autogen-ext`, or rewrite
+   `scripts/group_debate.py` against 0.2. Either is a rewrite of working code
+   and belongs to whoever owns the orchestration layer.
+
 ## Part 1 — What the repository is
 
 A governance and contract repository, not an application. It defines a

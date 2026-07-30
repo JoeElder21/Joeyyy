@@ -57,10 +57,13 @@ and that applies to this job too.
 
 ## Setup on the workstation
 
-Python 3.11 or 3.12, in a virtual environment dedicated to this repository:
+Python 3.12, in a virtual environment dedicated to this repository. The
+contract floor still runs on 3.11 and 3.12 both; the *full stack* is 3.12 only,
+because the two resolutions are not identical — see the header of
+`requirements/lock-2026-07-24.txt`.
 
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements/lock-2026-07-24.txt
@@ -73,11 +76,43 @@ python scripts/verify_runtime_stack.py --require-tier all
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 python -m unittest discover -s tests -v
-python scripts/verify_mcp_mounts.py
+python scripts/verify_mcp_mounts.py --strict
 ```
 
 The suite is correct on this host only when no test skips for a missing
 dependency. A skip here means the stack is not actually installed.
+
+### Install proof — 2026-07-30
+
+Before this date the install could not succeed anywhere: the lock pinned
+`posthog==7.29.0` alongside `chromadb==1.1.1`, which requires `posthog<6.0.0`.
+`requirements/lock-2026-07-24.txt` was regenerated from a real manifest
+(`requirements/runtime-full.txt`) and the install was then executed end to end:
+
+```
+1053 packages installed, exit 0
+scripts/verify_runtime_stack.py --require-tier all
+  -> valid: true, installed_count: 20, missing: []
+```
+
+That is the first time every declared runtime dependency has been importable in
+one environment in this repository's history. Two defects surfaced immediately,
+both invisible while the stack was absent, both fixed:
+
+- `verify_runtime_stack.py` probed only `autogen_agentchat`. The pinned
+  `autogen-agentchat<0.3` exposes `autogen`; `autogen_agentchat` is the 0.4+
+  module. The audit had been reporting an installed, pinned dependency as
+  missing.
+- The same command writes JSON to stdout, and importing the real stack writes
+  to stdout too (nltk fetches a corpus; dspy and typer emit warnings), so the
+  document its callers parse was corrupted. Import side effects now go to
+  stderr.
+
+**This proof was produced in a container, not on the workstation.** It
+establishes that the lock resolves and installs, and that every dependency
+imports. It is not workstation evidence and it is not mission evidence: it
+satisfies no acceptance gate, and gate 21 in `runtime/lifecycle.py` continues
+to refuse promotion on harness evidence of any kind.
 
 ## What this record does NOT authorize
 

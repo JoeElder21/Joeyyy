@@ -24,6 +24,7 @@ The full-stack CI job passes ``--require-tier all``.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import importlib.metadata
 import json
@@ -36,7 +37,14 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.privacy_guard import gitlink_paths, is_vendored, tracked_paths  # noqa: E402
 
-RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
+# Module names are probe targets, not distribution names: a distribution can
+# expose a module whose name it does not share, and `autogen-agentchat` exposes
+# a DIFFERENT one per major line -- `autogen` on the 0.2 API this repository
+# pins, `autogen_agentchat` from 0.4 on. Probing only the 0.4 name reported the
+# pinned-and-installed distribution as missing, which nothing caught because
+# the stack had never been installed anywhere. A tuple of candidates is
+# satisfied by any one of them.
+RUNTIME_STACK: dict[str, list[tuple[str | tuple[str, ...], str]]] = {
     "contracts": [
         ("pydantic", "pydantic"),
         ("jsonschema", "jsonschema"),
@@ -47,7 +55,7 @@ RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
     "orchestration": [
         ("langgraph", "langgraph"),
         ("crewai", "crewai"),
-        ("autogen_agentchat", "autogen-agentchat"),
+        (("autogen", "autogen_agentchat"), "autogen-agentchat"),
         ("prefect", "prefect"),
         ("celery", "celery"),
         ("agents", "openai-agents"),
@@ -72,14 +80,31 @@ RUNTIME_STACK: dict[str, list[tuple[str, str]]] = {
 }
 
 
+def _importable(module_names: str | tuple[str, ...]) -> bool:
+    """True when any candidate module imports. See RUNTIME_STACK on why a tuple.
+
+    Import side effects are redirected to stderr for the duration: importing
+    the real stack writes to stdout (nltk downloads a corpus, dspy and typer
+    emit DeprecationWarnings), and this command's stdout is a JSON document its
+    callers parse. With the stack absent nothing printed, so the output
+    contract held by accident until the stack was first installed.
+    """
+    for module_name in (module_names,) if isinstance(module_names, str) else module_names:
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
+                importlib.import_module(module_name)
+        except Exception:
+            continue
+        return True
+    return False
+
+
 def audit_dependencies() -> dict[str, dict[str, str | None]]:
     report: dict[str, dict[str, str | None]] = {}
     for tier, packages in RUNTIME_STACK.items():
         tier_report: dict[str, str | None] = {}
-        for module_name, dist_name in packages:
-            try:
-                importlib.import_module(module_name)
-            except Exception:
+        for module_names, dist_name in packages:
+            if not _importable(module_names):
                 tier_report[dist_name] = None
                 continue
             try:
