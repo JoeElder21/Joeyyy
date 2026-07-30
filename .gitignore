@@ -62,3 +62,8 @@ audit/
 # Trusted-launcher replay ledger and grant claim files: consumed grant ids and
 # operational state from a real workstation. Machine-local, never tracked.
 .state/
+
+# Uploaded screenshots and binaries never belong in this public repo
+*.png
+*.jpg
+*.jpeg
