@@ -204,6 +204,7 @@ External tools under evaluation for the ecosystem. These are not agents; they ar
 - citrolabs/ego-lite — permit-portal agent browser; blocked on Windows support, revisit on release
 - max-sixty/worktrunk — install when multiple agents edit this repo concurrently
 - ADN-DevTech/Civil3DSnoop — bookmark for future Civil 3D .NET development sessions
+- google/antigravity-sdk-python — Gemini-backed agent runtime (Apache-2.0, 0.1.8, alpha). **Absorb-only; do not deploy.** Adopting it would add a third agent runtime beside Claude Code and Codex, against the two-runtime ruling, and its engine ships as an uninspectable compiled binary. Its policy primitives, hook taxonomy, and trigger/hook separation are absorbed in `docs/ABSORBED_PATTERNS.md` §11. Revisit only if it reaches a stable release *and* a concrete need appears that the two existing runtimes cannot serve.
 
 ## Dream-team charter modes (2026-07-24)
 
