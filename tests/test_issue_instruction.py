@@ -351,10 +351,6 @@ class IssuerHonestyTests(unittest.TestCase):
         self.assertNotIn("single-use", text.replace("single-use enforcement", ""))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SigningKeyCustodyTests(unittest.TestCase):
     """A key any local user can read is a key that can forge Joe's authority.
 
@@ -428,3 +424,12 @@ class SigningKeyCustodyTests(unittest.TestCase):
         directory.mkdir(mode=0o700)
         with self.assertRaises(InstructionRefused):
             self._issue(directory)
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_issue_instruction` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()
