@@ -1396,6 +1396,77 @@ class DependencyProvenanceTests(unittest.TestCase):
                 self.assertIn(lock, job, f"{lock} is scanned but its drift is never checked")
 
 
+class RuntimeMajorBoundaryTests(unittest.TestCase):
+    """A bare manifest entry lets a re-resolve cross a major version on its own."""
+
+    GOVERNANCE_SERVER = ROOT / "scripts" / "governance_mcp_server.py"
+    CONTRACTS_MANIFEST = ROOT / "requirements" / "runtime-contracts.txt"
+    CONTRACTS_LOCK = ROOT / "requirements" / "lock-runtime-contracts.txt"
+
+    def _requirement(self, name: str) -> str:
+        for line in self.CONTRACTS_MANIFEST.read_text(encoding="utf-8").splitlines():
+            entry = line.split("#", 1)[0].strip()
+            if entry and re.match(rf"^{re.escape(name)}\b", entry):
+                return entry
+        self.fail(f"{name} is not listed in {self.CONTRACTS_MANIFEST.name}")
+
+    def test_the_mcp_requirement_is_bounded_above(self):
+        # `scripts/governance_mcp_server.py` imports `mcp.server.fastmcp`, and
+        # mcp 2.0.0 removes that module outright. The manifest carried a bare
+        # `mcp`, so regenerating the lock silently resolved to 2.0.0 and the
+        # mounts job failed with `NameError: name 'build_server' is not
+        # defined`. A bare entry is a claim that every future major works.
+        entry = self._requirement("mcp")
+        self.assertNotEqual(entry, "mcp", "mcp is unbounded; a re-resolve may cross to 2.x")
+        self.assertRegex(
+            entry,
+            r"(<\s*2|<=\s*1|==\s*1\.|~=\s*1\.)",
+            f"{entry!r} does not bound mcp below 2.x",
+        )
+
+    def test_the_locked_mcp_is_a_major_the_server_can_import(self):
+        # The manifest bound and the committed lock are separate facts; the lock
+        # is what CI installs. Checking only the manifest would pass while the
+        # lock still carried 2.x.
+        locked = re.search(
+            r"^mcp==(\d+)\.", self.CONTRACTS_LOCK.read_text(encoding="utf-8"), re.MULTILINE
+        )
+        self.assertIsNotNone(locked, "the contracts lock carries no pinned mcp")
+        self.assertEqual(
+            locked.group(1), "1", "the locked mcp is not the 1.x line the server imports from"
+        )
+
+    def test_the_import_the_bound_exists_for_is_still_the_one_used(self):
+        # If the server is ever ported off `mcp.server.fastmcp`, the bound above
+        # stops being justified and this test should fail rather than quietly
+        # keep pinning an old major for a reason that no longer holds.
+        source = self.GOVERNANCE_SERVER.read_text(encoding="utf-8")
+        self.assertIn(
+            "from mcp.server.fastmcp import FastMCP",
+            source,
+            "the server no longer imports mcp.server.fastmcp; re-justify the mcp<2 bound",
+        )
+
+    def test_the_entrypoint_reports_a_missing_runtime_instead_of_a_name_error(self):
+        # `MCP_AVAILABLE = False` leaves `build_server` undefined, so the
+        # entrypoint raised a bare NameError naming neither the missing
+        # dependency nor the remedy -- an incompatible mcp read exactly like an
+        # absent one. The import claims to degrade cleanly; it must actually.
+        source = self.GOVERNANCE_SERVER.read_text(encoding="utf-8")
+        entrypoint = source[source.index('if __name__ == "__main__":') :]
+        self.assertIn(
+            "if not MCP_AVAILABLE:",
+            entrypoint,
+            "build_server() is called without checking MCP_AVAILABLE",
+        )
+        self.assertLess(
+            entrypoint.index("if not MCP_AVAILABLE:"),
+            entrypoint.index("build_server()"),
+            "the availability check must precede the call it guards",
+        )
+        self.assertIn("mcp.server.fastmcp", entrypoint, "the error names no cause")
+
+
 class SecretScanScopeTests(unittest.TestCase):
     """Each event gets the range it is responsible for."""
 
