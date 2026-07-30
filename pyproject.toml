@@ -20,7 +20,10 @@ autogen-preflight = "python scripts/autogen_challenge_pair.py --brain APEX --age
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-extend-exclude = ["connectors/aps/node_modules"]
+# Submodule working trees (vendor/ third-party, repos/ first-party) are other
+# repositories' code: lint them in their own repositories, not here. CI never
+# initializes them; this keeps local runs with initialized submodules identical.
+extend-exclude = ["connectors/aps/node_modules", "vendor", "repos"]
 
 [tool.ruff.lint]
 # Enforced in CI and clean across the tree, so the gate is real rather than
