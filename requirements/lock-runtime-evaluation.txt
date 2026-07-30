@@ -106,7 +106,7 @@ portalocker==3.2.0
     # via deepeval
 posthog==7.29.0
     # via deepeval
-prompt-toolkit==3.0.52
+prompt-toolkit==3.0.53
     # via questionary
 propcache==0.5.2
     # via
