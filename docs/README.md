@@ -56,6 +56,7 @@ Read in date order — each supersedes nothing, but later records assume earlier
 | [`FRONTIER_REPO_SCAN_2026-07-24.md`](FRONTIER_REPO_SCAN_2026-07-24.md) | Web-sourced frontier scan; the FakeGit intake-hardening finding |
 | [`EXTERNAL_RUNTIME_REGISTER_2026-07-24.md`](EXTERNAL_RUNTIME_REGISTER_2026-07-24.md) | Declared runtime dependencies 11–24 and promotion conditions |
 | [`REPO_OPTIMIZATION_2026-07-25.md`](REPO_OPTIMIZATION_2026-07-25.md) | Repository-engineering review: substrate gaps, evaluation/supply-chain candidates |
+| [`REPO_AUDIT_2026-07-30.md`](REPO_AUDIT_2026-07-30.md) | Adversarial audit against Google's Antigravity SDK; executed verification of what this harness does and does not do |
 | [`ABSORBED_PATTERNS.md`](ABSORBED_PATTERNS.md) | Capability-absorption extraction record |
 | [`EXECUTION_LAYER_TRIAL.md`](EXECUTION_LAYER_TRIAL.md) | codex-autorunner vs multica trial plan and decision rule |
 
