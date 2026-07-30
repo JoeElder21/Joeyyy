@@ -18,9 +18,13 @@ provenance.
 | `elder-command-center` | `JoeElder21/Elder-Command-Center` | `946a545` (main) | Elder Command Center operating standard: prompts, templates, examples, and Python tooling for JEDS / Savage Investments deliverables. |
 | `antigravity-sdk-python` | `JoeElder21/antigravity-sdk-python` | `9e47a90` (main) | Joe's fork of the Antigravity Python SDK. |
 
-Planned: `elder-briefing-app` (the Next.js Daily Executive Briefing app) will be
-added here once its repository is transferred from the old account to
-JoeElder21. Until that transfer lands there is nothing to pin.
+Planned: `elder-briefing-app` (the Next.js Daily Executive Briefing app). Its
+original repository was lost when the old `joeelder2021-crypto` account was
+deleted before transfer; the recoverable work (the briefing intelligence layer,
+both commits as patches, and the original signed bundle) is preserved in a
+salvage package pending reconstruction. It will be pinned here if and when the
+app is restored to a JoeElder21 repository. The daily briefing itself is
+unaffected — it runs as a Claude-native Routine, not through this app.
 
 ## Install
 
