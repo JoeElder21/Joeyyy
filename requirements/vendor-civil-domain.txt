@@ -9,4 +9,4 @@
 # renders data/resources.json through templates/ into the list README. The
 # vendored list itself is reference data, not an importable package.
 Jinja2>=3.1,<4
-pydantic>=2.12,<3
+pydantic>=2.13.4,<3

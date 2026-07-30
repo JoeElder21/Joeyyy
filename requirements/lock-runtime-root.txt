@@ -18,7 +18,7 @@ anyio==4.14.2
     # via
     #   httpx
     #   openai
-autogen-agentchat==0.2.40
+autogen-agentchat==0.7.5
     # via -r requirements.txt
 certifi==2026.7.22
     # via
@@ -48,7 +48,7 @@ idna==3.18
     #   requests
 jiter==0.16.0
     # via openai
-numpy==1.26.4
+numpy==2.5.1
     # via
     #   autogen-agentchat
     #   flaml
@@ -60,7 +60,7 @@ pydantic==2.13.4
     # via
     #   autogen-agentchat
     #   openai
-pydantic-core==2.46.4
+pydantic-core==2.47.0
     # via pydantic
 python-dotenv==1.2.2
     # via autogen-agentchat
