@@ -54,9 +54,10 @@ class ReconciliationTests(unittest.TestCase):
         mode_mapped = set(orchestration_graphs.MODE_GATE_FIELDS.values())
 
         # Fields the runtime shadow -> active gate actually consults.
-        required_agent_fields = set(
-            orchestration_graphs.ACTIVE_AGENT_GATE_FIELDS.values()
-        ) | {"connector_isolation_runtime_verified", "joe_approved_activation"}
+        required_agent_fields = set(orchestration_graphs.ACTIVE_AGENT_GATE_FIELDS.values()) | {
+            "connector_isolation_runtime_verified",
+            "joe_approved_activation",
+        }
         required_mode_fields = {
             "real_mission_completed",
             "boundary_behavior_verified",
@@ -80,9 +81,7 @@ class ReconciliationTests(unittest.TestCase):
             self.assertIn(field, ModeEvidence.__dataclass_fields__)
 
         # Stage vocabulary and promotion table are derived, not restated.
-        self.assertEqual(
-            orchestration_graphs.LIFECYCLE_STAGES, [stage.value for stage in Stage]
-        )
+        self.assertEqual(orchestration_graphs.LIFECYCLE_STAGES, [stage.value for stage in Stage])
 
     def test_graph_projection_agrees_with_runtime_verdict(self):
         """Every gate flag must be load-bearing on both promotions."""
@@ -94,8 +93,7 @@ class ReconciliationTests(unittest.TestCase):
             for dropped in (None, *required):
                 gates = {gate: gate != dropped for gate in required}
                 projected = orchestration_graphs.to_runtime_state(
-                    {"agent": "apex_war_architect", "brain": "APEX",
-                     "stage": stage, "gates": gates}
+                    {"agent": "apex_war_architect", "brain": "APEX", "stage": stage, "gates": gates}
                 )
                 self.assertEqual(
                     evaluate_promotion(projected).allowed,
@@ -105,17 +103,14 @@ class ReconciliationTests(unittest.TestCase):
 
     def test_graph_cannot_promote_without_joe_approval(self):
         """The regression this parity lock exists to prevent."""
-        gates = {gate: True for gate in orchestration_graphs.ACTIVE_GATES}
+        gates = dict.fromkeys(orchestration_graphs.ACTIVE_GATES, True)
         gates["joe_approved_activation"] = False
         state = orchestration_graphs.to_runtime_state(
-            {"agent": "apex_war_architect", "brain": "APEX", "stage": "shadow",
-             "gates": gates}
+            {"agent": "apex_war_architect", "brain": "APEX", "stage": "shadow", "gates": gates}
         )
         result = evaluate_promotion(state)
         self.assertFalse(result.allowed)
-        self.assertTrue(
-            any("Joe's explicit approval" in failure for failure in result.failures)
-        )
+        self.assertTrue(any("Joe's explicit approval" in failure for failure in result.failures))
 
     def test_reconciliation_record_names_the_canonical_homes(self):
         record = (ROOT / "docs" / "RECONCILIATION_2026-07-24.md").read_text(encoding="utf-8")

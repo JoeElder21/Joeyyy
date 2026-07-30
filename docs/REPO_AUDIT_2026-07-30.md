@@ -8,6 +8,49 @@ record.
 
 Measurements taken at commit `c546e4f` on Python 3.11.15.
 
+## Correction — the audit ran against a stale tree
+
+**Read this before trusting any measurement below.** The working clone was
+`c546e4f` when this audit ran. `origin/main` was already ~200 commits ahead:
+constitution adoption, a vendored agent corps, ruff and gitleaks gates,
+restructured per-tier locks, `runtime/mission_runner.py`, `runtime/value_meter.py`,
+the Market Operator agent, and four CI workflows. Every scale figure in Part 1
+is therefore understated, and several Part 2 findings were fixed on main before
+this record was written.
+
+Re-verified against `origin/main` at `4c0f46e`:
+
+| Claim below | Actual on current main |
+| --- | --- |
+| 241 tests, ~2s | **1,083 tests, ~157s**, 36 test modules |
+| 27 docs, 3,305 prose lines | **40 docs** |
+| CI never runs `verify_runtime_stack.py` (finding 17) | **Already fixed** — it is a step in the `validate` job |
+| The 269-package lock is exercised by nothing (finding 13) | **Largely fixed** — CI installs `lock-runtime-root` and `lock-runtime-contracts`, and a `locks` job re-resolves each manifest with pinned `uv` to catch drift |
+| `runtime/autogen_groupchat.py` is legacy (finding 8) | **Withdrawn** — main's README documents it as a live brain-private planning adapter |
+| `privacy_guard.py` has no allowlist (finding 22) | **Superseded** — the guard now carries basename and per-pattern allowlists and is far larger |
+| No `.claude/` directory or skills (Part 1) | **Superseded** — `.claude/agents/` now holds the corps projected into Claude Code subagents |
+
+Findings re-confirmed as still live on `4c0f46e`:
+
+- **Finding 1** — the lifecycle-gate bypass. `scripts/orchestration_graphs.py`
+  on main still carries its own `ACTIVE_GATES` with no `joe_approved_activation`
+  and no gate-21 check, and `runtime/lifecycle.py`'s `active_gate` is unchanged.
+  Fixed by the change that carries this record.
+- **Finding 10** — the seam is still inverted, and worse than recorded:
+  `packet_guard.py` remains in `scripts/`, and `runtime/` now imports from
+  `scripts/` in two modules (`autogen_orchestrator.py`, `mission_runner.py`)
+  rather than one.
+- **Finding 5** — the .NET Self-Learning Architect is still unregistered in
+  `docs/AGENT_REGISTRY.md`.
+- **Finding 7** — roster data is still stated across the corps config and both
+  brain manifests.
+- **Finding 18** — `trial/output/cadence-log.md` still has exactly one line.
+
+Findings not re-verified are marked by their original date and should be
+re-measured before being acted on. The lesson is recorded rather than
+explained away: an audit is only as current as its fetch, and this one did not
+fetch first.
+
 ## Part 1 — What the repository is
 
 A governance and contract repository, not an application. It defines a

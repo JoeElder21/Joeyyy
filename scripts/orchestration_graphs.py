@@ -29,6 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypedDict
 
+from runtime.lifecycle import PROMOTIONS as _RUNTIME_PROMOTIONS
 from runtime.lifecycle import (
     AgentLifecycleState,
     ModeEvidence,
@@ -36,7 +37,6 @@ from runtime.lifecycle import (
     evaluate_administrative,
     evaluate_promotion,
 )
-from runtime.lifecycle import PROMOTIONS as _RUNTIME_PROMOTIONS
 
 try:  # degrade cleanly when the runtime stack is not installed
     from langgraph.checkpoint.memory import MemorySaver
@@ -52,9 +52,7 @@ LIFECYCLE_STAGES = [stage.value for stage in Stage]
 
 # String view of runtime.lifecycle.PROMOTIONS for graph state, which carries
 # stage names as plain strings. Derived, never restated.
-PROMOTIONS = {
-    source.value: target.value for source, target in _RUNTIME_PROMOTIONS.items()
-}
+PROMOTIONS = {source.value: target.value for source, target in _RUNTIME_PROMOTIONS.items()}
 
 # Graph gate flags mapped onto the AgentLifecycleState / ModeEvidence fields
 # that runtime.lifecycle actually reads. This module owns the vocabulary a
@@ -126,10 +124,7 @@ def to_runtime_state(state: LifecycleState) -> AgentLifecycleState:
         ModeEvidence(
             mode=mode,
             mutation_occurred=True,
-            **{
-                field: bool(gates.get(flag))
-                for flag, field in MODE_GATE_FIELDS.items()
-            },
+            **{field: bool(gates.get(flag)) for flag, field in MODE_GATE_FIELDS.items()},
         )
         for mode in modes
     ]
@@ -139,10 +134,7 @@ def to_runtime_state(state: LifecycleState) -> AgentLifecycleState:
         stage=Stage(state["stage"]),
         material_modes=evidence,
         administrative_reason=state.get("violation", ""),
-        **{
-            field: bool(gates.get(flag))
-            for flag, field in AGENT_GATE_FIELDS.items()
-        },
+        **{field: bool(gates.get(flag)) for flag, field in AGENT_GATE_FIELDS.items()},
     )
     if state.get("evidence_source"):
         runtime_state.evidence_source = state["evidence_source"]

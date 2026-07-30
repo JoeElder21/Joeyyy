@@ -58,7 +58,7 @@ The repository systematically refuses to claim capability it cannot demonstrate.
 
 ### What exists today, in one paragraph
 
-A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 38-document architectural record, and 1,080 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
+A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 38-document architectural record, and 1,083 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
 
 ---
 

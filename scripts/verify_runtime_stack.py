@@ -185,9 +185,7 @@ def missing_in_tiers(
     dependency_report: dict[str, dict[str, str | None]], tiers: list[str]
 ) -> list[str]:
     """Distributions absent from the named tiers ('all' selects every tier)."""
-    selected = RUNTIME_STACK if "all" in tiers else {
-        tier: RUNTIME_STACK[tier] for tier in tiers
-    }
+    selected = RUNTIME_STACK if "all" in tiers else {tier: RUNTIME_STACK[tier] for tier in tiers}
     return [
         dist
         for tier in selected
