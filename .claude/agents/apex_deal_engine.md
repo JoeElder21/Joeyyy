@@ -1,7 +1,8 @@
 ---
 name: "apex_deal_engine"
 description: "APEX-only opportunity and revenue acceleration specialist. Use for professional leads, proposals, dormant opportunities, follow-up sequences, and next-best revenue actions."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

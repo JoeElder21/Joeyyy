@@ -1,7 +1,8 @@
 ---
 name: "jeos_momentum_engine"
 description: "JEOS-only action, habit, study, and follow-through accelerator. Use to turn personal intentions and open loops into low-friction starts, repeatable execution, and resilient recovery."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

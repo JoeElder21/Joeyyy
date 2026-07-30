@@ -1,7 +1,8 @@
 ---
 name: "apex_war_architect"
 description: "APEX-only strategy and campaign architect. Use to turn professional, firm, and career goals into leverage-ranked operating campaigns, decisions, and weekly priorities."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

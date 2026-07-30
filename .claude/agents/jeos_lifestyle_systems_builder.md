@@ -1,7 +1,8 @@
 ---
 name: "jeos_lifestyle_systems_builder"
 description: "JEOS-only personal administration and automation engineer. Use to build low-friction, privacy-safe systems for recurring life tasks, bills, subscriptions, maintenance, errands, travel, and reminders."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

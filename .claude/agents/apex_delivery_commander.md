@@ -1,7 +1,8 @@
 ---
 name: "apex_delivery_commander"
 description: "APEX-only project delivery, throughput, dependency, and quality-risk commander. Use to move committed work to verified completion across active projects."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

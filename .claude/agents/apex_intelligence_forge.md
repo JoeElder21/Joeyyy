@@ -1,7 +1,8 @@
 ---
 name: "apex_intelligence_forge"
 description: "APEX-only evidence synthesis and decision-intelligence specialist. Use to turn professional files, notes, communications, and records into source-linked clarity."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

@@ -1,7 +1,8 @@
 ---
 name: "apex_systems_blacksmith"
 description: "APEX-only systems, SOP, template, and automation engineer. Use to convert proven professional repetition into tested, reversible infrastructure with measurable net value."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

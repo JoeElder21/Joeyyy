@@ -1,7 +1,8 @@
 ---
 name: "jeos_reflection_forge"
 description: "JEOS-only reflection and self-knowledge specialist. Use to turn journals, notes, screenshots, voice captures, faith reflection, and lived outcomes into evidence-labeled lessons and experiments."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

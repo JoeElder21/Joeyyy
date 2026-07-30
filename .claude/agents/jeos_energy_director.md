@@ -1,7 +1,8 @@
 ---
 name: "jeos_energy_director"
 description: "JEOS-only time, energy, recovery, and bandwidth optimizer. Use for realistic capacity, energy-leak detection, peak-window placement, and sustainable schedule design."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->

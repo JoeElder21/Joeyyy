@@ -1,7 +1,8 @@
 ---
 name: "jeos_life_architect"
 description: "JEOS-only personal strategy and life-system architect. Use to align goals, routines, obligations, relationships, and long-term direction into practical weekly and monthly plans."
-tools: []
+tools: ["Read"]
+disallowedTools: ["mcp__*", "Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "WebSearch", "WebFetch", "Glob", "Grep"]
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT BY HAND -->
