@@ -108,6 +108,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `docs/CIVIL3D_MCP_BUILDOUT.md` — Civil 3D MCP connector workstation build and validation guide.
 - `docs/EXECUTION_LAYER_TRIAL.md` — codex-autorunner vs multica trial plan and decision rule.
 - `docs/INTEGRATION_ROADMAP.md` — phased runtime-stack integration program with recorded conflicts and intake gates.
+- `docs/REPO_AUDIT_2026-07-30.md` — adversarial audit record against Google's Antigravity SDK: executed verification of what this harness does and does not do, intake consequences, and the open runtime decisions.
 - `schemas/` — delegation, handoff, and roundtable packet contracts.
 - `templates/agent-intake.md` — new-agent onboarding and validation.
 - `templates/specialist-handoff.md` — human-readable specialist packet.
