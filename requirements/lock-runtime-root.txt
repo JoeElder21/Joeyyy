@@ -1,4 +1,4 @@
-# Resolved lock for requirements/root.txt — generated 2026-07-25.
+# Resolved lock for requirements/root.txt — generated 2026-07-30.
 #
 # Exists because osv-scanner cannot audit a floating manifest without
 # resolving it over the network, and that resolution failed in CI with
@@ -52,7 +52,7 @@ numpy==1.26.4
     # via
     #   autogen-agentchat
     #   flaml
-openai==2.48.0
+openai==2.50.0
     # via autogen-agentchat
 packaging==26.2
     # via autogen-agentchat
@@ -78,7 +78,7 @@ termcolor==3.3.0
     # via autogen-agentchat
 tiktoken==0.13.0
     # via autogen-agentchat
-tqdm==4.69.1
+tqdm==4.70.0
     # via openai
 typing-extensions==4.16.0
     # via
