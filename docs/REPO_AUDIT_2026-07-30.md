@@ -10,12 +10,12 @@ This audit was executed against a session clone of `main` at **2026-07-25**. By 
 
 | Measured | 07-25 snapshot | Current `main` (`4c0f46e`) |
 | --- | --- | --- |
-| Test suite | 241 tests, 2.769s, `OK (skipped=27)`, 0 failures | 1,080 tests, ~460s, **2 failures**, 24 skips |
+| Test suite | 241 tests, 2.769s, `OK (skipped=27)`, 0 failures | 1,080 tests, `OK (skipped=23)`, 0 failures in CI |
 | Test corpus | 4,349 lines / 24 files | 21,622 lines / 35 files |
 | `scripts/packet_guard.py` | 1,321 lines | 1,228 lines |
 | LICENSE | absent | **Apache-2.0 present** (`LICENSE`, `NOTICE`, `CITATION.cff`) |
 
-The two current failures are `tests/test_orchestration.py::test_the_mount_verifier_fails_an_undeclared_grant_scope` and one peer, on the Azure MCP grant-scope verifier. They reproduce on a clean `origin/main` worktree (`Ran 44 tests ... FAILED (failures=2, skipped=6)`) and are unrelated to this document. **The repository is not currently all-green**, and any earlier phrasing to that effect described the 07-25 snapshot only.
+A note on where numbers come from, because this audit got it wrong once. Running the suite inside the audit sandbox produced two failures in `tests/test_orchestration.py` on the Azure MCP grant-scope verifier, reproducible there against a clean `origin/main` worktree. **They do not reproduce in CI**, which runs the same 1,080 tests green (`OK (skipped=23)`, 166s, both 3.11 and 3.12). The verifier launches MCP servers through `npx`, which the sandbox restricts, so the most likely reading is a sandbox artifact rather than repository state. An earlier revision of this document reported those two failures as the current condition of `main`. That was wrong: **`main` is green on tests**, and CI is authoritative for that claim over any single local environment.
 
 ## Method and verification honesty
 
@@ -97,15 +97,16 @@ Ordered by how much each unblocks. Decisions 2, 3, 4, and 6 only become concrete
 4. **Does cadence run on a schedule, and where?** Cron specs exist; no deployment does. *Recommendation: defer Prefect; a scheduled invocation of the host from decision 1 achieves the same outcome with far less infrastructure.*
 5. **Implement the nominal integrations, or strike them?** mem0, dspy, guardrails-ai, and Phoenix are named but uncalled. *Recommendation: strike them from the README and requirements tiers.*
 6. **Do writer leases become durable?** *Recommendation: persist to SQLite or a lockfile, converting the single-writer guarantee from aspiration to fact.*
-7. **Who fixes the standing base-branch failures?** Current `main` is red on five independent checks, none of them caused by repository code changes under review:
-   - Lockfile drift, already recorded in `docs/DEPENDENCY_AUDIT_2026-07-25.md`.
-   - Two `zizmor` `ref-version-mismatch` findings on pinned action version comments.
-   - An invalid `semver-major-days` property in `.github/dependabot.yml`, unsupported for the `github-actions` ecosystem — **Dependabot is not running for this repository at all** until it is removed.
-   - The two `tests/test_orchestration.py` grant-scope failures above.
-   - `claude-review` fails because its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment; the action exits in ~19s having produced no review. This one is **not fixable in a pull request** — it needs a repository secret set by Joe, or the workflow moved to another supported auth method.
+7. **Who fixes the standing red CI checks?** The test and contract surface is green; four checks are not, none of them caused by repository code changes under review:
+   - `Locks match their manifests` (3.11 and 3.12) — upstream drift against `lock-runtime-evaluation.txt`, already recorded in `docs/DEPENDENCY_AUDIT_2026-07-25.md`. A reconciliation is in flight in PR #57, so this may already be handled.
+   - `zizmor` — two `ref-version-mismatch` findings on pinned action version comments.
+   - `.github/dependabot.yml` — an invalid `semver-major-days` property, unsupported for the `github-actions` ecosystem. **Dependabot is not running for this repository at all** until it is removed.
+   - `claude-review` — its `ANTHROPIC_API_KEY` secret resolves empty in the workflow environment, so the action exits in ~19s having produced no review. This one is **not fixable in a pull request**; it needs a repository secret or a different supported auth method.
 
-   *Recommendation: one separate infrastructure PR for the first four; the fifth is a repository-settings action. None of these belong in a documentation change.*
+   *Recommendation: one separate infrastructure PR for the first three, after checking PR #57 for overlap; the fourth is a repository-settings action. None of these belong in a documentation change.*
 
 ## Rollback
 
 This change adds one document and two index lines (`README.md`, `docs/README.md`). No code, schema, configuration, or test behavior was modified, and no agent lifecycle stage changed. To reverse: delete `docs/REPO_AUDIT_2026-07-30.md` and remove its index entries, or revert the commit. Nothing in this record grants authority, promotes an agent, or activates a capability.
+
+`requirements/lock-runtime-evaluation.txt` is named in this record only as the subject of a pre-existing CI failure inherited from `main`. This change does **not** modify it, regenerate it, or alter any pin, so reverting this record leaves it exactly as it stands and nothing about that failure is undone here. Fixing it remains open decision 7, and belongs to a separate infrastructure change.
