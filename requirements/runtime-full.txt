@@ -1,0 +1,26 @@
+# The whole runtime stack, as one manifest.
+#
+# Exists because `requirements/lock-2026-07-24.txt` had no manifest. It was a
+# hand-assembled union that no resolver had ever checked, and it showed: the
+# file pinned `posthog==7.29.0` while pinning `chromadb==1.1.1`, which requires
+# `posthog<6.0.0`. Those cannot both hold, so the "full runtime stack" was
+# uninstallable by any resolver from the day it was committed
+# (docs/DEPENDENCY_AUDIT_2026-07-25.md recorded the conflict; this file is the
+# fix). It was also incomplete: 269 pinned packages against a real resolution
+# of 1,053.
+#
+# With a manifest the lock is derivable and checkable, so the `locks` CI job
+# can prove it still represents its inputs rather than trusting that it does.
+#
+# Scope: every tier `scripts/verify_runtime_stack.py` audits, plus the root
+# AutoGen runtime. The evaluation tier is deliberately excluded — it has its
+# own manifest and lock, runs only on the workstation, and pulls deepeval,
+# which wants a posthog major that chromadb forbids. Keeping the two sets apart
+# is what makes both resolvable; merging them is what made neither.
+-r ../requirements.txt
+-r runtime-contracts.txt
+-r runtime-orchestration.txt
+-r runtime-memory.txt
+-r runtime-observability.txt
+-r runtime-guards.txt
+-r runtime-intelligence.txt

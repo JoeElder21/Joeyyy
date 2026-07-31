@@ -95,37 +95,62 @@ class CadenceAndMissionGraphTests(unittest.TestCase):
         self.assertIn("irreversible executed: submit to LFUCG", resumed["actions"])
 
 
-@unittest.skipUnless(
-    _available("autogen_agentchat") and _available("autogen_ext"),
-    "autogen not installed",
-)
+@unittest.skipUnless(_available("autogen"), "AutoGen 0.2 runtime is not installed")
 class GroupDebateTests(unittest.TestCase):
-    def _client(self, turns: list[str]):
-        from autogen_ext.models.replay import ReplayChatCompletionClient
+    """The 0.2 line, matching the pin and the other two AutoGen modules.
 
-        return ReplayChatCompletionClient(turns)
+    These tests ran nowhere until 2026-07-30: the module imported
+    ``autogen_agentchat`` (0.4+) while the repository pins
+    ``autogen-agentchat<0.3``, which provides ``autogen``. No installation of
+    the declared set could satisfy them. See the module docstring of
+    ``scripts/group_debate.py``.
+
+    ``llm_config=False`` plus ``default_auto_reply`` is the fully offline 0.2
+    pattern already proven by ``tests/test_autogen_orchestrator.py`` — no model,
+    no network, and no replay client from an unmanifested package.
+    """
+
+    @staticmethod
+    def _scripted(chat, replies: dict[str, str]) -> None:
+        for name, agent in chat.agents.items():
+            agent._default_auto_reply = replies.get(name, f"{name} synthetic turn")
 
     def test_registered_challenge_pair_actually_debates(self):
-        import asyncio
+        from autogen import ConversableAgent
 
         from scripts.group_debate import build_challenge_debate
 
-        team = build_challenge_debate(
+        chat = build_challenge_debate(
             "APEX",
             ("apex_war_architect", "apex_intelligence_forge"),
-            self._client(
-                [
-                    "Campaign two is the highest-leverage move this quarter.",
-                    "The source record does not support that: two of three cited "
-                    "opportunities are stale. TERMINATE",
-                ]
-            ),
-            max_turns=2,
+            llm_config=False,
+            max_turns=3,
         )
-        result = asyncio.run(team.run(task="Debate: is campaign two the right focus?"))
-        speakers = {message.source for message in result.messages}
-        self.assertIn("apex_war_architect", speakers)
-        self.assertIn("apex_intelligence_forge", speakers)
+        self._scripted(
+            chat,
+            {
+                "apex_war_architect": "Campaign two is the highest-leverage move this quarter.",
+                "apex_intelligence_forge": (
+                    "The source record does not support that: two of three cited "
+                    "opportunities are stale."
+                ),
+            },
+        )
+        opener = ConversableAgent(
+            name="apex_chief_of_staff",
+            llm_config=False,
+            human_input_mode="NEVER",
+            code_execution_config=False,
+            default_auto_reply="noted",
+        )
+        opener.initiate_chat(
+            chat.manager,
+            message="Debate: is campaign two the right focus?",
+            clear_history=True,
+        )
+        spoken = {message.get("name") for message in chat.groupchat.messages}
+        self.assertIn("apex_war_architect", spoken)
+        self.assertIn("apex_intelligence_forge", spoken)
 
     def test_unregistered_and_cross_brain_pairs_are_refused(self):
         from scripts.group_debate import DebateRefused, build_challenge_debate
@@ -136,14 +161,33 @@ class GroupDebateTests(unittest.TestCase):
                 ("apex_war_architect", "apex_delivery_commander")
                 if not self._pair_registered("apex_war_architect", "apex_delivery_commander")
                 else ("apex_deal_engine", "apex_systems_blacksmith"),
-                self._client(["x"]),
+                llm_config=False,
             )
         with self.assertRaises(DebateRefused):
             build_challenge_debate(
                 "APEX",
                 ("apex_war_architect", "jeos_life_architect"),
-                self._client(["x"]),
+                llm_config=False,
             )
+
+    def test_a_model_grant_of_tools_is_refused(self):
+        """Connector isolation holds at the model boundary too."""
+        from scripts.group_debate import DebateRefused, build_challenge_debate
+
+        for grant in ({"tools": [{"name": "shell"}]}, {"functions": [{"name": "shell"}]}):
+            with self.subTest(grant=sorted(grant)), self.assertRaises(DebateRefused):
+                build_challenge_debate(
+                    "APEX",
+                    ("apex_war_architect", "apex_intelligence_forge"),
+                    llm_config={"model": "irrelevant", **grant},
+                )
+
+    def test_selector_chat_refuses_to_degrade_into_round_robin(self):
+        """A selector with no model cannot select; silence would be a lie."""
+        from scripts.group_debate import DebateRefused, build_selector_chat
+
+        with self.assertRaises(DebateRefused):
+            build_selector_chat("APEX", llm_config=False)
 
     @staticmethod
     def _pair_registered(a: str, b: str) -> bool:
@@ -158,9 +202,10 @@ class GroupDebateTests(unittest.TestCase):
 
         manifest = load_manifest("apex", ROOT)
         route = next(r for r in manifest["cadence_routes"] if r["cadence"] == "daily")
-        team = build_cadence_chat("APEX", "daily", self._client(["a", "b", "c", "d"]))
-        names = [participant.name for participant in team._participants]
-        self.assertEqual(names, list(route["order"]) + [route["integrator"]])
+        chat = build_cadence_chat("APEX", "daily", llm_config=False)
+        expected = list(route["order"]) + [route["integrator"]]
+        self.assertEqual(list(chat.speaker_order), expected)
+        self.assertEqual([agent.name for agent in chat.groupchat.agents], expected)
 
 
 class GroupChatPlanTests(unittest.TestCase):
