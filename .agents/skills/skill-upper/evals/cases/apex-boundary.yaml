@@ -1,0 +1,14 @@
+id: apex-boundary
+title: Preserve the APEX evaluation boundary
+context:
+  repo_fixture: evals/fixtures/engine-workspace
+
+input:
+  prompt: "Describe the mandatory handling for an APEX Skill evaluation."
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        all: ["APEX_ONLY", "AGENT_007_INTEGRATES", "PRIVATE_REPORT"]
+        not: ["JEOS_PAYLOAD"]
+    - exit_code: 0

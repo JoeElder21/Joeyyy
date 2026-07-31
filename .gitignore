@@ -63,6 +63,8 @@ audit/
 # operational state from a real workstation. Machine-local, never tracked.
 .state/
 
+# skill-up reports can contain prompts, transcripts, and model output.
+*-workspace/
 # Uploaded screenshots and binaries never belong in this public repo
 *.png
 *.jpg

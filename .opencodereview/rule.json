@@ -1,0 +1,32 @@
+{
+  "include": [
+    "tests/**/*.py"
+  ],
+  "exclude": [
+    "audit/**",
+    "runtime-memory/**",
+    "private-memory/**",
+    "brain-memory/**",
+    "brains/*/memory/**",
+    "trial/output/**",
+    "vendor/**"
+  ],
+  "rules": [
+    {
+      "path": "{runtime,scripts,connectors}/**/*.{py,mjs}",
+      "rule": "Prioritize correctness, fail-closed authority and privacy behavior, command or query injection, secret leakage, unsafe external I/O, race conditions, replay or idempotency failures, incomplete rollback/readback, and contract drift. Report only actionable defects on changed lines; preserve Agent 007 as designated writer and the APEX/JEOS boundary."
+    },
+    {
+      "path": "schemas/**/*.json",
+      "rule": "Check schema validity, fail-closed required fields and additionalProperties behavior, version and enum drift against runtime consumers, replay resistance, privacy classification, ownership, expiration, readback, and rollback semantics."
+    },
+    {
+      "path": "{config,brains}/**/*.toml",
+      "rule": "Check TOML validity and semantic drift across registries, lifecycle, routes, modes, namespaces, ownership, brain separation, least privilege, and designated-writer constraints."
+    },
+    {
+      "path": ".github/workflows/**/*.{yaml,yml}",
+      "rule": "Check least-privilege permissions, immutable action pinning, untrusted pull-request execution, secret exposure, shell injection, dependency provenance, and whether every reported green check actually executes the governed validation surface."
+    }
+  ]
+}
