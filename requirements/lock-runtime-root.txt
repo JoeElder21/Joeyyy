@@ -52,7 +52,7 @@ numpy==1.26.4
     # via
     #   autogen-agentchat
     #   flaml
-openai==2.50.0
+openai==2.51.0
     # via autogen-agentchat
 packaging==26.2
     # via autogen-agentchat
