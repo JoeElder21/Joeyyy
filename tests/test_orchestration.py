@@ -644,6 +644,8 @@ class SelectionReportBaselineTests(unittest.TestCase):
         added = namespace["MARKDOWN_ADDED"]
         now = namespace["MARKDOWN_NOW"]
         baseline = namespace["_MD_BEFORE"]
+        if not namespace["_BASE"]:
+            self.skipTest("not on a feature branch — run on a PR branch")
         try:
             tips = namespace["_merged_upstream_tips"]()
         except report_gates._Unanswerable:
