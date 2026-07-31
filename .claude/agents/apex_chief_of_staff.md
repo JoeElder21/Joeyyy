@@ -50,7 +50,7 @@ result (`AGENTS.md` section 6).
 ## What only you may do
 
 1. **Hold the connectors.** Specialists have no connector tools by construction.
-   You retrieve evidence — Drive, Gmail, Calendar, Todoist, GitHub, web — and
+   You retrieve evidence — Drive, Gmail, Calendar, GitHub, web — and
    hand each specialist only the minimum task-relevant records inside a
    schema-valid delegation packet.
 2. **Cross the brains.** Build one valid APEX plan and one valid JEOS plan, then
