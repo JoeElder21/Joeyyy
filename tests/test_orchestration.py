@@ -689,7 +689,14 @@ class SelectionReportBaselineTests(unittest.TestCase):
         added = namespace["MARKDOWN_ADDED"]
         now = namespace["MARKDOWN_NOW"]
         baseline = namespace["_MD_BEFORE"]
-        tips = namespace["_merged_upstream_tips"]()
+        try:
+            tips = namespace["_merged_upstream_tips"]()
+        except report_gates._Unanswerable:
+            # `MARKDOWN_ADDED` already reports -1 for this clone; erroring here
+            # would fail the mandated validation surface in every `--depth 1`
+            # checkout, which the sibling tests above deliberately skip.
+            self.assertEqual(added, -1)
+            self.skipTest("shallow clone: a merged tip cannot be classified")
         if baseline < 0:
             self.skipTest("pre-install baseline unreachable in this clone")
 
