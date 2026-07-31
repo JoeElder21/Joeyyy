@@ -36,7 +36,12 @@ jobs:
           persist-credentials: false
 
       - name: Review pull request
-        uses: anthropics/claude-code-action@12310e4417c3473095c957cb311b3cf59a38d659 # v1.0.99
+        # Pinned to the COMMIT v1.0.99 points to, not to the tag object -- see
+        # the fuller note in claude.yml. v1.0.99 is an annotated tag whose
+        # object is 12310e4417c34730 and whose commit (`v1.0.99^{}`) is
+        # c3d45e8e941e1b2a. A tag object is mutable, so pinning one preserves
+        # the mutability SHA-pinning exists to remove.
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true

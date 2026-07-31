@@ -3614,10 +3614,6 @@ class ThirtyFifthPassRegressionTests(unittest.TestCase):
         self.assertIn("scheduled_task_change", HIGH_IMPACT_ACTIONS)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ThirtySixthPassRegressionTests(unittest.TestCase):
     """Four classifier findings and the delegation action allowlist.
 
@@ -4759,3 +4755,12 @@ class FortiethPassRegressionTests(unittest.TestCase):
                     "irreversible_bulk_deletion",
                     f"{action} names destruction whatever its object is",
                 )
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_policy_enforcement` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

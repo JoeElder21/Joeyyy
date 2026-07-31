@@ -6,6 +6,7 @@ step, unpin an action, or remove a boundary document.
 """
 
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -22,16 +23,23 @@ OPTIMIZATION_RECORD = ROOT / "docs" / "REPO_OPTIMIZATION_2026-07-25.md"
 def _npm_lockfiles() -> list[str]:
     """Every committed npm lock, as a repo-relative POSIX path.
 
-    Derived from the tree rather than listed, because a list is what let the
-    relay connector's lock go unscanned. `node_modules` is excluded: those locks
+    Derived from the index rather than listed, because a list is what let the
+    relay connector's lock go unscanned. Not a directory walk: a walk also finds
+    locks inside checked-out submodules (`vendor/relay` carries two), which
+    belong to their own repositories and are outside this repository's scan and
+    update surface — so the suite failed in any clone that had run
+    `git submodule update --init`. `node_modules` is excluded: those locks
     belong to dependencies, are not committed, and are covered transitively by
     the top-level lock that resolved them.
     """
-    return [
-        path.relative_to(ROOT).as_posix()
-        for path in ROOT.rglob("package-lock.json")
-        if "node_modules" not in path.parts and ".git" not in path.parts
-    ]
+    listing = subprocess.run(
+        ["git", "ls-files", "*package-lock.json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return [path for path in listing if "node_modules" not in path.split("/")]
 
 
 # `uses: owner/repo@ref` — captures the ref so it can be checked for a SHA pin.
@@ -60,6 +68,38 @@ class WorkflowSecurityTests(unittest.TestCase):
                         FULL_SHA,
                         f"{path.name}: {reference!r} must be pinned to a full commit SHA "
                         "with the version in a trailing comment",
+                    )
+
+    # A tag OBJECT's sha is 40 hex characters too, so the test above passed
+    # while `anthropics/claude-code-action` was pinned to the annotated tag
+    # v1.0.99 rather than to the commit that tag points at. Being a full sha is
+    # necessary and NOT sufficient: a tag object can be deleted and re-created
+    # against different code, which is the same mutability a floating tag has
+    # and exactly what pinning is supposed to remove. zizmor's
+    # ref-version-mismatch audit caught it; this records the ones already
+    # identified so a revert cannot quietly restore them.
+    #
+    # Resolving an arbitrary pin needs the network (`git ls-remote --tags <repo>`
+    # and take the `^{}` line), so this cannot be a general check offline. It is
+    # a denylist of the specific objects this repository has been burned by.
+    KNOWN_TAG_OBJECTS = {
+        "12310e4417c3473095c957cb311b3cf59a38d659": (
+            "anthropics/claude-code-action v1.0.99 tag object; "
+            "the commit is c3d45e8e941e1b2ad7b278c57482d9c5bf1f35b3"
+        ),
+    }
+
+    def test_no_action_is_pinned_to_a_known_tag_object(self):
+        for path in self._workflow_files():
+            text = path.read_text(encoding="utf-8")
+            for reference in USES_PATTERN.findall(text):
+                _, _, ref = reference.rpartition("@")
+                with self.subTest(workflow=path.name, action=reference):
+                    self.assertNotIn(
+                        ref.lower(),
+                        self.KNOWN_TAG_OBJECTS,
+                        f"{path.name}: {reference!r} pins a tag object, not a commit — "
+                        f"{self.KNOWN_TAG_OBJECTS.get(ref.lower(), '')}",
                     )
 
     def test_checkout_never_persists_credentials(self):
@@ -1396,6 +1436,117 @@ class DependencyProvenanceTests(unittest.TestCase):
                 self.assertIn(lock, job, f"{lock} is scanned but its drift is never checked")
 
 
+class RuntimeMajorBoundaryTests(unittest.TestCase):
+    """A bare manifest entry lets a re-resolve cross a major version on its own."""
+
+    GOVERNANCE_SERVER = ROOT / "scripts" / "governance_mcp_server.py"
+    CONTRACTS_MANIFEST = ROOT / "requirements" / "runtime-contracts.txt"
+    CONTRACTS_LOCK = ROOT / "requirements" / "lock-runtime-contracts.txt"
+
+    def _requirement(self, name: str) -> str:
+        for line in self.CONTRACTS_MANIFEST.read_text(encoding="utf-8").splitlines():
+            entry = line.split("#", 1)[0].strip()
+            if entry and re.match(rf"^{re.escape(name)}\b", entry):
+                return entry
+        self.fail(f"{name} is not listed in {self.CONTRACTS_MANIFEST.name}")
+
+    def test_the_mcp_requirement_is_bounded_above(self):
+        # `scripts/governance_mcp_server.py` imports `mcp.server.fastmcp`, and
+        # mcp 2.0.0 removes that module outright. The manifest carried a bare
+        # `mcp`, so regenerating the lock silently resolved to 2.0.0 and the
+        # mounts job failed with `NameError: name 'build_server' is not
+        # defined`. A bare entry is a claim that every future major works.
+        entry = self._requirement("mcp")
+        self.assertNotEqual(entry, "mcp", "mcp is unbounded; a re-resolve may cross to 2.x")
+        self.assertRegex(
+            entry,
+            r"(<\s*2|<=\s*1|==\s*1\.|~=\s*1\.)",
+            f"{entry!r} does not bound mcp below 2.x",
+        )
+
+    def test_the_locked_mcp_is_a_major_the_server_can_import(self):
+        # The manifest bound and the committed lock are separate facts; the lock
+        # is what CI installs. Checking only the manifest would pass while the
+        # lock still carried 2.x.
+        locked = re.search(
+            r"^mcp==(\d+)\.", self.CONTRACTS_LOCK.read_text(encoding="utf-8"), re.MULTILINE
+        )
+        self.assertIsNotNone(locked, "the contracts lock carries no pinned mcp")
+        self.assertEqual(
+            locked.group(1), "1", "the locked mcp is not the 1.x line the server imports from"
+        )
+
+    def test_the_import_the_bound_exists_for_is_still_the_one_used(self):
+        # If the server is ever ported off `mcp.server.fastmcp`, the bound above
+        # stops being justified and this test should fail rather than quietly
+        # keep pinning an old major for a reason that no longer holds.
+        source = self.GOVERNANCE_SERVER.read_text(encoding="utf-8")
+        self.assertIn(
+            "from mcp.server.fastmcp import FastMCP",
+            source,
+            "the server no longer imports mcp.server.fastmcp; re-justify the mcp<2 bound",
+        )
+
+    def test_the_entrypoint_reports_a_missing_runtime_instead_of_a_name_error(self):
+        # `MCP_AVAILABLE = False` leaves `build_server` undefined, so the
+        # entrypoint raised a bare NameError naming neither the missing
+        # dependency nor the remedy -- an incompatible mcp read exactly like an
+        # absent one. The import claims to degrade cleanly; it must actually.
+        source = self.GOVERNANCE_SERVER.read_text(encoding="utf-8")
+        entrypoint = source[source.index('if __name__ == "__main__":') :]
+        self.assertIn(
+            "if not MCP_AVAILABLE:",
+            entrypoint,
+            "build_server() is called without checking MCP_AVAILABLE",
+        )
+        self.assertLess(
+            entrypoint.index("if not MCP_AVAILABLE:"),
+            entrypoint.index("build_server()"),
+            "the availability check must precede the call it guards",
+        )
+        self.assertIn("mcp.server.fastmcp", entrypoint, "the error names no cause")
+
+
+class SuiteCollectionTests(unittest.TestCase):
+    """A module must run every test it defines, however it is invoked."""
+
+    def test_no_test_module_defines_anything_after_its_main_guard(self):
+        # `if __name__ == "__main__": unittest.main()` sitting mid-module means a
+        # direct `python -m tests.<module>` run calls main() and exits BEFORE the
+        # classes below it are defined -- so it runs a subset and prints "OK".
+        # `unittest discover` imports the module instead of executing it as
+        # __main__, so the hidden tests DO run in CI and nothing ever says the
+        # two disagree. Nine modules had it; test_policy_enforcement was hiding
+        # eleven classes and reported success on 248-of-248 only under discovery.
+        #
+        # Static rather than executed: running every module twice to compare
+        # counts takes minutes, and the property is a source-layout one.
+        offenders = {}
+        for path in sorted((ROOT / "tests").glob("test_*.py")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            guard = next(
+                (i for i, line in enumerate(lines) if line.startswith('if __name__ == "__main__"')),
+                None,
+            )
+            if guard is None:
+                # No guard at all is fine -- the module is simply not directly
+                # runnable, and discovery still collects it.
+                continue
+            hidden = [
+                f"{i + 1}: {lines[i].split('(')[0]}"
+                for i in range(guard + 1, len(lines))
+                if lines[i].startswith(("class ", "def "))
+            ]
+            if hidden:
+                offenders[path.name] = hidden
+        self.assertEqual(
+            offenders,
+            {},
+            "these modules define tests after their __main__ guard, so a direct "
+            f"run silently skips them and still reports OK: {offenders}",
+        )
+
+
 class SecretScanScopeTests(unittest.TestCase):
     """Each event gets the range it is responsible for."""
 
@@ -1434,5 +1585,91 @@ class SecretScanScopeTests(unittest.TestCase):
                 self.assertNotIn(expression, script)
 
 
+class PrivacyGuardFixtureShapeTests(unittest.TestCase):
+    """The guard's own fixtures must need no gitleaks suppression.
+
+    `scripts/privacy_guard.py` builds negative fixtures as split literals so its
+    OWN patterns do not match its test data. Splitting off the first character
+    (`"c" + 'lient_secret...'`) achieves that but not the same for gitleaks,
+    which reads the reassembled line -- so one fixture produced a working-tree
+    finding, that finding needed a LINE-PINNED suppression, and a line-pinned
+    suppression drifts whenever anything above it moves. It broke CI once, was
+    raised in review four times, and Joe marked it Fix.
+
+    The fix was to stop producing the finding rather than to keep suppressing it.
+    This test keeps it that way: no working-tree entry may name this file. It is
+    the one file in the exemption list this repository actually wrote, so it is
+    the one where "do not need the exemption" was available -- the rest are
+    absorbed documents whose sample text must keep looking like the credential it
+    warns about.
+    """
+
+    GUARD = "scripts/privacy_guard.py"
+
+    def test_the_guard_needs_no_working_tree_exemption(self):
+        for path, rule, number in GitleaksSuppressionTests()._working_tree_entries():
+            with self.subTest(entry=f"{path}:{rule}:{number}"):
+                self.assertNotEqual(
+                    path,
+                    self.GUARD,
+                    f"{self.GUARD} is back in the working-tree exemptions. Re-split the "
+                    "fixture so gitleaks stops matching it instead of pinning a line "
+                    "number that will drift again.",
+                )
+
+    def test_the_history_exemption_is_still_present_and_immutable(self):
+        # The other direction, and the part that CANNOT be removed: `gitleaks git`
+        # attributes a secret to the commit that ADDED the line, so that
+        # fingerprint is pinned to an immutable ancestor. Deleting it because the
+        # working-tree one went away would turn the history scan red.
+        text = (ROOT / ".gitleaksignore").read_text(encoding="utf-8")
+        history = [
+            line.strip()
+            for line in text.splitlines()
+            if self.GUARD in line and not line.strip().startswith("#")
+        ]
+        self.assertEqual(
+            len(history),
+            1,
+            f"expected exactly one (history-form) entry for {self.GUARD}, found {history}",
+        )
+        self.assertRegex(history[0], r"^[0-9a-f]{40}:")
+
+    def test_the_fixture_value_still_matches_the_document_it_excuses(self):
+        # The re-split is only safe because the runtime VALUE is unchanged. This
+        # string is an allowlist entry: if it stops matching the absorbed
+        # document, the guard starts reporting that document as a real leak.
+        import sys
+
+        # Push/pop rather than a bare insert, matching test_runtime_stack.py. A
+        # leaked entry stays on sys.path for every test that runs after this
+        # one, which is an order-dependent import bug waiting for an unrelated
+        # module to shadow a stdlib name.
+        sys.path.insert(0, str(ROOT))
+        try:
+            from scripts.privacy_guard import PLACEHOLDER_LITERALS
+        finally:
+            sys.path.pop(0)
+
+        document = Path(".claude/agents/awesome-claude-agents/specialized/python/testing-expert.md")
+        literals = PLACEHOLDER_LITERALS[document]
+        matching = [value for value in literals if value.startswith("client_secret")]
+        self.assertEqual(len(matching), 1, f"expected one client_secret literal, got {matching}")
+        self.assertIn(
+            matching[0],
+            (ROOT / document).read_text(encoding="utf-8"),
+            "the re-split fixture no longer matches the document it exempts, so the "
+            "guard will report that document as a real leak",
+        )
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# above PrivacyGuardFixtureShapeTests -- so `python -m tests.test_repo_hygiene`
+# called unittest.main() and exited BEFORE that class was defined, running 65 of
+# 68 tests and reporting "OK". `unittest discover` imports the module rather than
+# executing it as __main__, so the same three tests ran there and the gap was
+# invisible from CI. A suite that silently omits checks and reports success is
+# the exact failure this file exists to catch, committed in the file itself.
+# Anything appended below this line is not collected on a direct run.
 if __name__ == "__main__":
     unittest.main()

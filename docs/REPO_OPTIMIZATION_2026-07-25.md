@@ -2042,6 +2042,68 @@ and suite figures are regenerated together now (`80f5369`, 304 files, ~90,700
 lines), with a note in the document saying a change to one means re-reading the
 others, and stating which sections were verified rather than re-derived.
 
+### After the merge — Joe's five "Fix" markers, and the one that was not already done
+
+PR #31 merged as `b321448`. Joe then marked **Fix** at five locations. Four land
+on code that is already the fix, because he marks CURRENT line numbers and the
+round-40 work was in the merge:
+
+| Marker | What is at that line now |
+| --- | --- |
+| `scripts/policy_enforcement.py:134` | `ORIGINALS_MARKERS` — the compound `overwrite` rule |
+| `evals/run_evaluations.py:381` | `OUTPUT_ROOT.chmod(0o700)` |
+| `docs/REPOSITORY_OVERVIEW.md:11` | the regenerated snapshot row |
+| `scripts/issue_instruction.py:182` | `_refuse_a_readable_key(key_path)` |
+
+The fifth, `.gitleaksignore:18`, was the recurring history-entry claim — refuted
+four times on its stated facts. **Marking it Fix is not a fact claim, it is an
+instruction to make the recurrence stop, and that is a different and better
+question than the one the finding asked.**
+
+**The history entry cannot be removed, and that is worth stating once so it is not
+asked a fifth time.** `gitleaks git` scans DIFFS and attributes a secret to the
+commit that ADDED the line, so this fingerprint is pinned to `03cb443` — an
+immutable ancestor of every future commit. No present-day edit can change it and
+none can make it stale, which also means it can never *drift*.
+
+**What was removable was the cause of new findings.** The fixture that produced
+the working-tree entry is now split after the key rather than inside it —
+`'client_secret"' + ': "pi_..."'` instead of `"c" + 'lient_secret": "pi_..."'`.
+gitleaks stops matching because the assignment it keys on is broken; the privacy
+guard's own patterns remain equally unmatched, which is what the original split
+existed for; and the runtime value is **byte-identical**, which matters because
+this string is an allowlist entry that must still match the absorbed document it
+excuses. All three properties were verified rather than reasoned about, including
+that the value still appears in that document.
+
+So `scripts/privacy_guard.py` now has **no working-tree fingerprint** — the
+line-drift class that broke CI once and was raised four times no longer has a
+live instance in the one file on that list this repository actually wrote.
+
+That is a claim about the current tree, not a permanent guarantee. A later edit
+to the fixture, or a change to gitleaks' own rule set, can reintroduce a match;
+nothing here prevents that, and an earlier draft of this section said "no future
+edit to it can create one", which was an absolute this change cannot support.
+The durable part is the **remedy**, not the impossibility: when a match comes
+back, re-split the literal so the scanner stops matching it rather than adding
+another line-pinned suppression. Exemptions are the fallback for text that
+cannot be rewritten — which is exactly why the remaining five are absorbed
+vendor documents whose sample text must keep looking like the credential it
+warns about, and why this repository's own fixture is not among them.
+
+`PrivacyGuardFixtureShapeTests` holds all three properties: no working-tree entry
+may name the guard, the history entry must still be present and commit-pinned
+(deleting it because the working-tree one went away would turn the history scan
+red), and the fixture value must still match the document it exempts. Three
+mutants killed.
+
+**Follow-up work restarted from `main` rather than reusing the merged branch.** A
+merged pull request is finished; it cannot track new work. The branch was reset to
+`origin/main` with this change on top, and the overview's snapshot regenerated
+against the new base (`b321448`, 304 files, 1,082 tests) — which the round-40
+snapshot test now requires, since the head it names must be an ancestor of the
+current commit.
+
 ### What remains open after this round
 
 Not a decision backlog — the actual work the harness exposed:

@@ -51,14 +51,22 @@ Applied automatically to matching files via each file's `applyTo` glob.
 ## Agents — `.github/agents/`
 
 Registered in `docs/AGENT_REGISTRY.md`, as `AGENTS.md` requires. These are editor-plane
-agents: no brain ownership, no memory namespace, no write target, no writer lease. Agent
-007 remains the sole write-capable native agent.
+agents: no brain ownership, no memory namespace, and no governed write target. Agent 007
+remains the sole write-capable native agent.
+
+`dotnet-self-learning-architect.agent.md` is the one partial exception and is called out
+below: its `tools` list is upstream's, so unlike the other three it retains file-editing and
+terminal tools, and its own instructions direct it to write learning artifacts under
+`.github/Lessons/` and `.github/Memories/`. Those two directories are editor-plane
+scratch space — they carry no packet, no lease, and no route — but the claim "no write
+target" is not true of this agent, so it is not made.
 
 | File | What it does | Status |
 | --- | --- | --- |
 | `prompt-engineer.agent.md` | Treats every input as a prompt to analyse and rewrite. **Local override:** `tools: []`, `user-invocable: false`. | candidate |
 | `task-planner.agent.md` | Produces implementation plans destined for `.copilot-tracking/`. **Local override:** execution and file-editing tools removed, `agent` added, workflow rewritten to return artifacts. | candidate |
 | `task-researcher.agent.md` | Research pass the planner mandates before planning. **Local override:** execution and file-editing tools removed, workflow rewritten to return artifacts. | candidate |
+| `dotnet-self-learning-architect.agent.md` | Principal-level .NET architect; chooses between parallel and orchestrated subagent execution and maintains versioned lessons/memories. **Local override:** `user-invocable: false`, `disable-model-invocation: true` — the lifecycle gates every `candidate` here carries. **Tools left at upstream**, so `edit/editFiles`, `execute/runInTerminal`, `execute/runTask` and `agent` are all retained; see the registry for why that is not yet safe to rely on. | candidate |
 
 **`agent-safety` local override.** Upstream lists "send email" among the actions always
 requiring human-in-the-loop approval. This file applies to `**`, so that arrived as a
@@ -73,6 +81,11 @@ out-of-scope) rather than inventing a second checkpoint.
 `.github/instructions/agents.instructions.md` grants *every* built-in and MCP tool. This
 agent processes arbitrary user-supplied text, so all-tools access would let prompt
 injection reach the repository and connected systems. `tools: []` is set deliberately.
+
+**`agents.instructions` local override.** Upstream's "Related Files" section links to
+`./prompt.instructions.md` and `./instructions.instructions.md` relative to itself. Neither
+file is vendored in this repository, so both links were dead here. Each now points at the
+same file in the upstream tree at the pinned commit above. Nothing else in the file changed.
 
 **Do not dismiss a drift report on this file.** An earlier version of this note told
 maintainers to treat any reported drift as expected — which would have hidden a genuine

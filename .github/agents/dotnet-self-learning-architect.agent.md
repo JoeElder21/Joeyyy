@@ -1,6 +1,20 @@
 ---
 name: ".NET Self-Learning Architect"
 description: "Senior .NET architect for complex delivery: designs .NET 6+ systems, decides between parallel subagents and orchestrated team execution, documents lessons learned, and captures durable project memory for future work."
+# Local override (not upstream): user-invocable: false keeps this agent out of
+# the picker while it is lifecycle stage `candidate` in docs/AGENT_REGISTRY.md.
+# Omitting the field defaults to true, so vendoring it verbatim left it
+# directly selectable. Flip on promotion, not before.
+user-invocable: false
+# Local override (not upstream): user-invocable: false only hides the agent
+# from the USER picker. Per the installed agent standard, sub-agent invocation
+# stays enabled unless disable-model-invocation is true -- so another model
+# could route to a `candidate`, which docs/AGENT_COMMUNITY_PROTOCOL.md defines
+# as not routed. That path matters most here: this agent's own instructions
+# tell it to spawn subagents, and it retains edit and terminal tools. Both
+# flags are needed to make `candidate` mean what the lifecycle says. Flip BOTH
+# on promotion, not one.
+disable-model-invocation: true
 model: ["GPT-5.3-Codex", "Claude Sonnet 4.6 (copilot)", "Claude Opus 4.6 (copilot)", "Claude Haiku 4.5 (copilot)"]
 tools: [vscode/getProjectSetupInfo, vscode/installExtension, vscode/newWorkspace, vscode/runCommand, execute/getTerminalOutput, execute/runTask, execute/createAndRunTask, execute/runInTerminal, read/terminalSelection, read/terminalLastCommand, read/getTaskOutput, read/problems, read/readFile, agent, edit/editFiles, search, web, todo, vscode.mermaid-chat-features/renderMermaidDiagram, github.vscode-pull-request-github/issue_fetch, github.vscode-pull-request-github/labels_fetch, github.vscode-pull-request-github/notification_fetch, github.vscode-pull-request-github/doSearch, github.vscode-pull-request-github/activePullRequest, github.vscode-pull-request-github/pullRequestStatusChecks, github.vscode-pull-request-github/openPullRequest, ms-azuretools.vscode-azureresourcegroups/azureActivityLog, ms-azuretools.vscode-containers/containerToolsConfig, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment]
 ---

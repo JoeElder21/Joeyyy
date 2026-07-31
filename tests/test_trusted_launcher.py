@@ -1300,6 +1300,33 @@ class ScriptsTrustedLauncherTests(unittest.TestCase):
                 authorize("civil3d", grant_path, key, ledger, now=1_000_120)
             self.assertEqual(ledger.verify(), [])
 
+    def test_concurrent_consume_of_one_grant_is_denied(self):
+        """The single-use property must survive two overlapping launches.
+
+        The replay check (`nonce in _consumed_nonces`) and the ledger append
+        that records consumption are separate steps, so two processes could both
+        pass the check before either appended and both execute one grant. An
+        exclusive O_EXCL claim on the nonce closes the window: here we simulate a
+        first process that has claimed the nonce but not yet appended, and prove
+        the second `authorize` is denied rather than admitted.
+        """
+        import hashlib
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key, ledger = self._env(tmp)
+            grant_path = issue_grant(
+                "civil3d", 30, key, Path(tmp), now=3_000_000, agent="apex_chief_of_staff"
+            )
+            nonce = json.loads(grant_path.read_text())["nonce"]
+            digest = hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+            claim = ledger.path.parent / f".{ledger.path.name}.claim-{digest}"
+            claim.parent.mkdir(parents=True, exist_ok=True)
+            os.close(os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+
+            with self.assertRaisesRegex(LaunchDenied, "already being consumed"):
+                authorize("civil3d", grant_path, key, ledger, now=3_000_060)
+
     def test_grant_for_wrong_mount_is_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             key, ledger = self._env(tmp)
@@ -1437,10 +1464,6 @@ class ScriptsTrustedLauncherTests(unittest.TestCase):
                 )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class LedgerDurabilityTests(unittest.TestCase):
     """A torn ledger write bricks every future launch, so the write must be atomic."""
 
@@ -1538,3 +1561,12 @@ class LauncherFailClosedTests(unittest.TestCase):
         self.assertTrue(resolved[0].startswith("/"))
         with self.assertRaises(GrantDeniedError):
             TrustedLauncher._resolved_command(("definitely-not-a-real-binary-xyz",))
+
+
+# Last statement in the file, deliberately. This guard used to sit mid-module,
+# so `python -m tests.test_trusted_launcher` called unittest.main() and exited before the
+# classes below it were defined -- running a subset and reporting "OK".
+# `unittest discover` imports the module rather than executing it as __main__,
+# so those tests ran in CI and the gap was invisible there.
+if __name__ == "__main__":
+    unittest.main()

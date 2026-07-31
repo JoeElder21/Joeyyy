@@ -53,6 +53,24 @@ class CanonicalKeyTests(unittest.TestCase):
             "APEX/APEX/Strategy-Campaigns/campaign-alpha",
         )
 
+    def test_resource_id_is_casefolded_to_match_packet_guard(self):
+        # PacketGuard.validate_lease_ledger keys active leases on the NFKC +
+        # casefolded resource_id, so "Playbook" and "playbook" are one canonical
+        # resource there. The registry is the sole single-writer gate on the
+        # memory_layer/lease_queue path (memory_layer.add validates only the one
+        # lease it is handed, never the whole ledger), so a case-preserving key
+        # here would let two "distinct" leases sit active on one resource.
+        self.assertEqual(
+            canonical_key("APEX", "APEX/Reusable-Playbooks", "Deck"),
+            canonical_key("APEX", "APEX/Reusable-Playbooks", "deck"),
+        )
+
+    def test_case_variant_resource_ids_cannot_both_hold_a_lease(self):
+        registry = LeaseRegistry()
+        _issue(registry, resource_id="Playbook-42")
+        with self.assertRaises(LeaseError):
+            _issue(registry, mission_id="m-002", resource_id="playbook-42")
+
 
 class LeaseRegistryTests(unittest.TestCase):
     def test_single_active_lease_per_canonical_key_across_missions(self):
