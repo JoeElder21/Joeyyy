@@ -1,269 +1,1083 @@
+# Resolved lock for requirements/runtime-full.txt — regenerated 2026-07-30.
+#
+# The filename keeps its original date because the security workflow,
+# osv-scanner.toml, tests/test_repo_hygiene.py and three sibling locks all
+# reference it by name. The date records when this lock was introduced, not
+# when it was last resolved; the line above is the resolution date.
+#
+# Regenerated because the previous contents could not be installed at all:
+#
+#   ERROR: Cannot install -r requirements/lock-2026-07-24.txt (line 36)
+#   and posthog==7.29.0 because these package versions have conflicting
+#   dependencies. chromadb 1.1.1 depends on posthog<6.0.0 and >=2.4.0
+#
+# That file had been assembled by hand with no manifest behind it, so no
+# resolver ever checked it. It was also incomplete — 269 pinned packages where
+# the real resolution is 1,053 — which is why "the full stack" had never been
+# installed anywhere, in CI or on a workstation. requirements/runtime-full.txt
+# is now its manifest, and a resolver produced everything below.
+#
+# PYTHON 3.12 ONLY. Unlike lock-runtime-root.txt, the 3.11 and 3.12 resolutions
+# of this set are NOT identical: 3.11 additionally requires async-timeout (via
+# redis) and resolves one package through a second path. Per
+# docs/RUNTIME_HOST_DECISION.md the governed execution host is a single
+# workstation, so this set targets one interpreter rather than pretending to
+# serve two. The stdlib contract floor is unaffected and still runs on both.
+#
+# Regenerate with:
+#   uv pip compile requirements/runtime-full.txt -o requirements/lock-2026-07-24.txt \
+#     --python-version 3.12 --no-header
+#
 aiofiles==24.1.0
+    # via crewai
 aiohappyeyeballs==2.7.1
+    # via aiohttp
 aiohttp==3.14.3
+    # via
+    #   instructor
+    #   kubernetes
+    #   litellm
+    #   llama-index-core
 aiosignal==1.4.0
+    # via aiohttp
 aiosqlite==0.21.0
+    # via
+    #   crewai
+    #   llama-index-core
+    #   prefect
 alembic==1.18.5
+    # via prefect
 amplitude-analytics==1.2.3
+    # via prefect
 amqp==5.3.1
-annotated-doc==0.0.4
+    # via kombu
+annotated-doc==0.0.5
+    # via fastapi
 annotated-types==0.8.0
-anthropic==0.119.0
+    # via pydantic
+anthropic==0.120.2
+    # via -r requirements/runtime-contracts.txt
 anyio==4.14.1
+    # via
+    #   anthropic
+    #   asyncer
+    #   dspy
+    #   httpx
+    #   langsmith
+    #   mcp
+    #   openai
+    #   prefect
+    #   sse-starlette
+    #   starlette
+    #   watchfiles
 appdirs==1.4.4
+    # via
+    #   crewai
+    #   crewai-cli
+    #   crewai-core
 apprise==1.12.0
+    # via prefect
 arize-phoenix-otel==0.16.1
+    # via -r requirements/runtime-observability.txt
 arrow==1.4.0
+    # via isoduration
 asgi-lifespan==2.1.0
+    # via prefect
 asyncer==0.0.8
+    # via dspy
 asyncpg==0.31.0
+    # via prefect
 attrs==26.1.0
-autogen-agentchat==0.7.5
-autogen-core==0.7.5
+    # via
+    #   aiohttp
+    #   cyclopts
+    #   jsonschema
+    #   referencing
+autogen-agentchat==0.2.40
+    # via
+    #   -r requirements/../requirements.txt
+    #   -r requirements/runtime-orchestration.txt
 backoff==2.2.1
+    # via posthog
 banks==2.4.5
+    # via llama-index-core
 bcrypt==5.0.0
+    # via chromadb
 beartype==0.22.9
+    # via py-key-value-aio
 billiard==4.2.4
+    # via celery
 build==1.5.0
+    # via chromadb
 burner-redis==0.1.7
+    # via pydocket
 cachetools==7.1.6
+    # via
+    #   dspy
+    #   prefect
+    #   py-key-value-aio
 cel-python==0.5.0
+    # via crewai
 celery==5.6.3
+    # via -r requirements/runtime-orchestration.txt
 certifi==2026.7.22
+    # via
+    #   apprise
+    #   crewai-cli
+    #   httpcore
+    #   httpx
+    #   kubernetes
+    #   requests
 cffi==2.1.0
+    # via cryptography
 charset-normalizer==3.4.9
+    # via
+    #   pdfminer-six
+    #   requests
 chromadb==1.1.1
+    # via crewai
 click==8.2.0
+    # via
+    #   apprise
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
+    #   crewai
+    #   crewai-cli
+    #   guardrails-ai
+    #   litellm
+    #   nltk
+    #   prefect
+    #   typer
+    #   uvicorn
 click-didyoumean==0.3.1
+    # via celery
 click-plugins==1.1.1.2
+    # via celery
 click-repl==0.3.0
+    # via celery
 cloudpickle==3.1.2
+    # via
+    #   dspy
+    #   prefect
+    #   pydocket
 colorama==0.4.6
+    # via
+    #   griffecli
+    #   taskipy
 coolname==5.0.0
-crewai==1.15.5
-crewai-cli==1.15.5
-crewai-core==1.15.5
+    # via prefect
+crewai==1.15.9
+    # via -r requirements/runtime-orchestration.txt
+crewai-cli==1.15.9
+    # via crewai
+crewai-core==1.15.9
+    # via
+    #   crewai
+    #   crewai-cli
 cronsim==2.7
+    # via pydocket
 cryptography==49.0.0
-cyclopts==4.22.1
+    # via
+    #   crewai-cli
+    #   crewai-core
+    #   pdfminer-six
+    #   prefect
+    #   pyjwt
+cyclopts==4.22.3
+    # via prefect
 dataclasses-json==0.6.7
+    # via llama-index-core
 dateparser==1.4.1
+    # via prefect
 defusedxml==0.7.1
-Deprecated==1.3.1
+    # via nltk
+deprecated==1.3.1
+    # via
+    #   banks
+    #   llama-index-core
+    #   llama-index-instrumentation
 deprecation==2.1.0
+    # via lancedb
 diff-match-patch==20241021
+    # via guardrails-ai
 dirtyjson==1.0.8
+    # via llama-index-core
 diskcache==5.6.3
+    # via
+    #   autogen-agentchat
+    #   dspy
 distro==1.9.0
+    # via
+    #   anthropic
+    #   langsmith
+    #   openai
+    #   posthog
 docker==7.2.0
-docstring_parser==0.18.0
+    # via
+    #   autogen-agentchat
+    #   prefect
+docstring-parser==0.18.0
+    # via
+    #   anthropic
+    #   cyclopts
+    #   instructor
 dspy==3.2.1
+    # via -r requirements/runtime-intelligence.txt
 durationpy==0.10
-et_xmlfile==2.0.0
+    # via kubernetes
+et-xmlfile==2.0.0
+    # via openpyxl
 exceptiongroup==1.3.1
-Faker==37.12.0
-fastapi==0.139.2
+    # via prefect
+faker==37.12.0
+    # via guardrails-ai
+fastapi==0.141.1
+    # via prefect
 fastuuid==0.14.0
-filelock==3.32.0
+    # via litellm
+filelock==3.32.2
+    # via huggingface-hub
 filetype==1.2.0
+    # via
+    #   banks
+    #   llama-index-core
+flaml==2.6.0
+    # via autogen-agentchat
 flatbuffers==25.12.19
+    # via onnxruntime
 fqdn==1.5.1
+    # via jsonschema
 frozenlist==1.8.0
-fsspec==2026.6.0
+    # via
+    #   aiohttp
+    #   aiosignal
+fsspec==2026.7.0
+    # via
+    #   huggingface-hub
+    #   llama-index-core
+    #   prefect
 gepa==0.0.27
+    # via dspy
 google-re2==1.1.20251105
+    # via cel-python
 googleapis-common-protos==1.75.0
-graphiti-core==0.29.2
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+graphiti-core==0.29.3
+    # via -r requirements/runtime-memory.txt
 graphviz==0.21
+    # via prefect
 greenlet==3.5.4
+    # via sqlalchemy
 griffe==2.1.0
+    # via
+    #   banks
+    #   prefect
 griffecli==2.1.0
+    # via griffe
 griffelib==2.1.0
+    # via
+    #   griffe
+    #   griffecli
+    #   openai-agents
 grpcio==1.83.0
+    # via
+    #   chromadb
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   qdrant-client
 guardrails-ai==0.10.2
+    # via -r requirements/runtime-guards.txt
 guardrails-ai-types==0.5.0
-guardrails_hub_types==0.0.4
+    # via guardrails-ai
+guardrails-hub-types==0.0.4
+    # via guardrails-ai
 h11==0.16.0
+    # via
+    #   httpcore
+    #   uvicorn
 h2==4.4.0
+    # via httpx
 hf-xet==1.5.2
+    # via huggingface-hub
 hpack==4.2.0
+    # via h2
 httpcore==1.0.9
+    # via
+    #   httpx
+    #   prefect
 httptools==0.8.0
+    # via uvicorn
 httpx==0.28.1
+    # via
+    #   anthropic
+    #   chromadb
+    #   crewai
+    #   crewai-cli
+    #   crewai-core
+    #   huggingface-hub
+    #   langgraph-sdk
+    #   langsmith
+    #   litellm
+    #   llama-index-core
+    #   mcp
+    #   openai
+    #   prefect
+    #   qdrant-client
 httpx-sse==0.4.3
-huggingface_hub==1.13.0
+    # via mcp
+huggingface-hub==1.13.0
+    # via tokenizers
 humanize==4.16.0
+    # via
+    #   jinja2-humanize-extension
+    #   prefect
 hyperframe==6.1.0
+    # via h2
 idna==3.18
-importlib_metadata==8.9.0
-importlib_resources==7.1.0
+    # via
+    #   anyio
+    #   httpx
+    #   jsonschema
+    #   requests
+    #   yarl
+importlib-metadata==8.9.0
+    # via litellm
+importlib-resources==7.1.0
+    # via chromadb
 instructor==1.15.4
+    # via crewai
 isoduration==20.11.0
-Jinja2==3.1.6
+    # via jsonschema
+jinja2==3.1.6
+    # via
+    #   banks
+    #   instructor
+    #   jinja2-humanize-extension
+    #   litellm
+    #   prefect
 jinja2-humanize-extension==0.4.0
+    # via prefect
 jiter==0.14.0
+    # via
+    #   anthropic
+    #   instructor
+    #   openai
 jmespath==1.1.0
+    # via cel-python
 joblib==1.5.3
+    # via nltk
+json-repair==0.60.1
+    # via
+    #   crewai
+    #   dspy
 json5==0.10.0
-json_repair==0.61.7
+    # via crewai
 jsonpatch==1.33
+    # via
+    #   langchain-core
+    #   prefect
 jsonpointer==3.1.1
+    # via
+    #   jsonpatch
+    #   jsonschema
 jsonref==1.1.0
+    # via
+    #   crewai
+    #   guardrails-ai
 jsonschema==4.26.0
+    # via
+    #   -r requirements/runtime-contracts.txt
+    #   chromadb
+    #   guardrails-ai
+    #   litellm
+    #   mcp
+    #   prefect
 jsonschema-specifications==2025.9.1
+    # via jsonschema
 kombu==5.6.2
+    # via celery
 kubernetes==36.0.3
+    # via chromadb
 lance-namespace==0.9.0
+    # via lancedb
 lance-namespace-urllib3-client==0.9.0
+    # via lance-namespace
 lancedb==0.30.0
+    # via crewai
 langchain==1.3.14
-langchain-core==1.5.1
+    # via -r requirements/runtime-memory.txt
+langchain-core==1.5.3
+    # via
+    #   guardrails-ai
+    #   langchain
+    #   langgraph
+    #   langgraph-checkpoint
+    #   langgraph-prebuilt
+    #   langgraph-sdk
 langchain-protocol==0.0.18
-langgraph==1.2.9
+    # via
+    #   langchain-core
+    #   langgraph-sdk
+langgraph==1.2.10
+    # via
+    #   -r requirements/runtime-orchestration.txt
+    #   langchain
 langgraph-checkpoint==4.1.1
+    # via
+    #   langgraph
+    #   langgraph-prebuilt
 langgraph-prebuilt==1.1.0
+    # via langgraph
 langgraph-sdk==0.4.2
-langsmith==0.10.10
+    # via langgraph
+langsmith==0.10.13
+    # via langchain-core
 lark==1.3.1
+    # via
+    #   cel-python
+    #   rfc3987-syntax
 linkify-it-py==2.1.0
-litellm==1.93.0
+    # via markdown-it-py
+litellm==1.94.0
+    # via
+    #   dspy
+    #   guardrails-ai
 llama-index-core==0.14.23
+    # via -r requirements/runtime-memory.txt
 llama-index-instrumentation==0.5.0
+    # via llama-index-workflows
 llama-index-workflows==2.22.2
+    # via llama-index-core
 lxml==6.1.1
-Mako==1.3.12
-Markdown==3.10.2
+    # via guardrails-ai
+mako==1.3.12
+    # via alembic
+markdown==3.10.2
+    # via apprise
 markdown-it-py==4.2.0
-MarkupSafe==3.0.3
+    # via
+    #   mdit-py-plugins
+    #   rich
+    #   textual
+markupsafe==3.0.3
+    # via
+    #   jinja2
+    #   mako
 marshmallow==3.26.2
+    # via dataclasses-json
 mcp==1.28.1
+    # via
+    #   -r requirements/runtime-contracts.txt
+    #   crewai
+    #   openai-agents
 mdit-py-plugins==0.6.1
+    # via textual
 mdurl==0.1.2
-mem0ai==2.0.13
+    # via markdown-it-py
+mem0ai==2.0.5
+    # via -r requirements/runtime-memory.txt
 mmh3==5.2.1
+    # via chromadb
 multidict==6.7.1
-mypy_extensions==1.1.0
+    # via
+    #   aiohttp
+    #   yarl
+mypy-extensions==1.1.0
+    # via typing-inspect
 neo4j==6.2.0
+    # via graphiti-core
 nest-asyncio==1.6.0
+    # via llama-index-core
 networkx==3.6.1
+    # via llama-index-core
 nltk==3.10.0
-numpy==2.4.6
+    # via llama-index-core
+numpy==1.26.4
+    # via
+    #   autogen-agentchat
+    #   chromadb
+    #   dspy
+    #   flaml
+    #   graphiti-core
+    #   lancedb
+    #   llama-index-core
+    #   onnxruntime
+    #   qdrant-client
 oauthlib==3.3.1
-onnxruntime==1.27.0
-openai==2.48.0
-openai-agents==0.18.3
+    # via requests-oauthlib
+onnxruntime==1.28.0
+    # via chromadb
+openai==2.50.0
+    # via
+    #   autogen-agentchat
+    #   crewai
+    #   dspy
+    #   graphiti-core
+    #   guardrails-ai
+    #   instructor
+    #   litellm
+    #   mem0ai
+    #   openai-agents
+openai-agents==0.19.1
+    # via -r requirements/runtime-orchestration.txt
 openinference-instrumentation==0.1.54
+    # via arize-phoenix-otel
 openinference-semantic-conventions==0.1.30
+    # via
+    #   arize-phoenix-otel
+    #   openinference-instrumentation
 openpyxl==3.1.5
+    # via crewai
 opentelemetry-api==1.42.1
+    # via
+    #   chromadb
+    #   crewai
+    #   crewai-core
+    #   openinference-instrumentation
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   prefect
+    #   pydocket
 opentelemetry-exporter-otlp==1.42.1
+    # via arize-phoenix-otel
 opentelemetry-exporter-otlp-proto-common==1.42.1
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-exporter-otlp-proto-grpc==1.42.1
+    # via
+    #   chromadb
+    #   guardrails-ai
+    #   opentelemetry-exporter-otlp
 opentelemetry-exporter-otlp-proto-http==1.42.1
+    # via
+    #   crewai
+    #   crewai-core
+    #   guardrails-ai
+    #   opentelemetry-exporter-otlp
 opentelemetry-proto==1.42.1
+    # via
+    #   arize-phoenix-otel
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-sdk==1.42.1
+    # via
+    #   -r requirements/runtime-observability.txt
+    #   arize-phoenix-otel
+    #   chromadb
+    #   crewai
+    #   crewai-core
+    #   guardrails-ai
+    #   openinference-instrumentation
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-semantic-conventions==0.63b1
+    # via
+    #   arize-phoenix-otel
+    #   opentelemetry-sdk
 orjson==3.11.9
+    # via
+    #   chromadb
+    #   dspy
+    #   langgraph-sdk
+    #   langsmith
+    #   prefect
 ormsgpack==1.12.2
+    # via langgraph-checkpoint
 overrides==7.7.0
+    # via chromadb
 packaging==26.2
+    # via
+    #   autogen-agentchat
+    #   build
+    #   crewai-cli
+    #   crewai-core
+    #   deprecation
+    #   huggingface-hub
+    #   kombu
+    #   lancedb
+    #   langchain-core
+    #   langsmith
+    #   marshmallow
+    #   onnxruntime
+    #   prefect
 pathspec==1.1.1
-pdfminer.six==20260107
+    # via prefect
+pdfminer-six==20260107
+    # via pdfplumber
 pdfplumber==0.11.10
+    # via crewai
 pendulum==3.2.0
+    # via
+    #   cel-python
+    #   prefect
 pillow==12.3.0
+    # via
+    #   llama-index-core
+    #   pdfplumber
+pip==26.2
+    # via guardrails-ai
 platformdirs==4.11.0
+    # via
+    #   banks
+    #   llama-index-core
+    #   textual
 pluggy==1.6.0
+    # via prefect
 portalocker==2.7.0
-posthog==7.29.0
+    # via
+    #   crewai
+    #   crewai-core
+    #   qdrant-client
+posthog==5.4.0
+    # via
+    #   chromadb
+    #   graphiti-core
+    #   mem0ai
 prefect==3.8.0
-prometheus_client==0.25.0
-prompt_toolkit==3.0.52
+    # via -r requirements/runtime-orchestration.txt
+prometheus-client==0.26.0
+    # via
+    #   prefect
+    #   pydocket
+prompt-toolkit==3.0.53
+    # via click-repl
 propcache==0.5.2
-protobuf==5.29.6
+    # via
+    #   aiohttp
+    #   yarl
+protobuf==6.33.6
+    # via
+    #   googleapis-common-protos
+    #   mem0ai
+    #   onnxruntime
+    #   opentelemetry-proto
+    #   qdrant-client
 psutil==6.1.1
+    # via taskipy
 py-key-value-aio==0.4.5
+    # via pydocket
 pyarrow==25.0.0
+    # via lancedb
 pybase64==1.4.3
+    # via chromadb
 pycparser==3.0
+    # via cffi
 pydantic==2.12.5
+    # via
+    #   -r requirements/runtime-contracts.txt
+    #   anthropic
+    #   autogen-agentchat
+    #   banks
+    #   chromadb
+    #   crewai
+    #   crewai-cli
+    #   crewai-core
+    #   dspy
+    #   fastapi
+    #   graphiti-core
+    #   guardrails-ai
+    #   guardrails-ai-types
+    #   instructor
+    #   lance-namespace-urllib3-client
+    #   lancedb
+    #   langchain
+    #   langchain-core
+    #   langgraph
+    #   langsmith
+    #   litellm
+    #   llama-index-core
+    #   llama-index-instrumentation
+    #   llama-index-workflows
+    #   mcp
+    #   mem0ai
+    #   openai
+    #   openai-agents
+    #   prefect
+    #   pydantic-extra-types
+    #   pydantic-settings
+    #   qdrant-client
+pydantic-core==2.41.5
+    # via
+    #   instructor
+    #   prefect
+    #   pydantic
 pydantic-extra-types==2.11.1
-pydantic-settings==2.10.1
-pydantic_core==2.41.5
+    # via prefect
+pydantic-settings==2.14.2
+    # via
+    #   crewai
+    #   crewai-cli
+    #   mcp
+    #   prefect
 pydash==8.0.6
+    # via guardrails-ai
 pydocket==0.23.1
-Pygments==2.20.0
-PyJWT==2.13.0
+    # via prefect
+pygments==2.20.0
+    # via
+    #   rich
+    #   rich-rst
+    #   textual
+pyjwt==2.13.0
+    # via
+    #   crewai
+    #   crewai-cli
+    #   crewai-core
+    #   guardrails-ai
+    #   mcp
 pypdfium2==5.12.1
-PyPika==0.51.1
-pyproject_hooks==1.2.0
+    # via pdfplumber
+pypika==0.51.1
+    # via chromadb
+pyproject-hooks==1.2.0
+    # via build
 python-dateutil==2.9.0.post0
+    # via
+    #   arrow
+    #   celery
+    #   dateparser
+    #   guardrails-ai
+    #   kubernetes
+    #   lance-namespace-urllib3-client
+    #   pendulum
+    #   posthog
+    #   prefect
 python-dotenv==1.2.2
+    # via
+    #   autogen-agentchat
+    #   crewai
+    #   crewai-cli
+    #   graphiti-core
+    #   litellm
+    #   pydantic-settings
+    #   uvicorn
 python-json-logger==4.1.0
+    # via pydocket
 python-multipart==0.0.32
+    # via mcp
 python-slugify==8.0.4
-pytz==2026.2
-PyYAML==6.0.3
+    # via prefect
+pytz==2026.3.post1
+    # via
+    #   dateparser
+    #   mem0ai
+    #   neo4j
+    #   prefect
+pyyaml==6.0.3
+    # via
+    #   -r requirements/../requirements.txt
+    #   apprise
+    #   cel-python
+    #   chromadb
+    #   crewai
+    #   huggingface-hub
+    #   kubernetes
+    #   langchain-core
+    #   llama-index-core
+    #   prefect
+    #   uvicorn
 qdrant-client==1.18.0
+    # via mem0ai
 readchar==4.2.2
-redis==8.0.1
+    # via prefect
+redis==8.1.0
+    # via
+    #   py-key-value-aio
+    #   pydocket
 referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 regex==2026.1.15
+    # via
+    #   crewai
+    #   dateparser
+    #   dspy
+    #   nltk
+    #   tiktoken
 requests==2.34.2
+    # via
+    #   apprise
+    #   docker
+    #   dspy
+    #   guardrails-ai
+    #   instructor
+    #   kubernetes
+    #   langsmith
+    #   llama-index-core
+    #   openai-agents
+    #   opentelemetry-exporter-otlp-proto-http
+    #   posthog
+    #   requests-oauthlib
+    #   requests-toolbelt
+    #   tiktoken
 requests-oauthlib==2.0.0
+    # via
+    #   apprise
+    #   kubernetes
 requests-toolbelt==1.0.0
+    # via langsmith
 rfc3339-validator==0.1.4
+    # via
+    #   jsonschema
+    #   prefect
 rfc3986-validator==0.1.1
+    # via jsonschema
 rfc3987-syntax==1.1.0
+    # via jsonschema
 rich==14.3.4
+    # via
+    #   chromadb
+    #   crewai-cli
+    #   crewai-core
+    #   cyclopts
+    #   guardrails-ai
+    #   instructor
+    #   prefect
+    #   pydocket
+    #   rich-rst
+    #   textual
+    #   typer
 rich-rst==2.1.0
+    # via cyclopts
 rpds-py==2026.6.3
+    # via
+    #   jsonschema
+    #   referencing
 rstr==3.2.2
+    # via guardrails-ai
 rtoml==0.13.0
-ruamel.yaml==0.19.1
-ruamel.yaml.clib==0.2.15
+    # via -r requirements/runtime-contracts.txt
+ruamel-yaml==0.19.1
+    # via prefect
+ruamel-yaml-clib==0.2.15
+    # via prefect
 semver==3.0.4
+    # via
+    #   guardrails-ai
+    #   prefect
+setuptools==83.0.0
+    # via llama-index-core
 shellingham==1.5.4
+    # via typer
 six==1.17.0
+    # via
+    #   kubernetes
+    #   posthog
+    #   python-dateutil
+    #   rfc3339-validator
 sniffio==1.3.1
-SQLAlchemy==2.0.51
+    # via
+    #   anthropic
+    #   asgi-lifespan
+    #   langsmith
+    #   openai
+    #   prefect
+sqlalchemy==2.0.51
+    # via
+    #   alembic
+    #   llama-index-core
+    #   mem0ai
+    #   prefect
 sse-starlette==3.4.6
+    # via mcp
 starlette==1.3.1
+    # via
+    #   fastapi
+    #   mcp
+    #   prefect
+    #   sse-starlette
 taskipy==1.14.1
+    # via -r requirements/runtime-observability.txt
 tenacity==9.1.4
+    # via
+    #   chromadb
+    #   dspy
+    #   graphiti-core
+    #   guardrails-ai
+    #   instructor
+    #   langchain-core
+    #   llama-index-core
+termcolor==3.3.0
+    # via autogen-agentchat
 text-unidecode==1.3
+    # via python-slugify
 textual==8.2.8
+    # via crewai-cli
 tiktoken==0.13.0
+    # via
+    #   autogen-agentchat
+    #   guardrails-ai
+    #   litellm
+    #   llama-index-core
 tinytag==2.2.1
+    # via llama-index-core
 tokenizers==0.23.1
+    # via
+    #   chromadb
+    #   crewai
+    #   litellm
 toml==0.10.2
+    # via prefect
 tomli==2.0.2
-tomli_w==1.1.0
-tqdm==4.69.0
+    # via
+    #   crewai
+    #   crewai-cli
+    #   crewai-core
+    #   taskipy
+tomli-w==1.1.0
+    # via
+    #   crewai
+    #   crewai-cli
+tqdm==4.70.0
+    # via
+    #   chromadb
+    #   dspy
+    #   huggingface-hub
+    #   lancedb
+    #   llama-index-core
+    #   nltk
+    #   openai
 typeguard==4.4.3
+    # via dspy
 typer==0.19.2
+    # via
+    #   chromadb
+    #   guardrails-ai
+    #   huggingface-hub
+    #   instructor
+    #   pydocket
+typing-extensions==4.16.0
+    # via
+    #   aiohttp
+    #   aiosignal
+    #   aiosqlite
+    #   alembic
+    #   anthropic
+    #   anyio
+    #   arize-phoenix-otel
+    #   chromadb
+    #   exceptiongroup
+    #   fastapi
+    #   grpcio
+    #   guardrails-ai
+    #   huggingface-hub
+    #   lance-namespace-urllib3-client
+    #   langchain-core
+    #   langchain-protocol
+    #   langsmith
+    #   llama-index-core
+    #   llama-index-workflows
+    #   mcp
+    #   openai
+    #   openai-agents
+    #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   prefect
+    #   py-key-value-aio
+    #   pydantic
+    #   pydantic-core
+    #   pydantic-extra-types
+    #   pydash
+    #   pydocket
+    #   referencing
+    #   sqlalchemy
+    #   starlette
+    #   textual
+    #   typeguard
+    #   typer
+    #   typing-inspect
+    #   typing-inspection
 typing-inspect==0.9.0
+    # via
+    #   dataclasses-json
+    #   llama-index-core
 typing-inspection==0.4.2
-typing_extensions==4.16.0
+    # via
+    #   fastapi
+    #   mcp
+    #   pydantic
+    #   pydantic-settings
 tzdata==2026.3
+    # via
+    #   arrow
+    #   faker
+    #   kombu
+    #   pendulum
 tzlocal==5.4.4
+    # via
+    #   celery
+    #   dateparser
 uc-micro-py==2.0.0
+    # via linkify-it-py
 uncalled-for==0.3.2
+    # via pydocket
 uri-template==1.3.0
+    # via jsonschema
 urllib3==2.7.0
-uuid_utils==0.17.0
-uv==0.11.32
-uvicorn==0.51.0
+    # via
+    #   docker
+    #   kubernetes
+    #   lance-namespace-urllib3-client
+    #   qdrant-client
+    #   requests
+uuid-utils==0.17.0
+    # via
+    #   langchain-core
+    #   langsmith
+uv==0.11.33
+    # via crewai-cli
+uvicorn==0.52.0
+    # via
+    #   chromadb
+    #   mcp
+    #   prefect
 uvloop==0.22.1
+    # via uvicorn
 vine==5.1.0
+    # via
+    #   amqp
+    #   celery
+    #   kombu
 watchfiles==1.2.0
+    # via uvicorn
 wcwidth==0.8.2
+    # via prompt-toolkit
 webcolors==25.10.0
+    # via jsonschema
 websocket-client==1.9.0
+    # via kubernetes
 websockets==15.0.1
-wrapt==2.2.2
+    # via
+    #   langgraph-sdk
+    #   langsmith
+    #   openai-agents
+    #   prefect
+    #   uvicorn
+wrapt==2.3.0
+    # via
+    #   arize-phoenix-otel
+    #   deprecated
+    #   llama-index-core
+    #   openinference-instrumentation
 xxhash==3.8.1
+    # via
+    #   dspy
+    #   langgraph
+    #   langsmith
 yarl==1.24.5
+    # via aiohttp
 zipp==4.1.0
+    # via importlib-metadata
 zstandard==0.25.0
+    # via langsmith

@@ -115,7 +115,7 @@ definition_of_done = [
   "At most one adjustment recommended, and only if the day is genuinely overloaded.",
 ]
 definition_of_done_ids = ["windows-mapped", "ceiling-stated", "adjustment-bounded"]
-evidence_sources = ["calendar:today and tomorrow", "todoist:due today"]
+evidence_sources = ["calendar:today and tomorrow"]
 baseline_prompt = "How long does planning your day realistically take you by hand?"
 
 [[mission]]
@@ -135,7 +135,7 @@ definition_of_done = [
   "A stop / delegate / postpone list where the week is over-committed.",
 ]
 definition_of_done_ids = ["plan-complete", "items-traced", "tradeoffs-named"]
-evidence_sources = ["calendar:next 7 days", "todoist:this week", "drive:personal planning notes"]
+evidence_sources = ["calendar:next 7 days", "drive:personal planning notes"]
 baseline_prompt = "How long does weekly planning normally take you by hand?"
 
 [[mission]]
@@ -154,5 +154,5 @@ definition_of_done = [
   "No motivational framing that outruns what the evidence supports.",
 ]
 definition_of_done_ids = ["single-action", "cue-complete", "claims-bounded"]
-evidence_sources = ["todoist:stalled tasks", "calendar:today"]
+evidence_sources = ["calendar:today", "gmail:open loops", "drive:recently modified"]
 baseline_prompt = "How long do you usually spend getting started on a stalled task?"

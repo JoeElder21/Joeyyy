@@ -66,7 +66,14 @@ class PolicyLoadingTests(unittest.TestCase):
         # daily_capacity carries a manifest_declared baseline, which is a design
         # intent rather than an observation of Joe, so it is not usable.
         self.assertIsNone(policy.usable_baseline("daily_capacity"))
-        self.assertIsNone(policy.usable_baseline("delivery_control"))
+        # pipeline_triage is still source = "unset": nobody has declared it.
+        self.assertIsNone(policy.usable_baseline("pipeline_triage"))
+        # delivery_control used to be unset and was asserted here alongside the
+        # others. Joe declared 240 minutes on 2026-07-30, so it is now usable and
+        # the assertion is inverted rather than deleted -- a joe_declared
+        # baseline is exactly what this policy is supposed to accept, and a test
+        # that only ever checks refusal cannot tell acceptance from a bug.
+        self.assertEqual(policy.usable_baseline("delivery_control"), 240)
 
 
 class ObservationRefusalTests(unittest.TestCase):
