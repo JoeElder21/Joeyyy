@@ -84,7 +84,7 @@ multidict==6.7.1
     #   yarl
 nest-asyncio==1.6.0
     # via deepeval
-openai==2.50.0
+openai==2.51.0
     # via deepeval
 opentelemetry-api==1.44.0
     # via
@@ -104,7 +104,7 @@ pluggy==1.6.0
     # via pytest
 portalocker==3.2.0
     # via deepeval
-posthog==7.34.0
+posthog==7.35.0
     # via deepeval
 prompt-toolkit==3.0.53
     # via questionary
