@@ -344,6 +344,10 @@ unregistered prompt in the discovery path bypasses this registry by construction
   when the directory is absent, so validation would stay green over an inconsistent
   state. Nothing else in the repository depends on them.
 
+## Runtime host (2026-07-30)
+
+Decided and recorded in `docs/RUNTIME_HOST_DECISION.md`: **Joe's workstation is the only governed execution host**; GitHub Actions is a proving host holding no credentials, grants, or writer leases. No cloud or container runtime is authorized. Installing the stack satisfies none of the `active` gates — it only makes earning them possible, and gate 21 still refuses to let a CI pass promote an agent.
+
 ## Intake rule
 
 Use `templates/agent-intake.md` before adding or materially changing an agent. A name in conversation is not a deployed agent until its configuration, owner brain, namespace, targets, handoff, runtime access, tests, and controlled mission are verified.
