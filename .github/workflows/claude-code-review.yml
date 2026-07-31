@@ -22,6 +22,12 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
       && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    env:
+      # The secrets context is unreadable in a job-level `if`, so the gate
+      # lives on the steps. Without the key the action can only fail — it
+      # red-Xed every same-repo PR while the secret was unset (PR #67) — and
+      # an advisory review that cannot run should skip visibly, not fail.
+      ANTHROPIC_KEY_PRESENT: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     permissions:
       contents: read
       pull-requests: write
@@ -29,13 +35,19 @@ jobs:
       id-token: write
       actions: read
     steps:
+      - name: Report why the review is skipped
+        if: env.ANTHROPIC_KEY_PRESENT != 'true'
+        run: echo "ANTHROPIC_API_KEY is not configured for this repository; the advisory review is skipped rather than failed."
+
       - name: Checkout repository
+        if: env.ANTHROPIC_KEY_PRESENT == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: Review pull request
+        if: env.ANTHROPIC_KEY_PRESENT == 'true'
         # Pinned to the COMMIT v1.0.99 points to, not to the tag object -- see
         # the fuller note in claude.yml. v1.0.99 is an annotated tag whose
         # object is 12310e4417c34730 and whose commit (`v1.0.99^{}`) is

@@ -28,6 +28,18 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    # The AutoGen modules are converged on the legacy 0.2 API and
+    # requirements.txt pins autogen-agentchat>=0.2.35,<0.3 deliberately.
+    # Dependabot cannot see that the pin is a design decision: PR #66 rewrote
+    # the manifest itself to >=0.7.5, an incompatible API line, and every gate
+    # went red. Majors AND minors are ignored because the package lives at
+    # 0.x, where the API line moves in the second component (0.2 -> 0.7 is
+    # semver-minor); patch updates within 0.2.x still arrive.
+    ignore:
+      - dependency-name: autogen-agentchat
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
     groups:
       python-runtime:
         patterns: ["*"]

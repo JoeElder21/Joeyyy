@@ -275,7 +275,7 @@ Twenty modules. Each names its upstream project explicitly in its docstring and 
 | Module | LoC | Upstream | Function |
 | --- | --- | --- | --- |
 | `agent_runtime.py` | 300 | openai-agents | Makes the handoff contract executable on the OpenAI Agents SDK. Fail-closed packet admission (`admit_delegation`, `validate_specialist_return`), brain-locked topology, and a **hash-chained `AuditLedger`** with canonicalisation, digesting and `verify()` — tamper-evident by construction. |
-| `claude_runtime.py` | 169 | anthropic | The same fail-closed core exposed as typed Anthropic `tools` definitions plus a `ToolUseBlock` handler, with `stream_mission()` and `governed_request()`. |
+| `claude_runtime.py` | 161 | anthropic | The same fail-closed core exposed as typed Anthropic `tools` definitions plus a `ToolUseBlock` handler, with `governed_request()`. |
 | `governance_mcp_server.py` | 135 | mcp | Makes `packet_only_no_direct_connectors` enforceable: a specialist's *entire* tool surface is the MCP servers Agent 007 mounts for it, starting with this one. |
 | `packet_models.py` | 126 | pydantic | Pydantic models generated from the JSON schemas at import time. Never hand-written — by design, so they cannot drift. |
 

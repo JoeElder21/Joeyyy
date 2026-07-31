@@ -8,7 +8,7 @@ Runtime record, 2026-07-24. Continues the build-out from `docs/AGENT_RUNTIME_BRI
 
 - `governed_tool_definitions()` — typed Anthropic `tools` entries for `delegate_to_specialist` (enum-locked to the ten registered specialists; the packet travels as canonical JSON), `validate_handoff_return`, and `verify_audit_ledger`.
 - `handle_tool_use()` — parses a `ToolUseBlock` and runs the same fail-closed core as the OpenAI bridge: an inadmissible packet returns `is_error` and control never transfers. Duck-typed, so it is stdlib-testable and SDK-version-tolerant.
-- `stream_mission()` — thin wrapper over `client.messages.stream()` so long missions (a full weekly APEX review) stream progress instead of timing out. Network path; nothing invokes it implicitly and no key is stored.
+- Streaming was removed 2026-07-31: `stream_mission()` wrapped `client.messages.stream()` but had no caller and no client to call it with. A model client gets wired when the runtime host is chosen (`docs/REPO_AUDIT_2026-07-30.md`, open decision 1); until then the module is offline end to end.
 
 Consequence: the 6→1 dispatch-overhead reduction measured in `docs/AGENT_RUNTIME_BRIDGE.md` now covers **both** runtimes — Claude-native and OpenAI-SDK — instead of one. Governed-dispatch automation coverage: 2 of 2 runtimes.
 
@@ -40,4 +40,4 @@ LangChain's value here — `ConversationSummaryMemory` (rolling compressed per-s
 
 ## Boundaries and rollback
 
-No credentials are stored or read by any of these layers; live calls (`stream_mission`, a mounted MCP client session, LangChain memory) activate only on Joe's instruction under the shadow-stage gates. Rollback: delete `scripts/claude_runtime.py`, `scripts/governance_mcp_server.py`, `scripts/packet_models.py`, `tests/test_native_runtime.py`, and this document; audit ledgers created under `audit/` may be deleted or retained as records.
+No credentials are stored or read by any of these layers; live calls (a mounted MCP client session, LangChain memory) activate only on Joe's instruction under the shadow-stage gates. Rollback: delete `scripts/claude_runtime.py`, `scripts/governance_mcp_server.py`, `scripts/packet_models.py`, `tests/test_native_runtime.py`, and this document; audit ledgers created under `audit/` may be deleted or retained as records.
