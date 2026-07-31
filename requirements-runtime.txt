@@ -4,8 +4,8 @@
 langgraph>=0.2
 crewai>=0.80
 prefect>=3.0
-mem0ai>=0.1
-llama-index>=0.11
+mem0ai>=2.0.13
+llama-index>=0.14.23
 langchain>=0.3
 jsonschema>=4.23
-pydantic>=2.9
+pydantic>=2.13.4
