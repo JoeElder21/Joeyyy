@@ -9,11 +9,20 @@ Two properties matter more than convenience:
 
 1. **Connector isolation is enforced by the tool list, not by prose.** Every
    specialist declares ``connector_policy = "packet_only_no_direct_connectors"``,
-   so a generated specialist receives an empty tool list. It cannot reach Gmail,
-   Drive, Calendar, Todoist, the web, a shell, or even the repository filesystem,
-   because it has no tools at all — not because a sentence asks it not to. Agent
-   007 holds the connectors and supplies every permitted record inside a
-   PacketGuard-validated delegation packet.
+   so a generated specialist receives the narrowest grant the runtime will load
+   (``Read``) plus a ``disallowedTools`` denial covering the connector wildcard,
+   both writers, the shell, delegation, and the web. It cannot reach Gmail,
+   Drive, or Calendar because those tools are denied to it — not because a
+   sentence asks it not to. Agent 007 holds the connectors and supplies every
+   permitted record inside a PacketGuard-validated delegation packet.
+
+   Stated precisely, because an earlier version of this docstring claimed more
+   than the mechanism delivered: a specialist CAN still read the repository
+   filesystem, so the brain lock is not structurally enforced against a
+   determined filesystem read. That residual is checked at run time instead —
+   ``MissionRunner.complete()`` fails any return citing a source that was not in
+   the delegation packet. What is structurally enforced is the connector and
+   writer boundary, which is the boundary that matters for external action.
 
 2. **Drift is detectable.** Each generated file records the SHA-256 of the exact
    canonical inputs that produced it. ``tests/test_claude_agents.py``
@@ -45,28 +54,64 @@ CHIEF_OF_STAFF = "apex_chief_of_staff"
 GENERATED_MARKER = "<!-- GENERATED FILE - DO NOT EDIT BY HAND -->"
 SOURCE_HASH_PREFIX = "<!-- source-sha256: "
 
-# A packet-only specialist gets NO tools at all.
+# A packet-only specialist gets the narrowest tool grant the runtime will load.
 #
-# An earlier version granted Read/Glob/Grep, reasoning that repository reads were
-# harmless. They are not: the repository contains both brain manifests, so a JEOS
-# specialist could read brains/apex/** directly and the "structurally enforced"
-# brain lock would have been prose again. The delegation packet already carries
-# every record the specialist is allowed to analyze, so a packet-only specialist
-# genuinely needs no tool. An empty list is the faithful projection of
-# connector_policy = "packet_only_no_direct_connectors".
-SPECIALIST_TOOLS: list[str] = []
+# History, because this line has now been wrong in two opposite directions:
+#
+# 1. An earlier version granted Read/Glob/Grep, reasoning that repository reads
+#    were harmless. They are not: the repository contains both brain manifests,
+#    so a JEOS specialist could read brains/apex/** directly and the
+#    "structurally enforced" brain lock would have been prose again.
+# 2. The fix for (1) was an empty list, believed to be the faithful projection
+#    of connector_policy = "packet_only_no_direct_connectors". It was the exact
+#    inverse. Claude Code's documented rule is that `tools` "inherits every tool
+#    available to subagents if omitted", and an empty list resolves to no
+#    entries, so the runtime falls back to inheriting everything. The harness
+#    agent registry reported every specialist as "Tools: All tools" -- including
+#    every `mcp__*` connector -- while this file claimed they had none. The
+#    isolation the architecture rests on was not merely absent; the mechanism
+#    meant to enforce it was granting the whole surface.
+#
+# So the grant must be non-empty to be a grant at all. `Read` is the least
+# capability that still loads: it cannot call a connector, spawn an agent, run a
+# shell, or write. The residual cross-brain read risk from (1) is real and is
+# bounded below by the runtime -- there is no narrower expressible grant -- so it
+# is handled in depth by SPECIALIST_DISALLOWED_TOOLS and, at run time, by
+# MissionRunner.complete(), which fails any return citing a source that was not
+# in the packet.
+SPECIALIST_TOOLS: list[str] = ["Read"]
+
+# Belt and braces over the allowlist above. `disallowedTools` is documented as
+# "tools to deny, removed from inherited or specified list", so it holds even if
+# an allowlist entry ever resolves more broadly than intended, and it denies the
+# connector surface by wildcard rather than by enumeration -- a connector added
+# to Joe's session later is denied without editing this file.
+SPECIALIST_DISALLOWED_TOOLS = [
+    "mcp__*",
+    "Bash",
+    "Write",
+    "Edit",
+    "NotebookEdit",
+    "Task",
+    "Agent",
+    "WebSearch",
+    "WebFetch",
+    "Glob",
+    "Grep",
+]
 
 # Agent 007 is the cross-brain governor and the only connector holder.
 #
 # An earlier version listed only built-in tools. That silently broke the whole
 # architecture in the subagent path: the runbook says Agent 007 retrieves
-# evidence from Gmail, Drive, Calendar, and Todoist, but a subagent whose
+# evidence from Gmail, Drive, and Calendar, but a subagent whose
 # frontmatter omits those tools cannot reach them even when the parent session
 # is authorized. Every catalog mission would have had no evidence to package.
 #
 # `mcp__*` is a wildcard over the session's connected MCP servers: whatever Joe
 # has authorized is available, and nothing is invented if a connector is absent.
-# Specialists still receive an empty list, so isolation is unchanged.
+# Specialists receive SPECIALIST_TOOLS and are denied this same wildcard, so the
+# chief remains the only connector holder.
 CHIEF_TOOLS = [
     "Read",
     "Glob",
@@ -97,17 +142,33 @@ def _yaml_scalar(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _frontmatter(name: str, description: str, tools: list[str]) -> str:
+def _frontmatter(
+    name: str,
+    description: str,
+    tools: list[str],
+    disallowed_tools: list[str] | None = None,
+) -> str:
     """Build frontmatter whose scalars survive a real YAML parser."""
+    if not tools:
+        # An empty list is not a restriction. Claude Code inherits every
+        # subagent tool when no entry resolves, so emitting `tools: []` grants
+        # the full surface -- connectors included -- while reading like a lock.
+        # Refuse to generate rather than ship that inversion again.
+        raise ValueError(
+            f"{name}: refusing to emit an empty tools list; the runtime reads it "
+            "as inherit-everything, not as no-tools"
+        )
     lines = [
         "---",
         f"name: {_yaml_scalar(name)}",
         f"description: {_yaml_scalar(description)}",
-        # An empty tools list must still be valid YAML, and must not read as a
-        # missing key that a runtime would fill with a permissive default.
         f"tools: [{', '.join(_yaml_scalar(tool) for tool in tools)}]",
-        "---",
     ]
+    if disallowed_tools:
+        lines.append(
+            f"disallowedTools: [{', '.join(_yaml_scalar(tool) for tool in disallowed_tools)}]"
+        )
+    lines.append("---")
     return "\n".join(lines)
 
 
@@ -175,9 +236,16 @@ def render_specialist(name: str, meta: dict[str, Any], contract: dict[str, Any])
 
 ## Enforced boundaries
 
-These are structural, not advisory. You have **no tools at all**: no connector,
-no shell, no writer, and no filesystem read. Everything you are permitted to
-analyze is already in the delegation packet.
+These are structural, not advisory. You hold **`Read` and nothing else**: no
+connector, no shell, no writer, no delegation, no web. Everything you are
+permitted to *analyze* is already in the delegation packet, and reading anything
+outside it is a boundary violation even though the tool would physically allow
+it — `MissionRunner.complete()` fails any return citing a source the packet did
+not contain.
+
+`Read` exists so you can open your own delegation packet and the schema your
+return must satisfy. That is its entire purpose. It is not a licence to browse
+the repository, and it is never a route to the other brain's manifest.
 
 1. **You are {brain}-only.** You never read, infer, write, or ask about the other
    brain. Agent 007 is the sole cross-brain governor and transfer point.
@@ -213,7 +281,7 @@ reproduced verbatim. It governs; this projection may not amend it.
 """
 
     return (
-        f"{_frontmatter(name, description, SPECIALIST_TOOLS)}\n\n"
+        f"{_frontmatter(name, description, SPECIALIST_TOOLS, SPECIALIST_DISALLOWED_TOOLS)}\n\n"
         f"{GENERATED_MARKER}\n\n"
         f"# {name}\n\n"
         f"{governance}"
@@ -259,7 +327,7 @@ result (`AGENTS.md` section 6).
 ## What only you may do
 
 1. **Hold the connectors.** Specialists have no connector tools by construction.
-   You retrieve evidence — Drive, Gmail, Calendar, Todoist, GitHub, web — and
+   You retrieve evidence — Drive, Gmail, Calendar, GitHub, web — and
    hand each specialist only the minimum task-relevant records inside a
    schema-valid delegation packet.
 2. **Cross the brains.** Build one valid APEX plan and one valid JEOS plan, then

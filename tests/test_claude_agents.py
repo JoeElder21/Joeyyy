@@ -17,7 +17,9 @@ from scripts.generate_claude_agents import (
     CHIEF_TOOLS,
     GENERATED_MARKER,
     OUTPUT_DIR,
+    SPECIALIST_DISALLOWED_TOOLS,
     SPECIALIST_TOOLS,
+    _frontmatter,
     build,
     load_manifests,
 )
@@ -88,12 +90,38 @@ class GeneratedCorpsTests(unittest.TestCase):
             if path.stem == CHIEF_OF_STAFF:
                 continue
             with self.subTest(agent=path.stem):
-                tools = set(frontmatter(content)["tools"])
+                parsed = frontmatter(content)
+                tools = set(parsed["tools"])
                 self.assertEqual(tools, set(SPECIALIST_TOOLS))
                 self.assertEqual(tools & FORBIDDEN_SPECIALIST_TOOLS, set())
-                # Packet-only means no tools at all, including filesystem reads
-                # that would expose the other brain's manifest.
-                self.assertEqual(tools, set())
+                # The grant must be NON-empty. Claude Code inherits every
+                # subagent tool when no entry in `tools` resolves, so the
+                # previous assertion here -- that the list was empty -- was
+                # asserting the broken state: the harness reported every
+                # specialist as "All tools", connectors included.
+                self.assertNotEqual(
+                    tools,
+                    set(),
+                    "an empty tools list is inherit-everything, not no-tools",
+                )
+                denied = set(parsed.get("disallowedTools", []))
+                # Assert against the source constant, not just a literal, so a
+                # tool removed from the denial list fails here rather than
+                # silently narrowing what specialists are refused.
+                self.assertEqual(denied, set(SPECIALIST_DISALLOWED_TOOLS))
+                self.assertIn(
+                    "mcp__*",
+                    denied,
+                    "specialists must be denied the connector wildcard",
+                )
+                self.assertEqual(tools & denied, set(), "grant and denial overlap")
+                for forbidden in FORBIDDEN_SPECIALIST_TOOLS:
+                    self.assertIn(forbidden, denied)
+
+    def test_generator_refuses_to_emit_an_empty_tool_grant(self):
+        """The inversion that made every specialist omnipotent must not recur."""
+        with self.assertRaises(ValueError):
+            _frontmatter("probe", "probe agent", [])
 
     def test_chief_of_staff_holds_the_connector_and_writer_surface(self):
         content = self.expected[OUTPUT_DIR / f"{CHIEF_OF_STAFF}.md"]
