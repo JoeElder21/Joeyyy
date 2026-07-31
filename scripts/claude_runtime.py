@@ -8,14 +8,12 @@ Claude-driven Agent 007 dispatches specialists through native tool use —
 typed packets, never freeform instruction text.
 
 Everything in this module is offline: building tool definitions and handling
-tool-use blocks needs no API key. Only `stream_mission()` performs a network
-call, and nothing here invokes it implicitly.
+tool-use blocks needs no API key, and nothing here performs a network call.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from typing import Any
 
 from scripts.agent_runtime import (
@@ -145,16 +143,7 @@ def handle_tool_use(
     return result({"errors": [f"unknown tool {block.name!r}"]}, is_error=True)
 
 
-def stream_mission(client: Any, **request: Any) -> Iterator[str]:
-    """Stream a long-running mission's text instead of waiting on one response.
-
-    Thin wrapper over `client.messages.stream()` (Anthropic SDK) so weekly
-    reviews and other long missions surface progress incrementally rather
-    than timing out. Network path — requires a configured client; never
-    called by anything else in this module.
-    """
-    with client.messages.stream(**request) as stream:
-        yield from stream.text_stream
+# TODO: wire a model client when the runtime host is chosen (see docs/REPO_AUDIT_2026-07-30.md open decision 1)
 
 
 def governed_request(
