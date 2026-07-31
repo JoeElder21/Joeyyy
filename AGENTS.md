@@ -313,13 +313,22 @@ Do not paste the constitution into any adapter or other surface.
 
 ### Validation surface
 
-Repository validation requires Python 3.11 or 3.12. Before committing, validate all TOML files and run:
+Repository validation requires Python 3.11 or 3.12. One-time setup in a fresh clone — without these, the vendor-requirements derivation checks and the schema-enforcement tests skip rather than run, while CI runs both:
+
+```bash
+git submodule update --init
+python -m pip install -r requirements/lock-runtime-contracts.txt
+```
+
+Before committing, validate all TOML files and run:
 
 ```bash
 python scripts/privacy_guard.py
 python scripts/validate_specialist_corps.py
 python -m unittest discover -s tests -v
 ```
+
+A skipped check is reported as skipped, never as passed; a clone that has not run the setup above validates a narrower surface than CI does.
 
 Current CI (`.github/workflows/validate-agent.yml`) may be narrower than this surface; a green workflow alone is insufficient (section 11).
 

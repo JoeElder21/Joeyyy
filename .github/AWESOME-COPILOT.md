@@ -82,6 +82,11 @@ out-of-scope) rather than inventing a second checkpoint.
 agent processes arbitrary user-supplied text, so all-tools access would let prompt
 injection reach the repository and connected systems. `tools: []` is set deliberately.
 
+**`agents.instructions` local override.** Upstream's "Related Files" section links to
+`./prompt.instructions.md` and `./instructions.instructions.md` relative to itself. Neither
+file is vendored in this repository, so both links were dead here. Each now points at the
+same file in the upstream tree at the pinned commit above. Nothing else in the file changed.
+
 **Do not dismiss a drift report on this file.** An earlier version of this note told
 maintainers to treat any reported drift as expected — which would have hidden a genuine
 upstream change behind the local override. The comparison procedure in each discovery skill
