@@ -5,7 +5,6 @@ import subprocess
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PIN = "0.7.0"
 
@@ -31,9 +30,7 @@ class SkillUpIntegrationTests(unittest.TestCase):
             self.assertIn("JEOS", text)
             self.assertNotIn("curl -fsSL", text)
 
-        chief = (ROOT / ".codex/agents/apex_chief_of_staff.toml").read_text(
-            encoding="utf-8"
-        )
+        chief = (ROOT / ".codex/agents/apex_chief_of_staff.toml").read_text(encoding="utf-8")
         self.assertIn(".agents/skills/skill-upper/SKILL.md", chief)
         self.assertIn("scripts/skill_up.sh", chief)
         self.assertIn("Keep APEX and JEOS suites", chief)
@@ -48,7 +45,9 @@ class SkillUpIntegrationTests(unittest.TestCase):
         self.assertIn("JEOS_ONLY", jeos)
         self.assertNotIn("api_key", config.lower())
 
-    @unittest.skipUnless(os.environ.get("SKILL_UP_INTEGRATION_TEST") == "1", "opt-in installed CLI check")
+    @unittest.skipUnless(
+        os.environ.get("SKILL_UP_INTEGRATION_TEST") == "1", "opt-in installed CLI check"
+    )
     def test_installed_cli_validates_committed_suite(self) -> None:
         completed = subprocess.run(
             [str(ROOT / "scripts/skill_up.sh"), "validate"],
