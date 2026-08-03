@@ -4,7 +4,7 @@
 #
 # DO NOT install into the shared runtime environment.
 #
-# Recorded conflict: this stack pins `llama-index==0.10.42`, which contradicts
+# Recorded conflict: this stack pins `llama-index==0.14.23`, which contradicts
 # `llama-index>=0.11` in requirements-runtime.txt and the `llama-index-core`
 # declared in requirements/runtime-memory.txt. Installing it alongside the
 # runtime stack downgrades llama-index and breaks the declared memory tier.
@@ -16,8 +16,8 @@
 # vendor/multi-agent-ai-in-civil-engineering/README.md are separately
 # authorized. Those are external services; declaring a package here grants no
 # credential or connector access.
-llama-index==0.10.42
-llama-index-core==0.10.42
+llama-index==0.14.23
+llama-index-core==0.14.23
 llama-index-embeddings-openai
 llama-index-postprocessor-flag-embedding-reranker
 llama-index-graph-stores-neo4j
