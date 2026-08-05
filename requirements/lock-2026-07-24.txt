@@ -178,7 +178,7 @@ crewai-core==1.15.9
     #   crewai-cli
 cronsim==2.7
     # via pydocket
-cryptography==49.0.0
+cryptography==50.0.0
     # via
     #   crewai-cli
     #   crewai-core

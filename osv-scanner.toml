@@ -16,22 +16,37 @@
 [[IgnoredVulns]]
 id = "PYSEC-2026-311"
 ignoreUntil = 2026-08-25
-reason = """chromadb 1.1.1, CVSS 9.3, no fix available upstream. Reaches this
-repository only as a transitive dependency of the optional memory tier, which is
-not deployed; CI installs requirements.txt alone. Because no upgrade resolves it,
-this is a deployment decision for Joe rather than a version bump — see the
-recommended actions in docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry or
-sooner if the memory tier is deployed to the workstation."""
+reason = """chromadb 1.1.1, CVSS 9.3, no fix available upstream. Originally
+triaged as reaching this repository only through the optional memory tier,
+"which is not deployed; CI installs requirements.txt alone."
+
+REASSESSED 2026-08-05 and that premise no longer holds. The condition the
+original entry said would trigger a revisit has occurred:
+scripts/workstation_setup.sh installs requirements/lock-2026-07-24.txt — the
+set that carries chromadb — on the governed workstation, and the WSL layer
+(scripts/wsl_ubuntu_setup.sh, docs/WSL_UBUNTU_SETUP.md) makes that install
+one command away from a fresh Windows machine. So this is a real exposure on
+the governed execution host, downgraded only by having no upstream fix and by
+that host not being internet-exposed — the same honest position as
+PYSEC-2026-2447 below. Kept as a triage because no version resolves it; the
+open decision the original entry deferred is now live and is Joe's: keep the
+memory tier in the workstation manifest with this accepted, or trim it. See
+docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry at the latest."""
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-2132"
 ignoreUntil = 2026-08-25
-reason = """click 8.2.0, CVSS 7.2, fixed in 8.3.3. This one is genuinely fixable
-and should be fixed — but lock-2026-07-24.txt is a dated evidence record, and
-editing pins inside a snapshot named for that date would falsify the record it
-exists to be. Carry the fix into the next lockfile regeneration, which is needed
-regardless: the file does not currently resolve (posthog is pinned at 7.29.0
-while chromadb requires <6.0.0)."""
+reason = """click 8.2.0, CVSS 7.2, fixed in 8.3.3. Genuinely blocked, and the
+blocker is now measured rather than assumed: guardrails-ai 0.10.2 — the
+current release, entering via requirements/runtime-guards.txt — declares
+click<=8.2.0, so no resolution of runtime-full.txt can carry a fixed click.
+Forcing click>=8.3.3 was tried on 2026-08-05, and the resolver satisfied it
+by retreating guardrails-ai to 0.1.8, which carries PYSEC-2026-206 (CVSS 9.6)
+and PYSEC-2026-347 (CVSS 9.8) with no fix available — strictly worse than the
+finding this entry acknowledges. The contracts and evaluation locks carry
+fixed click (8.4.2 / 8.3.3); the exposure is the workstation full stack only.
+Clears when guardrails-ai widens its click range; at expiry this becomes a
+manifest decision about the guards tier rather than a version bump."""
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-2447"
@@ -114,16 +129,6 @@ blocker from the other three: this one is a genuine RANGE conflict, not a
 shrinkwrap. @modelcontextprotocol/sdk declares ^1.19.9, and 2.0.5 is a major
 outside it, so forcing it would violate a compatibility constraint the SDK
 states rather than merely inherits. Clears when the MCP SDK widens its range."""
-
-[[IgnoredVulns]]
-id = "PYSEC-2026-3552"
-ignoreUntil = 2026-09-05
-reason = """cryptography 49.0.0, CVSS 8.2, fixed in 50.0.0. Fixed where it is
-fixable: requirements/lock-runtime-contracts.txt was re-resolved 2026-08-05 and
-carries 50.0.0. The remaining hit is lock-2026-07-24.txt, which is a
-dated evidence record — the same reasoning as PYSEC-2026-2132 above: editing
-pins inside a snapshot named for that date would falsify the record. Carry the
-fix into the next full lockfile regeneration."""
 
 # --- npm, connectors/relay: second wave, 2026-08-05 ---
 #

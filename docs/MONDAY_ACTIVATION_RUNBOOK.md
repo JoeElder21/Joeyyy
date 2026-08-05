@@ -85,6 +85,13 @@ produce a PacketGuard-clean delegation, so none of them can fail at the
 starting line. The per-specialist worksheets in `docs/PROMOTION_CHECKLISTS.md`
 map each mode to its catalog entry.
 
+`scripts/setup_workstation.ps1` above is the native-Windows path, and its own
+header records that host's limits: the POSIX custody checks and the full suite
+need a POSIX filesystem for a clean signal. `docs/WSL_UBUNTU_SETUP.md` is that
+environment — from a bare Windows machine, through `scripts/wsl_ubuntu_setup.sh`
+and `scripts/workstation_setup.sh`, to a working
+`wsl -d Ubuntu --cd /root/Joeyyy -- claude`.
+
 ```bash
 python -c "
 from runtime.mission_runner import load_mission_catalog

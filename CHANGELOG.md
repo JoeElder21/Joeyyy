@@ -3,6 +3,46 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-08-05 — The governed host gets its WSL layer
+
+`docs/RUNTIME_HOST_DECISION.md` put the runtime on Joe's workstation and no
+third host; the workstation runs Windows. This change makes the host concrete —
+an Ubuntu distribution under WSL with the governed clone at `/root/Joeyyy` — so
+the whole stack is one command away: `wsl -d Ubuntu --cd /root/Joeyyy -- claude`.
+
+### Added
+
+- `scripts/wsl_ubuntu_setup.sh` — idempotent WSL-layer provisioning: refuses
+  non-WSL kernels and non-root users before any mutation, installs the OS
+  packages the validation surface needs (including Node.js, without which the
+  `npx`-launched mounts cannot be probed), makes root the distribution's
+  default user via `/etc/wsl.conf` when no `[user]` section exists, installs
+  the Claude Code CLI when absent and links it into `/usr/local/bin` (the
+  launch command runs a non-login shell that never reads `~/.profile`),
+  creates the Python 3.12 `.venv`, and hands off to
+  `scripts/workstation_setup.sh`. No credential, grant, or signing-key step.
+- `docs/WSL_UBUNTU_SETUP.md` — the runbook from bare Windows to the launch
+  command, recording the one floating-channel trust decision (Anthropic's CLI
+  installer, deliberately unpinned because the CLI self-updates) and the
+  host-side rollback.
+- `tests/test_wsl_bootstrap.py` — 7 drift locks: script and runbook agree on
+  the launch command byte for byte; the WSL layer delegates stack
+  installation instead of reimplementing it; both setup scripts fail fast and
+  stay executable (the workstation script's first coverage); guards precede
+  mutation; the `/usr/local/bin` PATH mechanism and the floating-channel
+  guard are enforced, not just described; the runbook is indexed and routed.
+
+### Changed
+
+- `docs/README.md` — indexed the new runbook; header count set to the
+  measured row count (it said 31 against an actual 38 before this change;
+  40 after merging #75's checklist row).
+- `docs/MONDAY_ACTIVATION_RUNBOOK.md` — routes Windows workstations to the
+  WSL runbook as the clean-signal environment `scripts/setup_workstation.ps1`
+  itself points to for the full suite.
+- `docs/REPOSITORY_OVERVIEW.md` — suite figures moved by the new module and
+  the #74/#75 merge: 1128 tests across 38 modules.
+
 ## 2026-07-30 — Joeyyy becomes the account umbrella
 
 Joe is consolidating everything under the JoeElder21 account. Joeyyy now pins

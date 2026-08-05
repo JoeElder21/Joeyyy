@@ -1,6 +1,6 @@
 # Documentation index
 
-32 records, grouped by purpose. Start at the top of each section.
+40 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -31,6 +31,7 @@
 
 | Document | What it is |
 | --- | --- |
+| [`WSL_UBUNTU_SETUP.md`](WSL_UBUNTU_SETUP.md) | WSL Ubuntu layer of the governed execution host: from bare Windows to `wsl -d Ubuntu --cd /root/Joeyyy -- claude` |
 | [`RUNTIME_NATIVE_LAYERS.md`](RUNTIME_NATIVE_LAYERS.md) | Anthropic SDK, MCP, pydantic layers; gated LangChain absorption |
 | [`AGENT_RUNTIME_BRIDGE.md`](AGENT_RUNTIME_BRIDGE.md) | Governed-handoff bridge on the OpenAI Agents SDK |
 | [`DATA_MEMORY_LAYERS.md`](DATA_MEMORY_LAYERS.md) | llama_index, mem0, crewAI |
