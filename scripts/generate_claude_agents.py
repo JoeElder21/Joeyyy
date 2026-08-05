@@ -191,7 +191,10 @@ def load_manifests() -> dict[str, dict[str, Any]]:
             entry = dict(meta)
             entry["brain"] = manifest["brain"]
             entry["namespace_prefix"] = manifest["namespace_prefix"]
-            entry["manifest_path"] = str(manifest_path.relative_to(ROOT))
+            # as_posix(): on Windows, str() renders backslashes, which makes
+            # every projection differ from its POSIX-generated committed form
+            # and --check report the whole corps stale on the runtime host.
+            entry["manifest_path"] = manifest_path.relative_to(ROOT).as_posix()
             merged[name] = entry
     return merged
 

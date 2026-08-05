@@ -811,7 +811,14 @@ class SelectionReportBaselineTests(unittest.TestCase):
             "integer": "grant_scope = 1",
             "boolean": "grant_scope = true",
         }
-        try:
+        # Every mutation goes to a scratch copy, exercised via `--registry`.
+        # This test used to write each mutation into the LIVE registry and
+        # restore it in a `finally` -- and `finally` does not run in a process
+        # that is killed. A SIGKILL inside that window (2026-08-04) left the
+        # committed file stripped of every grant_scope disclosure. A negative
+        # test must never hold the file it is guarding open for writing.
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch = Path(tmp) / "mcp_mounts.toml"
             for label, replacement in unusable.items():
                 lines, replaced = [], False
                 for line in original.splitlines():
@@ -821,9 +828,14 @@ class SelectionReportBaselineTests(unittest.TestCase):
                     else:
                         lines.append(line)
                 self.assertTrue(replaced, "no grant_scope line to replace")
-                registry.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                scratch.write_text("\n".join(lines) + "\n", encoding="utf-8")
                 completed = subprocess.run(
-                    [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts" / "verify_mcp_mounts.py"),
+                        "--registry",
+                        str(scratch),
+                    ],
                     cwd=ROOT,
                     capture_output=True,
                     text=True,
@@ -832,9 +844,11 @@ class SelectionReportBaselineTests(unittest.TestCase):
                 with self.subTest(value=label):
                     self.assertNotEqual(completed.returncode, 0, label)
                     self.assertIn("undeclared grant scope", completed.stdout)
-        finally:
-            registry.write_text(original, encoding="utf-8")
 
+        # The committed registry, read through the DEFAULT path, must still
+        # pass -- the gate is real -- and must be byte-identical to what this
+        # test started from, which is the property the scratch copy exists to
+        # guarantee.
         restored = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
             cwd=ROOT,
@@ -843,6 +857,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(restored.returncode, 0, restored.stdout[-300:])
+        self.assertEqual(registry.read_text(encoding="utf-8"), original)
 
     def test_the_mount_verifier_fails_an_undeclared_grant_scope(self):
         """The declaration has to be enforced, or it is a convention.
@@ -864,19 +879,26 @@ class SelectionReportBaselineTests(unittest.TestCase):
         self.assertTrue(gated)
         self.assertTrue(all("grant_scope" not in m for m in gated))
 
+        # The stripped registry is a scratch file handed to the verifier via
+        # `--registry`; the committed one is never written. The previous
+        # write-then-restore-in-`finally` shape is exactly how a SIGKILL on
+        # 2026-08-04 left the live registry with no grant_scope lines at all.
         registry = ROOT / "config" / "mcp_mounts.toml"
-        backup = raw
-        try:
-            registry.write_text(stripped, encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch = Path(tmp) / "mcp_mounts.toml"
+            scratch.write_text(stripped, encoding="utf-8")
             completed = subprocess.run(
-                [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "verify_mcp_mounts.py"),
+                    "--registry",
+                    str(scratch),
+                ],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
                 check=False,
             )
-        finally:
-            registry.write_text(backup, encoding="utf-8")
 
         self.assertNotEqual(completed.returncode, 0, "an undeclared grant scope must fail the gate")
         payload = json.loads(completed.stdout)
@@ -885,8 +907,9 @@ class SelectionReportBaselineTests(unittest.TestCase):
             "undeclared grant scope", [entry.get("status") for entry in payload["mounts"]]
         )
 
-        # And the unmodified registry must still pass, so the check is a real
-        # gate rather than a permanent failure.
+        # And the unmodified registry must still pass through the default
+        # path, so the check is a real gate rather than a permanent failure --
+        # and must be byte-identical to what this test started from.
         restored = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "verify_mcp_mounts.py")],
             cwd=ROOT,
@@ -895,6 +918,7 @@ class SelectionReportBaselineTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(restored.returncode, 0, restored.stdout[-400:])
+        self.assertEqual(registry.read_text(encoding="utf-8"), raw)
 
     def test_the_corps_row_discloses_that_nothing_live_ran(self):
         """The largest scope limit of the three gates disclosed nothing.
