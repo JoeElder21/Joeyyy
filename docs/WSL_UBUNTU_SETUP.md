@@ -71,7 +71,10 @@ The script is idempotent and safe to re-run. In order, it:
 5. Creates `.venv` with Python 3.12 (the full-stack interpreter per
    `docs/RUNTIME_HOST_DECISION.md`), activates it, and hands off to
    `scripts/workstation_setup.sh`, which installs the committed lock and runs
-   the validation surface.
+   the validation surface. It then launches the two offline-verifiable MCP
+   mounts through `scripts/verify_mcp_mounts.py --strict` — the probe the
+   mounts CI job runs — so a host whose `npx` layer is broken fails setup
+   here instead of at the first mission.
 
 ## The one floating channel, and why
 

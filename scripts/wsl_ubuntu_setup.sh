@@ -134,6 +134,14 @@ fi
 echo "==> Hand off to the governed-host setup"
 bash "${repo_root}/scripts/workstation_setup.sh"
 
+echo "==> Launch the offline-verifiable MCP mounts (the layer Node was installed for)"
+# workstation_setup.sh runs the validation surface but not the strict mount
+# probe; the canonical task runner and the mounts CI job both treat the probe
+# as the check that actually launches the offline-verifiable mounts. Without
+# it, a host whose npx layer is broken reports a usable governed host and
+# discovers otherwise at the first mission.
+python "${repo_root}/scripts/verify_mcp_mounts.py" --strict >/dev/null
+
 # Never advertise a command this run just determined will not work: with a
 # non-root default user the plain form dies at --cd /root/Joeyyy.
 effective_launch="${launch_command}"
@@ -157,5 +165,17 @@ if [ "${wsl_conf_changed}" -eq 1 ]; then
 /etc/wsl.conf now sets the default user to root. From Windows, run
   wsl --terminate ${WSL_DISTRO_NAME:-Ubuntu}
 once; the next launch picks it up.
+NOTE
+elif [ "${default_user_is_root}" -eq 1 ]; then
+  # A prior run may have appended the block and then failed before printing
+  # the restart note; keying the reminder on "changed this run" would lose it
+  # exactly then. Phrased conditionally because whether the restart already
+  # happened is not observable from inside the distribution.
+  cat <<NOTE
+
+/etc/wsl.conf sets the default user to root. If this distribution has not
+been restarted since that line was added, run
+  wsl --terminate ${WSL_DISTRO_NAME:-Ubuntu}
+from Windows once; the next launch picks it up.
 NOTE
 fi
