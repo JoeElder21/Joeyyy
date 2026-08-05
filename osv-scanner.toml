@@ -24,6 +24,21 @@ recommended actions in docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry or
 sooner if the memory tier is deployed to the workstation."""
 
 [[IgnoredVulns]]
+id = "PYSEC-2026-2132"
+ignoreUntil = 2026-08-25
+reason = """click 8.2.0, CVSS 7.2, fixed in 8.3.3. Genuinely blocked, and the
+blocker is now measured rather than assumed: guardrails-ai 0.10.2 — the
+current release, entering via requirements/runtime-guards.txt — declares
+click<=8.2.0, so no resolution of runtime-full.txt can carry a fixed click.
+Forcing click>=8.3.3 was tried on 2026-08-05, and the resolver satisfied it
+by retreating guardrails-ai to 0.1.8, which carries PYSEC-2026-206 (CVSS 9.6)
+and PYSEC-2026-347 (CVSS 9.8) with no fix available — strictly worse than the
+finding this entry acknowledges. The contracts and evaluation locks carry
+fixed click (8.4.2 / 8.3.3); the exposure is the workstation full stack only.
+Clears when guardrails-ai widens its click range; at expiry this becomes a
+manifest decision about the guards tier rather than a version bump."""
+
+[[IgnoredVulns]]
 id = "PYSEC-2026-2447"
 ignoreUntil = 2026-08-25
 reason = """diskcache 5.6.3, CVSS 5.2, no fix available upstream. Transitive via
@@ -110,10 +125,10 @@ id = "PYSEC-2026-3552"
 ignoreUntil = 2026-09-05
 reason = """cryptography 49.0.0, CVSS 8.2, fixed in 50.0.0. Fixed where it is
 fixable: requirements/lock-runtime-contracts.txt was re-resolved 2026-08-05 and
-carries 50.0.0. The remaining hit is lock-2026-07-24.txt, which is a
-dated evidence record — the same reasoning as PYSEC-2026-2132 above: editing
-pins inside a snapshot named for that date would falsify the record. Carry the
-fix into the next full lockfile regeneration."""
+carries 50.0.0. The remaining hit is lock-2026-07-24.txt, which still resolved
+to 49.0.0 when that lock was regenerated on 2026-08-05. Carry the fix into a
+regeneration that moves it — measuring what blocks it first, the way
+PYSEC-2026-2132 above was measured before its fix was attempted."""
 
 # --- npm, connectors/relay: second wave, 2026-08-05 ---
 #
