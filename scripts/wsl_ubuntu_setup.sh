@@ -89,12 +89,12 @@ fi
 # WSL default — system directories only. ~/.profile is what adds ~/.local/bin,
 # and non-login shells never read it, so the CLI must be reachable from
 # /usr/local/bin or the launch command dies with "command not found".
-# -f so a stale or broken symlink is replaced on re-run; a real file there
-# (say, an npm-managed install) is left alone.
-if [ -x "${HOME}/.local/bin/claude" ]; then
-  if [ -L /usr/local/bin/claude ] || [ ! -e /usr/local/bin/claude ]; then
-    ln -sf "${HOME}/.local/bin/claude" /usr/local/bin/claude
-  fi
+# -e follows symlinks, so this is true exactly for a missing entry or a
+# broken link — the two states worth repairing. Anything that already
+# resolves (a real file, or a valid link from some other installation)
+# satisfies the launch path and is left alone; -f clears the dangling name.
+if [ -x "${HOME}/.local/bin/claude" ] && [ ! -e /usr/local/bin/claude ]; then
+  ln -sf "${HOME}/.local/bin/claude" /usr/local/bin/claude
 fi
 
 if [ "${repo_root}" != "/root/Joeyyy" ]; then
@@ -140,9 +140,10 @@ launches drop straight in. Validation commands run inside the virtual
 environment: activate it with  . .venv/bin/activate
 DONE
 if [ "${wsl_conf_changed}" -eq 1 ]; then
-  cat <<'NOTE'
+  cat <<NOTE
 
 /etc/wsl.conf now sets the default user to root. From Windows, run
-`wsl --terminate Ubuntu` once; the next launch picks it up.
+  wsl --terminate ${WSL_DISTRO_NAME:-Ubuntu}
+once; the next launch picks it up.
 NOTE
 fi
