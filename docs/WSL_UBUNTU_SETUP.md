@@ -65,7 +65,10 @@ The script is idempotent and safe to re-run. In order, it:
    section exists, and says so. The canonical clone lives in root's home, so
    the launch command only works when the distribution's default user is
    root; an existing `[user]` section is reported and left alone. The change
-   takes effect after `wsl --terminate Ubuntu` from Windows.
+   takes effect after `wsl --terminate <distribution>` from Windows —
+   `Ubuntu` in the canonical path, `Ubuntu-24.04` if the recovery path above
+   put the clone there; the script prints the exact command for the
+   distribution it ran in.
 4. Installs the Claude Code CLI if absent — the one floating channel, see
    below — and links it into `/usr/local/bin`.
 5. Creates `.venv` with Python 3.12 (the full-stack interpreter per

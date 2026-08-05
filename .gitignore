@@ -1,6 +1,12 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+# The governed host's dedicated virtual environment (docs/RUNTIME_HOST_DECISION.md,
+# created by scripts/wsl_ubuntu_setup.sh). Untracked-but-unignored, it makes
+# `git status --porcelain` non-empty, and evals/run_evaluations.py refuses
+# acceptance evidence from a dirty tree — the provisioned host could never
+# produce the evidence it exists for.
+.venv/
 .coverage
 .DS_Store
 .env
