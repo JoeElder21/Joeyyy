@@ -29,10 +29,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "error: run this inside the repository worktree" >&2
-  exit 1
-}
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
 echo "==> OS packages (git, curl, build tools, Python 3.12, Node.js for the npx mounts)"
