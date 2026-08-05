@@ -61,19 +61,53 @@ class PolicyLoadingTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertEqual(policy.threshold_for(mode), 0.35)
 
-    def test_declared_only_baselines_are_not_treated_as_measured(self):
+    def test_declared_baselines_on_record_are_usable(self):
         policy = ValuePolicy.load()
-        # daily_capacity carries a manifest_declared baseline, which is a design
-        # intent rather than an observation of Joe, so it is not usable.
-        self.assertIsNone(policy.usable_baseline("daily_capacity"))
-        # pipeline_triage is still source = "unset": nobody has declared it.
-        self.assertIsNone(policy.usable_baseline("pipeline_triage"))
-        # delivery_control used to be unset and was asserted here alongside the
-        # others. Joe declared 240 minutes on 2026-07-30, so it is now usable and
-        # the assertion is inverted rather than deleted -- a joe_declared
-        # baseline is exactly what this policy is supposed to accept, and a test
-        # that only ever checks refusal cannot tell acceptance from a bug.
+        # These assertions are inverted rather than deleted as Joe declares each
+        # baseline -- a joe_declared baseline is exactly what this policy is
+        # supposed to accept, and a test that only ever checks refusal cannot
+        # tell acceptance from a bug. delivery_control was declared 2026-07-30;
+        # daily_capacity and pipeline_triage on 2026-07-31, the latter two
+        # superseding a manifest_declared and an unset entry respectively.
         self.assertEqual(policy.usable_baseline("delivery_control"), 240)
+        self.assertEqual(policy.usable_baseline("daily_capacity"), 30)
+        self.assertEqual(policy.usable_baseline("pipeline_triage"), 60)
+
+    def test_a_baseline_is_unusable_unless_measured_or_joe_declared(self):
+        """The provenance rule, pinned to a fixture rather than to live config.
+
+        This was asserted against whichever modes in config/value_policy.toml
+        happened to be `manifest_declared` or `unset`. Both examples became
+        `joe_declared` the moment Joe declared them, which would have quietly
+        retired the only coverage of the refusal itself -- the rule would still
+        hold and nothing would be testing it. The rule is about `source`, so the
+        fixture now supplies the sources directly and no future declaration can
+        erode it.
+        """
+        extra = """
+[[baseline]]
+mode = "fixture_manifest_declared"
+agent = "jeos_energy_director"
+baseline_minutes = 2
+source = "manifest_declared"
+note = "Design intent copied from a routine_time_budget, never an observation."
+
+[[baseline]]
+mode = "fixture_unset"
+agent = "jeos_energy_director"
+baseline_minutes = 0
+source = "unset"
+note = "Nobody has declared this one."
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "value_policy.toml"
+            path.write_text(POLICY_PATH.read_text(encoding="utf-8") + extra, encoding="utf-8")
+            policy = ValuePolicy.load(path)
+            self.assertIsNone(policy.usable_baseline("fixture_manifest_declared"))
+            self.assertIsNone(policy.usable_baseline("fixture_unset"))
+            # Acceptance still works in the same file, so a loader that returned
+            # None for everything could not pass this test.
+            self.assertEqual(policy.usable_baseline("delivery_control"), 240)
 
 
 class ObservationRefusalTests(unittest.TestCase):
