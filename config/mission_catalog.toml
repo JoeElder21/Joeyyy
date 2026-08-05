@@ -472,6 +472,324 @@ definition_of_done_ids = ["single-action", "cue-complete", "claims-bounded"]
 evidence_sources = ["calendar:today", "gmail:open loops", "drive:recently modified"]
 baseline_prompt = "How long do you usually spend getting started on a stalled task?"
 
+# ------------------------------------------------------- shadow-exit coverage
+# Added 2026-07-31: every remaining registered mode gets a prepared mission, so
+# the 39 controlled real missions the active gate requires are all "run this"
+# rather than "design this". Same rule as above: an entry is a prepared
+# assignment, not a promotion, and Joe supplies the evidence and baseline.
+
+[[mission]]
+key = "operating_campaign"
+required_artifact_types = ["campaign_map"]
+agent = "apex_war_architect"
+mode = "operating_campaign"
+trigger = "What should I focus on? / build my operating plan / rank my campaigns"
+objective = """
+Produce one campaign map from the supplied evidence: the active professional
+campaigns, what each is for, its current bottleneck, and a leverage-ranked
+priority stack. Rank only on evidence in the packet; say when two campaigns
+cannot be ordered from what is supplied.
+"""
+definition_of_done = [
+  "One campaign_map artifact covering every campaign present in the evidence.",
+  "Each campaign carries its bottleneck and the source it was read from.",
+  "The priority stack states its ranking basis; unrankable pairs are said so.",
+]
+definition_of_done_ids = ["campaigns-mapped", "bottlenecks-sourced", "ranking-honest"]
+evidence_sources = ["drive:strategy notes", "gmail:commitment threads", "calendar:next 30 days"]
+baseline_prompt = "How long does building or refreshing your operating plan take you by hand?"
+
+[[mission]]
+key = "career_integration"
+required_artifact_types = ["decision_brief"]
+agent = "apex_war_architect"
+mode = "career_integration"
+trigger = "How does this fit my career? / licensure and positioning check"
+objective = """
+Produce one decision brief connecting the supplied career evidence — licensure
+progress, roles, credentials, positioning — to the current campaign stack: what
+advances, what conflicts, and the single highest-leverage career move now.
+Separate source-backed facts from judgment.
+"""
+definition_of_done = [
+  "One decision_brief artifact tracing each claim to supplied evidence.",
+  "Conflicts between career moves and active campaigns are named explicitly.",
+  "Exactly one recommended next move, labeled as judgment, with its basis.",
+]
+definition_of_done_ids = ["brief-sourced", "conflicts-named", "move-labeled"]
+evidence_sources = ["drive:career records", "gmail:professional correspondence"]
+baseline_prompt = "How long does a career-positioning review normally take you by hand?"
+
+[[mission]]
+key = "delegation_topology"
+required_artifact_types = ["delegation_topology"]
+agent = "apex_war_architect"
+mode = "delegation_topology"
+trigger = "What should I stop doing myself? / who or what should own this work"
+objective = """
+From the supplied workload evidence, produce one delegation topology: which
+recurring work stays with Joe, which moves to a named owner or system, and what
+each transfer requires. Recommend only transfers the evidence shows are safe;
+list the rest as candidates with their missing prerequisite.
+"""
+definition_of_done = [
+  "One delegation_topology artifact covering the workload in the evidence.",
+  "Every proposed transfer names its owner, prerequisite, and reversal path.",
+  "Unsafe or unevidenced transfers are listed as candidates, not recommendations.",
+]
+definition_of_done_ids = ["topology-complete", "transfers-specified", "candidates-separated"]
+evidence_sources = ["drive:task records", "gmail:recurring threads", "calendar:recurring events"]
+baseline_prompt = "How long does working out what to delegate normally take you by hand?"
+
+[[mission]]
+key = "reactivation"
+required_artifact_types = ["follow_up_plan"]
+agent = "apex_deal_engine"
+mode = "reactivation"
+trigger = "Wake up my dormant opportunities / who should I re-contact"
+objective = """
+From the supplied pipeline evidence, identify dormant opportunities with an
+observable reason to re-engage, and produce one follow-up plan: who, why now,
+and a draft opener grounded in the last real exchange. Exclude contacts with no
+evidence of prior interest rather than inventing a pretext.
+"""
+definition_of_done = [
+  "One follow_up_plan artifact listing each reactivation with its evidence.",
+  "Every draft opener cites the prior exchange it builds on.",
+  "Opportunities excluded for lack of evidence are listed with that reason.",
+]
+definition_of_done_ids = ["targets-evidenced", "openers-grounded", "exclusions-honest"]
+evidence_sources = ["gmail:dormant threads", "drive:proposal history"]
+baseline_prompt = "How long does a dormant-opportunity sweep normally take you by hand?"
+
+[[mission]]
+key = "proposal_control"
+required_artifact_types = ["proposal_checkpoint"]
+agent = "apex_deal_engine"
+mode = "proposal_control"
+trigger = "Where do my proposals stand? / proposal deadline check"
+objective = """
+Produce one proposal checkpoint from the supplied evidence: every open proposal,
+its stage, owner, due date, missing pieces, and the next action. Flag anything
+due inside the supplied horizon or blocked on Joe.
+"""
+definition_of_done = [
+  "One proposal_checkpoint artifact with a row per open proposal in the evidence.",
+  "Each row carries stage, due date, missing pieces, and next action with source.",
+  "Proposals due soon or blocked on Joe are flagged explicitly.",
+]
+definition_of_done_ids = ["proposals-rowed", "rows-sourced", "urgent-flagged"]
+evidence_sources = ["drive:proposal folders", "gmail:proposal threads", "calendar:submission deadlines"]
+baseline_prompt = "How long does a proposal status pass normally take you by hand?"
+
+[[mission]]
+key = "technical_qa"
+required_artifact_types = ["qa_risk_packet"]
+agent = "apex_delivery_commander"
+mode = "technical_qa"
+trigger = "QA this deliverable / check this before it goes out"
+objective = """
+Review the supplied deliverable evidence against its stated requirements and
+produce one QA risk packet: findings ordered by consequence, each traced to the
+requirement or standard it violates, with jurisdiction and edition preserved.
+Never certify; findings support licensed judgment, they do not replace it.
+"""
+definition_of_done = [
+  "One qa_risk_packet artifact with findings ordered by consequence.",
+  "Every finding cites the requirement, standard, or source it was checked against.",
+  "The packet states it is review support, not certification or sealed work.",
+]
+definition_of_done_ids = ["findings-ordered", "findings-cited", "no-certification"]
+evidence_sources = ["drive:deliverable files", "drive:requirement records"]
+baseline_prompt = "How long does a QA pass on a deliverable like this take you by hand?"
+
+[[mission]]
+key = "quantity_delta"
+required_artifact_types = ["quantity_delta"]
+agent = "apex_delivery_commander"
+mode = "quantity_delta"
+trigger = "What changed between revisions? / compare these quantity sets"
+objective = """
+Compare the supplied quantity sets and produce one quantity delta: what changed,
+by how much, in which units, and what drove it where the evidence says. Preserve
+units, coordinate systems, and revision identity; report an unexplained change
+as unexplained rather than inventing a driver.
+"""
+definition_of_done = [
+  "One quantity_delta artifact covering every item present in both sets.",
+  "Units, revisions, and sources are preserved on every line.",
+  "Changes without an evidenced driver are labeled unexplained.",
+]
+definition_of_done_ids = ["delta-complete", "units-preserved", "drivers-honest"]
+evidence_sources = ["drive:quantity takeoffs", "drive:revision records"]
+baseline_prompt = "How long does a revision-to-revision quantity comparison take you by hand?"
+
+[[mission]]
+key = "cost_evidence"
+required_artifact_types = ["cost_evidence"]
+agent = "apex_delivery_commander"
+mode = "cost_evidence"
+trigger = "Back this estimate / assemble the cost basis"
+objective = """
+Assemble one cost evidence packet from the supplied records: each cost item, its
+source, date, and applicability, with assumptions and exclusions stated. Do not
+fill gaps with invented figures; a missing basis is reported as missing.
+"""
+definition_of_done = [
+  "One cost_evidence artifact with a source, date, and basis per cost item.",
+  "Assumptions and exclusions are stated in one place.",
+  "Items lacking a defensible basis are listed as gaps, not estimated silently.",
+]
+definition_of_done_ids = ["items-sourced", "assumptions-stated", "gaps-honest"]
+evidence_sources = ["drive:cost records", "drive:quotes and invoices"]
+baseline_prompt = "How long does assembling a cost basis normally take you by hand?"
+
+[[mission]]
+key = "source_replay"
+required_artifact_types = ["source_cursor"]
+agent = "apex_intelligence_forge"
+mode = "source_replay"
+trigger = "What did we already know about this? / replay the record"
+objective = """
+Walk the supplied records in order and produce one source cursor: what was known
+when, from which source, and where the record contradicts itself. Preserve
+chronology and citations; a contradiction is reported, not resolved by guessing.
+"""
+definition_of_done = [
+  "One source_cursor artifact ordered by record date with citations preserved.",
+  "Contradictions between sources are listed with both sides cited.",
+  "The cursor states where the record ends and what remains unknown.",
+]
+definition_of_done_ids = ["chronology-preserved", "contradictions-cited", "end-stated"]
+evidence_sources = ["drive:project records", "gmail:related threads"]
+baseline_prompt = "How long does reconstructing a decision history take you by hand?"
+
+[[mission]]
+key = "decision_brief"
+required_artifact_types = ["intelligence_brief"]
+agent = "apex_intelligence_forge"
+mode = "decision_brief"
+trigger = "Brief me for this decision / what do the records say about X"
+objective = """
+Produce one decision-support brief from the supplied evidence: the question, the
+source-backed facts, the calculated figures with their inputs shown, the open
+unknowns, and the options the evidence supports. Label facts, calculations,
+judgment, and unknowns separately; recommend only if the evidence ranks options.
+"""
+definition_of_done = [
+  "One intelligence_brief artifact with facts, calculations, judgment, and unknowns labeled.",
+  "Every fact and figure traces to a supplied source or shown calculation.",
+  "Options are stated with their evidence; absence of a clear winner is said plainly.",
+]
+definition_of_done_ids = ["labels-separated", "claims-traced", "options-honest"]
+evidence_sources = ["drive:decision records", "gmail:relevant threads"]
+baseline_prompt = "How long does assembling a decision brief normally take you by hand?"
+
+[[mission]]
+key = "meeting_brief"
+required_artifact_types = ["intelligence_brief"]
+agent = "apex_intelligence_forge"
+mode = "meeting_brief"
+trigger = "Prep me for this meeting / who am I meeting and where do things stand"
+objective = """
+Produce one meeting brief from the supplied evidence: who attends, the live
+threads with each party, open commitments in both directions, and the outcomes
+this meeting should produce. Only relationship facts the record shows; no
+inferred motives.
+"""
+definition_of_done = [
+  "One intelligence_brief artifact covering attendees, threads, and commitments.",
+  "Every commitment cites the exchange that created it.",
+  "Desired outcomes are listed and bounded by what the evidence supports.",
+]
+definition_of_done_ids = ["parties-covered", "commitments-cited", "outcomes-bounded"]
+evidence_sources = ["calendar:the meeting", "gmail:attendee threads", "drive:related records"]
+baseline_prompt = "How long does preparing for a meeting like this take you by hand?"
+
+[[mission]]
+key = "playbook_capture"
+required_artifact_types = ["playbook"]
+agent = "apex_intelligence_forge"
+mode = "playbook"
+trigger = "Turn how we did this into a playbook / capture this process"
+objective = """
+From the supplied records of completed work, produce one playbook: the steps as
+actually performed, decision points, inputs, checks, and failure modes observed.
+Capture what happened, not an idealized process; steps the record does not show
+are marked as gaps.
+"""
+definition_of_done = [
+  "One playbook artifact whose every step traces to the record of real work.",
+  "Decision points and observed failure modes are captured with sources.",
+  "Steps missing from the record are marked as gaps, not reconstructed.",
+]
+definition_of_done_ids = ["steps-evidenced", "failures-captured", "gaps-marked"]
+evidence_sources = ["drive:completed work records", "gmail:process threads"]
+baseline_prompt = "How long does writing up a process like this normally take you by hand?"
+
+[[mission]]
+key = "system_design"
+required_artifact_types = ["system_design"]
+agent = "apex_systems_blacksmith"
+mode = "system_design"
+trigger = "Design the fix for this recurring work / build me a system for X"
+objective = """
+From a diagnosed repetition in the supplied evidence, produce one system design:
+the smallest reliable intervention, its inputs and outputs, failure behavior,
+rollback, and maintenance cost. Reversible by construction; a design that cannot
+be rolled back is out of scope.
+"""
+definition_of_done = [
+  "One system_design artifact with inputs, outputs, failure behavior, and rollback.",
+  "The maintenance cost is stated and set against the measured recurring cost.",
+  "The design names what it deliberately does not attempt.",
+]
+definition_of_done_ids = ["design-complete", "cost-compared", "non-goals-stated"]
+evidence_sources = ["drive:process records", "gmail:recurring threads"]
+baseline_prompt = "How long does designing a fix for this kind of repetition take you by hand?"
+
+[[mission]]
+key = "shadow_validation"
+required_artifact_types = ["automation_assessment"]
+agent = "apex_systems_blacksmith"
+mode = "shadow_validation"
+trigger = "Did the new system actually work? / validate the shadow run"
+objective = """
+Compare the supplied shadow-run records against the system's declared definition
+of done and produce one assessment: what ran, what matched, what diverged, and
+whether the evidence supports promotion. A run with missing records is reported
+as unverifiable, never assumed to have passed.
+"""
+definition_of_done = [
+  "One automation_assessment artifact comparing declared behavior to observed records.",
+  "Every divergence is listed with its record; missing records are named.",
+  "The promotion recommendation is bounded by what the evidence actually shows.",
+]
+definition_of_done_ids = ["comparison-recorded", "divergences-listed", "verdict-bounded"]
+evidence_sources = ["drive:shadow-run records"]
+baseline_prompt = "How long does checking whether a new process worked take you by hand?"
+
+[[mission]]
+key = "system_value_review_apex"
+required_artifact_types = ["value_review"]
+agent = "apex_systems_blacksmith"
+mode = "value_review"
+trigger = "Is this system still worth it? / review what the automation returns"
+objective = """
+From the supplied usage and maintenance records, produce one value review of an
+operating system or automation: time returned, review and correction burden,
+incidents, and net verdict against the binding threshold. Gross time saved is
+not the number; the net figure after burden is.
+"""
+definition_of_done = [
+  "One value_review artifact with benefit and burden itemized from records.",
+  "The net figure is computed against the value policy's binding threshold.",
+  "A keep, fix, or retire verdict is stated with its evidence.",
+]
+definition_of_done_ids = ["ledger-itemized", "net-computed", "verdict-stated"]
+evidence_sources = ["drive:usage records", "drive:maintenance log"]
+baseline_prompt = "How long did this task take you by hand before the system existed?"
+
 [[mission]]
 key = "life_direction"
 required_artifact_types = ["life_plan"]

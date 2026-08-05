@@ -67,10 +67,10 @@ UPSTREAM_DEPENDENCY_SOURCES = {
 # everywhere including CI rather than only where submodules are initialized.
 DERIVED_DEPENDENCY_DECLARATIONS = {
     "requirements/vendor-civil-domain.txt": (
-        "42733ffc98f57c7dfa97ad2ddaf330693bc6765ca803a0162452f6469831b483"
+        "b6e0ca9c47ef9cd7535693a182756108acc13897d19a5a8b4eef7631f00edc3e"
     ),
     "requirements/vendor-multi-agent-kg.txt": (
-        "e64c672325efdf716d0b1356933abc31c5fc034cfb04d31f1db65d17f27cd60b"
+        "f467a303eae3dbd6f2fe4d44d8b38a2e226f60a427fe3216a2bc40eab0492e6d"
     ),
 }
 

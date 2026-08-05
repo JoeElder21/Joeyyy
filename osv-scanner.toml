@@ -114,3 +114,61 @@ blocker from the other three: this one is a genuine RANGE conflict, not a
 shrinkwrap. @modelcontextprotocol/sdk declares ^1.19.9, and 2.0.5 is a major
 outside it, so forcing it would violate a compatibility constraint the SDK
 states rather than merely inherits. Clears when the MCP SDK widens its range."""
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-3552"
+ignoreUntil = 2026-09-05
+reason = """cryptography 49.0.0, CVSS 8.2, fixed in 50.0.0. Fixed where it is
+fixable: requirements/lock-runtime-contracts.txt was re-resolved 2026-08-05 and
+carries 50.0.0. The remaining hit is lock-2026-07-24.txt, which is a
+dated evidence record — the same reasoning as PYSEC-2026-2132 above: editing
+pins inside a snapshot named for that date would falsify the record. Carry the
+fix into the next full lockfile regeneration."""
+
+# --- npm, connectors/relay: second wave, 2026-08-05 ---
+#
+# Same blocker as the 2026-07 wave above: brace-expansion and undici resolve
+# inside @earendil-works/pi-coding-agent's published npm-shrinkwrap.json, which
+# npm honours exactly and `overrides` cannot reach. The two findings in the
+# regular tree from the same scan (fast-uri, hono) were fixed in the lock the
+# same day rather than listed here. Short expiry again: fixable upstream, and
+# the expiry forces the recheck.
+
+[[IgnoredVulns]]
+id = "GHSA-rgw5-rvv9-x895"
+ignoreUntil = 2026-09-05
+reason = """brace-expansion 5.0.6, CVSS 7.5, fixed in 5.0.9. Third advisory
+against the same shrinkwrap-pinned copy as GHSA-3jxr-9vmj-r5cp and
+GHSA-mh99-v99m-4gvg; listed separately so fixing one does not silence another.
+Clears when pi-coding-agent republishes with a refreshed shrinkwrap."""
+
+[[IgnoredVulns]]
+id = "GHSA-4cwx-7wf7-3272"
+ignoreUntil = 2026-09-05
+reason = """undici 8.5.0, CVSS 7.4, fixed in 8.9.0. Shrinkwrap-pinned under
+@earendil-works/pi-coding-agent; overrides verified unable to reach it (see the
+2026-07 wave note). Connectors/relay remains declaration-only."""
+
+[[IgnoredVulns]]
+id = "GHSA-8xcm-r25x-g524"
+ignoreUntil = 2026-09-05
+reason = """undici 8.5.0, CVSS 4.8, fixed in 8.9.0. Same shrinkwrap-pinned copy
+as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
+
+[[IgnoredVulns]]
+id = "GHSA-jr45-8vmc-qm54"
+ignoreUntil = 2026-09-05
+reason = """undici 8.5.0, CVSS 5.9, fixed in 8.9.0. Same shrinkwrap-pinned copy
+as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
+
+[[IgnoredVulns]]
+id = "GHSA-m8rv-5g2x-5cg5"
+ignoreUntil = 2026-09-05
+reason = """undici 8.5.0, CVSS 4.2, fixed in 8.9.0. Same shrinkwrap-pinned copy
+as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
+
+[[IgnoredVulns]]
+id = "GHSA-v3r7-h72x-cjcm"
+ignoreUntil = 2026-09-05
+reason = """undici 8.5.0, CVSS 4.8, fixed in 8.9.0. Same shrinkwrap-pinned copy
+as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
