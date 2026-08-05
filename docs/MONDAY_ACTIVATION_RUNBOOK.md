@@ -73,11 +73,15 @@ Say what you need in your own words. Examples that map to registered modes:
 
 Agent 007 routes; you do not need to name the specialist.
 
-These seven are **pre-written** in `config/mission_catalog.toml` — objective,
-definition of done, criterion ids, and the evidence sources to retrieve are all
-settled in advance, so Monday is running a mission rather than designing one.
+These are examples of the **thirty-nine** missions pre-written in
+`config/mission_catalog.toml` — one per registered material mode, so the full
+set the active gate requires (`docs/SHADOW_EXIT_STATUS_2026-07-30.md`) is
+"run this" rather than "design this". Objective, definition of done, criterion
+ids, and the evidence sources to retrieve are all settled in advance.
 Every catalog entry is tested to produce a PacketGuard-clean delegation, so none
-of them can fail at the starting line.
+of them can fail at the starting line. On a fresh workstation, run
+`scripts/workstation_setup.sh` once first — it installs the locked stack,
+verifies every declared dependency imports, and runs the validation surface.
 
 ```bash
 python -c "
