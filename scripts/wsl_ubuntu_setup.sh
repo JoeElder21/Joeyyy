@@ -29,10 +29,14 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "error: run this inside the repository worktree" >&2
+# Derived from this script's location, not from git: on a fresh distribution
+# git is one of the packages this script exists to install, and a tree copied
+# in without .git should still provision rather than fail at the first line.
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ ! -f "${repo_root}/AGENTS.md" ]; then
+  echo "error: ${repo_root} does not look like the repository root" >&2
   exit 1
-}
+fi
 cd "${repo_root}"
 
 echo "==> OS packages (git, curl, build tools, Python 3.12, Node.js for the npx mounts)"
@@ -49,7 +53,7 @@ apt-get install -y git curl ca-certificates build-essential \
   python3.12 python3.12-venv nodejs npm
 
 echo "==> Default WSL user (the launch command assumes root)"
-if [ -f /etc/wsl.conf ] && grep -q '^\[user\]' /etc/wsl.conf; then
+if [ -f /etc/wsl.conf ] && grep -qi '^[[:space:]]*\[user\]' /etc/wsl.conf; then
   echo "    /etc/wsl.conf already declares a [user] section; leaving it as is."
   wsl_conf_changed=0
 else
@@ -70,8 +74,12 @@ fi
 # WSL default — system directories only. ~/.profile is what adds ~/.local/bin,
 # and non-login shells never read it, so the CLI must be reachable from
 # /usr/local/bin or the launch command dies with "command not found".
-if [ ! -e /usr/local/bin/claude ] && [ -x "${HOME}/.local/bin/claude" ]; then
-  ln -s "${HOME}/.local/bin/claude" /usr/local/bin/claude
+# -f so a stale or broken symlink is replaced on re-run; a real file there
+# (say, an npm-managed install) is left alone.
+if [ -x "${HOME}/.local/bin/claude" ]; then
+  if [ -L /usr/local/bin/claude ] || [ ! -e /usr/local/bin/claude ]; then
+    ln -sf "${HOME}/.local/bin/claude" /usr/local/bin/claude
+  fi
 fi
 
 if [ "${repo_root}" != "/root/Joeyyy" ]; then
