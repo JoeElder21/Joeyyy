@@ -39,10 +39,15 @@ wsl -d Ubuntu -u root
 then, in the distribution:
 
 ```bash
+apt-get update && apt-get install -y git
 git clone https://github.com/JoeElder21/Joeyyy.git /root/Joeyyy
 cd /root/Joeyyy
 bash scripts/wsl_ubuntu_setup.sh
 ```
+
+The first line matters on a minimal image: the setup script installs git as
+an OS package, but the clone is how the script arrives, so git cannot wait
+for it. On an image that already ships git the line is a no-op.
 
 The script is idempotent and safe to re-run. In order, it:
 
@@ -114,8 +119,13 @@ index row in `docs/README.md`, the pointer in
 `docs/MONDAY_ACTIVATION_RUNBOOK.md`, the suite figures in
 `docs/REPOSITORY_OVERVIEW.md`, and the `CHANGELOG.md` entry — nothing else.
 
-Host side, each independently reversible: `rm /usr/local/bin/claude` removes
-the link; `rm -rf /root/Joeyyy/.venv` removes the environment; deleting the
+Host side, each independently reversible: remove `/usr/local/bin/claude`
+only if it is the symlink this setup created — a link into
+`/root/.local/bin` — since the script leaves a pre-existing binary or
+foreign link alone and removing one of those would destroy an installation
+this change never made
+(`[ "$(readlink /usr/local/bin/claude)" = /root/.local/bin/claude ] && rm /usr/local/bin/claude`);
+`rm -rf /root/Joeyyy/.venv` removes the environment; deleting the
 `[user]` section from `/etc/wsl.conf` (then `wsl --terminate Ubuntu`)
 restores the previous default user. Full teardown is
 `wsl --unregister Ubuntu` from Windows — destructive to the distribution's
