@@ -116,11 +116,16 @@ evidence, not evidence.
 
 ## Rollback
 
-Repository side: revert the commit that added this record. It touched
-`scripts/wsl_ubuntu_setup.sh`, this file, `tests/test_wsl_bootstrap.py`, the
-index row in `docs/README.md`, the pointer in
-`docs/MONDAY_ACTIVATION_RUNBOOK.md`, the suite figures in
-`docs/REPOSITORY_OVERVIEW.md`, and the `CHANGELOG.md` entry — nothing else.
+Repository side: revert the commits, which are separated by concern. The WSL
+layer itself is `scripts/wsl_ubuntu_setup.sh`, this file,
+`tests/test_wsl_bootstrap.py`, the index row in `docs/README.md`, the pointer
+in `docs/MONDAY_ACTIVATION_RUNBOOK.md`, the suite figures in
+`docs/REPOSITORY_OVERVIEW.md`, and the `CHANGELOG.md` entry. The dependency
+repairs that landed on the same branch — the four `requirements/lock*.txt`
+re-resolutions and the `osv-scanner.toml` triage updates, including the
+chromadb reassessment this install path triggered — are their own commits
+with their own rationale, independently revertible; reverting the WSL layer
+alone does not restore the pre-repair dependency state.
 
 Host side, each independently reversible: remove `/usr/local/bin/claude`
 only if it is the symlink this setup created — a link into

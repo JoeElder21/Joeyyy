@@ -15,11 +15,6 @@ set -euo pipefail
 # docs/WSL_UBUNTU_SETUP.md records the full runbook, the one floating-channel
 # trust decision this script makes, and what stays manual.
 
-# Printed with the distribution this run is actually inside, so the recovery
-# path onto Ubuntu-24.04 reports a command that targets it rather than the
-# canonical default.
-launch_command="wsl -d ${WSL_DISTRO_NAME:-Ubuntu} --cd /root/Joeyyy -- claude"
-
 if ! grep -qiE 'microsoft|wsl' /proc/version; then
   echo "error: not a WSL kernel; this script provisions the WSL layer only." >&2
   echo "On a Linux host, run scripts/workstation_setup.sh directly." >&2
@@ -41,6 +36,12 @@ if [ ! -f "${repo_root}/AGENTS.md" ]; then
   exit 1
 fi
 cd "${repo_root}"
+
+# Built from what this run actually resolved — the distribution it is inside
+# and the clone it provisioned — so the completion message never names a
+# path or distro this run did not verify. The canonical form is
+# wsl -d Ubuntu --cd /root/Joeyyy -- claude (docs/WSL_UBUNTU_SETUP.md).
+launch_command="wsl -d ${WSL_DISTRO_NAME:-Ubuntu} --cd ${repo_root} -- claude"
 
 echo "==> OS packages (git, curl, build tools, Python 3.12, Node.js for the npx mounts)"
 export DEBIAN_FRONTEND=noninteractive
@@ -110,8 +111,8 @@ if [ -z "${resolved_claude}" ] || [ ! -x "${resolved_claude}" ]; then
 fi
 
 if [ "${repo_root}" != "/root/Joeyyy" ]; then
-  echo "note: this clone is at ${repo_root}, not /root/Joeyyy — adjust --cd in" >&2
-  echo "the launch command accordingly." >&2
+  echo "note: this clone is at ${repo_root}, not the canonical /root/Joeyyy;" >&2
+  echo "the launch command printed at the end reflects this clone." >&2
 fi
 
 echo "==> Virtual environment (Python 3.12 per docs/RUNTIME_HOST_DECISION.md)"
@@ -146,7 +147,7 @@ python "${repo_root}/scripts/verify_mcp_mounts.py" --strict >/dev/null
 # non-root default user the plain form dies at --cd /root/Joeyyy.
 effective_launch="${launch_command}"
 if [ "${default_user_is_root}" -eq 0 ]; then
-  effective_launch="wsl -d ${WSL_DISTRO_NAME:-Ubuntu} -u root --cd /root/Joeyyy -- claude"
+  effective_launch="wsl -d ${WSL_DISTRO_NAME:-Ubuntu} -u root --cd ${repo_root} -- claude"
 fi
 
 cat <<DONE

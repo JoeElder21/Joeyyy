@@ -16,12 +16,22 @@
 [[IgnoredVulns]]
 id = "PYSEC-2026-311"
 ignoreUntil = 2026-08-25
-reason = """chromadb 1.1.1, CVSS 9.3, no fix available upstream. Reaches this
-repository only as a transitive dependency of the optional memory tier, which is
-not deployed; CI installs requirements.txt alone. Because no upgrade resolves it,
-this is a deployment decision for Joe rather than a version bump — see the
-recommended actions in docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry or
-sooner if the memory tier is deployed to the workstation."""
+reason = """chromadb 1.1.1, CVSS 9.3, no fix available upstream. Originally
+triaged as reaching this repository only through the optional memory tier,
+"which is not deployed; CI installs requirements.txt alone."
+
+REASSESSED 2026-08-05 and that premise no longer holds. The condition the
+original entry said would trigger a revisit has occurred:
+scripts/workstation_setup.sh installs requirements/lock-2026-07-24.txt — the
+set that carries chromadb — on the governed workstation, and the WSL layer
+(scripts/wsl_ubuntu_setup.sh, docs/WSL_UBUNTU_SETUP.md) makes that install
+one command away from a fresh Windows machine. So this is a real exposure on
+the governed execution host, downgraded only by having no upstream fix and by
+that host not being internet-exposed — the same honest position as
+PYSEC-2026-2447 below. Kept as a triage because no version resolves it; the
+open decision the original entry deferred is now live and is Joe's: keep the
+memory tier in the workstation manifest with this accepted, or trim it. See
+docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry at the latest."""
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-2132"
