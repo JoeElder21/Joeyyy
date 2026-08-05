@@ -125,9 +125,14 @@ only if it is the symlink this setup created — a link into
 foreign link alone and removing one of those would destroy an installation
 this change never made
 (`[ "$(readlink /usr/local/bin/claude)" = /root/.local/bin/claude ] && rm /usr/local/bin/claude`);
-`rm -rf /root/Joeyyy/.venv` removes the environment; deleting the
-`[user]` section from `/etc/wsl.conf` (then `wsl --terminate Ubuntu`)
-restores the previous default user. Full teardown is
-`wsl --unregister Ubuntu` from Windows — destructive to the distribution's
-entire disk, including anything in it that never reached this repository, so
-it is a deliberate last step, not a cleanup.
+`rm -rf /root/Joeyyy/.venv` removes the environment. The `[user]` section:
+only if the setup appended it — it prints a notice when it does, and reports
+an existing section untouched — delete that appended block from
+`/etc/wsl.conf` (then `wsl --terminate` the distribution) to restore the
+previous default user; a section the setup left alone is your configuration,
+not this change's, and stays. Full teardown is
+`wsl --unregister <distribution>` from Windows — `Ubuntu` in the canonical
+path, and whichever distribution you actually provisioned otherwise —
+destructive to that distribution's entire disk, including anything in it
+that never reached this repository, so it is a deliberate last step, not a
+cleanup.

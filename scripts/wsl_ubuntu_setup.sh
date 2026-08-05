@@ -96,6 +96,18 @@ fi
 if [ -x "${HOME}/.local/bin/claude" ] && [ ! -e /usr/local/bin/claude ]; then
   ln -sf "${HOME}/.local/bin/claude" /usr/local/bin/claude
 fi
+# Completion is a claim about the command Joe will run, not about this shell:
+# resolve claude against the WSL default (non-login) PATH and require it to be
+# executable, so a stale or permission-broken entry fails here instead of at
+# the first launch.
+wsl_default_path='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+resolved_claude="$(PATH="${wsl_default_path}" command -v claude || true)"
+if [ -z "${resolved_claude}" ] || [ ! -x "${resolved_claude}" ]; then
+  echo "error: claude does not resolve to an executable on the WSL default PATH." >&2
+  echo "A stale /usr/local/bin/claude from an earlier install would cause this:" >&2
+  echo "inspect it, remove it if it is not an installation you want, and re-run." >&2
+  exit 1
+fi
 
 if [ "${repo_root}" != "/root/Joeyyy" ]; then
   echo "note: this clone is at ${repo_root}, not /root/Joeyyy — adjust --cd in" >&2
