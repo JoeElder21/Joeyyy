@@ -1,6 +1,6 @@
 # Documentation index
 
-31 records, grouped by purpose. Start at the top of each section.
+32 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -18,6 +18,7 @@
 | [`AGENT_COMMUNITY_PROTOCOL.md`](AGENT_COMMUNITY_PROTOCOL.md) | Delegation, handoffs, conflict resolution, intake, absorption, error learning, audits |
 | [`SPECIALIST_CORPS_PROTOCOL.md`](SPECIALIST_CORPS_PROTOCOL.md) | Specialist isolation and operating system |
 | [`SPECIALIST_ACCEPTANCE_TESTS.md`](SPECIALIST_ACCEPTANCE_TESTS.md) | Static, shadow, activation, and value gates |
+| [`PROMOTION_CHECKLISTS.md`](PROMOTION_CHECKLISTS.md) | Per-specialist promotion worksheets: the catalog mission per mode, the covering loop, and the approval steps |
 | [`EVALUATION_HARNESS.md`](EVALUATION_HARNESS.md) | Behavioral evaluation harness: metric contract, 39-mode coverage, Drive result boundary |
 | [`PRIVACY_AND_DATA_BOUNDARIES.md`](PRIVACY_AND_DATA_BOUNDARIES.md) | Public-repository and runtime-data rules |
 | [`BRAIN_CADENCE_RUNBOOK.md`](BRAIN_CADENCE_RUNBOOK.md) | Daily, weekly, and monthly brain-specific orchestration |

@@ -1,15 +1,17 @@
-# Ready-to-run controlled missions for the modes Joe actually uses.
+# Ready-to-run controlled missions — one prepared entry per material mode.
 #
 # Each entry is a complete mission specification minus two things only Joe can
 # supply at run time: the evidence (Agent 007 retrieves it from live connectors)
 # and the baseline (how long the task takes him by hand).
 #
-# The point is that Monday is "run this" rather than "design this". Agent 007
+# The point is that a mission is "run this" rather than "design this". Agent 007
 # loads a catalog entry, attaches the evidence it just retrieved, and runs the
 # mission through runtime/mission_runner.py.
 #
 # Adding an entry here is not a promotion and does not change any lifecycle
-# stage. It is a prepared assignment, nothing more.
+# stage. It is a prepared assignment, nothing more. Coverage of the 39 material
+# modes is measured by MissionRunner.promotion_status() from mission evidence,
+# never by this file's existence.
 
 version = "1.1.0"
 effective_date = "2026-07-26"
@@ -95,6 +97,319 @@ definition_of_done = [
 definition_of_done_ids = ["workload-quantified", "intervention-scoped", "cost-honest"]
 evidence_sources = ["drive:process records", "gmail:recurring threads", "calendar:recurring events"]
 baseline_prompt = "How long do you spend on this recurring task in a typical week?"
+
+[[mission]]
+key = "sheet_qa_review"
+required_artifact_types = ["qa_risk_packet"]
+agent = "apex_delivery_commander"
+mode = "technical_qa"
+trigger = "QA these drawings before they go out / review this sheet set"
+objective = """
+Produce one QA risk packet for the supplied sheet set. Verify jurisdiction, project
+identifier, sheet list, revision, and as-of date before reviewing anything. Record
+each finding against a supplied dated authority, and classify every issue without
+closing it.
+"""
+definition_of_done = [
+  "Jurisdiction, project identifier, sheet list, revision, and as-of date are verified and stated before any finding.",
+  "Every finding carries exact location, cited dated authority, severity, confidence, downstream impact, and a named verification owner.",
+  "Every issue is classified as confirmed defect, risk, question, assumption, professional decision, or unknown, and none is self-closed.",
+]
+definition_of_done_ids = ["scope-verified", "findings-complete", "issues-classified"]
+evidence_sources = ["drive:current sheet set", "drive:governing standards and dated authorities", "gmail:agency review comments"]
+baseline_prompt = "How long does one QA pass over a sheet set take you by hand?"
+
+[[mission]]
+key = "quantity_revision_delta"
+required_artifact_types = ["quantity_delta"]
+agent = "apex_delivery_commander"
+mode = "quantity_delta"
+trigger = "What changed between revisions / re-run the quantities"
+objective = """
+Compare quantities across the supplied revisions and return one quantity delta.
+Preserve scale, measurement method, units, inclusions, exclusions, source geometry,
+and calculation path per line. Declare any tolerance before comparing, and record an
+independent arithmetic check and the downstream revision cascade.
+"""
+definition_of_done = [
+  "Each quantity line states scale, measurement method, units, inclusions, exclusions, and source geometry.",
+  "Tolerance is declared before comparison and applied only to measured lengths, areas, or volumes; counts and arithmetic are exact.",
+  "An independent arithmetic check and the downstream revision cascade are recorded.",
+]
+definition_of_done_ids = ["basis-preserved", "tolerance-declared", "check-and-cascade"]
+evidence_sources = ["drive:revision set under comparison", "drive:prior quantity takeoff", "gmail:revision transmittals"]
+baseline_prompt = "How long does comparing quantities between two revisions take you by hand?"
+
+[[mission]]
+key = "cost_basis_check"
+required_artifact_types = ["cost_evidence"]
+agent = "apex_delivery_commander"
+mode = "cost_evidence"
+trigger = "What will this cost / where did that number come from"
+objective = """
+Assemble one cost evidence set from the supplied cost sources, kept separate from
+geometry. Label every figure with source date, geography, unit basis, evidence class,
+exclusions, escalation, and confidence. Never present an allowance as a bid or as
+current market certainty.
+"""
+definition_of_done = [
+  "Every cost figure carries source date, geography, unit basis, evidence class, exclusions, escalation, and confidence.",
+  "Cost evidence is kept separate from geometry and quantity assertions.",
+  "Allowances and order-of-magnitude figures are labeled as such and never stated as bids or market certainty.",
+]
+definition_of_done_ids = ["figures-labeled", "cost-geometry-separated", "certainty-bounded"]
+evidence_sources = ["drive:cost references and bid tabs", "gmail:vendor and contractor pricing", "drive:prior project cost records"]
+baseline_prompt = "How long does assembling a defensible cost basis take you by hand?"
+
+[[mission]]
+key = "source_replay"
+required_artifact_types = ["source_cursor"]
+agent = "apex_intelligence_forge"
+mode = "source_replay"
+trigger = "Re-run intake over that window / did anything get missed since last time"
+objective = """
+Replay the supplied bounded source window against its prior cursor, or against an
+explicit first_run sentinel, and emit one source cursor: source identity, prior
+cursor, window start and end, processed-through value, stable seen-record keys, gap
+status, replay status, and the deterministic next cursor.
+"""
+definition_of_done = [
+  "A prior cursor or explicit first_run sentinel is present in the evidence and is restated in the artifact.",
+  "The source cursor records window bounds, processed-through, stable seen-record keys, gap status, and replay status.",
+  "The cursor advances only when every delegated segment is complete and validated; otherwise the prior cursor is preserved and the return is partial or blocked.",
+]
+definition_of_done_ids = ["cursor-anchored", "cursor-fields-complete", "advance-conditional"]
+evidence_sources = ["drive:prior source cursor record", "gmail:threads in the replay window", "drive:files modified in the replay window"]
+baseline_prompt = "How long does re-checking a source window for missed items take you by hand?"
+
+[[mission]]
+key = "decision_brief"
+required_artifact_types = ["intelligence_brief"]
+agent = "apex_intelligence_forge"
+mode = "decision_brief"
+trigger = "Help me decide / what do I actually know about this"
+objective = """
+Turn the supplied evidence into one decision brief: the decision at hand, what the
+sources establish, what they do not, each option with its source-backed consequence,
+and what new evidence would change the answer. Separate facts from inferences and
+preserve unresolved contradictions rather than smoothing them.
+"""
+definition_of_done = [
+  "The decision, the options, and the consequence of each are stated and traced to cited sources.",
+  "Facts are labeled separately from inferences, and gaps in the evidence are named explicitly.",
+  "Unresolved contradictions are preserved rather than reconciled by assertion.",
+]
+definition_of_done_ids = ["decision-framed", "fact-inference-split", "contradictions-preserved"]
+evidence_sources = ["gmail:threads bearing on the decision", "drive:project and reference records", "calendar:related meetings"]
+baseline_prompt = "How long does assembling the evidence behind a decision like this take you by hand?"
+
+[[mission]]
+key = "meeting_brief"
+required_artifact_types = ["intelligence_brief"]
+agent = "apex_intelligence_forge"
+mode = "meeting_brief"
+trigger = "Prep me for this meeting / who am I meeting and about what"
+objective = """
+Produce one meeting brief from the supplied evidence: attendees and their stated
+positions, the history bearing on the agenda, open commitments in both directions,
+unanswered questions, and the decisions this meeting is expected to produce.
+"""
+definition_of_done = [
+  "Attendees, agenda, and the bearing history are stated and traced to cited sources.",
+  "Open commitments in both directions and unanswered questions are listed explicitly.",
+  "Expected decisions are named, and anything not yet decidable from the evidence is called out.",
+]
+definition_of_done_ids = ["participants-and-history", "commitments-listed", "decisions-scoped"]
+evidence_sources = ["calendar:the meeting and its invitees", "gmail:threads with the attendees", "drive:related project records"]
+baseline_prompt = "How long does preparing for a meeting like this take you by hand?"
+
+[[mission]]
+key = "playbook"
+required_artifact_types = ["playbook"]
+agent = "apex_intelligence_forge"
+mode = "playbook"
+trigger = "Write this down so I stop re-deriving it / make this repeatable"
+objective = """
+Turn the supplied evidence of a repeated professional sequence into one reusable
+playbook: trigger, preconditions, ordered steps, decision points, the failure modes
+the evidence actually shows, and the verification that tells Joe it worked.
+"""
+definition_of_done = [
+  "Trigger, preconditions, ordered steps, and decision points are all present.",
+  "Every step traces to evidence of the sequence being performed, not to an idealized process.",
+  "Observed failure modes and the verification step are stated.",
+]
+definition_of_done_ids = ["playbook-structured", "steps-evidenced", "failures-and-verification"]
+evidence_sources = ["gmail:threads showing the repeated sequence", "drive:records produced by prior runs", "calendar:recurring events for the sequence"]
+baseline_prompt = "How long does writing up a repeatable process take you by hand?"
+
+[[mission]]
+key = "reactivation"
+required_artifact_types = ["follow_up_plan"]
+agent = "apex_deal_engine"
+mode = "reactivation"
+trigger = "Who have I gone quiet on / chase the dormant ones"
+objective = """
+Identify the opportunities and contacts in the supplied evidence with no observable
+movement, and return one follow-up plan: who, last observed contact, what was last
+owed and by whom, and one ethical next touch per item. Do not infer client intent the
+evidence does not show, and never treat silence as refusal.
+"""
+definition_of_done = [
+  "Every dormant item states its last observed contact date and what was last owed, by whom, with a citation.",
+  "Exactly one next touch per item, grounded in a cited source and appropriate to the last exchange.",
+  "Silence is recorded as dormancy, never as a decision the evidence does not show.",
+]
+definition_of_done_ids = ["dormancy-evidenced", "one-touch-each", "no-inferred-intent"]
+evidence_sources = ["gmail:threads with no recent reply", "drive:proposal and pursuit folders", "calendar:past pursuit meetings"]
+baseline_prompt = "How long does a dormant-opportunity sweep take you by hand?"
+
+[[mission]]
+key = "proposal_control"
+required_artifact_types = ["proposal_checkpoint"]
+agent = "apex_deal_engine"
+mode = "proposal_control"
+trigger = "Where does this proposal stand / what is outstanding before we submit"
+objective = """
+Return one proposal checkpoint for the supplied evidence: required components and
+which are present, owner and due date for each outstanding item, submission
+requirements with their source, and any conflict between what was promised and what
+the evidence shows.
+"""
+definition_of_done = [
+  "Required components are enumerated with present or outstanding status and a citation each.",
+  "Every outstanding item has a named owner and a due date, or is explicitly marked unowned.",
+  "Conflicts between promised scope and evidenced scope are stated rather than reconciled silently.",
+]
+definition_of_done_ids = ["components-inventoried", "items-owned", "conflicts-surfaced"]
+evidence_sources = ["gmail:proposal correspondence", "drive:proposal working folder", "calendar:submission deadlines"]
+baseline_prompt = "How long does a full proposal readiness check take you by hand?"
+
+[[mission]]
+key = "operating_campaign"
+required_artifact_types = ["campaign_map"]
+agent = "apex_war_architect"
+mode = "operating_campaign"
+trigger = "What should this week's campaign be / where is my professional focus"
+objective = """
+Produce one campaign map from the supplied evidence: the professional outcomes in
+play, active campaigns with the next milestone for each, the observed bottleneck,
+and a priority stack ordered by evidence. Recommend; the choice of campaign stays
+with Joe.
+"""
+definition_of_done = [
+  "Outcomes, active campaigns, and next milestones are stated and traced to cited sources.",
+  "One bottleneck is named with the observations behind it, or none is claimed.",
+  "The priority stack is ordered by cited evidence, with a stop-delegate-postpone list where load exceeds capacity.",
+]
+definition_of_done_ids = ["campaign-mapped", "bottleneck-evidenced", "priorities-ordered"]
+evidence_sources = ["drive:strategy and planning notes", "calendar:next 30 days", "gmail:active commitment threads"]
+baseline_prompt = "How long does building a weekly operating plan take you by hand?"
+
+[[mission]]
+key = "career_direction"
+required_artifact_types = ["decision_brief"]
+agent = "apex_war_architect"
+mode = "career_integration"
+trigger = "Does this fit where I'm going / career decision / long-game check"
+objective = """
+Produce one decision brief testing the question at hand against Joe's stated
+professional anchors in the supplied evidence: the options observable in the
+record, the cost and return of each, and where each aligns or conflicts with each
+anchor. Anchors come from the evidence; none are assumed.
+"""
+definition_of_done = [
+  "Every option is stated with its evidence-backed cost and return.",
+  "Alignment claims cite stated anchors in the evidence, never assumed values.",
+  "Facts are labeled separately from inferences, and the decision is returned to Joe, not made.",
+]
+definition_of_done_ids = ["options-costed", "anchors-cited", "decision-returned"]
+evidence_sources = ["drive:career notes and stated anchors", "gmail:correspondence bearing on the question"]
+baseline_prompt = "How long does thinking through a career-direction question take you by hand?"
+
+[[mission]]
+key = "delegation_topology"
+required_artifact_types = ["delegation_topology"]
+agent = "apex_war_architect"
+mode = "delegation_topology"
+trigger = "What should I stop doing myself / rebalance my load / who owns what"
+objective = """
+Place every workstream observable in the supplied evidence into a delegation
+topology: keep, delegate, postpone, or stop, each with the evidence behind its
+placement and, for delegate, a named owner or an explicit none-available. Nothing
+is placed that the evidence does not show.
+"""
+definition_of_done = [
+  "Every observed workstream is placed in exactly one of keep, delegate, postpone, or stop, with a citation.",
+  "Each delegate placement names an owner or states none-available; no owner is invented.",
+  "No workstream is invented, and load claims trace to observed time or commitments.",
+]
+definition_of_done_ids = ["placements-complete", "owners-named-or-none", "no-invented-work"]
+evidence_sources = ["calendar:recurring commitments", "gmail:request and handoff threads", "drive:task and project records"]
+baseline_prompt = "How long does a delegation review take you by hand?"
+
+[[mission]]
+key = "system_design"
+required_artifact_types = ["system_design"]
+agent = "apex_systems_blacksmith"
+mode = "system_design"
+trigger = "Build the fix for this repetition / design the SOP / systemize it"
+objective = """
+Design the smallest reliable system for the repetition evidenced in the packet:
+the process as observed, the intervention, rollout and rollback plans, and the
+tests that would show it working. State the maintenance cost and net it against
+the evidenced time returned; a design whose upkeep exceeds its return says so.
+"""
+definition_of_done = [
+  "The process map reflects the observed process, and the intervention is the smallest adequate one considered.",
+  "Rollout, rollback, and the tests that would show the system working are all stated.",
+  "Maintenance cost is netted against evidenced return, and retirement conditions are named.",
+]
+definition_of_done_ids = ["smallest-adequate", "rollout-rollback-tests", "cost-netted"]
+evidence_sources = ["drive:process records", "gmail:recurring threads", "calendar:recurring events"]
+baseline_prompt = "How long does designing a process fix like this take you by hand?"
+
+[[mission]]
+key = "shadow_validation"
+required_artifact_types = ["automation_assessment"]
+agent = "apex_systems_blacksmith"
+mode = "shadow_validation"
+trigger = "Is the pilot actually working / validate the new system before it goes live"
+objective = """
+Assess the shadow-period records in the supplied evidence: runs observed, failures
+with causes where determinable, human corrections and their cost, and whether
+observed behavior matches the design. Return continue, adjust, or stop, grounded
+solely in the tabulated record.
+"""
+definition_of_done = [
+  "Every shadow run in the evidence is tabulated with outcome, corrections, and their cost.",
+  "Failure causes are separated from symptoms, or marked undetermined rather than guessed.",
+  "The continue, adjust, or stop recommendation follows from the tabulated record alone.",
+]
+definition_of_done_ids = ["runs-tabulated", "causes-or-undetermined", "verdict-grounded"]
+evidence_sources = ["drive:shadow run records", "gmail:exception and correction threads"]
+baseline_prompt = "How long does reviewing a pilot's results take you by hand?"
+
+[[mission]]
+key = "automation_value_review"
+required_artifact_types = ["value_review"]
+agent = "apex_systems_blacksmith"
+mode = "value_review"
+trigger = "Is this automation still paying for itself / keep or retire"
+objective = """
+Compute the observed value of the system in the supplied evidence: time returned,
+review and correction burden, maintenance spent, and incident cost. Show the
+arithmetic and return keep, adjust, or retire. Costs count in full even when they
+argue for retirement.
+"""
+definition_of_done = [
+  "Time returned and every burden category are tabulated from cited evidence, with the arithmetic shown.",
+  "The keep, adjust, or retire recommendation follows from the shown arithmetic.",
+  "Costs present in the evidence are counted in full, including those that argue for retirement.",
+]
+definition_of_done_ids = ["arithmetic-shown", "verdict-follows", "costs-counted"]
+evidence_sources = ["drive:system usage and maintenance records", "gmail:failure and upkeep threads"]
+baseline_prompt = "How long does reviewing whether a system pays for itself take you by hand?"
 
 # ---------------------------------------------------------------- JEOS
 
@@ -480,60 +795,61 @@ key = "life_direction"
 required_artifact_types = ["life_plan"]
 agent = "jeos_life_architect"
 mode = "life_direction"
-trigger = "Where is my life heading? / align my commitments with what matters"
+trigger = "Where is my life heading / do my commitments match my priorities"
 objective = """
-From the supplied personal evidence, produce one life-direction plan: what Joe
-has said matters, what his time actually goes to, where the two diverge, and
-candidate adjustments. Recommend, never prescribe; Joe's stated values are the
-reference, not an imported ideal.
+Produce one life-domain map from the supplied evidence: the domains in play,
+stated outcomes and anchors, and where observed commitments diverge from stated
+direction. Divergences cite observed time or commitments; propose at most three
+adjustments, each as a recommendation Joe can decline.
 """
 definition_of_done = [
-  "One life_plan artifact comparing stated priorities to evidenced time use.",
-  "Every divergence cites the evidence on both sides.",
-  "Adjustments are offered as options with trade-offs, preserving Joe's agency.",
+  "Domains, stated outcomes, and anchors are mapped from cited evidence.",
+  "Each divergence cites observed commitments or time, never assumed values.",
+  "At most three adjustments are proposed, each as a recommendation Joe can decline.",
 ]
-definition_of_done_ids = ["divergence-evidenced", "claims-cited", "agency-preserved"]
-evidence_sources = ["calendar:past 30 days", "drive:personal notes"]
-baseline_prompt = "How long does a life-direction review normally take you by hand?"
+definition_of_done_ids = ["domains-mapped", "divergence-cited", "adjustments-bounded"]
+evidence_sources = ["drive:personal planning notes", "calendar:recurring commitments"]
+baseline_prompt = "How long does a life-direction review take you by hand?"
 
 [[mission]]
 key = "monthly_review"
 required_artifact_types = ["monthly_life_review"]
 agent = "jeos_life_architect"
 mode = "monthly_review"
-trigger = "Review my month / how did the month actually go"
+trigger = "Review my month / what actually happened in the last month"
 objective = """
-Produce one monthly review from the supplied evidence: what was planned, what
-happened, what recurred, and what the next month inherits. Outcomes are read
-from the record; a month with thin records yields a thin review, said plainly.
+Produce one monthly review from the supplied evidence: what was intended, what the
+record shows happened, where they diverged, and what next month inherits. Wins and
+misses both come from dated evidence, and every carry-forward states its reason.
 """
 definition_of_done = [
-  "One monthly_life_review artifact comparing plan to evidenced outcome.",
-  "Recurring patterns are named with at least two evidenced instances each.",
-  "Carry-overs into next month are listed with their reason.",
+  "Intended, actual, and divergence are stated with dated citations.",
+  "Wins and misses are both drawn from the record, not recollection.",
+  "Every carry-forward item states its reason from the review.",
 ]
-definition_of_done_ids = ["plan-compared", "patterns-evidenced", "carryover-listed"]
-evidence_sources = ["calendar:past month", "drive:personal planning notes"]
-baseline_prompt = "How long does a monthly review normally take you by hand?"
+definition_of_done_ids = ["review-complete", "wins-misses-dated", "carryforward-reasoned"]
+evidence_sources = ["calendar:the past month", "drive:planning notes and journals"]
+baseline_prompt = "How long does a monthly review take you by hand?"
 
 [[mission]]
 key = "commitment_radar"
 required_artifact_types = ["commitment_radar"]
 agent = "jeos_life_architect"
 mode = "commitment_radar"
-trigger = "What have I committed to? / am I overcommitted"
+trigger = "What have I committed to / am I overcommitted"
 objective = """
-From the supplied evidence, produce one commitment radar: every open personal
-commitment, to whom, by when, and its current state. Distinguish commitments the
-record shows from ones inferred; flag collisions and overload.
+Sweep the supplied evidence for personal commitments, explicit and implied, and
+return one radar: what was promised, to whom, by when, and its observed state.
+Implied commitments are labeled inferred, and conflicts between commitments are
+flagged where the radar shows them.
 """
 definition_of_done = [
-  "One commitment_radar artifact with each commitment traced to its source.",
-  "Inferred commitments are labeled as inferred, separately from stated ones.",
-  "Collisions and overload windows are flagged from the calendar evidence.",
+  "Every commitment states counterparty, deadline or none-stated, and current observed state, with a citation.",
+  "Explicit commitments are separated from implied ones, and every implied commitment is labeled inferred.",
+  "Conflicts and overcommitment are flagged where the radar shows them, and not asserted beyond it.",
 ]
-definition_of_done_ids = ["commitments-traced", "inference-labeled", "collisions-flagged"]
-evidence_sources = ["calendar:next 30 days", "gmail:personal threads"]
+definition_of_done_ids = ["radar-complete", "inference-labeled", "conflicts-flagged"]
+evidence_sources = ["gmail:personal threads", "calendar:upcoming events", "drive:personal notes"]
 baseline_prompt = "How long does taking stock of your commitments take you by hand?"
 
 [[mission]]
@@ -541,104 +857,104 @@ key = "relationship_family"
 required_artifact_types = ["life_plan"]
 agent = "jeos_life_architect"
 mode = "relationship_family"
-trigger = "Plan time for the people who matter / family rhythm check"
+trigger = "Family and relationship check / where has my attention gone"
 objective = """
-From the supplied evidence, produce one plan for relationship and family time:
-what is scheduled, what has lapsed against Joe's stated intentions, and concrete
-options to restore rhythm. Supportive planning only — no judgments about the
-relationships themselves, and nothing beyond what Joe has said he wants.
+Map relationship and family commitments in the supplied evidence against observed
+time: what was planned, what the record shows happened, and where attention
+diverged from stated priorities. Observations only — nothing is inferred about
+feelings or motives, and adjustments are recommendations.
 """
 definition_of_done = [
-  "One life_plan artifact covering scheduled and lapsed relationship time.",
-  "Lapses are measured against Joe's stated intentions, not an external standard.",
-  "Options are concrete and schedulable, offered without pressure language.",
+  "Planned versus observed time is mapped with dated citations.",
+  "No claim is made about feelings or motives; observations stay at the level of the record.",
+  "At most three concrete adjustments, each presented as a recommendation.",
 ]
-definition_of_done_ids = ["rhythm-mapped", "lapses-measured", "options-schedulable"]
-evidence_sources = ["calendar:past and next 30 days", "drive:personal notes"]
-baseline_prompt = "How long does planning family and relationship time take you by hand?"
+definition_of_done_ids = ["time-mapped", "no-motive-inference", "adjustments-bounded"]
+evidence_sources = ["calendar:family and personal events", "drive:personal planning notes"]
+baseline_prompt = "How long does reviewing family and relationship time take you by hand?"
 
 [[mission]]
 key = "habit_recovery"
 required_artifact_types = ["habit_protocol"]
 agent = "jeos_momentum_engine"
 mode = "habit_recovery"
-trigger = "I fell off the habit / restart my streak"
+trigger = "I fell off the habit / restart the routine"
 objective = """
-From the supplied habit evidence, produce one recovery protocol: where the habit
-actually broke, the smallest restart version, its cue and time box, and the
-planned response to the next miss. Recovery is designed for resilience, not
-perfection; no shame framing.
+Produce one recovery protocol for the lapsed habit evidenced in the packet: what
+the record shows about the lapse, a restart version smaller than the original, its
+cue, time box, and stop condition, and the rule for the next miss. The protocol
+starts from where the evidence says Joe is, without moral framing.
 """
 definition_of_done = [
-  "One habit_protocol artifact locating the break from evidence, not memory.",
-  "The restart version is smaller than the original and has a concrete cue.",
-  "A next-miss response is defined in advance.",
+  "The lapse is described from the record — dates and observed pattern, no blame framing.",
+  "The restart version is smaller than the original habit and carries cue, time box, and stop condition.",
+  "A next-miss rule is stated so one miss does not end the recovery.",
 ]
-definition_of_done_ids = ["break-located", "restart-minimal", "miss-planned"]
-evidence_sources = ["calendar:habit history", "drive:personal tracking notes"]
-baseline_prompt = "How long do you usually spend getting a lapsed habit going again?"
+definition_of_done_ids = ["lapse-evidenced", "restart-smaller", "miss-rule-present"]
+evidence_sources = ["drive:habit tracking records", "calendar:recent days"]
+baseline_prompt = "How long does getting a lapsed habit restarted take you by hand?"
 
 [[mission]]
 key = "study_retrieval"
 required_artifact_types = ["study_repetition"]
 agent = "jeos_momentum_engine"
 mode = "study_retrieval"
-trigger = "Help me study / build my retrieval schedule"
+trigger = "Quiz me / what is due for review / spaced repetition pass"
 objective = """
-From the supplied study materials and history, produce one retrieval-practice
-plan: what to retrieve, at what spacing, with prompts built from the material
-itself. Study behavior only — exam logistics and professional administration
-belong to APEX under the LARE rule.
+Produce one repetition update from the supplied study evidence: the items due for
+retrieval, the prompts to run, observed misses from the last session, and the next
+interval per item. Intervals follow recorded performance; nothing is promoted on a
+guess.
 """
 definition_of_done = [
-  "One study_repetition artifact with a spaced schedule over the supplied material.",
-  "Every prompt is grounded in the supplied material, not outside content.",
-  "The plan states its scope boundary: study behavior, not exam administration.",
+  "Due items and their prompts are listed from the repetition record.",
+  "Every interval change traces to observed performance in the evidence.",
+  "Missed items shorten their interval, and no item advances without a recorded success.",
 ]
-definition_of_done_ids = ["schedule-spaced", "prompts-grounded", "scope-bounded"]
-evidence_sources = ["drive:study materials", "calendar:study windows"]
-baseline_prompt = "How long does planning a study session normally take you by hand?"
+definition_of_done_ids = ["items-scheduled", "intervals-evidenced", "no-unearned-advance"]
+evidence_sources = ["drive:study materials and repetition log"]
+baseline_prompt = "How long does preparing a study session take you by hand?"
 
 [[mission]]
 key = "weekly_load"
 required_artifact_types = ["weekly_load_review"]
 agent = "jeos_energy_director"
 mode = "weekly_load"
-trigger = "How heavy is my week? / balance my load"
+trigger = "How loaded is my week / can this week absorb more"
 objective = """
-From the supplied schedule evidence, produce one weekly load review: committed
-load by day, recovery windows, collision points, and where demanding work is
-placed relative to peak windows. Name the single change that most improves the
-week, if the evidence shows one.
+Produce one weekly load review from the supplied schedule evidence: committed load
+per day, genuine open windows, peak windows, and the days that are over or under
+committed. Name at most one structural adjustment, and only if the week is
+genuinely overloaded.
 """
 definition_of_done = [
-  "One weekly_load_review artifact mapping load and recovery across the week.",
-  "Collisions and mis-placed demanding work are identified from the schedule.",
-  "At most one restructuring recommendation, grounded in the evidence.",
+  "Per-day committed load and open windows are mapped from the schedule evidence.",
+  "Peak windows and overloaded days are identified from the record, not assumed.",
+  "At most one structural adjustment is proposed, and only for genuine overload.",
 ]
-definition_of_done_ids = ["load-mapped", "collisions-identified", "change-bounded"]
+definition_of_done_ids = ["load-mapped", "peaks-evidenced", "adjustment-bounded"]
 evidence_sources = ["calendar:next 7 days"]
-baseline_prompt = "How long does balancing your week's load take you by hand?"
+baseline_prompt = "How long does assessing your week's load take you by hand?"
 
 [[mission]]
 key = "recovery_adjustment"
 required_artifact_types = ["schedule_adjustment"]
 agent = "jeos_energy_director"
 mode = "recovery_adjustment"
-trigger = "I'm running on empty / adjust my schedule for recovery"
+trigger = "I'm running on empty / protect some recovery time"
 objective = """
-From the supplied schedule and stated energy state, produce one schedule
-adjustment: what to move, shrink, or drop to restore recovery, with the
-trade-off of each change stated. Supportive scheduling only — no health claims,
-no diagnosis, and licensed care is named as the path for medical concerns.
+Propose exactly one schedule adjustment that protects recovery, from the supplied
+evidence: the window to protect, what moves to make room, and what the schedule
+record shows about current depletion. One adjustment, not a redesign; alternatives
+are listed only as alternatives.
 """
 definition_of_done = [
-  "One schedule_adjustment artifact with concrete move, shrink, or drop changes.",
-  "Each change states its trade-off and what it protects.",
-  "The artifact stays within scheduling; medical questions are referred out.",
+  "Exactly one adjustment is proposed, naming the protected window and what moves.",
+  "Depletion claims trace to the schedule record, never to assumption.",
+  "Alternatives, if any, are listed as alternatives and not folded into the proposal.",
 ]
-definition_of_done_ids = ["changes-concrete", "tradeoffs-stated", "scope-nonclinical"]
-evidence_sources = ["calendar:next 7 days"]
+definition_of_done_ids = ["single-adjustment", "depletion-evidenced", "alternatives-separate"]
+evidence_sources = ["calendar:recent and upcoming days"]
 baseline_prompt = "How long does rearranging your schedule for recovery take you by hand?"
 
 [[mission]]
@@ -646,83 +962,83 @@ key = "weekly_reflection"
 required_artifact_types = ["reflection_synthesis"]
 agent = "jeos_reflection_forge"
 mode = "weekly_reflection"
-trigger = "Reflect on my week / what did this week teach me"
+trigger = "Weekly reflection / what did this week teach me"
 objective = """
-From the supplied captures — journal entries, notes, voice captures — produce
-one reflection synthesis: what happened, what Joe said it meant, and candidate
-lessons labeled by evidence strength. The synthesis quotes Joe's own words where
-it matters and never upgrades a candidate lesson into a fact.
+Synthesize the supplied week's records into one reflection: what happened,
+patterns worth watching, one lesson the evidence supports, and open questions.
+Every claim carries its evidence label. Professional load may appear only as
+capacity, never with professional detail — only Agent 007 sees both brains.
 """
 definition_of_done = [
-  "One reflection_synthesis artifact grounded in the supplied captures.",
-  "Each lesson is labeled source-backed, pattern, or hypothesis.",
-  "Joe's own words are preserved where the meaning depends on them.",
+  "Events, patterns, one lesson, and open questions are present, each with an evidence label.",
+  "Speculation is marked as speculation and separated from evidenced claims.",
+  "Professional specifics are absent; load is referenced at capacity level only.",
 ]
-definition_of_done_ids = ["synthesis-grounded", "lessons-labeled", "voice-preserved"]
-evidence_sources = ["drive:journal captures", "calendar:past 7 days"]
-baseline_prompt = "How long does a weekly reflection normally take you by hand?"
+definition_of_done_ids = ["synthesis-labeled", "speculation-marked", "isolation-held"]
+evidence_sources = ["drive:journal and personal notes", "calendar:the past week"]
+baseline_prompt = "How long does a weekly reflection take you by hand?"
 
 [[mission]]
 key = "pattern_hypothesis"
 required_artifact_types = ["reflection_synthesis"]
 agent = "jeos_reflection_forge"
 mode = "pattern_hypothesis"
-trigger = "Why does this keep happening? / find the pattern"
+trigger = "Why does this keep happening / is this a real pattern"
 objective = """
-From the supplied history, produce one pattern analysis: the recurring situation,
-its evidenced instances, one falsifiable hypothesis about the driver, and the
-observation that would test it. A hypothesis is offered as a hypothesis —
-no destiny claims, no diagnosis, no certainty the record does not support.
+Test the suspected pattern against the supplied dated evidence: occurrences found,
+the conditions present at each, counterexamples, and one falsifiable hypothesis
+with the observation that would confirm it and the one that would break it. An
+unsupported pattern is reported as unsupported.
 """
 definition_of_done = [
-  "One reflection_synthesis artifact citing at least three evidenced instances.",
-  "Exactly one falsifiable hypothesis, with the observation that would test it.",
-  "The artifact's claims stay within what the record supports.",
+  "Occurrences and their conditions are cited with dates, and counterexamples are searched for and reported.",
+  "The hypothesis is falsifiable, naming both its confirming and its breaking observation.",
+  "A pattern the evidence does not support is reported as unsupported, not softened.",
 ]
-definition_of_done_ids = ["instances-cited", "hypothesis-falsifiable", "claims-bounded"]
-evidence_sources = ["drive:journal captures", "calendar:relevant history"]
-baseline_prompt = "How long does working through a recurring pattern take you by hand?"
+definition_of_done_ids = ["occurrences-dated", "hypothesis-falsifiable", "unsupported-honest"]
+evidence_sources = ["drive:journals and dated personal notes"]
+baseline_prompt = "How long does checking a suspected pattern take you by hand?"
 
 [[mission]]
 key = "faith_examen"
 required_artifact_types = ["faith_examen"]
 agent = "jeos_reflection_forge"
 mode = "faith_examen"
-trigger = "Walk me through an examen / faith reflection on the week"
+trigger = "Examen / faith reflection on the week"
 objective = """
-From the supplied captures, produce one examen-structured reflection in Joe's
-own tradition: gratitude, review of the week's moments, and intention — built
-from what Joe recorded, in his framing. The artifact supports his practice; it
-does not instruct belief, claim spiritual authority, or import outside doctrine.
+Structure the supplied reflective records into one examen: moments of gratitude,
+moments of resistance, where attention was drawn, and one intention. Preserve
+Joe's own words wherever the evidence provides them; offer structure, never
+prescriptive spiritual direction.
 """
 definition_of_done = [
-  "One faith_examen artifact following the examen structure over supplied captures.",
-  "Every referenced moment comes from Joe's own records, in his framing.",
-  "The artifact supports practice without instructing belief or claiming authority.",
+  "Gratitude, resistance, attention, and one intention are each present and drawn from the records.",
+  "Joe's own words are preserved where the evidence provides them.",
+  "Exactly one intention, stated simply, with no prescriptive spiritual direction added.",
 ]
-definition_of_done_ids = ["structure-followed", "moments-sourced", "stance-supportive"]
-evidence_sources = ["drive:journal captures", "calendar:past 7 days"]
-baseline_prompt = "How long does an unassisted examen reflection normally take you?"
+definition_of_done_ids = ["examen-structured", "voice-preserved", "one-intention"]
+evidence_sources = ["drive:journal and reflective notes"]
+baseline_prompt = "How long does an examen take you by hand?"
 
 [[mission]]
 key = "growth_experiment"
 required_artifact_types = ["growth_experiment"]
 agent = "jeos_reflection_forge"
 mode = "growth_experiment"
-trigger = "Turn this lesson into an experiment / test this change"
+trigger = "Design an experiment / test a change for a couple of weeks"
 objective = """
-From a verified lesson in the supplied evidence, design one growth experiment:
-the change to try, its duration, the observable signal that decides it, and the
-return path if it does not help. One experiment at a time; the design must be
-falsifiable and reversible.
+Design one growth experiment from the supplied evidence: the change to try, the
+observable signal, the duration, and the stop rule. The success measure is fixed
+before the experiment starts, and the design fits inside current capacity as the
+evidence shows it.
 """
 definition_of_done = [
-  "One growth_experiment artifact with change, duration, and deciding signal.",
-  "The experiment traces to the lesson and evidence that motivated it.",
-  "A reversal path exists and is stated.",
+  "Change, observable signal, duration, and stop rule are all defined.",
+  "The success measure is set before the start and stated in observable terms.",
+  "The experiment fits the capacity the evidence shows; an oversized design is cut down, not excused.",
 ]
-definition_of_done_ids = ["design-falsifiable", "lesson-traced", "reversal-stated"]
-evidence_sources = ["drive:reflection records"]
+definition_of_done_ids = ["experiment-defined", "measure-preset", "capacity-respected"]
+evidence_sources = ["drive:reflection and capacity records", "calendar:the coming weeks"]
 baseline_prompt = "How long does designing a personal experiment take you by hand?"
 
 [[mission]]
@@ -730,62 +1046,62 @@ key = "life_admin_system"
 required_artifact_types = ["life_system_design"]
 agent = "jeos_lifestyle_systems_builder"
 mode = "life_admin_system"
-trigger = "Systematize this life admin / stop me re-solving this chore"
+trigger = "This chore keeps biting me / build the checklist / systemize my admin"
 objective = """
-From the supplied records of a recurring personal-admin task, produce one system
-design: trigger, steps, owner, reminder cadence, and failure behavior — the
-lowest-friction version that actually closes the loop. Privacy-safe by
-construction: the design references record locations, never embeds their contents.
+Design the smallest reliable system for the recurring personal admin evidenced in
+the packet: the process as observed, the checklist or control, duplicate
+protections, rollout and rollback. Net the upkeep against the evidenced friction
+removed; a system that costs more than it saves recommends against itself.
 """
 definition_of_done = [
-  "One life_system_design artifact covering trigger, steps, and failure behavior.",
-  "The design is the smallest that closes the loop, and says what it omits.",
-  "No private record content is embedded; locations are referenced instead.",
+  "The observed process and its recurrence are cited before any design is proposed.",
+  "The control is the smallest adequate one, with duplicate protections, rollout, and rollback stated.",
+  "Upkeep is netted against evidenced friction removed, and retirement conditions are named.",
 ]
-definition_of_done_ids = ["loop-closed", "design-minimal", "privacy-safe"]
-evidence_sources = ["drive:admin records", "calendar:recurring events"]
-baseline_prompt = "How long does this admin task take you each time it comes up?"
+definition_of_done_ids = ["recurrence-cited", "smallest-control", "upkeep-netted"]
+evidence_sources = ["drive:personal admin records", "gmail:recurring personal threads"]
+baseline_prompt = "How long does this recurring admin take you by hand each time it comes around?"
 
 [[mission]]
 key = "renewal_maintenance"
 required_artifact_types = ["admin_control_plan"]
 agent = "jeos_lifestyle_systems_builder"
 mode = "renewal_maintenance"
-trigger = "What renewals are coming? / home and vehicle maintenance check"
+trigger = "What renews or comes due soon / don't let anything lapse"
 objective = """
-From the supplied records, produce one control plan for renewals and
-maintenance: every item with its due date, lead time, and next action, ordered
-by urgency. Items whose dates are absent from the evidence are listed as
-unknown-date, not guessed.
+Sweep the supplied evidence for renewals and maintenance obligations and return
+one control plan ordered by due date: the obligation, its date, the action
+required, and the lead time it needs. A date the evidence does not show is
+recorded as unknown, never guessed.
 """
 definition_of_done = [
-  "One admin_control_plan artifact with a row per renewal or maintenance item.",
-  "Each row carries due date, lead time, next action, and source.",
-  "Unknown dates are labeled unknown, with the record that should hold them.",
+  "Obligations are listed in due-date order, each with its required action and citation.",
+  "Dates absent from the evidence are recorded as unknown rather than estimated.",
+  "Items needing lead time state when preparation must start.",
 ]
-definition_of_done_ids = ["items-rowed", "rows-dated", "unknowns-labeled"]
-evidence_sources = ["gmail:renewal notices", "drive:household records", "calendar:reminders"]
-baseline_prompt = "How long does a renewals-and-maintenance sweep take you by hand?"
+definition_of_done_ids = ["plan-ordered", "unknown-dates-honest", "leadtime-stated"]
+evidence_sources = ["gmail:renewal and account notices", "drive:household and vehicle records", "calendar:existing reminders"]
+baseline_prompt = "How long does checking renewals and maintenance take you by hand?"
 
 [[mission]]
 key = "finance_admin"
 required_artifact_types = ["admin_control_plan"]
 agent = "jeos_lifestyle_systems_builder"
 mode = "finance_admin"
-trigger = "Sort my bills and subscriptions / personal finance admin pass"
+trigger = "Sort my bills / subscription audit / what am I paying for"
 objective = """
-From the supplied statements and notices, produce one personal finance-admin
-control plan: bills and their due dates, subscriptions with renewal dates and
-last-used evidence, and candidate cancellations. Administration only — no
-investment advice, and no transaction is executed by anyone but Joe.
+Normalize the supplied billing evidence into one control plan: recurring charges
+with source and date, changes since the prior record, duplicates or unused
+subscriptions, and items needing action. Administrative organization only — no
+investment or financial advice is offered, whatever the evidence suggests.
 """
 definition_of_done = [
-  "One admin_control_plan artifact covering bills and subscriptions in evidence.",
-  "Cancellation candidates carry the evidence of disuse that nominated them.",
-  "The plan executes nothing and states that every action remains Joe's.",
+  "Recurring charges are tabulated with source and as-of date.",
+  "Changes, duplicates, and apparently unused items are flagged with citations.",
+  "The output is administrative only; investment and financial advice are refused.",
 ]
-definition_of_done_ids = ["admin-covered", "candidates-evidenced", "no-execution"]
-evidence_sources = ["gmail:billing notices", "drive:statements"]
+definition_of_done_ids = ["charges-tabulated", "changes-flagged", "advice-refused"]
+evidence_sources = ["gmail:billing and subscription notices", "drive:personal finance admin records"]
 baseline_prompt = "How long does a bills-and-subscriptions pass take you by hand?"
 
 [[mission]]
@@ -793,39 +1109,39 @@ key = "travel_errand"
 required_artifact_types = ["admin_control_plan"]
 agent = "jeos_lifestyle_systems_builder"
 mode = "travel_errand"
-trigger = "Plan this trip's logistics / batch my errands"
+trigger = "Plan the trip logistics / batch my errands"
 objective = """
-From the supplied evidence, produce one logistics control plan for a trip or
-errand batch: what must happen, in what order, with what lead times, and what
-can be batched together. Bookings, purchases, and submissions remain Joe's to
-execute; the plan prepares them.
+Sequence the errands or travel steps in the supplied evidence into one plan: what
+must happen, in what order, under what constraints — hours, locations,
+dependencies — and what batches together. Constraints come from the evidence; a
+missing constraint is surfaced as a question, never invented.
 """
 definition_of_done = [
-  "One admin_control_plan artifact with an ordered, lead-time-aware sequence.",
-  "Batching opportunities are identified with their time saving.",
-  "The plan prepares external actions without performing any.",
+  "Steps are sequenced with their constraints, each constraint carrying a citation.",
+  "Missing constraints are surfaced as questions rather than filled by assumption.",
+  "Batching respects the schedule and capacity limits the evidence shows.",
 ]
-definition_of_done_ids = ["sequence-ordered", "batching-identified", "no-external-action"]
-evidence_sources = ["calendar:travel window", "gmail:booking threads", "drive:trip notes"]
+definition_of_done_ids = ["sequence-complete", "constraints-cited", "batching-feasible"]
+evidence_sources = ["calendar:the window in question", "gmail:bookings and confirmations", "drive:trip or errand notes"]
 baseline_prompt = "How long does planning logistics like this take you by hand?"
 
 [[mission]]
-key = "system_value_review_jeos"
+key = "lifestyle_value_review"
 required_artifact_types = ["system_value_review"]
 agent = "jeos_lifestyle_systems_builder"
 mode = "system_value_review"
-trigger = "Is this life system still earning its keep? / review my personal systems"
+trigger = "Is this life system still worth it / keep or drop the checklist"
 objective = """
-From the supplied usage records, produce one value review of a personal system:
-time and attention returned, upkeep burden, misses, and a keep, fix, or retire
-verdict against the value policy. A system that quietly stopped being used is
-reported as lapsed, not as working.
+Compute the observed value of the personal system in the supplied evidence:
+friction removed, upkeep spent, misses and their cost. Show the arithmetic and
+return keep, adjust, or retire. Upkeep counts in full even when it argues for
+retirement.
 """
 definition_of_done = [
-  "One system_value_review artifact with benefit and upkeep itemized from records.",
-  "Lapsed or unused systems are identified from the evidence of disuse.",
-  "A keep, fix, or retire verdict is stated per system with its basis.",
+  "Friction removed and every upkeep category are tabulated from cited evidence, with the arithmetic shown.",
+  "The keep, adjust, or retire recommendation follows from the shown arithmetic.",
+  "Upkeep present in the evidence is counted in full, including when it argues for retirement.",
 ]
-definition_of_done_ids = ["ledger-itemized", "lapses-identified", "verdicts-stated"]
-evidence_sources = ["drive:system records", "calendar:reminder history"]
-baseline_prompt = "How long did this task take you by hand before the system existed?"
+definition_of_done_ids = ["arithmetic-shown", "verdict-follows", "upkeep-counted"]
+evidence_sources = ["drive:system usage and checklist records"]
+baseline_prompt = "How long does reviewing whether a personal system earns its keep take you by hand?"

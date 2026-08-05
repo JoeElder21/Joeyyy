@@ -72,9 +72,23 @@ boundary_incident_blocks_verdict = true
 [[baseline]]
 mode = "daily_capacity"
 agent = "jeos_energy_director"
-baseline_minutes = 2
-source = "manifest_declared"
-note = "brains/jeos/agents.toml routine_time_budget: daily capacity pass <= 2 minutes"
+baseline_minutes = 30
+source = "joe_declared"
+note = "Declared by Joe on 2026-07-31 when asked how long planning his day realistically takes him by hand. Supersedes the prior manifest_declared figure of 2 minutes, which was the agent's routine_time_budget in brains/jeos/agents.toml — a design intent for the agent's own runtime, never an observation of Joe doing the task, and therefore not a usable baseline."
+
+[[baseline]]
+mode = "weekly_load"
+agent = "jeos_energy_director"
+baseline_minutes = 60
+source = "joe_declared"
+note = "Declared by Joe on 2026-07-31 when asked how long assessing his week's load takes him by hand."
+
+[[baseline]]
+mode = "recovery_adjustment"
+agent = "jeos_energy_director"
+baseline_minutes = 20
+source = "joe_declared"
+note = "Declared by Joe on 2026-07-31 when asked how long rearranging his schedule for recovery takes him by hand."
 
 [[baseline]]
 mode = "daily_activation"
@@ -93,9 +107,23 @@ note = "Declared by Joe on 2026-07-30 when asked directly how long one full deli
 [[baseline]]
 mode = "pipeline_triage"
 agent = "apex_deal_engine"
-baseline_minutes = 0
-source = "unset"
-note = "Awaiting Joe's measured or declared baseline for an opportunity triage pass."
+baseline_minutes = 60
+source = "joe_declared"
+note = "Declared by Joe on 2026-07-31 when asked how long a full pipeline triage takes him by hand."
+
+[[baseline]]
+mode = "reactivation"
+agent = "apex_deal_engine"
+baseline_minutes = 30
+source = "joe_declared"
+note = "Declared by Joe on 2026-07-31 when asked how long a dormant-opportunity sweep takes him by hand."
+
+[[baseline]]
+mode = "proposal_control"
+agent = "apex_deal_engine"
+baseline_minutes = 60
+source = "joe_declared"
+note = "Declared by Joe on 2026-07-31 when asked how long a full proposal readiness check takes him by hand."
 
 [[baseline]]
 mode = "intake_normalization"
