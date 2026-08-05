@@ -47,6 +47,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `.pre-commit-config.yaml` — local offline gates (gitleaks, ruff, privacy guard, corps validation) before a commit exists.
 - `docs/CONSTITUTION_ADOPTION_2026-07-25.md` — constitution adoption record, staffing-rule supersession, and rollback point.
 - `docs/MONDAY_ACTIVATION_RUNBOOK.md` — how to actually run the corps, what each value verdict means, and what is honestly not ready.
+- `config/mission_catalog.toml` — one prepared controlled mission per material mode (all 39): objective, definition of done, criterion ids, and evidence sources settled in advance; every entry tested to produce a PacketGuard-clean delegation.
+- `docs/PROMOTION_CHECKLISTS.md` — per-specialist promotion worksheets mapping each mode to its catalog entry, with the covering loop and the approval steps. Coverage is measured by `MissionRunner.promotion_status()`, never asserted by the document.
+- `scripts/setup_workstation.ps1` — idempotent Windows workstation setup and verification per `docs/RUNTIME_HOST_DECISION.md`: venv outside synced folders, filtered lock install, signing key with restricted ACL, and the full verification surface in one pass.
 - `.claude/agents/` — the ten specialists and Agent 007 projected into Claude Code subagents from the canonical contracts; connector isolation enforced by the tool list. Regenerate with `python scripts/generate_claude_agents.py`.
 - `runtime/mission_runner.py` — controlled-mission harness: validated delegation, typed return, connector-isolation check, hash-chained evidence, per-mode promotion coverage.
 - `config/value_policy.toml` + `runtime/value_meter.py` — the section 17 value policy and its meter: net saving after review, correction, incident, and maintenance, against a binding 35% threshold.

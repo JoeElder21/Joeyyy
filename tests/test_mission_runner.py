@@ -15,10 +15,23 @@ from runtime.mission_runner import (
     MissionRunner,
     MissionSpec,
 )
+from runtime.value_meter import ValuePolicy
 
 AGENT = "jeos_energy_director"
 MODE = "daily_capacity"
 SOURCE = "fixture/jeos/calendar-2026-07-27"
+
+# Track whatever config/value_policy.toml establishes for the fixture mode.
+#
+# This was a hardcoded 20, which held only while MODE had no usable baseline.
+# The moment Joe declared one, `prepare()` correctly refused every fixture
+# mission for supplying a baseline that disagreed with the policy, and 37 tests
+# that have nothing to do with baselines went red at once. Declaring a baseline
+# is a mandatory step before any mode can be promoted, so the suite must not
+# break when one is declared -- and pinning a new literal here would only move
+# the breakage to the next declaration. Tests that are actually about baseline
+# drift pass an explicit, deliberately different number instead.
+FIXTURE_BASELINE = ValuePolicy.load().usable_baseline(MODE) or 20
 
 
 def spec(**overrides) -> MissionSpec:
@@ -36,7 +49,7 @@ def spec(**overrides) -> MissionSpec:
                 owner_brain="JEOS",
             )
         ],
-        "baseline_minutes": 20,
+        "baseline_minutes": FIXTURE_BASELINE,
         "baseline_source": "joe_declared",
         "required_artifact_types": ["capacity_map"],
     }
@@ -285,7 +298,7 @@ class CompleteTests(RunnerHarness):
         self.assertTrue(evidence.connector_isolation_verified)
         self.assertTrue(evidence.qualifies_mode)
         observation = evidence.value_observation
-        self.assertEqual(observation["baseline_minutes"], 20)
+        self.assertEqual(observation["baseline_minutes"], FIXTURE_BASELINE)
         self.assertEqual(observation["baseline_source"], "joe_declared")
         self.assertFalse(observation["boundary_incident"])
 
@@ -597,7 +610,7 @@ class ValueEvidenceCouplingTests(RunnerHarness):
         recorded = self.runner.value_ledger.observations(ValuePolicy.load())
         self.assertEqual(len(recorded), 1)
         self.assertEqual(recorded[0].mode, MODE)
-        self.assertEqual(recorded[0].baseline_minutes, 20)
+        self.assertEqual(recorded[0].baseline_minutes, FIXTURE_BASELINE)
 
     def test_the_reported_value_ledger_path_is_the_one_the_runbook_names(self):
         from runtime.mission_runner import DEFAULT_VALUE_LEDGER

@@ -35,11 +35,13 @@ the whole stack is one command away: `wsl -d Ubuntu --cd /root/Joeyyy -- claude`
 ### Changed
 
 - `docs/README.md` — indexed the new runbook; header count set to the
-  measured 39 rows (it said 31 against an actual 38 before this change).
+  measured row count (it said 31 against an actual 38 before this change;
+  40 after merging #75's checklist row).
 - `docs/MONDAY_ACTIVATION_RUNBOOK.md` — routes Windows workstations to the
-  WSL runbook beneath `scripts/workstation_setup.sh`.
-- `docs/REPOSITORY_OVERVIEW.md` — suite figures moved by the new module:
-  1127 tests across 38 modules.
+  WSL runbook as the clean-signal environment `scripts/setup_workstation.ps1`
+  itself points to for the full suite.
+- `docs/REPOSITORY_OVERVIEW.md` — suite figures moved by the new module and
+  the #74/#75 merge: 1128 tests across 38 modules.
 
 ## 2026-07-30 — Joeyyy becomes the account umbrella
 

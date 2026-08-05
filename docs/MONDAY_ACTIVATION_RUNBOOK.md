@@ -51,6 +51,10 @@ count. This is checked mechanically in `MissionRunner.complete()`, not trusted.
 
 ### 1. Confirm the corps loaded
 
+First time on a new workstation, run `scripts/setup_workstation.ps1` — it
+creates the venv and signing key, installs the pinned dependencies, and runs
+the whole verification surface in one pass. After that:
+
 ```bash
 python scripts/generate_claude_agents.py --check
 ```
@@ -73,17 +77,19 @@ Say what you need in your own words. Examples that map to registered modes:
 
 Agent 007 routes; you do not need to name the specialist.
 
-These are examples of the **thirty-nine** missions pre-written in
-`config/mission_catalog.toml` — one per registered material mode, so the full
-set the active gate requires (`docs/SHADOW_EXIT_STATUS_2026-07-30.md`) is
-"run this" rather than "design this". Objective, definition of done, criterion
-ids, and the evidence sources to retrieve are all settled in advance.
-Every catalog entry is tested to produce a PacketGuard-clean delegation, so none
-of them can fail at the starting line. On a fresh workstation, run
-`scripts/workstation_setup.sh` once first — it installs the locked stack,
-verifies every declared dependency imports, and runs the validation surface.
-On the Windows workstation, `docs/WSL_UBUNTU_SETUP.md` is the layer beneath
-that: it takes a bare machine to a working
+Every material mode — all 39 — is **pre-written** in
+`config/mission_catalog.toml` — objective, definition of done, criterion ids,
+and the evidence sources to retrieve are all settled in advance, so Monday is
+running a mission rather than designing one. Every catalog entry is tested to
+produce a PacketGuard-clean delegation, so none of them can fail at the
+starting line. The per-specialist worksheets in `docs/PROMOTION_CHECKLISTS.md`
+map each mode to its catalog entry.
+
+`scripts/setup_workstation.ps1` above is the native-Windows path, and its own
+header records that host's limits: the POSIX custody checks and the full suite
+need a POSIX filesystem for a clean signal. `docs/WSL_UBUNTU_SETUP.md` is that
+environment — from a bare Windows machine, through `scripts/wsl_ubuntu_setup.sh`
+and `scripts/workstation_setup.sh`, to a working
 `wsl -d Ubuntu --cd /root/Joeyyy -- claude`.
 
 ```bash
@@ -150,7 +156,9 @@ and amortized maintenance from the baseline. It is designed to be hard to pass.
 All ten specialists are in `shadow` and **this runbook does not change that.**
 The gate in `config/specialist_corps.toml` requires one controlled real mission
 per material mode — 39 modes total — plus connector-isolation evidence and
-readback.
+readback. `docs/PROMOTION_CHECKLISTS.md` breaks this down per specialist: which
+catalog entry covers which mode, and the exact approval steps once a
+specialist's modes are all covered.
 
 Check coverage at any time:
 
