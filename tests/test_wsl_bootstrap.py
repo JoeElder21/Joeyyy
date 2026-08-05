@@ -29,13 +29,12 @@ class WslBootstrapTests(unittest.TestCase):
 
     def test_the_wsl_layer_delegates_rather_than_reimplements(self) -> None:
         # workstation_setup.sh is the one place the governed stack is
-        # installed from its committed lock. A second install path here would
-        # drift from it silently — so the WSL layer may upgrade pip inside the
-        # venv it creates, and must otherwise hand off.
+        # installed from its committed lock, and the CLI installer is this
+        # layer's ONLY floating channel — so the WSL layer runs no pip install
+        # of any kind, not even a pip self-upgrade, and hands off instead.
         text = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("workstation_setup.sh", text)
-        self.assertIn("pip install --upgrade pip", text)
-        self.assertNotIn("pip install -r", text)
+        self.assertNotIn("pip install", text)
 
     def test_both_setup_scripts_fail_fast_and_are_executable(self) -> None:
         # The workstation script had no coverage at all before this module;

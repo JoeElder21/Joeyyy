@@ -15,7 +15,10 @@ set -euo pipefail
 # docs/WSL_UBUNTU_SETUP.md records the full runbook, the one floating-channel
 # trust decision this script makes, and what stays manual.
 
-launch_command='wsl -d Ubuntu --cd /root/Joeyyy -- claude'
+# Printed with the distribution this run is actually inside, so the recovery
+# path onto Ubuntu-24.04 reports a command that targets it rather than the
+# canonical default.
+launch_command="wsl -d ${WSL_DISTRO_NAME:-Ubuntu} --cd /root/Joeyyy -- claude"
 
 if ! grep -qiE 'microsoft|wsl' /proc/version; then
   echo "error: not a WSL kernel; this script provisions the WSL layer only." >&2
@@ -53,9 +56,21 @@ apt-get install -y git curl ca-certificates build-essential \
   python3.12 python3.12-venv nodejs npm
 
 echo "==> Default WSL user (the launch command assumes root)"
+wsl_conf_changed=0
+default_user_is_root=1
 if [ -f /etc/wsl.conf ] && grep -qi '^[[:space:]]*\[user\]' /etc/wsl.conf; then
-  echo "    /etc/wsl.conf already declares a [user] section; leaving it as is."
-  wsl_conf_changed=0
+  # Last default= wins, matching how WSL reads the file. A default= key in a
+  # section other than [user] would be misread here; wsl.conf has no such key
+  # elsewhere today, and full INI parsing in shell is not worth that corner.
+  current_default="$(sed -n 's/^[[:space:]]*default[[:space:]]*=[[:space:]]*//Ip' /etc/wsl.conf | tail -n1 | tr -d '[:space:]')"
+  if [ "${current_default}" = "root" ]; then
+    echo "    /etc/wsl.conf already sets default=root; nothing to do."
+  else
+    echo "    /etc/wsl.conf sets default=${current_default:-<unset>}, not root; leaving it"
+    echo "    alone. The launch command below is adjusted with -u root; for the plain"
+    echo "    form, set default=root in the [user] section yourself."
+    default_user_is_root=0
+  fi
 else
   printf '\n[user]\ndefault=root\n' >>/etc/wsl.conf
   wsl_conf_changed=1
@@ -88,20 +103,37 @@ if [ "${repo_root}" != "/root/Joeyyy" ]; then
 fi
 
 echo "==> Virtual environment (Python 3.12 per docs/RUNTIME_HOST_DECISION.md)"
-if [ ! -x "${repo_root}/.venv/bin/python" ]; then
+if [ -x "${repo_root}/.venv/bin/python" ]; then
+  venv_version="$("${repo_root}/.venv/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+  if [ "${venv_version}" != "3.12" ]; then
+    echo "error: the existing .venv is Python ${venv_version}; the full stack resolves" >&2
+    echo "for 3.12 only (docs/RUNTIME_HOST_DECISION.md). Remove ${repo_root}/.venv" >&2
+    echo "and re-run." >&2
+    exit 1
+  fi
+else
   python3.12 -m venv "${repo_root}/.venv"
 fi
 . "${repo_root}/.venv/bin/activate"
-python -m pip install --upgrade pip
+# No pip upgrade: the venv's bundled pip is enough for the committed lock —
+# proven by a fresh-venv run against lock-runtime-contracts.txt — and the CLI
+# installer above stays the only floating channel in this layer.
 
 echo "==> Hand off to the governed-host setup"
 bash "${repo_root}/scripts/workstation_setup.sh"
+
+# Never advertise a command this run just determined will not work: with a
+# non-root default user the plain form dies at --cd /root/Joeyyy.
+effective_launch="${launch_command}"
+if [ "${default_user_is_root}" -eq 0 ]; then
+  effective_launch="wsl -d ${WSL_DISTRO_NAME:-Ubuntu} -u root --cd /root/Joeyyy -- claude"
+fi
 
 cat <<DONE
 
 WSL layer complete. Launch from Windows with:
 
-  ${launch_command}
+  ${effective_launch}
 
 The first launch asks you to authenticate and to trust this folder; later
 launches drop straight in. Validation commands run inside the virtual
