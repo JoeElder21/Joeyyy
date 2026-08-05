@@ -82,6 +82,9 @@ Every catalog entry is tested to produce a PacketGuard-clean delegation, so none
 of them can fail at the starting line. On a fresh workstation, run
 `scripts/workstation_setup.sh` once first — it installs the locked stack,
 verifies every declared dependency imports, and runs the validation surface.
+On the Windows workstation, `docs/WSL_UBUNTU_SETUP.md` is the layer beneath
+that: it takes a bare machine to a working
+`wsl -d Ubuntu --cd /root/Joeyyy -- claude`.
 
 ```bash
 python -c "

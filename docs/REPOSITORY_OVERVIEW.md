@@ -9,7 +9,7 @@ All-encompassing overview and technical breakdown of this repository, written as
 | Head commit analysed | `b321448` — merge of PR #31: repository-engineering substrate, forty rounds of review closed |
 | Primary language | Python 3.11 / 3.12 (plus Node 18+ for the APS connector) |
 | Scale | 338 tracked files, ~111,200 lines of source, config, schema and docs |
-| Test suite | 1120 tests, 0 failures, 24 dependency-gated skips. PyYAML is required: without it the privacy guard fails closed and 5 tests fail, by design |
+| Test suite | 1127 tests, 0 failures, 24 dependency-gated skips. PyYAML is required: without it the privacy guard fails closed and 5 tests fail, by design |
 | Validation | `privacy_guard` PASS; `validate_specialist_corps` PASS (10 contract packets, 10 boundary rejections) |
 
 Every status claim below was read from the repository or produced by running its own tooling, not inferred from the README.
@@ -58,7 +58,7 @@ The repository systematically refuses to claim capability it cannot demonstrate.
 
 ### What exists today, in one paragraph
 
-A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 38-document architectural record, and 1,120 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
+A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 46-document architectural record, and 1,127 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
 
 ---
 
@@ -93,7 +93,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 | `schemas/` | The seven canonical JSON Schemas. Single source of truth for packet structure; Pydantic models are generated from these at import time. | 7 |
 | `runtime/` | **Contract enforcement logic.** Stdlib-pure, CI-provable: lifecycle gates, cadence engine, writer-lease registry, mutation admission. Optional graph/queue/flow layers import lazily. | 10 |
 | `scripts/` | **SDK and service integration.** Governed dispatch bridges, PacketGuard, privacy guard, memory/evidence gateways, MCP server, observability, trusted launcher, validators. | 20 |
-| `tests/` | 37 unittest modules, 1120 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 37 |
+| `tests/` | 38 unittest modules, 1127 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 38 |
 | `docs/` | Architectural records: protocols, registries, absorption records, build-out guides, migration and reconciliation records. This is where *why* lives. | 29 |
 | `connectors/` | `aps/` — a Node 18+ harness running the Autodesk Platform Services validation gate, with a synthetic DXF test model and its generator. | 7 |
 | `templates/` | Human-readable operating templates: agent intake, project intake, specialist handoff, daily brief, weekly agent audit. | 5 |
@@ -373,7 +373,7 @@ The lock file pins `autogen-agentchat==0.7.5` and `autogen-core==0.7.5`, while `
 
 ## 11. Testing and CI
 
-**1120 tests across 37 modules; 0 failures; 24 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent the run reports 48 skips and 5 failures, which is the guard refusing to certify a tree it could not fully read. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
+**1127 tests across 38 modules; 0 failures; 24 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent the run reports 48 skips and 5 failures, which is the guard refusing to certify a tree it could not fully read. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
 
 | Module | Tests | Coverage focus |
 | --- | --- | --- |
@@ -388,6 +388,7 @@ The lock file pins `autogen-agentchat==0.7.5` and `autogen-core==0.7.5`, while `
 | `test_cadence.py` | 8 | Cadence engine (stdlib) and Prefect flows (skipped without prefect). |
 | `test_writer_lease.py` | 7 | Lease registry, mutation admission, Celery queue naming. |
 | `test_governance_docs.py` | 7 | Documentation consistency — docs are treated as testable artefacts. |
+| `test_wsl_bootstrap.py` | 7 | Drift locks between the WSL layer, the workstation setup, and their runbook — the launch command is a cross-surface contract. |
 | `test_privacy.py` | 6 | Privacy-guard behaviour. |
 | `test_dream_team.py` | 6 | Charter-mode roster structural validation. |
 | `test_data_memory_layers.py` | 6 | Memory gateway (stdlib), evidence indexes, crew bridge. |
@@ -471,7 +472,7 @@ The rationale follows from the repository being public: a binary blob cannot be 
 
 ## 13. Documentation index
 
-Twenty-nine records in `docs/`. Documentation here is a primary artefact, not commentary — `tests/test_governance_docs.py` and `tests/test_reconciliation.py` assert against it.
+Forty-six records in `docs/`. Documentation here is a primary artefact, not commentary — `tests/test_governance_docs.py` and `tests/test_reconciliation.py` assert against it.
 
 ### Operating contracts — read these first
 
@@ -630,6 +631,6 @@ Agent 007's contract carries a standing instruction: *"Preserve the current reco
 
 ## Summary
 
-Joeyyy is a contract-first, enforcement-backed multi-agent governance system with two sealed data domains and eleven agents, of which one is active. Its distinguishing property is that it refuses to claim capability it cannot demonstrate — and it has 1120 tests, a privacy scanner, a fail-closed packet validator and a denial-first launcher to keep that refusal honest.
+Joeyyy is a contract-first, enforcement-backed multi-agent governance system with two sealed data domains and eleven agents, of which one is active. Its distinguishing property is that it refuses to claim capability it cannot demonstrate — and it has 1127 tests, a privacy scanner, a fail-closed packet validator and a denial-first launcher to keep that refusal honest.
 
 When working in it: read `AGENTS.md` and `docs/RECONCILIATION_2026-07-24.md` before touching code, keep enforcement in `runtime/` and integration in `scripts/`, move contract + docs + registry + tests as one unit, and never let a change make the system sound more capable than it is.
