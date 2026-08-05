@@ -25,8 +25,8 @@ MOUNTS = ROOT / "config" / "mcp_mounts.toml"
 PROBE_TIMEOUT_SECONDS = 120
 
 
-def load_mounts() -> list[dict]:
-    with MOUNTS.open("rb") as source:
+def load_mounts(registry: Path = MOUNTS) -> list[dict]:
+    with registry.open("rb") as source:
         return tomllib.load(source)["mounts"]
 
 
@@ -121,7 +121,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="treat a degraded (unverified) probe as a failure",
     )
-    strict = parser.parse_args(argv if argv is not None else sys.argv[1:]).strict
+    # An alternate registry, for callers that must exercise the gate against a
+    # mutated copy. The negative-path tests used to write their mutations into
+    # the LIVE config/mcp_mounts.toml and restore it in a `finally` -- a window
+    # in which a SIGKILL (2026-08-04, a raced bootstrap killed mid-suite) left
+    # the committed registry stripped of every grant_scope disclosure, silently
+    # removing the one blast-radius statement the launcher signs against.
+    # `finally` is not a restore guarantee; a path the tests can own is. The
+    # default remains the committed registry, so every non-test caller still
+    # verifies the file the launcher actually reads.
+    parser.add_argument(
+        "--registry",
+        type=Path,
+        default=MOUNTS,
+        help="verify this mounts file instead of config/mcp_mounts.toml",
+    )
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+    strict = args.strict
     report: dict = {"mounts": [], "strict": strict}
     try:
         import mcp  # noqa: F401
@@ -130,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         mcp_available = False
 
-    for mount in load_mounts():
+    for mount in load_mounts(args.registry):
         entry = {
             "name": mount["name"],
             "agents": mount["agents"],
