@@ -27,12 +27,22 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-# Derived from this script's location, not from git: on a fresh distribution
-# git is one of the packages this script exists to install, and a tree copied
-# in without .git should still provision rather than fail at the first line.
+# Derived from this script's location, not from git, so root-finding works
+# before git is installed and a copied-in tree gets the clear refusal below
+# instead of a confusing git error.
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ ! -f "${repo_root}/AGENTS.md" ]; then
   echo "error: ${repo_root} does not look like the repository root" >&2
+  exit 1
+fi
+# Refused HERE, before the first mutation: deriving repo_root without git
+# gives a copied-in tree a clear error, but the handoff target
+# (workstation_setup.sh) and the submodule steps genuinely need a git clone —
+# discovering that after apt, wsl.conf, and the venv would leave a
+# half-provisioned host.
+if [ ! -e "${repo_root}/.git" ]; then
+  echo "error: ${repo_root} is not a git clone (no .git). The governed-host" >&2
+  echo "setup needs one — clone per docs/WSL_UBUNTU_SETUP.md and re-run." >&2
   exit 1
 fi
 cd "${repo_root}"
@@ -140,8 +150,14 @@ echo "==> Launch the offline-verifiable MCP mounts (the layer Node was installed
 # probe; the canonical task runner and the mounts CI job both treat the probe
 # as the check that actually launches the offline-verifiable mounts. Without
 # it, a host whose npx layer is broken reports a usable governed host and
-# discovers otherwise at the first mission.
-python "${repo_root}/scripts/verify_mcp_mounts.py" --strict >/dev/null
+# discovers otherwise at the first mission. The report is captured and shown
+# on failure — which mount refused and why is the whole point of probing.
+if ! mount_report="$(python "${repo_root}/scripts/verify_mcp_mounts.py" --strict)"; then
+  printf '%s\n' "${mount_report}" >&2
+  echo "error: the offline-verifiable MCP mounts did not launch; the report" >&2
+  echo "above names the mount and reason." >&2
+  exit 1
+fi
 
 # Never advertise a command this run just determined will not work: with a
 # non-root default user the plain form dies at --cd /root/Joeyyy.

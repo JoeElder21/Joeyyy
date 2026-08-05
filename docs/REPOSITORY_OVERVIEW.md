@@ -472,7 +472,7 @@ The rationale follows from the repository being public: a binary blob cannot be 
 
 ## 13. Documentation index
 
-Forty-six records in `docs/`. Documentation here is a primary artefact, not commentary — `tests/test_governance_docs.py` and `tests/test_reconciliation.py` assert against it.
+Forty-seven records in `docs/`, plus the index `README.md` — 48 tracked files, matching the layout table above. Documentation here is a primary artefact, not commentary — `tests/test_governance_docs.py` and `tests/test_reconciliation.py` assert against it.
 
 ### Operating contracts — read these first
 
