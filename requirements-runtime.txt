@@ -2,9 +2,9 @@
 # No credentials, connector identifiers, or private source data belong here.
 -r requirements.txt
 langgraph>=0.2
-crewai>=0.80
-prefect>=3.0
-mem0ai>=2.0.14
+crewai>=1.15.10
+prefect>=3.8.1
+mem0ai>=2.0.15
 llama-index>=0.14.23
 langchain>=0.3
 jsonschema>=4.23
