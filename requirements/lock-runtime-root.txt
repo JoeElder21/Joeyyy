@@ -48,19 +48,19 @@ idna==3.18
     #   requests
 jiter==0.16.0
     # via openai
-numpy==1.26.4
+numpy==2.4.6
     # via
     #   autogen-agentchat
     #   flaml
-openai==2.51.0
+openai==2.53.0
     # via autogen-agentchat
-packaging==26.2
+packaging==26.3
     # via autogen-agentchat
 pydantic==2.13.4
     # via
     #   autogen-agentchat
     #   openai
-pydantic-core==2.46.4
+pydantic-core==2.48.0
     # via pydantic
 python-dotenv==1.2.2
     # via autogen-agentchat
@@ -87,7 +87,7 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.3
     # via pydantic
 urllib3==2.7.0
     # via
