@@ -1,6 +1,6 @@
 # Documentation index
 
-40 records, grouped by purpose. Start at the top of each section.
+41 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -36,6 +36,7 @@
 | [`AGENT_RUNTIME_BRIDGE.md`](AGENT_RUNTIME_BRIDGE.md) | Governed-handoff bridge on the OpenAI Agents SDK |
 | [`DATA_MEMORY_LAYERS.md`](DATA_MEMORY_LAYERS.md) | llama_index, mem0, crewAI |
 | [`ORCHESTRATION_AND_CONNECTORS.md`](ORCHESTRATION_AND_CONNECTORS.md) | AutoGen, LangGraph, MCP servers, APS, Logseq |
+| [`FINANCIAL_DATASETS_CONNECTOR.md`](FINANCIAL_DATASETS_CONNECTOR.md) | Supplying the financial-datasets MCP key: where it goes, where it silently does not, and why cloud sessions differ |
 | [`AUTOGEN_INTEGRATION.md`](AUTOGEN_INTEGRATION.md) | Bounded AutoGen runtime-adapter contract |
 | [`AUTOGEN_CHALLENGE_PAIR_TRIAL.md`](AUTOGEN_CHALLENGE_PAIR_TRIAL.md) | Challenge-pair preflight trial |
 
