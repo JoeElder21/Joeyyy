@@ -208,8 +208,19 @@ PATTERNS = {
         # secret. That over-flag is deliberate and in the safe direction: the
         # author restructures one line, where the alternative was a real
         # credential reaching a public repository behind a placeholder prefix.
+        # An environment reference is not a literal secret either. `.mcp.json`
+        # authenticates the financial-datasets server with an X-API-KEY header
+        # whose value Claude Code expands from the environment at connection
+        # time, so the committed bytes name a variable and never hold the key.
+        # Anchored exactly like the placeholder exemption above -- the value
+        # must be a lone `${IDENTIFIER}` and nothing else -- so a literal key,
+        # or a reference concatenated with one, is still a finding. Written as
+        # a separate alternative rather than folded into the brace exemption
+        # above: making the `$` optional there would also excuse a bare
+        # `{IDENTIFIER}`, widening a second rule while repairing this one.
         r"[\"']?\s*[:=]\s*"
         r"(?!\s*[\"']\{[A-Za-z_][A-Za-z0-9_]*\}[\"']" + QUOTED_VALUE_END + NOT_CONTINUED + r")"
+        r"(?!\s*[\"']\$\{[A-Za-z_][A-Za-z0-9_]*\}[\"']" + QUOTED_VALUE_END + NOT_CONTINUED + r")"
         r"(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
     ),
     # Organization and workspace slugs. These sit apart from "connector

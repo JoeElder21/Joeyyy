@@ -5,6 +5,7 @@ themselves exist and stay wired up, so a later change cannot quietly drop a CI
 step, unpin an action, or remove a boundary document.
 """
 
+import json
 import re
 import subprocess
 import unittest
@@ -18,6 +19,7 @@ DEPENDABOT = ROOT / ".github" / "dependabot.yml"
 PRE_COMMIT = ROOT / ".pre-commit-config.yaml"
 PYPROJECT = ROOT / "pyproject.toml"
 OPTIMIZATION_RECORD = ROOT / "docs" / "REPO_OPTIMIZATION_2026-07-25.md"
+MCP_CLIENT_CONFIG = ROOT / ".mcp.json"
 
 
 def _npm_lockfiles() -> list[str]:
@@ -1660,6 +1662,36 @@ class PrivacyGuardFixtureShapeTests(unittest.TestCase):
             (ROOT / document).read_text(encoding="utf-8"),
             "the re-split fixture no longer matches the document it exempts, so the "
             "guard will report that document as a real leak",
+        )
+
+
+class McpClientConfigTests(unittest.TestCase):
+    """`.mcp.json` is committed to a public tree, so it references secrets rather than carrying them."""
+
+    def test_every_header_value_is_an_environment_reference(self):
+        # The financial-datasets server authenticates with an X-API-KEY header
+        # rather than the OAuth flow at its root URL. Claude Code expands
+        # ${VAR} in header values at connection time, so the key lives in the
+        # environment and this file stays public-safe. A literal pasted here
+        # would be committed, mirrored, and indexed -- deleting the line later
+        # does not unpublish it, so the only remedy is rotating the key.
+        config = json.loads(MCP_CLIENT_CONFIG.read_text(encoding="utf-8"))
+        servers = config["mcpServers"]
+        self.assertTrue(servers, "no MCP servers declared; this test would be vacuous")
+        checked = 0
+        for name, server in servers.items():
+            for header, value in server.get("headers", {}).items():
+                with self.subTest(server=name, header=header):
+                    self.assertRegex(
+                        value,
+                        r"^\$\{[A-Z0-9_]+\}$",
+                        f"{name}.{header} must be a ${{ENV_VAR}} reference, not a literal value",
+                    )
+                    checked += 1
+        self.assertTrue(
+            checked,
+            "no header values found; a server that later gains one would not be "
+            "covered, so this asserts the case exists rather than passing vacuously",
         )
 
 

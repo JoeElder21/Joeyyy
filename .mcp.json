@@ -2,7 +2,10 @@
   "mcpServers": {
     "financial-datasets": {
       "type": "http",
-      "url": "https://mcp.financialdatasets.ai"
+      "url": "https://mcp.financialdatasets.ai/api",
+      "headers": {
+        "X-API-KEY": "${FINANCIAL_DATASETS_API_KEY}"
+      }
     }
   }
 }
