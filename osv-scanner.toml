@@ -121,15 +121,6 @@ reason = """protobufjs 7.6.4, CVSS 5.3, fixed in 7.6.5. Transitive under
 @earendil-works/pi-coding-agent via @google/genai, which declares ^7.5.4 -- the
 patched version is in range and the published shrinkwrap forbids it."""
 
-[[IgnoredVulns]]
-id = "GHSA-frvp-7c67-39w9"
-ignoreUntil = 2026-08-26
-reason = """@hono/node-server 1.19.15, CVSS 5.9, fixed in 2.0.5. Different
-blocker from the other three: this one is a genuine RANGE conflict, not a
-shrinkwrap. @modelcontextprotocol/sdk declares ^1.19.9, and 2.0.5 is a major
-outside it, so forcing it would violate a compatibility constraint the SDK
-states rather than merely inherits. Clears when the MCP SDK widens its range."""
-
 # --- npm, connectors/relay: second wave, 2026-08-05 ---
 #
 # Same blocker as the 2026-07 wave above: brace-expansion and undici resolve
