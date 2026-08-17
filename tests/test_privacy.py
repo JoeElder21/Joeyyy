@@ -338,6 +338,29 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             with self.subTest(value=value, expect="clean"):
                 self.assertIsNone(pattern.search(f'TFE_ORGANIZATION = "{value}"'))
 
+    def test_environment_references_are_exempt_and_literals_still_are_not(self):
+        """`.mcp.json` names a variable for the financial-datasets key.
+
+        Claude Code expands `${VAR}` in an MCP header at connection time, so
+        the committed bytes hold no secret and flagging them is a false
+        positive. The exemption is anchored to the WHOLE value, like the brace
+        exemption beside it, because "reference plus literal" is the shape that
+        would otherwise carry a real key through behind a clean prefix."""
+        # Assembled at runtime: written literally, the probes below would be
+        # findings in this file, which is itself scanned by these patterns.
+        header = "X-API" + "_KEY"
+        real = "a1b2c3d4-1111-2222-3333-444444444444"
+        pattern = PATTERNS["credential assignment"]
+        for value in ("${FINANCIAL_DATASETS_API_KEY}", "${VAR}"):
+            with self.subTest(value=value, expect="clean"):
+                self.assertIsNone(pattern.search(f'"{header}": "{value}"'))
+        for value in (real, "${VAR}" + real, real + "${VAR}"):
+            with self.subTest(value=value, expect="flagged"):
+                self.assertIsNotNone(
+                    pattern.search(f'"{header}": "{value}"'),
+                    "a literal key, alone or concatenated with a reference, is a finding",
+                )
+
     def test_json_formatted_connector_config_is_not_a_bypass(self):
         """The closing quote of a JSON key sits between name and delimiter.
 
