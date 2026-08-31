@@ -3,6 +3,29 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-08-30 — The daily briefing becomes a verified schedule
+
+Briefings were produced by hand on 2026-07-30 through 2026-08-04 — one new
+artifact per day — and then stopped, because no Routine had ever been
+created and the 08-04 run additionally found Gmail and Google Calendar
+toggled off for its chat. This change records the diagnosis and the standing
+contract now that the schedule actually exists: one private artifact updated
+in place at 6:00 AM America/New_York daily by a Routine bound to a
+persistent briefing session that holds the Gmail and Google Calendar mounts
+(per-Routine connector grants are unavailable on this plan, and a
+fresh-session Routine would fire connector-less — the Aug 4 failure again).
+Private specifics (artifact URL, Routine identifier, holdings) stay out of
+the repository.
+
+### Added
+
+- `docs/DAILY_EXECUTIVE_BRIEFING.md` — the public-safe operating contract:
+  why the briefing stalled, the schedule and single-artifact contract, the
+  twelve-section spec with per-section sources and truth rules, read-only
+  boundaries under `AGENTS.md` section 9, to-do intake through the task
+  tracker, and a four-step failure-diagnosis order. The 6:00 AM daily
+  schedule supersedes the ~7:30 AM weekday reading-slot placeholders.
+
 ## 2026-08-05 — The governed host gets its WSL layer
 
 `docs/RUNTIME_HOST_DECISION.md` put the runtime on Joe's workstation and no
