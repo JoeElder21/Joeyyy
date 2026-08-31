@@ -15,7 +15,7 @@
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-311"
-ignoreUntil = 2026-08-25
+ignoreUntil = 2026-09-30
 reason = """chromadb 1.1.1, CVSS 9.3, no fix available upstream. Originally
 triaged as reaching this repository only through the optional memory tier,
 "which is not deployed; CI installs requirements.txt alone."
@@ -31,11 +31,44 @@ that host not being internet-exposed — the same honest position as
 PYSEC-2026-2447 below. Kept as a triage because no version resolves it; the
 open decision the original entry deferred is now live and is Joe's: keep the
 memory tier in the workstation manifest with this accepted, or trim it. See
-docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry at the latest."""
+docs/DEPENDENCY_AUDIT_2026-07-25.md. Revisit at expiry at the latest.
+
+RE-CHECKED 2026-08-30 at expiry: OSV still lists no fixed version (PyPI's
+latest is 1.5.9 and the advisory set marks releases through 1.5.9 as
+affected, so a bump is not a cure). Three further advisories against the
+same pinned chromadb surfaced in the 2026-08-30 scan and are entered
+separately below. Position otherwise unchanged; the workstation memory-tier
+manifest decision remains Joe's."""
+
+[[IgnoredVulns]]
+id = "GHSA-36p7-vc44-83pf"
+ignoreUntil = 2026-09-30
+reason = """chromadb 1.1.1, CVSS 9.4 (v4), authenticated code injection.
+Surfaced in the 2026-08-30 scan; OSV marks every release from 0.4.17 through
+the current 1.5.9 as affected with no fixed version, so no bump clears it.
+Same exposure position as PYSEC-2026-311 above -- the governed workstation's
+memory tier, not internet-exposed -- and the open manifest decision recorded
+there covers this advisory too."""
+
+[[IgnoredVulns]]
+id = "GHSA-2wm9-hf6c-p5cr"
+ignoreUntil = 2026-09-30
+reason = """chromadb 1.1.1, CVSS 8.8 (9.1 v3.1): missing authorization checks
+let any authenticated user read, write, update, or delete any tenant's
+collections. Surfaced 2026-08-30; affected through current 1.5.9 with no fixed
+version. Same position as GHSA-36p7-vc44-83pf; listed separately per advisory."""
+
+[[IgnoredVulns]]
+id = "GHSA-xph7-9rjv-w5fr"
+ignoreUntil = 2026-09-30
+reason = """chromadb 1.1.1, CVSS 8.8 (9.8 v3.1): SimpleRBACAuthorizationProvider
+does not check which tenant, database, or collection a permission applies to.
+Surfaced 2026-08-30; affected through current 1.5.9 with no fixed version. Same
+position as GHSA-36p7-vc44-83pf; listed separately per advisory."""
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-2132"
-ignoreUntil = 2026-08-25
+ignoreUntil = 2026-09-30
 reason = """click 8.2.0, CVSS 7.2, fixed in 8.3.3. Genuinely blocked, and the
 blocker is now measured rather than assumed: guardrails-ai 0.10.2 — the
 current release, entering via requirements/runtime-guards.txt — declares
@@ -46,11 +79,20 @@ and PYSEC-2026-347 (CVSS 9.8) with no fix available — strictly worse than the
 finding this entry acknowledges. The contracts and evaluation locks carry
 fixed click (8.4.2 / 8.3.3); the exposure is the workstation full stack only.
 Clears when guardrails-ai widens its click range; at expiry this becomes a
-manifest decision about the guards tier rather than a version bump."""
+manifest decision about the guards tier rather than a version bump.
+
+RE-CHECKED 2026-08-30 at expiry: the clearing condition has occurred --
+guardrails-ai 0.11.0 (current on PyPI) declares click<9.0.0. Clearing now
+means bumping guardrails-ai 0.10.2 -> 0.11.0 in its tier and re-resolving the
+full lock, a measured dependency change in the sense of abba0cf (the last
+click move was reverted because the cure measured worse), deliberately kept
+out of this expiry renewal. Renewed short so that bump lands as its own
+change rather than this entry quietly persisting past a fix that now
+exists."""
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-2447"
-ignoreUntil = 2026-08-25
+ignoreUntil = 2026-09-30
 reason = """diskcache 5.6.3, CVSS 5.2, no fix available upstream. Transitive via
 deepeval.
 
@@ -64,7 +106,10 @@ being internet-exposed.
 
 Kept as a triage rather than a blocker because no version resolves it, but the
 justification is now "no fix exists" alone, not "nothing installs it". Revisit at
-expiry, or sooner if deepeval drops the dependency."""
+expiry, or sooner if deepeval drops the dependency.
+
+RE-CHECKED 2026-08-30 at expiry: OSV still lists no fixed version. Position
+unchanged."""
 
 # --- npm, connectors/relay ---
 #
@@ -96,10 +141,21 @@ expiry, or sooner if deepeval drops the dependency."""
 # Short expiry deliberately -- one month, not the three these would get if they
 # were unfixable in principle. They are fixable upstream, and the expiry is what
 # forces the recheck.
+#
+# RE-CHECKED 2026-08-30 (this wave at its expiry, the 2026-08-05 wave below
+# early because the blocker is one and the same): the relay lock still
+# resolves @earendil-works/pi-coding-agent 0.79.10, whose shrinkwrap still
+# pins brace-expansion 5.0.6, protobufjs 7.6.4, and undici 8.5.0 -- verified
+# directly in connectors/relay/package-lock.json. Upstream has republished
+# through 0.84.4; whether a newer shrinkwrap clears these pins is unverified
+# from this environment (registry TLS blocked), and moving the resolved
+# version is bounded by agent-relay's declared range -- the open connector
+# decision recorded above. Both waves renewed to one aligned expiry so the
+# next recheck is a single dated event.
 
 [[IgnoredVulns]]
 id = "GHSA-3jxr-9vmj-r5cp"
-ignoreUntil = 2026-08-26
+ignoreUntil = 2026-09-30
 reason = """brace-expansion 5.0.6, CVSS 7.7, fixed in 5.0.7. Transitive under
 @earendil-works/pi-coding-agent, whose published npm-shrinkwrap.json pins it and
 which `overrides` cannot penetrate. minimatch declares ^5.0.5, so the patched
@@ -109,14 +165,14 @@ moved (a semver-major decision, recorded open)."""
 
 [[IgnoredVulns]]
 id = "GHSA-mh99-v99m-4gvg"
-ignoreUntil = 2026-08-26
+ignoreUntil = 2026-09-30
 reason = """brace-expansion 5.0.6, CVSS 7.5, fixed in 5.0.8. Same package, same
 shrinkwrap, same blocker as GHSA-3jxr-9vmj-r5cp -- listed separately because a
 combined entry would silence one advisory the day the other is fixed."""
 
 [[IgnoredVulns]]
 id = "GHSA-j3f2-48v5-ccww"
-ignoreUntil = 2026-08-26
+ignoreUntil = 2026-09-30
 reason = """protobufjs 7.6.4, CVSS 5.3, fixed in 7.6.5. Transitive under
 @earendil-works/pi-coding-agent via @google/genai, which declares ^7.5.4 -- the
 patched version is in range and the published shrinkwrap forbids it."""
@@ -132,7 +188,7 @@ patched version is in range and the published shrinkwrap forbids it."""
 
 [[IgnoredVulns]]
 id = "GHSA-rgw5-rvv9-x895"
-ignoreUntil = 2026-09-05
+ignoreUntil = 2026-09-30
 reason = """brace-expansion 5.0.6, CVSS 7.5, fixed in 5.0.9. Third advisory
 against the same shrinkwrap-pinned copy as GHSA-3jxr-9vmj-r5cp and
 GHSA-mh99-v99m-4gvg; listed separately so fixing one does not silence another.
@@ -140,31 +196,31 @@ Clears when pi-coding-agent republishes with a refreshed shrinkwrap."""
 
 [[IgnoredVulns]]
 id = "GHSA-4cwx-7wf7-3272"
-ignoreUntil = 2026-09-05
+ignoreUntil = 2026-09-30
 reason = """undici 8.5.0, CVSS 7.4, fixed in 8.9.0. Shrinkwrap-pinned under
 @earendil-works/pi-coding-agent; overrides verified unable to reach it (see the
 2026-07 wave note). Connectors/relay remains declaration-only."""
 
 [[IgnoredVulns]]
 id = "GHSA-8xcm-r25x-g524"
-ignoreUntil = 2026-09-05
+ignoreUntil = 2026-09-30
 reason = """undici 8.5.0, CVSS 4.8, fixed in 8.9.0. Same shrinkwrap-pinned copy
 as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
 
 [[IgnoredVulns]]
 id = "GHSA-jr45-8vmc-qm54"
-ignoreUntil = 2026-09-05
+ignoreUntil = 2026-09-30
 reason = """undici 8.5.0, CVSS 5.9, fixed in 8.9.0. Same shrinkwrap-pinned copy
 as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
 
 [[IgnoredVulns]]
 id = "GHSA-m8rv-5g2x-5cg5"
-ignoreUntil = 2026-09-05
+ignoreUntil = 2026-09-30
 reason = """undici 8.5.0, CVSS 4.2, fixed in 8.9.0. Same shrinkwrap-pinned copy
 as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
 
 [[IgnoredVulns]]
 id = "GHSA-v3r7-h72x-cjcm"
-ignoreUntil = 2026-09-05
+ignoreUntil = 2026-09-30
 reason = """undici 8.5.0, CVSS 4.8, fixed in 8.9.0. Same shrinkwrap-pinned copy
 as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
