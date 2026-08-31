@@ -11,5 +11,5 @@ rtoml
 # the mounts job failed with a bare `NameError: name 'build_server' is not
 # defined`. A range is the honest statement of what this code supports; lifting
 # it is a port of the server, not a version bump.
-mcp<2
+mcp<3
 anthropic

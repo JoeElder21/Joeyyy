@@ -1,11 +1,11 @@
 # Optional runtime integrations. Install only the adapters enabled in deployment.
 # No credentials, connector identifiers, or private source data belong here.
 -r requirements.txt
-langgraph>=0.2
-crewai>=0.80
-prefect>=3.0
-mem0ai>=2.0.14
-llama-index>=0.14.23
-langchain>=0.3
+langgraph>=1.2.11
+crewai>=1.15.17
+prefect>=3.8.3
+mem0ai>=2.0.18
+llama-index>=0.14.24
+langchain>=1.3.16
 jsonschema>=4.23
 pydantic>=2.13.4
