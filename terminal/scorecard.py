@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 
 EQUITY_WEIGHTS: dict[str, int] = {
@@ -76,7 +77,10 @@ class ScorecardResult:
 
 
 def clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("factor values must be finite numbers")
+    return max(0.0, min(1.0, number))
 
 
 def input_digest(payload: object) -> str:
@@ -169,7 +173,14 @@ def clears_hurdle(expected_upside: float | None, hurdle: float = UPSIDE_HURDLE) 
 
 
 def rank(results: dict[str, ScorecardResult]) -> list[tuple[str, ScorecardResult]]:
-    """Ranked, deterministic: score descending, then coverage, then id."""
+    """Ranked, deterministic: fully covered first, then score, then coverage, then id."""
     ranked = [(key, r) for key, r in results.items() if r.status != INSUFFICIENT]
-    ranked.sort(key=lambda item: (-(item[1].score or 0.0), -item[1].coverage, item[0]))
+    ranked.sort(
+        key=lambda item: (
+            item[1].status != SCORED,
+            -(item[1].score or 0.0),
+            -item[1].coverage,
+            item[0],
+        )
+    )
     return ranked

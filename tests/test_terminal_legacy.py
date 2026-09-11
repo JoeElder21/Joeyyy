@@ -14,7 +14,10 @@ PAGE = """<html><body>
 <div class="card"><div class="name">SCHWAB ROLLOVER</div><div class="val">$500.00</div><div class="d">cash <b>$0.01</b> — fully invested</div></div>
 <div class="card"><div class="name">COINBASE</div><div class="val">$300.00</div><div class="d">stocks + cash $200.00 at the Sep 1 mark</div></div>
 </div></section>
-<section id="optimizer"><h2>BOARD 21</h2><h3>01 &middot; CHARLES SCHWAB &mdash; TWO IRAs, ONE BOOK &middot; $1,500.00</h3>
+<section id="optimizer"><h2>BOARD 21</h2><h3>02 &middot; COINBASE CRYPTO &mdash; $300.00</h3>
+<table><tr><th>#</th><th>POSITION</th><th>NOW</th><th>TARGET</th><th>MOVE</th><th>SCORE</th><th>ACTION</th><th>THE CASE</th></tr>
+<tr><td>1</td><td>CCC</td><td>$100.00 33.33%</td><td>$100.00 33.33%</td><td>$0.00</td><td>&mdash;</td><td>HOLD</td><td>case</td></tr></table>
+<h3>01 &middot; CHARLES SCHWAB &mdash; TWO IRAs, ONE BOOK &middot; $1,500.00</h3>
 <table><tr><th>#</th><th>POSITION</th><th>NOW</th><th>TARGET</th><th>MOVE</th><th>SCORE</th><th>ACTION</th><th>THE CASE</th></tr>
 <tr><td>1</td><td>AAA</td><td>$900.00 60.00%</td><td>$750.00 50.00%</td><td>−$150.00</td><td>80.0</td><td>TRIM</td><td>case</td></tr></table></section>
 <section id="stocks"><h2>BOARD 01 &mdash; STOCKS</h2><div class="sub">stamp: <span data-stamp="stocks">Fri Sep 11, 6:41 AM — 6AM run: 2 of 2 re-quoted</span></div>
@@ -25,7 +28,8 @@ PAGE = """<html><body>
 <section id="pumpfun"><h2>BOARD 06</h2><div class="sub"><span data-stamp="pumpfun">6AM audit, 3 of 4 priced</span></div>
 <table><tr><th>#</th><th>ASSET</th><th>PRICE</th><th>ZONE</th><th>THE CASE</th></tr><tr><td>1</td><td>CCC</td><td>$0.01</td><td>BUY</td><td>x</td></tr></table></section>
 <section id="allcall"><h2>BOARD 17</h2><table><tr><th>DATE</th><th>THE CALL</th><th>BASIS</th><th>EXPECTED</th><th>CHECK</th><th>RESULT</th></tr>
-<tr><td>Sep 3</td><td>TOP 5 (equal weight)</td><td>basis</td><td>expected</td><td>Oct 3</td><td>PENDING</td></tr></table></section>
+<tr><td>Sep 3</td><td>TOP 5 (equal weight)</td><td>basis</td><td>expected</td><td>Oct 3</td><td>PENDING</td></tr>
+<tr><td>undated</td><td>A call with no readable date</td><td>basis</td><td>expected</td><td>later</td><td>PENDING</td></tr></table></section>
 <section id="ledger"><h2>BOARD 07</h2><table><tr><th>CALL</th><th>WHAT WAS SAID</th><th>WHAT HAPPENED</th><th>SCORE</th></tr>
 <tr><td>A</td><td>b</td><td>c</td><td>HIT</td></tr></table></section>
 <!--R:runlog:ANY:APPEND:1-->
@@ -61,7 +65,8 @@ class LegacyParseTests(unittest.TestCase):
         self.assertEqual(sections["action"].todos[0], {"title": "1 · Do X", "body": "Because Y"})
         self.assertEqual(ticker, ["6:41 AM RUN - hello", "6:41 AM RUN - hello"])
         self.assertEqual(
-            sections["optimizer"].h3[0], "01 · CHARLES SCHWAB — TWO IRAs, ONE BOOK · $1,500.00"
+            sections["optimizer"].tables[1].heading,
+            "01 · CHARLES SCHWAB — TWO IRAs, ONE BOOK · $1,500.00",
         )
 
 
@@ -120,6 +125,17 @@ class MigrationTests(unittest.TestCase):
                 continue
             with self.subTest(path=path):
                 self.assertEqual(schema.validate(doc, schema.load_schema(name)), [])
+
+    def test_review_fixes_hold(self):
+        pooled = self.docs["portfolios/schwab-combined"]
+        self.assertEqual(pooled["verification"], "screenshot-verified")
+        self.assertEqual(self.docs["portfolios/coinbase"]["positions"][0]["symbol"], "CCC")
+        rec = self.docs["recommendations/rec-legacy-001"]
+        self.assertEqual(rec["symbol"], "CALL-001")
+        self.assertEqual(len([p for p in self.docs if p.startswith("recommendations/")]), 1)
+        run_doc = next(d for p, d in self.docs.items() if p.startswith("runs/migration-"))
+        self.assertTrue(any("skipped" in n for n in run_doc["notes"]))
+        self.assertEqual(run_doc["base_sha"], "cccc")
 
 
 if __name__ == "__main__":

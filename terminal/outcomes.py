@@ -2,9 +2,10 @@
 
 A recommendation published at 6:41 AM cannot be graded from the prior close it
 was written on: nobody could trade that price. The reference is the first
-regular-session open after publication (or the publication-time quote when the
-market was open). A recommendation with no tradable reference is VOID, never
-graded on a number that did not exist.
+regular-session open print on the next session's date (or the first print
+after publication on the same session date when the market was open). A
+recommendation with no tradable reference is VOID, never graded on a number
+that did not exist, and a WATCH or PASS carries no position to grade.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from terminal import clock
 OPEN, HIT, MISS, VOID = "OPEN", "HIT", "MISS", "VOID"
 LONG_STANCES = frozenset({"BUY", "ADD", "HOLD"})
 SHORT_STANCES = frozenset({"TRIM", "EXIT", "AVOID", "REDUCE"})
+NEUTRAL_STANCES = frozenset({"WATCH", "PASS"})
+HORIZON_WINDOW = timedelta(days=5)
 
 
 @dataclass(frozen=True)
@@ -50,31 +53,45 @@ class Outcome:
         }
 
 
+def _ordered(observations: list[Observation]) -> list[Observation]:
+    return sorted(observations, key=lambda o: clock.to_utc(o.at))
+
+
 def tradable_reference(
     published_at: datetime, observations: list[Observation]
 ) -> Observation | None:
-    """The first observation a reader could have traded on.
+    """The first observation a reader could have traded on, or None.
 
-    Market open at publication: the first quote at or after publication.
-    Otherwise: the first regular-session ``open`` print at or after the next open.
+    Market open at publication: the first print at or after publication on the
+    same session date. Otherwise: the first ``open`` print dated the next
+    regular session. A print from any later day is not the reference.
     """
     published = clock.to_utc(published_at)
-    ordered = sorted(observations, key=lambda o: clock.to_utc(o.at))
     if clock.session_state(published) == "OPEN":
-        for obs in ordered:
-            if clock.to_utc(obs.at) >= published:
+        session_date = clock.to_et(published).date()
+        for obs in _ordered(observations):
+            at = clock.to_utc(obs.at)
+            if at >= published and clock.to_et(at).date() == session_date:
                 return obs
         return None
-    next_open = clock.to_utc(clock.next_regular_open(published))
-    for obs in ordered:
-        if obs.kind == "open" and clock.to_utc(obs.at) >= next_open:
+    next_open = clock.next_regular_open(published)
+    for obs in _ordered(observations):
+        at = clock.to_utc(obs.at)
+        if (
+            obs.kind == "open"
+            and at >= clock.to_utc(next_open)
+            and clock.to_et(at).date() == next_open.date()
+        ):
             return obs
     return None
 
 
-def _at_or_after(observations: list[Observation], moment: datetime) -> Observation | None:
-    for obs in sorted(observations, key=lambda o: clock.to_utc(o.at)):
-        if clock.to_utc(obs.at) >= moment:
+def _within(
+    observations: list[Observation], moment: datetime, window: timedelta
+) -> Observation | None:
+    for obs in _ordered(observations):
+        at = clock.to_utc(obs.at)
+        if moment <= at <= moment + window:
             return obs
     return None
 
@@ -87,16 +104,36 @@ def evaluate(
     benchmark_prices: list[Observation],
     now: datetime,
 ) -> Outcome:
-    """Grade one recommendation. Long stances win by beating the benchmark;
-    reduce stances win when the asset trails it; HOLD wins when it is not
-    negative on either measure."""
+    """Grade one recommendation.
+
+    Long stances win by beating the benchmark; reduce stances win when the
+    asset trails it; a HOLD misses only when the asset both fell and trailed
+    the benchmark. WATCH and PASS carry no position and are VOID.
+    """
     stance = stance.upper()
+    if stance in NEUTRAL_STANCES:
+        return Outcome(
+            VOID, None, None, None, None, None, None, "stance carries no position to grade"
+        )
     if stance not in LONG_STANCES | SHORT_STANCES:
         raise ValueError(f"unknown stance {stance!r}")
     reference = tradable_reference(published_at, asset_prices)
     bench_ref = tradable_reference(published_at, benchmark_prices)
     if reference is None or bench_ref is None:
         return Outcome(VOID, None, None, None, None, None, None, "no tradable reference price")
+    if clock.to_et(reference.at).date() != clock.to_et(bench_ref.at).date():
+        return Outcome(
+            VOID,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "benchmark reference is not on the same session",
+        )
+    if reference.price <= 0 or bench_ref.price <= 0:
+        return Outcome(VOID, None, None, None, None, None, None, "reference price is not positive")
     horizon_end = clock.to_utc(reference.at) + timedelta(days=horizon_days)
     if clock.to_utc(now) < horizon_end:
         return Outcome(
@@ -109,19 +146,11 @@ def evaluate(
             None,
             "horizon not reached",
         )
-    end_obs = _at_or_after(asset_prices, horizon_end)
-    bench_end = _at_or_after(benchmark_prices, horizon_end)
+    end_obs = _within(asset_prices, horizon_end, HORIZON_WINDOW)
+    bench_end = _within(benchmark_prices, horizon_end, HORIZON_WINDOW)
     if end_obs is None or bench_end is None:
-        return Outcome(
-            OPEN,
-            reference.price,
-            reference.at,
-            horizon_end,
-            None,
-            None,
-            None,
-            "horizon price not observed yet",
-        )
+        note = f"no observation within {HORIZON_WINDOW.days} days of the horizon end"
+        return Outcome(OPEN, reference.price, reference.at, horizon_end, None, None, None, note)
     realized = round(end_obs.price / reference.price - 1.0, 6)
     bench = round(bench_end.price / bench_ref.price - 1.0, 6)
     relative = round(realized - bench, 6)

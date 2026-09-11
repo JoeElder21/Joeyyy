@@ -62,7 +62,9 @@ class ClockTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             clock.to_et(datetime(2026, 9, 11, 6, 0))
         self.assertEqual(clock.stamp(utc("2026-09-11T10:41:00")), "Fri Sep 11, 2026, 6:41 AM ET")
-        self.assertEqual(clock.calendar_covered_through(), 2026)
+        self.assertEqual(clock.calendar_covered_through(), 2027)
+        self.assertFalse(clock.is_trading_day(date(2027, 12, 24)))
+        self.assertTrue(clock.is_trading_day(date(2027, 1, 4)))
 
 
 if __name__ == "__main__":

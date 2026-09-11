@@ -127,7 +127,10 @@ def verify_chain(records: list[dict]) -> ChainReport:
                 breaks.append(
                     f"{record.get('run_id')} built on {str(record.get('base_sha'))[:12]}, expected {previous[:12]}"
                 )
-            previous = record.get("result_sha") or previous
+            if not record.get("result_sha"):
+                breaks.append(f"{record.get('run_id')} published without a result hash")
+            else:
+                previous = record["result_sha"]
     return ChainReport(not breaks and not duplicates, len(records), breaks, duplicates)
 
 
@@ -135,7 +138,11 @@ class RunLedger:
     """An append-only list of manifests with idempotency enforced on append."""
 
     def __init__(self, records: list[dict] | None = None) -> None:
-        self.records: list[dict] = list(records or [])
+        # Stores list documents by id, and run ids are hashes: order the ledger by time so
+        # the chain is walked as it happened, not in hash order.
+        self.records: list[dict] = sorted(
+            records or [], key=lambda r: (r.get("started_at") or "", r.get("run_id") or "")
+        )
 
     def keys(self) -> set[str]:
         return {r["idempotency_key"] for r in self.records if r.get("status") == "PUBLISHED"}

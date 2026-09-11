@@ -1,9 +1,11 @@
 """The independent ranking critic: two rounds, evidence-cited, then a verdict.
 
 The critic cannot edit a recommendation; it can only challenge it. The
-responder may accept, rebut with evidence, or revise. After the second round
-any blocking challenge still open BLOCKS the release. A challenge without an
-evidence id is recorded as judgment and cannot block on its own.
+responder may accept, rebut with evidence, or revise. Only a revision or an
+evidence-backed rebuttal resolves a challenge: ``accept`` records agreement
+without action, so accepting a blocking challenge leaves it open. After the
+second round any blocking challenge still open BLOCKS the release. A challenge
+without an evidence id is recorded as judgment and cannot block on its own.
 """
 
 from __future__ import annotations
@@ -73,7 +75,7 @@ def run_debate(
     record = DebateRecord(UPHELD, 0)
     current = proposal
     revised = False
-    open_blocking: dict[str, Challenge] = {}
+    open_blocking: dict[tuple[str, str], Challenge] = {}
     for round_number in range(1, MAX_ROUNDS + 1):
         challenges = critic(current, round_number)
         if not challenges:
@@ -82,9 +84,18 @@ def run_debate(
             break
         current, responses = responder(current, challenges, round_number)
         _validate(challenges, responses)
-        answered = {r.target: r for r in responses}
+        by_target: dict[str, list[Response]] = {}
+        for response in responses:
+            by_target.setdefault(response.target, []).append(response)
+        seen: dict[str, int] = {}
         for challenge in challenges:
-            response = answered.get(challenge.target)
+            # Responses answer a target's challenges in order, so two challenges on one
+            # target are resolved one by one instead of by a single reply.
+            position = seen.get(challenge.target, 0)
+            seen[challenge.target] = position + 1
+            candidates = by_target.get(challenge.target, [])
+            response = candidates[position] if position < len(candidates) else None
+            key = (challenge.target, challenge.objection)
             if response is not None and response.disposition == "revise":
                 revised = True
             resolved = response is not None and (
@@ -92,9 +103,9 @@ def run_debate(
                 or (response.disposition == "rebut" and bool(response.evidence_ids))
             )
             if challenge.severity == "blocking" and not challenge.is_judgment and not resolved:
-                open_blocking[challenge.target] = challenge
+                open_blocking[key] = challenge
             elif resolved:
-                open_blocking.pop(challenge.target, None)
+                open_blocking.pop(key, None)
         record.transcript.append(
             {
                 "round": round_number,
@@ -107,7 +118,7 @@ def run_debate(
             }
         )
         record.rounds = round_number
-    record.open_blocking = sorted(open_blocking)
+    record.open_blocking = sorted(f"{target}: {objection}" for target, objection in open_blocking)
     if record.open_blocking:
         record.verdict = BLOCKED
     elif revised:

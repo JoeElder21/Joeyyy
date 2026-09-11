@@ -11,7 +11,11 @@ class GateTests(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.failed, ["going_concern"])
         self.assertEqual(result.checked, ["going_concern", "honeypot"])
-        self.assertTrue(gates.asset_gate({}).passed)
+        self.assertEqual(len(result.unchecked), len(gates.FATAL_FLAGS) - 2)
+        empty = gates.asset_gate({})
+        self.assertFalse(empty.passed)
+        self.assertEqual(empty.unchecked, sorted(gates.FATAL_FLAGS))
+        self.assertTrue(gates.asset_gate(dict.fromkeys(gates.FATAL_FLAGS, False)).passed)
         with self.assertRaises(ValueError):
             gates.asset_gate({"vibes": True})
 
@@ -27,6 +31,10 @@ class GateTests(unittest.TestCase):
         }
         return gates.release_gates(**(base | overrides))
 
+    def test_no_boards_is_not_a_labelled_run(self):
+        checks = self._checks(boards_with_status={})
+        self.assertEqual([c.name for c in checks if not c.passed], ["freshness_labelled"])
+
     def test_release_gates_pass_together(self):
         checks = self._checks()
         self.assertEqual(len(checks), 7)
@@ -40,7 +48,7 @@ class GateTests(unittest.TestCase):
             "freshness_labelled": {"boards_with_status": {"a": "unknown"}},
             "recommendations_immutable": {"immutable_violations": ["recommendations/r1"]},
             "invariants": {"invariant_failures": ["schwab pooled"]},
-            "critic": {"critic_verdict": "BLOCKED"},
+            "critic": {"critic_verdict": ""},
         }
         for name, override in failing.items():
             with self.subTest(gate=name):

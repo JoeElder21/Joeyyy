@@ -39,6 +39,11 @@ class ImmutableDocumentError(RuntimeError):
     """A recommendation already exists at this path."""
 
 
+def is_immutable(collection: str) -> bool:
+    """Immutability follows the top-level collection, however deep the path nests."""
+    return collection.split("/")[0] in IMMUTABLE
+
+
 def split_path(path: str) -> tuple[str, str]:
     parts = path.split("/")
     if len(parts) % 2 or any(not SEGMENT.match(p) for p in parts):
@@ -88,15 +93,16 @@ class MemoryStore:
         if problems:
             raise ValueError("; ".join(problems))
         collection, _ = split_path(path)
-        if collection in IMMUTABLE and path in self._docs and self._docs[path] != data:
+        incoming = json.loads(json.dumps(data))
+        if is_immutable(collection) and path in self._docs and self._docs[path] != incoming:
             raise ImmutableDocumentError(path)
         if path not in self._docs and len(self._docs) >= MAX_DOCS:
             raise RuntimeError("document quota reached")
-        self._docs[path] = json.loads(json.dumps(data))
+        self._docs[path] = incoming
 
     def delete(self, path: str) -> None:
         collection, _ = split_path(path)
-        if collection in IMMUTABLE:
+        if is_immutable(collection):
             raise ImmutableDocumentError(path)
         self._docs.pop(path, None)
 
@@ -163,10 +169,13 @@ def write_plan(
 def immutable_violations(
     before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]]
 ) -> list[str]:
-    """Recommendation paths whose content changed between two states."""
+    """Recommendation paths whose content changed, or that vanished, between two states.
+
+    ``after`` is the complete intended state; a recommendation missing from it was deleted.
+    """
     violations = []
     for path, doc in before.items():
         collection, _ = split_path(path)
-        if collection in IMMUTABLE and path in after and after[path] != doc:
+        if is_immutable(collection) and (path not in after or after[path] != doc):
             violations.append(path)
     return sorted(violations)

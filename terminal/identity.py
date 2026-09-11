@@ -82,7 +82,7 @@ def cash(currency: str = "USD", account: str = "any") -> AssetId:
 
 
 def parse(text: str, symbol: str | None = None) -> AssetId:
-    """Parse a canonical id such as ``eq:XNAS:NVDA`` or ``cx:pulsechain:0x...``."""
+    """Parse a canonical id such as ``eq:XNAS:EXA`` or ``cx:pulsechain:0x...``."""
     parts = text.split(":", 2)
     if len(parts) != 3 or parts[0] not in _CLASS_BY_PREFIX:
         raise ValueError(f"not a canonical asset id: {text!r}")

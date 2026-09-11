@@ -44,8 +44,35 @@ class CriticTests(unittest.TestCase):
 
         _, record = critic.run_debate({}, critic_fn, responder)
         self.assertEqual(record.verdict, critic.BLOCKED)
-        self.assertEqual(record.open_blocking, ["rec-1"])
+        self.assertEqual(record.open_blocking, ["rec-1: objection"])
         self.assertEqual(calls, [1, 2])
+
+    def test_accepting_a_blocking_challenge_does_not_resolve_it(self):
+        _, record = critic.run_debate(
+            {},
+            lambda p, r: [blocking("rec-1")],
+            lambda p, c, r: (
+                p,
+                [critic.Response("rec-1", "accept", "agreed, nothing changed", ())],
+            ),
+        )
+        self.assertEqual(record.verdict, critic.BLOCKED)
+
+    def test_two_challenges_on_one_target_are_resolved_separately(self):
+        def critic_fn(proposal, round_number):
+            if round_number == 1:
+                return [
+                    critic.Challenge("rec-1", "sources", "blocking", ("ev-1",)),
+                    critic.Challenge("rec-1", "coverage", "blocking", ("ev-2",)),
+                ]
+            return []
+
+        def responder(proposal, challenges, round_number):
+            return proposal, [critic.Response("rec-1", "rebut", "sources are fine", ("ev-9",))]
+
+        _, record = critic.run_debate({}, critic_fn, responder)
+        self.assertEqual(record.verdict, critic.BLOCKED)
+        self.assertEqual(record.open_blocking, ["rec-1: coverage"])
 
     def test_rebuttal_with_evidence_resolves(self):
         _, record = critic.run_debate(

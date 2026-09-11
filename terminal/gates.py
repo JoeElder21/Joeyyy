@@ -31,17 +31,29 @@ class GateResult:
     passed: bool
     failed: list[str]
     checked: list[str]
+    unchecked: list[str]
 
     def as_dict(self) -> dict:
-        return {"passed": self.passed, "failed": list(self.failed), "checked": list(self.checked)}
+        return {
+            "passed": self.passed,
+            "failed": list(self.failed),
+            "checked": list(self.checked),
+            "unchecked": list(self.unchecked),
+        }
 
 
 def asset_gate(flags: dict[str, bool]) -> GateResult:
+    """A gate passes only when every fatal flag was checked and none tripped.
+
+    A flag that was never looked at is not a flag that passed: an unchecked gate
+    keeps the asset out of the ranking until the research fills it in.
+    """
     unknown = set(flags) - set(FATAL_FLAGS)
     if unknown:
         raise ValueError(f"unknown fatal flags: {sorted(unknown)}")
     failed = sorted(name for name, tripped in flags.items() if tripped)
-    return GateResult(not failed, failed, sorted(flags))
+    unchecked = sorted(set(FATAL_FLAGS) - set(flags))
+    return GateResult(not failed and not unchecked, failed, sorted(flags), unchecked)
 
 
 @dataclass(frozen=True)
@@ -83,8 +95,13 @@ def release_gates(
         ),
         GateCheck(
             "freshness_labelled",
-            all(status in {"LIVE", "STALE", "DEGRADED"} for status in boards_with_status.values()),
-            "every board carries a computed status",
+            bool(boards_with_status)
+            and all(
+                status in {"LIVE", "STALE", "DEGRADED"} for status in boards_with_status.values()
+            ),
+            "every board carries a computed status"
+            if boards_with_status
+            else "no board was assessed",
         ),
         GateCheck(
             "recommendations_immutable",
@@ -98,7 +115,9 @@ def release_gates(
             not invariant_failures,
             "all page invariants hold" if not invariant_failures else "; ".join(invariant_failures),
         ),
-        GateCheck("critic", critic_verdict != "BLOCKED", f"critic verdict {critic_verdict}"),
+        GateCheck(
+            "critic", critic_verdict in {"UPHELD", "REVISED"}, f"critic verdict {critic_verdict}"
+        ),
     ]
     return checks
 

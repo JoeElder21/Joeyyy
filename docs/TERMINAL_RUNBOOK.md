@@ -23,8 +23,10 @@ Exit codes: `dry-run` returns 0 on `PUBLISHED` or `SKIPPED`, 2 on `BLOCKED`;
    `read_db`) before doing anything else.
 2. It computes the idempotency key for the ET date (`daily:YYYY-MM-DD`). If
    the key is already published, the run stops with `SKIPPED` and says so.
-3. It acquires the lease on `runs/lock` (`acquire({holder, ttlMs})`). Busy is a
-   normal outcome: stop, do not retry in a loop.
+3. It acquires the lease on `runs/lock` (`acquire({holder, ttlMs})` on the
+   store; the adapter is not built yet, so until it is the orchestrator holds
+   the package's in-memory lock and the Routine schedule is the only guard
+   against two writers). Busy is a normal outcome: stop, do not retry in a loop.
 4. It executes the stages in `TERMINAL_ARCHITECTURE.md`. Analyst roles return
    documents; nothing is written until the release gates pass.
 5. It writes documents in batches of at most 50, then swaps

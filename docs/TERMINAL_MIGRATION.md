@@ -8,8 +8,8 @@ legacy page and writes 110 documents:
 | Documents | From | Treatment |
 | --- | --- | --- |
 | `boards/*` (9) | Boards 01–06, 13, 16, 17 | rows carried with `legacy_zone`, `scorecard: null`, status `LEGACY_UNSCORED`; board status computed from the legacy stamp |
-| `portfolios/*` (8) | account cards, optimizer books | totals and cash from the screenshot-marked cards; the two Schwab IRAs as distinct documents; the legacy pooled book carried and labelled |
-| `recommendations/rec-legacy-*` (23) | Board 17 calls table | immutable, lens `legacy`, stance `WATCH`, no invented reference price |
+| `portfolios/*` (8) | account cards, optimizer books | totals and cash from the screenshot-marked cards; the two Schwab IRAs as distinct documents; the legacy pooled book carried under its own heading total (labelled `stated-unverified` when the heading carries none) |
+| `recommendations/rec-legacy-*` (23) | Board 17 calls table | immutable, lens `legacy`, stance `WATCH`, neutral `CALL-nnn` symbols, no invented reference price; a row whose date cannot be read is skipped and named in the run notes |
 | `outcomes/legacy-*` (50) | Board 07 calls ledger | status `LEGACY`, prose grade carried |
 | `legacy/*` (14) | action, expiry, optimizer, accounts, X-ray, ledger, journal, signal, calendar, health, feed, ticker, capsule, gates | frozen text and tables |
 | `learning/current` | capsule zone scorecards | one-day tier returns carried as windows; verdict computed |

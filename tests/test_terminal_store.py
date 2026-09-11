@@ -69,6 +69,16 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.write_plan({"nope/x": {}})
 
+    def test_nested_paths_and_deletions_are_immutable(self):
+        s = store.MemoryStore()
+        s.set("recommendations/2026/09/r2", {"stance": "BUY"})
+        with self.assertRaises(store.ImmutableDocumentError):
+            s.set("recommendations/2026/09/r2", {"stance": "SELL"})
+        s.set("recommendations/2026/09/r2", {"stance": "BUY"})  # identical content is not a change
+        before = {"recommendations/r1": {"a": 1}}
+        self.assertEqual(store.immutable_violations(before, {}), ["recommendations/r1"])
+        self.assertEqual(store.immutable_violations(before, dict(before)), [])
+
 
 if __name__ == "__main__":
     unittest.main()

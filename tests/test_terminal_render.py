@@ -53,13 +53,26 @@ class RenderTests(unittest.TestCase):
         payload = page.split('<script id="snapshot-data" type="application/json">', 1)[1].split(
             "</script>", 1
         )[0]
-        self.assertIn("<\\/script>", payload)
-        self.assertNotIn("</script><b>bad</b>", payload)
+        self.assertNotIn("<", payload)
+        self.assertIn("\\u003c/script>", payload)
 
     def test_empty_store_still_renders_all_views(self):
         page = render.render({})
         for view_id, _ in render.VIEWS:
             self.assertIn(f'id="view-{view_id}"', page)
+
+    def test_comment_opener_cannot_swallow_the_script_block(self):
+        docs = copy.deepcopy(self.docs)
+        docs["learning/current"]["lessons"].append({"date": "x", "text": "<!--<script>"})
+        page = render.render(docs)
+        marker = '<script id="snapshot-data" type="application/json">'
+        payload = page.split(marker, 1)[1].split("</script>", 1)[0]
+        self.assertNotIn("<!--", payload)
+        self.assertIn("<script>", page.split(marker, 1)[1].split("</script>", 1)[1])
+
+    def test_views_are_readable_without_javascript_and_load_no_fonts(self):
+        self.assertIn("<noscript><style>section.view{display:block}</style></noscript>", self.page)
+        self.assertNotIn("fonts.googleapis.com", self.page)
 
 
 if __name__ == "__main__":

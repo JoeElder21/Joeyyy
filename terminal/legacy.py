@@ -56,8 +56,20 @@ ACCOUNT_IDS: list[tuple[str, str, str, str]] = [
     ("TON", "ton", "self-custody wallet", "TON"),
     ("COINBASE", "coinbase", "Coinbase", "exchange account"),
     ("PUMP.FUN", "pumpfun", "self-custody wallet", "Solana / pump.fun"),
-    ("JOEYWANKENOBI", "pumpfun", "self-custody wallet", "Solana / pump.fun"),
 ]
+BOOK_KEYWORDS: list[tuple[str, str]] = [
+    ("SCHWAB", "schwab-combined"),
+    ("COINBASE", "coinbase"),
+    ("PULSECHAIN", "pulsechain"),
+    ("TON", "ton"),
+    ("PUMP.FUN", "pumpfun"),
+    ("SOFI", "sofi"),
+]
+
+
+def has_word(text: str, needle: str) -> bool:
+    """``needle`` as a whole word inside ``text`` (upper-cased comparison)."""
+    return re.search(rf"(?<![A-Z]){re.escape(needle)}(?![A-Z])", text.upper()) is not None
 
 
 def clean(text: str) -> str:
@@ -69,6 +81,7 @@ class Table:
     header: list[str] = field(default_factory=list)
     rows: list[list[str]] = field(default_factory=list)
     row_attrs: list[dict[str, str]] = field(default_factory=list)
+    heading: str = ""  # the nearest preceding h3, so tables are matched by name not position
 
 
 @dataclass
@@ -99,6 +112,7 @@ class _PageParser(HTMLParser):
         self.row_is_header = False
         self.card: dict[str, str] | None = None
         self.todo: dict[str, str] | None = None
+        self.last_h3 = ""
 
     @staticmethod
     def _classes(attrs: list[tuple[str, str | None]]) -> set[str]:
@@ -124,7 +138,7 @@ class _PageParser(HTMLParser):
             elif tag == "div" and "sub" in classes and not self.current.sub:
                 role = "sub"
             elif tag == "table":
-                self.table = Table()
+                self.table = Table(heading=self.last_h3)
             elif tag == "tr" and self.table is not None:
                 self.row = []
                 self.row_attrs = {k: v for k, v in attr.items() if k.startswith("data-") and v}
@@ -192,6 +206,7 @@ class _PageParser(HTMLParser):
             section.h2 = text
         elif role == "h3":
             section.h3.append(text)
+            self.last_h3 = text
         elif role == "stamp":
             section.stamp = text
         elif role == "sub":
@@ -256,7 +271,7 @@ def money_text(value: float | None) -> str:
 
 
 def symbol_of(cell: str) -> str:
-    """``"● ZETA"`` -> ``ZETA``; ``"AVAX L1/L2 · $3.28B"`` -> ``AVAX``."""
+    """``"● AAA"`` -> ``AAA``; ``"BBB L1/L2 · $1.0B"`` -> ``BBB``."""
     text = cell.replace("●", " ").strip()
     return text.split()[0] if text else ""
 
@@ -334,7 +349,7 @@ def portfolio_docs(sections: dict[str, Section], as_of: str) -> dict[str, dict]:
     for card in accounts.cards:
         name = card["name"].upper()
         for needle, portfolio_id, custodian, kind in ACCOUNT_IDS:
-            if needle in name and portfolio_id not in docs:
+            if has_word(name, needle) and portfolio_id not in docs:
                 detail = card["d"]
                 cash_match = re.search(
                     r"cash\s*\$([\d,]+(?:\.\d+)?)\s*(?:=\s*[\d.]+%|\u2014\s*fully invested)",
@@ -369,9 +384,13 @@ def portfolio_docs(sections: dict[str, Section], as_of: str) -> dict[str, dict]:
         docs["schwab-roth"]["distinct_from"] = ["schwab-rollover"]
         docs["schwab-rollover"]["distinct_from"] = ["schwab-roth"]
     if optimizer is not None:
-        book_ids = ["schwab-combined", "coinbase", "pulsechain", "ton", "pumpfun", "sofi"]
         tables = [t for t in optimizer.tables if t.header and t.header[:2] == ["#", "POSITION"]]
-        for portfolio_id, table in zip(book_ids, tables, strict=False):
+        for table in tables:
+            portfolio_id = next(
+                (pid for needle, pid in BOOK_KEYWORDS if has_word(table.heading, needle)), None
+            )
+            if portfolio_id is None:
+                continue
             positions = []
             for cells in table.rows:
                 if len(cells) < 6:
@@ -391,7 +410,7 @@ def portfolio_docs(sections: dict[str, Section], as_of: str) -> dict[str, dict]:
                     }
                 )
             if portfolio_id == "schwab-combined":
-                stated = next((money(h) for h in optimizer.h3 if "SCHWAB" in h.upper()), None)
+                stated = money(table.heading)
                 row_sum = round(sum(p["market_value"] or 0.0 for p in positions), 2)
                 docs[portfolio_id] = {
                     "portfolio_id": portfolio_id,
@@ -400,8 +419,8 @@ def portfolio_docs(sections: dict[str, Section], as_of: str) -> dict[str, dict]:
                     "account_kind": "legacy pooled book",
                     "as_of": as_of,
                     "source": "screenshot",
-                    "verification": "screenshot-verified",
-                    "total_value": stated or row_sum or None,
+                    "verification": "screenshot-verified" if stated else "stated-unverified",
+                    "total_value": stated,
                     "cash_value": None,
                     "cash_weight": None,
                     "positions": positions,
@@ -429,8 +448,13 @@ def _parse_legacy_date(text: str, year: int) -> str | None:
     return moment.date().isoformat()
 
 
-def recommendation_docs(sections: dict[str, Section], run_id: str, as_of: str) -> dict[str, dict]:
+def recommendation_docs(
+    sections: dict[str, Section], run_id: str, as_of: str, skipped: list[str] | None = None
+) -> dict[str, dict]:
+    """Legacy calls as immutable WATCH records; rows whose date cannot be read are skipped
+    (and listed in ``skipped``) rather than given an invented date."""
     docs: dict[str, dict] = {}
+    skipped = skipped if skipped is not None else []
     allcall = sections.get("allcall")
     if allcall is None:
         return docs
@@ -441,7 +465,12 @@ def recommendation_docs(sections: dict[str, Section], run_id: str, as_of: str) -
         for index, cells in enumerate(table.rows, start=1):
             if len(cells) != 6:
                 continue
-            issued = _parse_legacy_date(cells[0], year) or as_of[:10]
+            issued = _parse_legacy_date(cells[0], year)
+            if issued is None:
+                skipped.append(cells[0])
+                continue
+            if issued > as_of[:10]:  # a December call read in January: the prior year
+                issued = _parse_legacy_date(cells[0], year - 1) or issued
             check = _parse_legacy_date(cells[4], year)
             horizon = 30
             if check:
@@ -600,7 +629,8 @@ def migrate(html: str, now: datetime, writer: str = "CHAT") -> dict[str, dict]:
             )
     for portfolio_id, doc in portfolio_docs(sections, as_of).items():
         docs[f"portfolios/{portfolio_id}"] = doc
-    for rec_id, doc in recommendation_docs(sections, migration_run, as_of).items():
+    skipped_calls: list[str] = []
+    for rec_id, doc in recommendation_docs(sections, migration_run, as_of, skipped_calls).items():
         docs[f"recommendations/{rec_id}"] = doc
     for outcome_id, doc in outcome_docs(sections, as_of).items():
         docs[f"outcomes/{outcome_id}"] = doc
@@ -638,12 +668,19 @@ def migrate(html: str, now: datetime, writer: str = "CHAT") -> dict[str, dict]:
         scheduled_at=clock.to_utc(now).isoformat().replace("+00:00", "Z"),
         started_at=clock.to_utc(now).isoformat().replace("+00:00", "Z"),
         ready_at=clock.to_utc(now).isoformat().replace("+00:00", "Z"),
-        base_sha=records[-1]["result_sha"] if records else None,
+        base_sha=next(
+            (r["result_sha"] for r in reversed(records) if r["status"] == "PUBLISHED"), None
+        ),
         status="PUBLISHED",
         rows=sum(len(d.get("rows", [])) for p, d in docs.items() if p.startswith("boards/")),
         notes=[
             f"migrated from {capsule.get('meta', {}).get('artifactVersion')} capsule {capsule.get('meta', {}).get('schemaVersion')}"
-        ],
+        ]
+        + (
+            [f"legacy calls skipped (unreadable date): {', '.join(skipped_calls)}"]
+            if skipped_calls
+            else []
+        ),
     )
     boards_status = {
         p.split("/")[1]: d["status"] for p, d in docs.items() if p.startswith("boards/")

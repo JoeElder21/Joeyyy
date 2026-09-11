@@ -8,7 +8,9 @@ the research can be exercised without a model, a broker, or the network.
 
 from __future__ import annotations
 
+import contextlib
 import copy
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -52,6 +54,11 @@ SCHEMA_BY_COLLECTION = {
     "boards": "board",
 }
 UNSCHEMAED_DOCS = frozenset({"runs/legacy-chain"})
+PRICE_FIELD_BY_CLASS = {
+    "equity": "equity_price",
+    "crypto": "crypto_price",
+    "option": "options_mark",
+}
 
 
 def parse_time(text: str) -> datetime:
@@ -60,6 +67,11 @@ def parse_time(text: str) -> datetime:
 
 def iso(moment: datetime) -> str:
     return clock.to_utc(moment).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def doc_id_for(asset_id: str) -> str:
+    """A store-safe document id derived from a canonical asset id."""
+    return re.sub(r"[^a-z0-9]+", "-", asset_id.lower()).strip("-")
 
 
 def default_policy(adopted_at: str) -> dict[str, Any]:
@@ -145,15 +157,19 @@ def default_policy(adopted_at: str) -> dict[str, Any]:
             "recommendations_immutable": True,
             "human_approval_for_model_promotion": True,
             "critic_rounds_max": "2",
+            "proposed_rubrics_issue_no_stance": True,
         },
         "provenance": {
             "horizons": {
                 "label": "source-backed",
-                "source": "repository mandate (3-6 months) and the 2026-09-11 implementation prompt (12-36 months secondary lens)",
+                "source": "repository mandate (3-6 months) and the 2026-09-11 implementation "
+                "prompt (12-36 months secondary lens)",
             },
             "upside_hurdle": {
                 "label": "conflict",
-                "source": "implementation prompt names a 15% upside screening hurdle; the repository mandate states a 10% total-return goal; 15% retained for screening pending Joe's confirmation",
+                "source": "implementation prompt names a 15% upside screening hurdle; the "
+                "repository mandate states a 10% total-return goal; 15% retained for "
+                "screening pending Joe's confirmation",
             },
             "target_stock_count": {
                 "label": "source-backed",
@@ -165,23 +181,27 @@ def default_policy(adopted_at: str) -> dict[str, Any]:
             },
             "cooling_hours": {
                 "label": "source-backed",
-                "source": "handoffs/perplexity_portfolio/01_Joe_Investment_Mandate.md (24-hour cooling rule)",
+                "source": "handoffs/perplexity_portfolio/01_Joe_Investment_Mandate.md "
+                "(24-hour cooling rule)",
             },
             "max_single_position": {
                 "label": "source-backed",
-                "source": "handoffs/perplexity_portfolio/04_Portfolio_Risk_Limits.md (13% hard ceiling)",
+                "source": "handoffs/perplexity_portfolio/04_Portfolio_Risk_Limits.md "
+                "(13% hard ceiling)",
             },
             "rubric.equity": {
                 "label": "judgment",
-                "source": "implementation prompt weights; adopted for the dry run, subject to Joe's approval",
+                "source": "implementation prompt weights; adopted for the dry run, subject "
+                "to Joe's approval",
             },
             "rubric.crypto": {
                 "label": "assumption",
                 "source": "docs/TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md; PROPOSED, not adopted",
             },
             "schedule": {
-                "label": "confirmed",
-                "source": "Routine cron expressions read from the account's trigger list on 2026-09-11",
+                "label": "source-backed",
+                "source": "Routine cron expressions as read from the account's trigger list "
+                "on 2026-09-11; re-read before relying on them",
             },
         },
     }
@@ -228,15 +248,18 @@ def _observed(security: dict, inject: str | None) -> datetime | None:
 
 
 def _weights(portfolio: dict) -> dict[str, float]:
+    """Weight per asset id, summed across lots; symbol-only rows are unresolved."""
     total = portfolio.get("total_value") or 0.0
     weights: dict[str, float] = {}
     for position in portfolio.get("positions", []):
+        key = position.get("asset_id")
+        if not key:
+            continue
         weight = position.get("weight")
         if weight is None and total and position.get("market_value") is not None:
             weight = position["market_value"] / total
         if weight is not None:
-            key = position.get("asset_id") or position["symbol"]
-            weights[key] = max(weights.get(key, 0.0), float(weight))
+            weights[key] = weights.get(key, 0.0) + float(weight)
     return weights
 
 
@@ -244,11 +267,13 @@ def portfolio_risk(portfolio: dict, policy: dict) -> dict:
     """Limits from the policy, applied to one portfolio on its own."""
     mandate = policy["mandate"]
     weights = _weights(portfolio)
+    unresolved = sum(1 for p in portfolio.get("positions", []) if not p.get("asset_id"))
     breaches: list[str] = []
     largest = max(weights.items(), key=lambda kv: kv[1]) if weights else (None, 0.0)
     if largest[1] > mandate["max_single_position"]:
         breaches.append(
-            f"{largest[0]} at {largest[1]:.1%} exceeds the {mandate['max_single_position']:.0%} single-name ceiling"
+            f"{largest[0]} at {largest[1]:.1%} exceeds the "
+            f"{mandate['max_single_position']:.0%} single-name ceiling"
         )
     cash = portfolio.get("cash_weight")
     if cash is not None:
@@ -256,14 +281,14 @@ def portfolio_risk(portfolio: dict, policy: dict) -> dict:
             breaches.append(f"cash {cash:.1%} is below the {mandate['min_cash_weight']:.0%} floor")
         elif cash > mandate["max_cash_weight"]:
             breaches.append(
-                f"cash {cash:.1%} is above the {mandate['max_cash_weight']:.0%} ceiling (defensive rationale required)"
+                f"cash {cash:.1%} is above the {mandate['max_cash_weight']:.0%} ceiling "
+                "(defensive rationale required)"
             )
     count = len(weights)
-    if (
-        count > mandate["target_stock_count"]
-        and portfolio.get("account_kind", "").lower().find("ira") >= 0
-    ):
+    if count > mandate["target_stock_count"] and "ira" in portfolio.get("account_kind", "").lower():
         breaches.append(f"{count} positions against a {mandate['target_stock_count']}-name target")
+    if unresolved:
+        breaches.append(f"{unresolved} position(s) without a resolved asset id are not measured")
     return {
         "portfolio_id": portfolio["portfolio_id"],
         "label": portfolio.get("label", portfolio["portfolio_id"]),
@@ -282,7 +307,9 @@ def _stance(score: float | None, hurdle: bool | None, owned_weight: float, polic
     if score is None:
         return "PASS"
     if score >= 70 and hurdle:
-        return "ADD" if 0 < owned_weight < target else ("HOLD" if owned_weight else "BUY")
+        if owned_weight <= 0:
+            return "BUY"
+        return "ADD" if owned_weight < target else "HOLD"
     if score >= 50:
         return "HOLD" if owned_weight else "WATCH"
     if score < 35:
@@ -290,7 +317,12 @@ def _stance(score: float | None, hurdle: bool | None, owned_weight: float, polic
     return "HOLD" if owned_weight else "WATCH"
 
 
-def _critic_stand_in(inject: str | None):
+def _independent_sources(evidence_ids: list[str], evidence_docs: dict[str, dict]) -> int:
+    """Distinct evidence sources behind a recommendation; unknown ids do not count."""
+    return len({evidence_docs[e]["source"] for e in evidence_ids if e in evidence_docs})
+
+
+def _critic_stand_in(inject: str | None, evidence_docs: dict[str, dict]):
     def critic_fn(proposal: dict, round_number: int) -> list[critic.Challenge]:
         challenges: list[critic.Challenge] = []
         for rec in proposal["recommendations"]:
@@ -304,14 +336,13 @@ def _critic_stand_in(inject: str | None):
                     )
                 )
                 continue
-            if len(rec["evidence_ids"]) < MIN_INDEPENDENT_SOURCES and rec["stance"] in (
-                "BUY",
-                "ADD",
-            ):
+            sources = _independent_sources(rec["evidence_ids"], evidence_docs)
+            if sources < MIN_INDEPENDENT_SOURCES and rec["stance"] in ("BUY", "ADD"):
                 challenges.append(
                     critic.Challenge(
                         rec["recommendation_id"],
-                        f"fewer than {MIN_INDEPENDENT_SOURCES} independent sources behind a {rec['stance']}",
+                        f"{sources} independent source(s) behind a {rec['stance']}; "
+                        f"{MIN_INDEPENDENT_SOURCES} required",
                         "blocking",
                         (POLICY_EVIDENCE_ID,),
                     )
@@ -320,7 +351,8 @@ def _critic_stand_in(inject: str | None):
                 challenges.append(
                     critic.Challenge(
                         rec["recommendation_id"],
-                        f"rubric coverage {rec['scorecard']['coverage']:.0%}: the rationale must say what is unscored",
+                        f"rubric coverage {rec['scorecard']['coverage']:.0%}: the rationale "
+                        "must say what is unscored",
                         "material",
                         tuple(rec["evidence_ids"][:1]),
                     )
@@ -351,7 +383,7 @@ def _critic_stand_in(inject: str | None):
                     critic.Response(
                         challenge.target,
                         "revise",
-                        "withdrawn: the source floor is not met",
+                        "withdrawn: the independent-source floor is not met",
                         (POLICY_EVIDENCE_ID,),
                     )
                 )
@@ -371,6 +403,15 @@ def _critic_stand_in(inject: str | None):
     return critic_fn, responder_fn
 
 
+def _manifest_for(inputs: dict) -> runs.RunManifest:
+    now = parse_time(inputs["now"])
+    scheduled = parse_time(inputs.get("scheduled_at") or inputs["now"])
+    kind = inputs.get("kind", "daily")
+    key = runs.idempotency_key(kind, scheduled, inputs.get("label"))
+    rid = runs.run_id(kind, key, inputs.get("salt", ""))
+    return runs.RunManifest(rid, kind, key, inputs.get("writer", "DAILY"), iso(scheduled), iso(now))
+
+
 def run(
     inputs: dict,
     store: store_mod.Store,
@@ -378,17 +419,47 @@ def run(
     lock: runs.RunLock | None = None,
     ledger: runs.RunLedger | None = None,
 ) -> RunResult:
-    """Execute one research run against ``store`` and return what happened."""
+    """Execute one research run against ``store`` and return what happened.
+
+    An exception anywhere in the stages becomes a FAILED run document rather
+    than a silent crash, and the writer lease is always released.
+    """
     inject = inputs.get("inject")
     if inject is not None and inject not in INJECTIONS:
         raise ValueError(f"unknown failure injection {inject!r}")
+    manifest = _manifest_for(inputs)
+    lock = lock or runs.RunLock()
+    try:
+        return _execute(inputs, store, lock, ledger, manifest)
+    except Exception as error:  # noqa: BLE001 - the failure must reach the run document
+        manifest.status = "FAILED"
+        manifest.notes.append(f"{type(error).__name__}: {error}")
+        result = RunResult(manifest)
+        result.stages.append(_stage("exception", "FAILED", manifest.notes[-1]))
+        run_doc = manifest.as_dict() | {
+            "stages": result.stages,
+            "gates": [],
+            "boards": {},
+            "failure_injected": inject,
+        }
+        with contextlib.suppress(Exception):
+            store.set(f"runs/{manifest.run_id}", run_doc)
+        return result
+    finally:
+        lock.release(manifest.run_id)
+
+
+def _execute(
+    inputs: dict,
+    store: store_mod.Store,
+    lock: runs.RunLock,
+    ledger: runs.RunLedger | None,
+    manifest: runs.RunManifest,
+) -> RunResult:
+    inject = inputs.get("inject")
     now = parse_time(inputs["now"])
     scheduled = parse_time(inputs.get("scheduled_at") or inputs["now"])
-    kind = inputs.get("kind", "daily")
-    writer = inputs.get("writer", "DAILY")
-    key = runs.idempotency_key(kind, scheduled, inputs.get("label"))
-    rid = runs.run_id(kind, key, inputs.get("salt", ""))
-    manifest = runs.RunManifest(rid, kind, key, writer, iso(scheduled), iso(now))
+    key, rid = manifest.idempotency_key, manifest.run_id
     result = RunResult(manifest)
     stages = result.stages
 
@@ -403,6 +474,7 @@ def run(
                 "run_id": "prior-run",
                 "result_sha": ledger.last_published_sha() or "0" * 64,
                 "base_sha": None,
+                "started_at": iso(now),
             }
         )
     if ledger.already_published(key):
@@ -411,13 +483,11 @@ def run(
         stages.append(_stage("idempotency", "SKIPPED", manifest.notes[-1]))
         return result
     stages.append(_stage("idempotency", "OK", f"key {key} not yet published"))
-    lock = lock or runs.RunLock()
     if inject == "lock-held":
         lock.acquire("another-writer", now)
     if not lock.acquire(rid, now):
         manifest.status = "BLOCKED"
-        holder = lock.holder(now)
-        stages.append(_stage("lock", "FAILED", f"writer lock held by {holder}; not run"))
+        stages.append(_stage("lock", "FAILED", f"writer lock held by {lock.holder(now)}; not run"))
         return result
     stages.append(_stage("lock", "OK", f"lease held by {rid}"))
 
@@ -436,7 +506,6 @@ def run(
     if steward_errors:
         manifest.status = "BLOCKED"
         stages.append(_stage("steward", "FAILED", "; ".join(steward_errors[:5])))
-        lock.release(rid)
         return result
     securities = [copy.deepcopy(s) for s in inputs.get("securities", [])]
     identity_problems: dict[str, list[str]] = {}
@@ -448,16 +517,16 @@ def run(
             identity_problems[security["asset_id"]] = problems
         parsed.append(asset)
     collisions = identity.collisions(parsed)
-    equity_fresh: list[freshness.Freshness] = []
-    crypto_fresh: list[freshness.Freshness] = []
+    fresh_by_kind: dict[str, list[freshness.Freshness]] = {"equity": [], "crypto": []}
     for security in securities:
-        field_name = "equity_price" if security["asset_class"] == "equity" else "crypto_price"
+        field_name = PRICE_FIELD_BY_CLASS.get(security["asset_class"], "crypto_price")
         item = freshness.assess(field_name, _observed(security, inject), now)
         security["_freshness"] = item
-        (equity_fresh if field_name == "equity_price" else crypto_fresh).append(item)
+        kind_name = "equity" if security["asset_class"] == "equity" else "crypto"
+        fresh_by_kind[kind_name].append(item)
     boards = {
-        "rankings-equity": freshness.board_status(equity_fresh),
-        "rankings-crypto": freshness.board_status(crypto_fresh),
+        "rankings-equity": freshness.board_status(fresh_by_kind["equity"]),
+        "rankings-crypto": freshness.board_status(fresh_by_kind["crypto"]),
     }
     for board_id, doc in store.list("boards"):
         boards.setdefault(board_id, doc.get("status", "STALE"))
@@ -466,24 +535,23 @@ def run(
     detail = f"{len(securities)} securities, {len(evidence_docs)} evidence records"
     if identity_problems or collisions:
         steward_status = "DEGRADED"
-        detail += f"; identity problems on {len(identity_problems)} asset(s); symbol collisions {sorted(collisions)}"
-    if any(
-        status != freshness.LIVE
-        for status in (boards["rankings-equity"], boards["rankings-crypto"])
-    ):
+        detail += (
+            f"; identity problems on {len(identity_problems)} asset(s); "
+            f"symbol collisions {sorted(collisions)}"
+        )
+    if any(boards[b] != freshness.LIVE for b in ("rankings-equity", "rankings-crypto")):
         steward_status = "DEGRADED"
         detail += f"; boards {boards['rankings-equity']}/{boards['rankings-crypto']}"
     stages.append(_stage("steward", steward_status, detail))
 
     # Stage 2: universe tiers and the research budget.
-    owned = {
-        p.get("asset_id") or p["symbol"]
-        for portfolio in portfolios
-        for p in portfolio.get("positions", [])
-    }
+    owned_weight: dict[str, float] = {}
+    for portfolio in portfolios:
+        for asset_id, weight in _weights(portfolio).items():
+            owned_weight[asset_id] = max(owned_weight.get(asset_id, 0.0), weight)
     universe_in = inputs.get("universe", {})
     assignment = universe.assign(
-        owned,
+        set(owned_weight),
         set(universe_in.get("mandate", [])),
         set(universe_in.get("screened", [])),
         set(universe_in.get("mentions", [])),
@@ -503,10 +571,6 @@ def run(
     # Stage 3: analysts and quant: gates, scorecards, scenarios, hurdle.
     security_docs: dict[str, dict] = {}
     rows_by_kind: dict[str, list[dict]] = {"equity": [], "crypto": []}
-    owned_weight: dict[str, float] = {}
-    for portfolio in portfolios:
-        for key_, weight in _weights(portfolio).items():
-            owned_weight[key_] = max(owned_weight.get(key_, 0.0), weight)
     for security in securities:
         asset_id = security["asset_id"]
         gate = gates.asset_gate(security.get("fatal_flags", {}))
@@ -516,11 +580,8 @@ def run(
         weighted = None
         hurdle: bool | None = None
         if gate.passed and asset_id not in identity_problems:
-            scorer = (
-                scorecard.score_equity
-                if security["asset_class"] == "equity"
-                else scorecard.score_crypto
-            )
+            is_equity = security["asset_class"] == "equity"
+            scorer = scorecard.score_equity if is_equity else scorecard.score_crypto
             result_card = scorer(factors, evidence_map)
             scen = security.get("scenarios")
             if scen:
@@ -550,7 +611,8 @@ def run(
             "scorecard": result_card.as_dict() if result_card else None,
             "notes": list(security.get("notes", []))
             + [f"price freshness {fresh.state} ({fresh.limit})"]
-            + [f"identity: {p}" for p in identity_problems.get(asset_id, [])],
+            + [f"identity: {p}" for p in identity_problems.get(asset_id, [])]
+            + ([f"unchecked fatal flags: {', '.join(gate.unchecked)}"] if gate.unchecked else []),
         }
         if weighted is not None:
             doc["scenarios"] = weighted.as_dict() | {
@@ -559,18 +621,18 @@ def run(
                 "hurdle_cleared": hurdle,
             }
         security_docs[asset_id] = doc
-        status = (
-            "EXCLUDED"
-            if not gate.passed or asset_id in identity_problems
-            else (result_card.status if result_card else "INSUFFICIENT")
-        )
-        rows_by_kind["equity" if security["asset_class"] == "equity" else "crypto"].append(
+        if not gate.passed or asset_id in identity_problems:
+            status = "EXCLUDED"
+        else:
+            status = result_card.status if result_card else "INSUFFICIENT"
+        gate_cell = "PASS" if gate.passed else "FAIL: " + ", ".join(gate.failed or gate.unchecked)
+        kind_name = "equity" if security["asset_class"] == "equity" else "crypto"
+        rows_by_kind[kind_name].append(
             {
                 "rank": 0,
                 "asset_id": asset_id,
                 "symbol": security["symbol"],
-                "owned": (owned_weight.get(asset_id) or owned_weight.get(security["symbol"]) or 0.0)
-                > 0,
+                "owned": owned_weight.get(asset_id, 0.0) > 0,
                 "cells": {
                     "PRICE": (security.get("price") or {}).get("price"),
                     "SCORE": result_card.score if result_card else None,
@@ -578,18 +640,15 @@ def run(
                     "EXPECTED": f"{weighted.expected:+.1%}" if weighted else None,
                     "HURDLE": ("YES" if hurdle else "NO") if hurdle is not None else "n/a",
                     "FRESHNESS": fresh.state,
-                    "GATE": "PASS" if gate.passed else "FAIL: " + ", ".join(gate.failed),
+                    "GATE": gate_cell,
                 },
                 "legacy_zone": None,
                 "scorecard": result_card.as_dict() if result_card else None,
                 "status": status,
                 "case": "; ".join(result_card.notes) if result_card and result_card.notes else None,
                 "_hurdle": hurdle,
-                "_weight": owned_weight.get(asset_id)
-                or owned_weight.get(security["symbol"])
-                or 0.0,
+                "_weight": owned_weight.get(asset_id, 0.0),
                 "_evidence": sorted({eid for ids in evidence_map.values() for eid in ids}),
-                "_catalysts": security.get("catalysts", []),
                 "_risks": security.get("risks", []),
                 "_invalidation": security.get("invalidation", []),
             }
@@ -599,6 +658,7 @@ def run(
         ranked = [r for r in rows if r["status"] in ("SCORED", "PARTIAL")]
         ranked.sort(
             key=lambda r: (
+                r["status"] != "SCORED",
                 -(r["scorecard"]["score"] or 0.0),
                 -r["scorecard"]["coverage"],
                 r["symbol"],
@@ -608,14 +668,13 @@ def run(
             row["rank"] = index
         unranked = [r for r in rows if r["status"] not in ("SCORED", "PARTIAL")]
         board_id = f"rankings-{kind_name}"
-        rubric = (
-            scorecard.RUBRIC_VERSION if kind_name == "equity" else scorecard.CRYPTO_RUBRIC_VERSION
-        )
+        if kind_name == "equity":
+            rubric, title = scorecard.RUBRIC_VERSION, "Stock rankings (100-point scorecard)"
+        else:
+            rubric, title = scorecard.CRYPTO_RUBRIC_VERSION, "Crypto rankings (PROPOSED rubric)"
         board_docs[board_id] = {
             "board_id": board_id,
-            "title": "Stock rankings (100-point scorecard)"
-            if kind_name == "equity"
-            else "Crypto rankings (PROPOSED rubric)",
+            "title": title,
             "kind": kind_name,
             "as_of": iso(now),
             "status": boards[board_id],
@@ -625,48 +684,51 @@ def run(
                 {k: v for k, v in r.items() if not k.startswith("_")} for r in ranked + unranked
             ],
             "notes": [
-                f"{len(ranked)} ranked, {len(unranked)} listed not ranked (excluded or insufficient)"
+                f"{len(ranked)} ranked, {len(unranked)} listed not ranked "
+                "(excluded, unchecked or insufficient)"
             ],
             "rubric": rubric,
             "legacy_ordering": None,
         }
-    stages.append(
-        _stage(
-            "quant",
-            "OK",
-            f"{sum(1 for r in rows_by_kind['equity'] + rows_by_kind['crypto'] if r['rank'])} ranked of {len(securities)}",
-        )
-    )
+    ranked_total = sum(1 for rows in rows_by_kind.values() for r in rows if r["rank"])
+    stages.append(_stage("quant", "OK", f"{ranked_total} ranked of {len(securities)}"))
 
     # Stage 4: portfolio risk, each portfolio on its own.
     result.risk = [portfolio_risk(p, policy) for p in portfolios]
-    schwab = [
-        p
-        for p in portfolios
-        if p["portfolio_id"].startswith("schwab-") and p["portfolio_id"] != "schwab-combined"
-    ]
+    by_id = {p["portfolio_id"]: p for p in portfolios}
     invariant_failures: list[str] = []
-    if len(schwab) == 2 and not all(set(p.get("distinct_from", [])) for p in schwab):
-        invariant_failures.append("the two Schwab portfolios must declare distinct_from each other")
+    roth, rollover = by_id.get("schwab-roth"), by_id.get("schwab-rollover")
+    if roth is not None and rollover is not None:
+        mutual = "schwab-rollover" in roth.get(
+            "distinct_from", []
+        ) and "schwab-roth" in rollover.get("distinct_from", [])
+        if not mutual:
+            invariant_failures.append(
+                "the two Schwab portfolios must declare distinct_from each other"
+            )
+    risk_status = "DEGRADED" if any(r["breaches"] for r in result.risk) else "OK"
     stages.append(
         _stage(
             "risk",
-            "OK" if not any(r["breaches"] for r in result.risk) else "DEGRADED",
+            risk_status,
             "; ".join(f"{r['portfolio_id']} {r['status']}" for r in result.risk)
             or "no portfolios supplied",
         )
     )
 
-    # Stage 5: recommendations, then the critic.
+    # Stage 5: recommendations (equities only while the crypto rubric is PROPOSED), then the critic.
     recs: list[dict] = []
     cooling = timedelta(hours=policy["mandate"]["cooling_hours"])
+    crypto_status = policy["rubric"]["crypto"]["status"]
     for kind_name in ("equity", "crypto"):
+        if kind_name == "crypto" and crypto_status == "PROPOSED":
+            continue
         for row in rows_by_kind[kind_name]:
             if not row["rank"]:
                 continue
             stance = _stance(row["scorecard"]["score"], row["_hurdle"], row["_weight"], policy)
             body = {
-                "recommendation_id": f"rec-{rid}-{row['symbol'].lower()}",
+                "recommendation_id": f"rec-{rid}-{doc_id_for(row['asset_id'])}",
                 "run_id": rid,
                 "issued_at": iso(now),
                 "asset_id": row["asset_id"],
@@ -676,11 +738,16 @@ def run(
                 "horizon_days": 120,
                 "lens": "tactical",
                 "reference_price": None,
-                "reference_convention": "first regular-session open after publication (quote if published during the session)",
+                "reference_convention": "first regular-session open on the next session date "
+                "after publication (first same-session print if published during the session)",
                 "scorecard": row["scorecard"],
                 "scenarios": security_docs[row["asset_id"]].get("scenarios"),
                 "hurdle_cleared": row["_hurdle"],
-                "rationale": f"{row['symbol']} scores {row['scorecard']['score']} on {row['scorecard']['rubric']} with {row['scorecard']['coverage']:.0%} coverage; stance {stance} by the policy ladder.",
+                "rationale": (
+                    f"{row['symbol']} scores {row['scorecard']['score']} on "
+                    f"{row['scorecard']['rubric']} with {row['scorecard']['coverage']:.0%} "
+                    f"coverage; stance {stance} by the policy ladder."
+                ),
                 "evidence_ids": row["_evidence"],
                 "risks": row["_risks"],
                 "invalidation": row["_invalidation"],
@@ -688,7 +755,7 @@ def run(
                 "cooling_period_ends": iso(now + cooling) if stance in ("BUY", "ADD") else None,
             }
             recs.append(body)
-    critic_fn, responder_fn = _critic_stand_in(inject)
+    critic_fn, responder_fn = _critic_stand_in(inject, evidence_docs)
     revised, record = critic.run_debate({"recommendations": recs}, critic_fn, responder_fn)
     result.debate = record.as_dict()
     final_recs = revised["recommendations"] if record.verdict != critic.BLOCKED else []
@@ -701,7 +768,13 @@ def run(
         _stage(
             "critic",
             "OK" if record.verdict != critic.BLOCKED else "FAILED",
-            f"verdict {record.verdict} after {record.rounds} round(s); {len(final_recs)} recommendation(s) stand",
+            f"verdict {record.verdict} after {record.rounds} round(s); "
+            f"{len(final_recs)} recommendation(s) stand"
+            + (
+                "; crypto rows carry no stance while the rubric is PROPOSED"
+                if crypto_status == "PROPOSED"
+                else ""
+            ),
         )
     )
 
@@ -753,14 +826,14 @@ def run(
         )
     )
 
-    # Stage 7: health, snapshot and the release gates.
+    # Stage 7: health, hashes, snapshot and the release gates.
     docs: dict[str, dict] = {"policy/current": policy}
     for portfolio in portfolios:
         docs[f"portfolios/{portfolio['portfolio_id']}"] = portfolio
     for eid, doc in evidence_docs.items():
         docs[f"evidence/{eid}"] = doc
     for asset_id, doc in security_docs.items():
-        docs[f"security/{asset_id}"] = doc
+        docs[f"security/{doc_id_for(asset_id)}"] = doc
     for board_id, doc in board_docs.items():
         docs[f"boards/{board_id}"] = doc
     for rec_id, doc in rec_docs.items():
@@ -779,13 +852,15 @@ def run(
             and ":" in entry["target_et"]
         ):
             hour, minute = (int(x) for x in entry["target_et"].split(":"))
+            target = datetime.min.time().replace(hour=hour, minute=minute)
             drift = [
-                w.__dict__ | {"starts": w.starts.isoformat(), "ends": w.ends.isoformat()}
+                {
+                    "starts": w.starts.isoformat(),
+                    "ends": w.ends.isoformat(),
+                    "fires_at_et": w.fires_at_et,
+                }
                 for w in clock.dst_drift(
-                    int(parts[1]),
-                    int(parts[0]),
-                    datetime.min.time().replace(hour=hour, minute=minute),
-                    now.year,
+                    int(parts[1]), int(parts[0]), target, clock.to_et(now).year
                 )
             ]
         schedule.append(
@@ -800,9 +875,8 @@ def run(
     base_sha = "deadbeef" * 8 if inject == "chain-break" else ledger.last_published_sha()
     manifest.base_sha = base_sha
     manifest.inputs_sha = runs.sha256_of({k: v for k, v in inputs.items() if k != "inject"})
-    manifest.result_sha = runs.sha256_of(docs)
     manifest.rows = sum(len(d["rows"]) for d in board_docs.values())
-    candidate = manifest.as_dict() | {"status": "PUBLISHED"}
+    candidate = manifest.as_dict() | {"status": "PUBLISHED", "result_sha": "pending"}
     chain = runs.verify_chain([*ledger.records, candidate])
     chain_ok = chain.ok and base_sha == ledger.last_published_sha()
     health = {
@@ -822,11 +896,9 @@ def run(
         "calendar_covered_through": clock.calendar_covered_through(),
         "store": {
             "mode": "json-dir" if isinstance(store, store_mod.JsonDirStore) else "memory",
-            "documents": len(store_mod.MemoryStore.paths(store))
-            if isinstance(store, store_mod.MemoryStore)
-            else 0,
+            "documents": len(store.paths()) if isinstance(store, store_mod.MemoryStore) else 0,
         },
-        "page_bytes": sum(store_mod.doc_bytes(d) for d in docs.values()),
+        "page_bytes": 0,
         "chain": {
             "ok": chain_ok,
             "length": chain.length,
@@ -841,6 +913,10 @@ def run(
         ],
     }
     docs["health/current"] = health
+    # The result hash covers every document of this run except the run record and the
+    # snapshot pointer, which reference it; page_bytes counts the same set.
+    health["page_bytes"] = sum(store_mod.doc_bytes(d) for d in docs.values())
+    manifest.result_sha = runs.sha256_of(docs)
     schema_errors: list[str] = []
     for path, doc in docs.items():
         collection = path.split("/")[0]
@@ -851,7 +927,8 @@ def run(
             for e in schema.validate(doc, schema.load_schema(SCHEMA_BY_COLLECTION[collection]))
         ]
     before = {f"recommendations/{rec_id}": doc for rec_id, doc in store.list("recommendations")}
-    violations = store_mod.immutable_violations(before, docs)
+    after = dict(before) | {p: d for p, d in docs.items() if p.startswith("recommendations/")}
+    violations = store_mod.immutable_violations(before, after)
     checks = gates.release_gates(
         schema_errors=schema_errors,
         chain_ok=chain_ok,
@@ -863,9 +940,15 @@ def run(
     )
     result.gate_checks = checks
     passed = gates.all_passed(checks)
-    manifest.status = "PUBLISHED" if passed else "BLOCKED"
     manifest.ready_at = iso(now)
     manifest.notes.append(f"starts vs ready: {clock.starts_vs_ready(scheduled, now).label}")
+    stages.append(
+        _stage(
+            "release",
+            "OK" if passed else "FAILED",
+            "; ".join(f"{c.name}:{'pass' if c.passed else 'FAIL'}" for c in checks),
+        )
+    )
     run_doc = manifest.as_dict() | {
         "stages": stages,
         "gates": [c.as_dict() for c in checks],
@@ -875,33 +958,30 @@ def run(
         "risk": result.risk,
         "debate": result.debate,
     }
-    stages.append(
-        _stage(
-            "release",
-            "OK" if passed else "FAILED",
-            "; ".join(f"{c.name}:{'pass' if c.passed else 'FAIL'}" for c in checks),
-        )
-    )
-    run_doc["stages"] = stages
-    if passed:
-        for path, doc in docs.items():
-            store.set(path, doc)
+    if not passed:
+        manifest.status = "BLOCKED"
+        run_doc["status"] = "BLOCKED"
         store.set(f"runs/{rid}", run_doc)
-        parts = {
-            f"{collection}/{doc_id}": doc
-            for collection in store_mod.COLLECTIONS
-            for doc_id, doc in store.list(collection)
-            if collection != "snapshots"
-        }
-        snapshot = runs.build_snapshot(
-            parts, now, inputs.get("version_label") or f"run-{rid}", base_sha
-        ) | {"run_id": rid, "starts_vs_ready": run_doc["starts_vs_ready"]}
-        store.set("snapshots/current", snapshot)
-        ledger.append(manifest)
-        docs["snapshots/current"] = snapshot
-    else:
-        store.set(f"runs/{rid}", run_doc)
+        docs[f"runs/{rid}"] = run_doc
+        result.docs = docs
+        return result
+    for path, doc in docs.items():
+        store.set(path, doc)
+    manifest.status = "PUBLISHED"
+    run_doc["status"] = "PUBLISHED"
+    store.set(f"runs/{rid}", run_doc)
+    parts = {
+        f"{collection}/{doc_id}": doc
+        for collection in store_mod.COLLECTIONS
+        for doc_id, doc in store.list(collection)
+        if collection != "snapshots"
+    }
+    snapshot = runs.build_snapshot(
+        parts, now, inputs.get("version_label") or f"run-{rid}", base_sha
+    ) | {"run_id": rid, "starts_vs_ready": run_doc["starts_vs_ready"]}
+    store.set("snapshots/current", snapshot)
+    ledger.append(manifest)
+    docs["snapshots/current"] = snapshot
     docs[f"runs/{rid}"] = run_doc
     result.docs = docs
-    lock.release(rid)
     return result

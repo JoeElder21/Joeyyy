@@ -119,7 +119,7 @@
    "evidence_id": "ev-syn-001",
    "asset_id": "eq:XNAS:EXA",
    "kind": "filing",
-   "source": "synthetic fixture",
+   "source": "synthetic filing feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -135,7 +135,7 @@
    "evidence_id": "ev-syn-002",
    "asset_id": "eq:XNAS:EXA",
    "kind": "news",
-   "source": "synthetic fixture",
+   "source": "synthetic newswire",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -151,7 +151,7 @@
    "evidence_id": "ev-syn-003",
    "asset_id": "eq:XNAS:EXA",
    "kind": "market_data",
-   "source": "synthetic fixture",
+   "source": "synthetic market data feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -167,7 +167,7 @@
    "evidence_id": "ev-syn-004",
    "asset_id": "eq:XNYS:EXB",
    "kind": "filing",
-   "source": "synthetic fixture",
+   "source": "synthetic regulatory feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -183,7 +183,7 @@
    "evidence_id": "ev-syn-005",
    "asset_id": "eq:XNYS:EXB",
    "kind": "news",
-   "source": "synthetic fixture",
+   "source": "synthetic press release feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -199,7 +199,7 @@
    "evidence_id": "ev-syn-006",
    "asset_id": "eq:XNAS:EXC",
    "kind": "filing",
-   "source": "synthetic fixture",
+   "source": "synthetic filing feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -215,7 +215,7 @@
    "evidence_id": "ev-syn-007",
    "asset_id": "eq:XNAS:EXD",
    "kind": "filing",
-   "source": "synthetic fixture",
+   "source": "synthetic filing feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -231,7 +231,7 @@
    "evidence_id": "ev-syn-008",
    "asset_id": "eq:XNAS:EXD",
    "kind": "press_release",
-   "source": "synthetic fixture",
+   "source": "synthetic press release feed",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -247,7 +247,7 @@
    "evidence_id": "ev-syn-009",
    "asset_id": "cx:pulsechain:0x000000000000000000000000000000000000abcd",
    "kind": "onchain",
-   "source": "synthetic fixture",
+   "source": "synthetic on-chain reader",
    "url": null,
    "observed_at": "2026-09-10T22:00:00Z",
    "published_at": "2026-09-09T12:00:00Z",
@@ -336,7 +336,19 @@
      }
     ]
    },
-   "fatal_flags": {},
+   "fatal_flags": {
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
+   },
    "facts": [
     {
      "key": "net cash",
@@ -426,7 +438,19 @@
      }
     ]
    },
-   "fatal_flags": {},
+   "fatal_flags": {
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
+   },
    "facts": [],
    "catalysts": [],
    "risks": [
@@ -489,7 +513,19 @@
      }
     ]
    },
-   "fatal_flags": {},
+   "fatal_flags": {
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
+   },
    "facts": [],
    "catalysts": [],
    "risks": [
@@ -566,7 +602,19 @@
      }
     ]
    },
-   "fatal_flags": {},
+   "fatal_flags": {
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
+   },
    "facts": [],
    "catalysts": [],
    "risks": [
@@ -600,7 +648,16 @@
    "scenarios": null,
    "fatal_flags": {
     "going_concern": true,
-    "liquidity_cliff_in_horizon": true
+    "liquidity_cliff_in_horizon": true,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
    },
    "facts": [],
    "catalysts": [],
@@ -633,7 +690,19 @@
     "observed_at": "2026-09-10T20:00:00Z"
    },
    "scenarios": null,
-   "fatal_flags": {},
+   "fatal_flags": {
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
+   },
    "facts": [],
    "catalysts": [],
    "risks": [
@@ -680,7 +749,19 @@
     "observed_at": "2026-09-11T10:30:00Z"
    },
    "scenarios": null,
-   "fatal_flags": {},
+   "fatal_flags": {
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": false,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
+   },
    "facts": [],
    "catalysts": [],
    "risks": [
@@ -713,7 +794,17 @@
    },
    "scenarios": null,
    "fatal_flags": {
-    "open_mint_authority": true
+    "going_concern": false,
+    "liquidity_cliff_in_horizon": false,
+    "unresolved_audit_issue": false,
+    "fraud_allegation_unresolved": false,
+    "delisting_notice": false,
+    "honeypot": false,
+    "open_mint_authority": true,
+    "unverified_contract": false,
+    "owner_can_freeze_or_blacklist": false,
+    "insider_supply_over_half": false,
+    "no_reliable_market_data": false
    },
    "facts": [],
    "catalysts": [],
@@ -731,28 +822,35 @@
    "recommendation_id": "rec-prior-exa-buy",
    "asset_id": "eq:XNAS:EXA",
    "stance": "BUY",
-   "issued_at": "2026-05-01T11:00:00Z",
+   "issued_at": "2026-05-01T21:00:00Z",
    "horizon_days": 90
   },
   {
    "recommendation_id": "rec-prior-exb-avoid",
    "asset_id": "eq:XNYS:EXB",
    "stance": "AVOID",
-   "issued_at": "2026-05-01T11:00:00Z",
+   "issued_at": "2026-05-01T21:00:00Z",
    "horizon_days": 90
   },
   {
    "recommendation_id": "rec-prior-exc-hold",
    "asset_id": "eq:XNAS:EXC",
    "stance": "HOLD",
-   "issued_at": "2026-09-01T11:00:00Z",
+   "issued_at": "2026-09-01T21:00:00Z",
    "horizon_days": 120
   },
   {
    "recommendation_id": "rec-prior-exd-void",
    "asset_id": "eq:XNAS:EXD",
    "stance": "BUY",
-   "issued_at": "2026-05-01T11:00:00Z",
+   "issued_at": "2026-05-01T21:00:00Z",
+   "horizon_days": 30
+  },
+  {
+   "recommendation_id": "rec-prior-exf-watch",
+   "asset_id": "eq:XNAS:EXF",
+   "stance": "WATCH",
+   "issued_at": "2026-05-01T21:00:00Z",
    "horizon_days": 30
   }
  ],

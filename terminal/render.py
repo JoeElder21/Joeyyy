@@ -471,15 +471,21 @@ def portfolio_block(docs: dict[str, dict], portfolio_id: str) -> str:
 
 def view_portfolio(docs: dict[str, dict], portfolio_id: str, pooled: str | None = None) -> str:
     out = [portfolio_block(docs, portfolio_id)]
-    if (
-        pooled
-        and f"portfolios/{pooled}" in docs
-        and not docs.get(f"portfolios/{portfolio_id}", {}).get("positions")
-    ):
+    own_positions = docs.get(f"portfolios/{portfolio_id}", {}).get("positions")
+    if pooled is None and "portfolios/schwab-combined" in docs and not own_positions:
+        out.append(
+            note(
+                "The legacy pooled Schwab book is shown once, under Portfolio 1; this account's "
+                "own positions arrive on the next screenshots.",
+                "muted",
+            )
+        )
+    if pooled and f"portfolios/{pooled}" in docs and not own_positions:
         out.append(
             "<h3>Pooled legacy book</h3>"
             + note(
-                "The legacy page carried the Roth and Rollover positions as one book. Shown here for continuity; the split is not available until the next screenshots.",
+                "The legacy page carried the Roth and Rollover positions as one book. Shown here "
+                "for continuity; the split is not available until the next screenshots.",
                 "warn",
             )
         )
@@ -1077,7 +1083,7 @@ def render(docs: dict[str, dict], *, title: str = TITLE, description: str | None
         "stocks": view_stocks(docs),
         "crypto": view_crypto(docs),
         "portfolio-1": view_portfolio(docs, "schwab-roth", "schwab-combined"),
-        "portfolio-2": view_portfolio(docs, "schwab-rollover", "schwab-combined"),
+        "portfolio-2": view_portfolio(docs, "schwab-rollover", None),
         "accounts": view_accounts(docs),
         "assets": view_assets(docs),
         "risk": view_risk(docs),
@@ -1095,10 +1101,12 @@ def render(docs: dict[str, dict], *, title: str = TITLE, description: str | None
         f'<section class="view" id="view-{vid}"><h2>{esc(label)}</h2>{parts[vid]}</section>'
         for vid, label in VIEWS
     )
-    payload = json.dumps(docs, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    fonts = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">'
+    # Every "<" in the payload is written as \u003c so no stored text can end the script
+    # element or open a comment inside it; JSON.parse restores the character.
+    payload = json.dumps(docs, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    noscript = "<noscript><style>section.view{display:block}</style></noscript>"
     return (
-        f"<title>{esc(title)}</title>{fonts}<style>{CSS}</style>"
+        f"<title>{esc(title)}</title><style>{CSS}</style>{noscript}"
         '<div class="wrap">'
         f'<header class="top"><h1>{esc(title)}</h1><span class="meta">snapshot {esc(snap.get("version") or "n/a")} · generated {generated}</span>'
         f'<span class="meta">freshness {pill(overall)}</span><span class="meta">store: <span id="store-status-top">embedded snapshot</span></span>'

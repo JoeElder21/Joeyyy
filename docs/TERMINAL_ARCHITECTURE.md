@@ -19,7 +19,8 @@ every failure injection without a model or the network.
 
 ```
 Routine fires (UTC cron)  ->  fresh session reads policy/current and the last snapshot
-  1 orchestrator      acquire lease on runs/lock; refuse a published idempotency key
+  1 orchestrator      acquire the lease on runs/lock (store adapter NOT BUILT: the package
+                      ships an in-memory lock with the same semantics); refuse a published key
   2 data steward      validate inputs; freshness per field; identity contract-first
   3 analysts          bounded fan-out by tier (T1 owned, T2 mandate, T3 screened, T4 mentions)
   4 quant             scorecards, scenarios, probability-weighted return, hurdle
@@ -33,7 +34,14 @@ Routine fires (UTC cron)  ->  fresh session reads policy/current and the last sn
 
 `terminal/pipeline.py` is the reference implementation of stages 1–9. In
 production the analyst stages are filled by the roles in `terminal/agents/`;
-their outputs are documents, and only the orchestrator writes.
+their outputs are documents, and only the orchestrator writes. Two adapters are
+not built yet and are labelled so in `TERMINAL_HANDOFF.md`: the store-backed
+lease (the package's `RunLock` is in-memory and protects one process only) and
+the artifact-db reader/writer inside a Routine session (today the publishing
+tool's `read_db`/`write_db` calls carry the documents).
+
+Crypto rows are ranked and shown, but while the crypto rubric is `PROPOSED`
+the pipeline issues no stance and no recommendation for them.
 
 ## The store
 
@@ -46,7 +54,7 @@ Collections (`terminal/store.py`):
 | `evidence` | one per record | append | `evidence` |
 | `security` | one per asset (canonical id) | replaced per run | `security_research` |
 | `boards` | one per ranking or legacy board | replaced per run | `board` |
-| `recommendations` | one per recommendation | **immutable** (hash-checked) | `recommendation` |
+| `recommendations` | one per recommendation | **immutable** (store refuses edits and deletions; `verify` re-checks content hashes) | `recommendation` |
 | `outcomes` | one per graded recommendation | append / update as horizons pass | `outcome` |
 | `learning` | `current` | replaced per run, lessons append | `learning` |
 | `runs` | one per run, plus `legacy-chain` | append | `research_run` |
@@ -69,7 +77,8 @@ when the `db` capability resolves in the viewer, compares it with
 - `freshness.py`: equity prices are fresh at or after the last regular close;
   other fields carry wall-clock limits. Boards are `LIVE`, `STALE` or
   `DEGRADED` by computation.
-- `clock.py`: America/New_York with the NYSE calendar for 2026; `dst_drift`
+- `clock.py`: America/New_York with the NYSE calendar for 2026 and 2027 (a
+  date past the table is a FAILED run, not a guess); `dst_drift`
   names the days a fixed-UTC cron fires at the wrong ET hour;
   `starts_vs_ready` is the honest stamp ("starts 6:00 AM, ready 6:41 AM").
 
@@ -82,14 +91,18 @@ the denominator; a missing core factor makes the asset `INSUFFICIENT`. The
 crypto rubric is `PROPOSED` (see `TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md`) and every
 result from it says so. `scenarios.py` defines total return once and requires
 probabilities that sum to one. `outcomes.py` grades from the first regular
-open after publication and against the benchmark.
+open on the next session date after publication (or the first same-session
+print when published during the session), requires the benchmark reference on
+the same session, and accepts the horizon print only within five days of the
+horizon end; a WATCH or PASS carries no position and is VOID.
 
 ## Views
 
 Today · Stock rankings · Crypto rankings · Portfolio 1 · Portfolio 2 · Other
 accounts · Asset detail · Risk and catalysts · Critic · Performance · History /
 as-built · Memory / learning · Sources / health. `render.py` builds all
-thirteen server-side; the page shows its content without JavaScript.
+thirteen server-side; without JavaScript every view is shown stacked, and no
+external font or script is loaded.
 
 ## Boundaries
 

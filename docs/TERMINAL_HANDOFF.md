@@ -21,10 +21,11 @@ Status labels follow the implementation prompt: **BUILT AND TESTED**,
 | Two-round critic protocol | BUILT AND TESTED | `tests/test_terminal_critic.py` |
 | Store adapters and write plans | BUILT AND TESTED | `tests/test_terminal_store.py` |
 | Daily pipeline with six failure injections | BUILT AND TESTED | `tests/test_terminal_pipeline.py`, `tests/test_terminal_cli.py` |
-| Legacy migration (capsule v43, boards, accounts, calls, run log) | BUILT AND TESTED | `tests/test_terminal_legacy.py`; V53 migration verified clean in session |
+| Legacy migration (capsule v43, boards, accounts, calls, run log) | BUILT AND TESTED on the synthetic page; BUILT NOT VERIFIED in the repository for the real V53 page (the clean V53 migration and `verify` were observed in the session only) | `tests/test_terminal_legacy.py` |
 | Renderer with thirteen views | BUILT AND TESTED | `tests/test_terminal_render.py`; one visual check of the migrated page |
 | Role definitions (10) | BUILT AND TESTED | `terminal/agents/`, `tests/test_terminal_agents.py` |
 | Revamped Edition artifact with the artifact database seeded | BUILT NOT VERIFIED | published from the session; store seeded and read back through the publishing tool; the in-page store check was not observed in a viewer from this session |
+| Store-backed writer lease and in-session artifact-db adapter | PROPOSED | `RunLock` is in-memory; the production lease and the Routine-side db reader/writer are designed in `TERMINAL_RUNBOOK.md` and not built |
 | Cutover of the Routines and the live page | BLOCKED | needs Joe's approval on policy, schedule and prompts (`TERMINAL_MIGRATION.md`) |
 | Live analyst research through the roles (real evidence, real scores) | BLOCKED | no run has been fired; the dry run uses fixture inputs |
 
@@ -38,8 +39,10 @@ Status labels follow the implementation prompt: **BUILT AND TESTED**,
 
 ## Test results
 
-`python -m unittest discover -s tests -p "test_terminal_*.py"`: 102 tests, 0
-failures. The full repository surface (`task validate`) was run before the
+`python -m unittest discover -s tests -p "test_terminal_*.py"`: 117 tests, 0
+failures, after the independent review's findings were fixed (ledger ordering,
+gate strictness, bounded outcome references, critic resolution keys, payload
+escaping, no stance from the proposed crypto rubric). The full repository surface (`task validate`) was run before the
 pull request; its figures are in `REPOSITORY_OVERVIEW.md`.
 
 ## Remaining tasks (in order)

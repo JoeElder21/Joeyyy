@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -47,14 +48,17 @@ class PipelineTests(unittest.TestCase):
         recs = {d["symbol"]: d for _, d in self.store.list("recommendations")}
         self.assertEqual(
             {k: v["stance"] for k, v in recs.items()},
-            {"EXA": "HOLD", "EXB": "ADD", "EXC": "HOLD", "EXD": "BUY", "SYNTH": "HOLD"},
+            {"EXA": "HOLD", "EXB": "ADD", "EXC": "HOLD", "EXD": "BUY"},
         )
         self.assertIsNotNone(recs["EXB"]["cooling_period_ends"])
         self.assertIsNone(recs["EXA"]["cooling_period_ends"])
         self.assertTrue(recs["EXD"]["hurdle_cleared"])
         self.assertEqual(recs["EXD"]["reference_price"], None)
-        self.assertIn("open after publication", recs["EXD"]["reference_convention"])
-        self.assertEqual(recs["SYNTH"]["scorecard"]["rubric_status"], "PROPOSED")
+        self.assertIn("next session date", recs["EXD"]["reference_convention"])
+        crypto_rows = {r["symbol"]: r for r in self.store.get("boards/rankings-crypto")["rows"]}
+        self.assertEqual(crypto_rows["SYNTH"]["scorecard"]["rubric_status"], "PROPOSED")
+        self.assertEqual(crypto_rows["SYNTH"]["rank"], 1)
+        self.assertNotIn("SYNTH", recs)
 
     def test_excluded_and_insufficient_assets_are_listed_not_ranked(self):
         board = self.store.get("boards/rankings-equity")
@@ -97,7 +101,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(graded["rec-prior-exd-void"]["status"], "VOID")
         learning = self.store.get("learning/current")
         rate = next(iter(learning["hit_rates"].values()))
-        self.assertEqual((rate["graded"], rate["hits"], rate["open"], rate["void"]), (2, 1, 1, 1))
+        self.assertEqual((rate["graded"], rate["hits"], rate["open"], rate["void"]), (2, 1, 1, 2))
 
     def test_every_stored_document_validates(self):
         for path in self.store.paths():
@@ -180,7 +184,7 @@ class FailureInjectionTests(unittest.TestCase):
     def test_pooled_schwab_portfolios_fail_the_invariant(self):
         inputs = load_inputs()
         for portfolio in inputs["portfolios"]:
-            portfolio["distinct_from"] = []
+            portfolio["distinct_from"] = ["something-else"]
         result = pipeline.run(inputs, store.MemoryStore())
         self.assertEqual(result.status, "BLOCKED")
         self.assertIn("invariants", [g.name for g in result.gate_checks if not g.passed])
@@ -191,6 +195,84 @@ class FailureInjectionTests(unittest.TestCase):
         result = pipeline.run(inputs, store.MemoryStore())
         self.assertEqual(result.status, "BLOCKED")
         self.assertEqual(result.stages[-1]["name"], "steward")
+
+
+class ReviewFixTests(unittest.TestCase):
+    """Behaviours added after the independent review."""
+
+    def test_consecutive_runs_chain_on_one_store(self):
+        chained = store.MemoryStore()
+        first = pipeline.run(load_inputs(), chained)
+        second_inputs = load_inputs() | {
+            "now": "2026-09-14T10:41:00Z",
+            "scheduled_at": "2026-09-14T10:00:00Z",
+        }
+        for sec in second_inputs["securities"]:
+            equity = sec["asset_class"] == "equity"
+            sec["price"]["observed_at"] = (
+                "2026-09-11T20:00:00Z" if equity else "2026-09-14T10:30:00Z"
+            )
+        second = pipeline.run(second_inputs, chained)
+        third_inputs = load_inputs() | {
+            "now": "2026-09-15T10:41:00Z",
+            "scheduled_at": "2026-09-15T10:00:00Z",
+        }
+        for sec in third_inputs["securities"]:
+            equity = sec["asset_class"] == "equity"
+            sec["price"]["observed_at"] = (
+                "2026-09-14T20:00:00Z" if equity else "2026-09-15T10:30:00Z"
+            )
+        third = pipeline.run(third_inputs, chained)
+        self.assertEqual(
+            (first.status, second.status, third.status), ("PUBLISHED", "PUBLISHED", "PUBLISHED")
+        )
+        self.assertEqual(second.manifest.base_sha, first.manifest.result_sha)
+        self.assertEqual(third.manifest.base_sha, second.manifest.result_sha)
+        self.assertTrue(chained.get("health/current")["chain"]["ok"])
+
+    def test_an_exception_becomes_a_failed_run_document(self):
+        s = store.MemoryStore()
+        inputs = load_inputs()
+        inputs["securities"][0]["scenarios"]["cases"][0]["probability"] = 0.9
+        result = pipeline.run(inputs, s)
+        self.assertEqual(result.status, "FAILED")
+        self.assertEqual(result.stages[-1]["name"], "exception")
+        run_doc = s.get(f"runs/{result.manifest.run_id}")
+        self.assertEqual(run_doc["status"], "FAILED")
+        self.assertIn("ValueError", run_doc["notes"][0])
+        self.assertTrue(pipeline.run(load_inputs(), s).status == "PUBLISHED")
+
+    def test_unchecked_fatal_flags_keep_an_asset_out_of_the_ranking(self):
+        inputs = load_inputs()
+        target = next(s for s in inputs["securities"] if s["symbol"] == "EXD")
+        target["fatal_flags"] = {"going_concern": False}
+        result = pipeline.run(inputs, store.MemoryStore())
+        row = next(r for r in result.docs["boards/rankings-equity"]["rows"] if r["symbol"] == "EXD")
+        self.assertEqual((row["status"], row["rank"]), ("EXCLUDED", 0))
+        self.assertTrue(row["cells"]["GATE"].startswith("FAIL:"))
+
+    def test_watch_prior_recommendation_is_void_not_a_crash(self):
+        result = pipeline.run(load_inputs(), store.MemoryStore())
+        self.assertEqual(result.docs["outcomes/rec-prior-exf-watch"]["status"], "VOID")
+
+    def test_recommendation_ids_come_from_the_asset_id(self):
+        result = pipeline.run(load_inputs(), store.MemoryStore())
+        ids = [p.split("/")[1] for p in result.docs if p.startswith("recommendations/")]
+        self.assertTrue(ids)
+        self.assertTrue(
+            all(re.fullmatch(r"rec-daily-[0-9a-f]{10}-eq-x[a-z]{3}-ex[a-z]", i) for i in ids), ids
+        )
+
+    def test_two_lots_of_one_asset_are_summed(self):
+        inputs = load_inputs()
+        roth = inputs["portfolios"][0]
+        roth["positions"].append(
+            {"asset_id": "eq:XNAS:EXA", "symbol": "EXA", "market_value": 2000.0, "weight": 0.02}
+        )
+        result = pipeline.run(inputs, store.MemoryStore())
+        report = next(r for r in result.risk if r["portfolio_id"] == "schwab-roth")
+        self.assertEqual(report["status"], "REVIEW")
+        self.assertTrue(any("14.0% exceeds" in b for b in report["breaches"]))
 
 
 if __name__ == "__main__":
