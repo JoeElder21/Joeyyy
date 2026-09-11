@@ -50,6 +50,16 @@ d94f96d5c0f6358689a8be81c16fcccbe6007ea9:.claude/agents/awesome-claude-agents/sp
 7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/code-review-generic.instructions.md:stripe-access-token:142
 7e2f52418cc8ea6221289d71368c45cf18fc69ff:.github/instructions/security-and-owasp.instructions.md:stripe-access-token:412
 
+# tests/test_terminal_identity.py, as first committed on this branch, asserted an
+# EVM contract address in mixed case next to the attribute name `key`
+# (`evm.key, "0xABCD..."`), which the generic-api-key rule reads as a key
+# assignment. The value is a synthetic address, not a credential. The line was
+# rewritten in the next commit to compare the canonical id instead, so the tree
+# scan is clean; this entry is pinned to the commit that added the line, which
+# is an immutable ancestor of every later commit on the branch, as with the
+# `03cb443` entry above.
+ee9e991ad42c4a8d53996a9e0dc02bcaadccc696:tests/test_terminal_identity.py:generic-api-key:16
+
 # --- working-tree fingerprints ---
 #
 # The CI job runs BOTH `gitleaks git` (history) and `gitleaks dir` (the tree),
