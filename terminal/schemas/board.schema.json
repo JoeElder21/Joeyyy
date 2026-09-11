@@ -1,0 +1,207 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Board",
+ "type": "object",
+ "required": [
+  "board_id",
+  "title",
+  "kind",
+  "as_of",
+  "status",
+  "stamp",
+  "columns",
+  "rows"
+ ],
+ "properties": {
+  "board_id": {
+   "type": "string",
+   "pattern": "^[a-z0-9-]+$"
+  },
+  "title": {
+   "type": "string"
+  },
+  "kind": {
+   "enum": [
+    "equity",
+    "crypto",
+    "meme",
+    "legacy",
+    "portfolio"
+   ]
+  },
+  "as_of": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "status": {
+   "enum": [
+    "LIVE",
+    "STALE",
+    "DEGRADED"
+   ]
+  },
+  "stamp": {
+   "type": "string"
+  },
+  "columns": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "rows": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "rank",
+     "symbol",
+     "cells",
+     "status"
+    ],
+    "properties": {
+     "rank": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "asset_id": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "symbol": {
+      "type": "string"
+     },
+     "cells": {
+      "type": "object",
+      "additionalProperties": {
+       "type": [
+        "string",
+        "number",
+        "null"
+       ]
+      }
+     },
+     "legacy_zone": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "scorecard": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "required": [
+       "rubric",
+       "rubric_status",
+       "status",
+       "score",
+       "earned",
+       "possible",
+       "coverage",
+       "factors",
+       "unscored",
+       "input_digest"
+      ],
+      "properties": {
+       "rubric": {
+        "type": "string"
+       },
+       "rubric_status": {
+        "enum": [
+         "ADOPTED",
+         "PROPOSED"
+        ]
+       },
+       "status": {
+        "enum": [
+         "SCORED",
+         "PARTIAL",
+         "INSUFFICIENT"
+        ]
+       },
+       "score": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "earned": {
+        "type": "number"
+       },
+       "possible": {
+        "type": "integer"
+       },
+       "coverage": {
+        "type": "number"
+       },
+       "factors": {
+        "type": "object",
+        "additionalProperties": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       },
+       "unscored": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "input_digest": {
+        "type": "string"
+       },
+       "notes": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "status": {
+      "enum": [
+       "SCORED",
+       "PARTIAL",
+       "INSUFFICIENT",
+       "EXCLUDED",
+       "LEGACY_UNSCORED"
+      ]
+     },
+     "owned": {
+      "type": "boolean"
+     },
+     "case": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   }
+  },
+  "notes": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "rubric": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "legacy_ordering": {
+   "type": [
+    "string",
+    "null"
+   ]
+  }
+ }
+}

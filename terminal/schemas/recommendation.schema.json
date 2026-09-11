@@ -1,0 +1,210 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Immutable recommendation",
+ "type": "object",
+ "required": [
+  "recommendation_id",
+  "run_id",
+  "issued_at",
+  "asset_id",
+  "symbol",
+  "stance",
+  "horizon_days",
+  "lens",
+  "reference_convention",
+  "rationale",
+  "evidence_ids",
+  "risks",
+  "invalidation",
+  "content_sha"
+ ],
+ "properties": {
+  "recommendation_id": {
+   "type": "string",
+   "pattern": "^rec-[A-Za-z0-9_-]+$"
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "issued_at": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "asset_id": {
+   "type": "string",
+   "pattern": "^(eq|cx|op|cash):[A-Za-z0-9_-]+:.+$"
+  },
+  "symbol": {
+   "type": "string"
+  },
+  "portfolio_id": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "stance": {
+   "enum": [
+    "BUY",
+    "ADD",
+    "HOLD",
+    "TRIM",
+    "EXIT",
+    "AVOID",
+    "WATCH",
+    "PASS",
+    "REDUCE"
+   ]
+  },
+  "horizon_days": {
+   "type": "integer",
+   "minimum": 1
+  },
+  "lens": {
+   "enum": [
+    "tactical",
+    "secondary",
+    "legacy"
+   ]
+  },
+  "reference_price": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "reference_convention": {
+   "type": "string"
+  },
+  "scorecard": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "required": [
+    "rubric",
+    "rubric_status",
+    "status",
+    "score",
+    "earned",
+    "possible",
+    "coverage",
+    "factors",
+    "unscored",
+    "input_digest"
+   ],
+   "properties": {
+    "rubric": {
+     "type": "string"
+    },
+    "rubric_status": {
+     "enum": [
+      "ADOPTED",
+      "PROPOSED"
+     ]
+    },
+    "status": {
+     "enum": [
+      "SCORED",
+      "PARTIAL",
+      "INSUFFICIENT"
+     ]
+    },
+    "score": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "earned": {
+     "type": "number"
+    },
+    "possible": {
+     "type": "integer"
+    },
+    "coverage": {
+     "type": "number"
+    },
+    "factors": {
+     "type": "object",
+     "additionalProperties": {
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    },
+    "unscored": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "input_digest": {
+     "type": "string"
+    },
+    "notes": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "scenarios": {
+   "type": [
+    "object",
+    "null"
+   ]
+  },
+  "hurdle_cleared": {
+   "type": [
+    "boolean",
+    "null"
+   ]
+  },
+  "rationale": {
+   "type": "string"
+  },
+  "evidence_ids": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "risks": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "invalidation": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "critic": {
+   "type": [
+    "object",
+    "null"
+   ]
+  },
+  "cooling_period_ends": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "content_sha": {
+   "type": "string"
+  },
+  "legacy": {
+   "type": [
+    "object",
+    "null"
+   ]
+  }
+ }
+}

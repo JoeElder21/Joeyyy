@@ -1,0 +1,119 @@
+# Bounded agent roles for the daily research workflow. Every role is JEOS-owned,
+# read-only toward brokers and wallets, and writes nothing to the store itself:
+# roles return documents to the orchestrator, which is the designated writer.
+# Parallelism is a hard cap per run, not a promise of concurrency.
+
+version = "0.1.0"
+brain = "JEOS"
+designated_writer = "orchestrator"
+max_concurrent_agents = 6
+
+[[role]]
+id = "orchestrator"
+title = "Orchestrator"
+stage = "all"
+parallelism = 1
+reads = ["policy", "portfolios", "runs", "snapshots"]
+produces = ["research_run", "snapshot"]
+writes_store = true
+tools = ["store", "clock"]
+forbidden = ["orders", "credentials", "schedule changes", "live artifact edits without approval"]
+
+[[role]]
+id = "data_steward"
+title = "Data steward"
+stage = "steward"
+parallelism = 1
+reads = ["policy", "portfolios", "evidence"]
+produces = ["evidence", "portfolio_state"]
+writes_store = false
+tools = ["market data (read)", "screenshots supplied by Joe", "on-chain reads"]
+forbidden = ["estimating a balance", "inventing a number"]
+
+[[role]]
+id = "market_catalyst_analyst"
+title = "Market and catalyst analyst"
+stage = "analysts"
+parallelism = 1
+reads = ["evidence", "policy"]
+produces = ["evidence"]
+writes_store = false
+tools = ["web search (read)", "primary-source filings and releases"]
+forbidden = ["unsourced claims"]
+
+[[role]]
+id = "equity_researcher"
+title = "Equity researcher"
+stage = "analysts"
+parallelism = 3
+reads = ["evidence", "security", "policy"]
+produces = ["security_research"]
+writes_store = false
+tools = ["filings", "market data (read)", "web search (read)"]
+forbidden = ["scoring a factor without evidence"]
+
+[[role]]
+id = "crypto_researcher"
+title = "Crypto researcher"
+stage = "analysts"
+parallelism = 2
+reads = ["evidence", "security", "policy"]
+produces = ["security_research"]
+writes_store = false
+tools = ["explorer and router reads", "DEX data (read)", "web search (read)"]
+forbidden = ["symbol-only identity", "wallet connection", "signing"]
+
+[[role]]
+id = "quant_valuation_analyst"
+title = "Quant and valuation analyst"
+stage = "quant"
+parallelism = 1
+reads = ["security", "policy"]
+produces = ["security_research"]
+writes_store = false
+tools = ["terminal.scorecard", "terminal.scenarios"]
+forbidden = ["imputing an unscored factor"]
+
+[[role]]
+id = "portfolio_risk_analyst"
+title = "Portfolio risk analyst"
+stage = "risk"
+parallelism = 1
+reads = ["portfolios", "policy", "security"]
+produces = ["research_run"]
+writes_store = false
+tools = ["terminal.pipeline.portfolio_risk"]
+forbidden = ["pooling the two Schwab accounts"]
+
+[[role]]
+id = "ranking_critic"
+title = "Independent ranking critic"
+stage = "critic"
+parallelism = 1
+reads = ["security", "recommendations", "evidence"]
+produces = ["research_run"]
+writes_store = false
+tools = ["terminal.critic"]
+forbidden = ["editing a recommendation", "a third round"]
+
+[[role]]
+id = "outcome_learning_analyst"
+title = "Outcome and learning analyst"
+stage = "learning"
+parallelism = 1
+reads = ["recommendations", "outcomes", "learning"]
+produces = ["outcome", "learning"]
+writes_store = false
+tools = ["terminal.outcomes"]
+forbidden = ["grading on a price nobody could trade"]
+
+[[role]]
+id = "release_qa_validator"
+title = "Release and QA validator"
+stage = "release"
+parallelism = 1
+reads = ["runs", "snapshots", "health"]
+produces = ["health"]
+writes_store = false
+tools = ["terminal.gates", "terminal.schema", "terminal.cli verify"]
+forbidden = ["publishing over a failed gate"]

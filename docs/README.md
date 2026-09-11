@@ -1,6 +1,6 @@
 # Documentation index
 
-41 records, grouped by purpose. Start at the top of each section.
+47 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -82,3 +82,14 @@ Read in date order — each supersedes nothing, but later records assume earlier
 - [`../schemas/`](../schemas/) — delegation, handoff, memory, lease, and roundtable packet contracts
 - [`../trial/`](../trial/) — execution-layer trial tickets and output
 - [`../brains/`](../brains/) — APEX and JEOS brain-owned rosters and memory policy
+
+## Claude Stocks Terminal
+
+| Document | What it is |
+| --- | --- |
+| [`TERMINAL_AUDIT.md`](TERMINAL_AUDIT.md) | Audit matrix of the live research terminal with VERIFIED / INFERRED / UNAVAILABLE labels and the findings that shaped the redesign |
+| [`TERMINAL_ARCHITECTURE.md`](TERMINAL_ARCHITECTURE.md) | Development workflow versus daily research workflow, the store's collections, identity, freshness, rankings, views |
+| [`TERMINAL_RUNBOOK.md`](TERMINAL_RUNBOOK.md) | Commands, the production run step by step, failure diagnosis order, republish rules, always-gated actions |
+| [`TERMINAL_MIGRATION.md`](TERMINAL_MIGRATION.md) | What the legacy migration does, what it refuses to invent, and the approval-gated cutover steps |
+| [`TERMINAL_HANDOFF.md`](TERMINAL_HANDOFF.md) | Milestone status by deliverable, state locations, test results, remaining tasks, next commands |
+| [`TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md`](TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md) | The proposed crypto scorecard, awaiting approval |

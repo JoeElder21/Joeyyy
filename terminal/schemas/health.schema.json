@@ -1,0 +1,166 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "System health",
+ "type": "object",
+ "required": [
+  "as_of",
+  "run_id",
+  "boards",
+  "schedule",
+  "calendar_covered_through",
+  "store",
+  "chain"
+ ],
+ "properties": {
+  "as_of": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "boards": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "status",
+     "stamp"
+    ],
+    "properties": {
+     "status": {
+      "enum": [
+       "LIVE",
+       "STALE",
+       "DEGRADED"
+      ]
+     },
+     "stamp": {
+      "type": "string"
+     },
+     "rows_total": {
+      "type": "integer"
+     },
+     "rows_fresh": {
+      "type": "integer"
+     },
+     "source": {
+      "type": "string"
+     },
+     "on_failure": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "schedule": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "name",
+     "cron_utc",
+     "target_et",
+     "dst_drift"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "cron_utc": {
+      "type": "string"
+     },
+     "target_et": {
+      "type": "string"
+     },
+     "dst_drift": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "starts",
+        "ends",
+        "fires_at_et"
+       ],
+       "properties": {
+        "starts": {
+         "type": "string"
+        },
+        "ends": {
+         "type": "string"
+        },
+        "fires_at_et": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "last_starts_vs_ready": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   }
+  },
+  "calendar_covered_through": {
+   "type": "integer"
+  },
+  "store": {
+   "type": "object",
+   "required": [
+    "mode"
+   ],
+   "properties": {
+    "mode": {
+     "enum": [
+      "embedded-snapshot",
+      "artifact-db",
+      "json-dir",
+      "memory"
+     ]
+    },
+    "documents": {
+     "type": "integer"
+    }
+   }
+  },
+  "page_bytes": {
+   "type": "integer"
+  },
+  "chain": {
+   "type": "object",
+   "required": [
+    "ok",
+    "length"
+   ],
+   "properties": {
+    "ok": {
+     "type": "boolean"
+    },
+    "length": {
+     "type": "integer"
+    },
+    "breaks": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "sources": {
+   "type": "array",
+   "items": {
+    "type": "object"
+   }
+  },
+  "notes": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  }
+ }
+}

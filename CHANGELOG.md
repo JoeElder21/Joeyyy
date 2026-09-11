@@ -3,6 +3,29 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-09-11 — The stocks terminal gets a durable, testable research workflow
+
+The daily research terminal ran as one page republished by three cloud
+Routines, with its only structured state embedded in the page and its build
+pipeline living in a chat session's scratchpad. This change audits that system
+as built and adds `terminal/`, a stdlib-only package that holds the workflow's
+calculations, document schemas, store adapters, migration, renderer and role
+definitions, with a synthetic dry run that exercises every stage and six
+failure paths. The live page and its Routines are not modified; cutover is an
+approval-gated step recorded in `docs/TERMINAL_MIGRATION.md`.
+
+### Added
+
+- `terminal/` — schemas, identity, market clock, freshness, the 100-point
+  equity scorecard, scenario mathematics, outcome grading, gates, tiers, run
+  manifests with an idempotency ledger and hash chain, the two-round critic,
+  store adapters, the daily pipeline, the legacy migration, the renderer, the
+  command line, ten role briefs and a synthetic fixture.
+- `tests/test_terminal_*.py` — 102 tests over the package.
+- `docs/TERMINAL_AUDIT.md`, `docs/TERMINAL_ARCHITECTURE.md`,
+  `docs/TERMINAL_RUNBOOK.md`, `docs/TERMINAL_MIGRATION.md`,
+  `docs/TERMINAL_HANDOFF.md`, `docs/TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md`.
+
 ## 2026-08-30 — The daily briefing becomes a verified schedule
 
 Briefings were produced by hand on 2026-07-30 through 2026-08-04 — one new

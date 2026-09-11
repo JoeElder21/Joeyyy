@@ -1,0 +1,250 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Security research",
+ "type": "object",
+ "required": [
+  "asset_id",
+  "symbol",
+  "asset_class",
+  "as_of",
+  "identity",
+  "fatal_flags",
+  "gate",
+  "facts"
+ ],
+ "properties": {
+  "asset_id": {
+   "type": "string",
+   "pattern": "^(eq|cx|op|cash):[A-Za-z0-9_-]+:.+$"
+  },
+  "symbol": {
+   "type": "string"
+  },
+  "asset_class": {
+   "enum": [
+    "equity",
+    "crypto",
+    "option",
+    "cash"
+   ]
+  },
+  "as_of": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "identity": {
+   "type": "object",
+   "required": [
+    "canonical"
+   ],
+   "properties": {
+    "canonical": {
+     "type": "string"
+    },
+    "exchange": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "chain": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "contract": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "name": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   }
+  },
+  "fatal_flags": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "boolean"
+   }
+  },
+  "gate": {
+   "type": "object",
+   "required": [
+    "passed",
+    "failed"
+   ],
+   "properties": {
+    "passed": {
+     "type": "boolean"
+    },
+    "failed": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "checked": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "facts": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "key",
+     "value",
+     "label"
+    ],
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "value": {},
+     "label": {
+      "type": "string",
+      "enum": [
+       "confirmed",
+       "source-backed",
+       "calculated",
+       "judgment",
+       "assumption",
+       "unknown",
+       "conflict"
+      ]
+     },
+     "evidence_id": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "observed_at": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+     }
+    }
+   }
+  },
+  "catalysts": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "text"
+    ],
+    "properties": {
+     "date": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "text": {
+      "type": "string"
+     },
+     "evidence_id": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   }
+  },
+  "scorecard": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "required": [
+    "rubric",
+    "rubric_status",
+    "status",
+    "score",
+    "earned",
+    "possible",
+    "coverage",
+    "factors",
+    "unscored",
+    "input_digest"
+   ],
+   "properties": {
+    "rubric": {
+     "type": "string"
+    },
+    "rubric_status": {
+     "enum": [
+      "ADOPTED",
+      "PROPOSED"
+     ]
+    },
+    "status": {
+     "enum": [
+      "SCORED",
+      "PARTIAL",
+      "INSUFFICIENT"
+     ]
+    },
+    "score": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "earned": {
+     "type": "number"
+    },
+    "possible": {
+     "type": "integer"
+    },
+    "coverage": {
+     "type": "number"
+    },
+    "factors": {
+     "type": "object",
+     "additionalProperties": {
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    },
+    "unscored": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "input_digest": {
+     "type": "string"
+    },
+    "notes": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "notes": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  }
+ }
+}

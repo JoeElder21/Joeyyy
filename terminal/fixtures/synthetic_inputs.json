@@ -1,0 +1,810 @@
+{
+ "synthetic": true,
+ "now": "2026-09-11T10:41:00Z",
+ "scheduled_at": "2026-09-11T10:00:00Z",
+ "kind": "daily",
+ "writer": "DAILY",
+ "version_label": "dryrun-synthetic-1",
+ "portfolios": [
+  {
+   "portfolio_id": "schwab-roth",
+   "label": "Synthetic Roth IRA",
+   "custodian": "synthetic custodian",
+   "account_kind": "Roth IRA",
+   "as_of": "2026-09-10T17:13:00Z",
+   "source": "screenshot",
+   "verification": "screenshot-verified",
+   "total_value": 100000.0,
+   "cash_value": 15000.0,
+   "cash_weight": 0.15,
+   "positions": [
+    {
+     "asset_id": "eq:XNAS:EXA",
+     "symbol": "EXA",
+     "market_value": 12000.0,
+     "weight": 0.12
+    },
+    {
+     "asset_id": "eq:XNYS:EXB",
+     "symbol": "EXB",
+     "market_value": 9000.0,
+     "weight": 0.09
+    },
+    {
+     "asset_id": "eq:XNAS:EXC",
+     "symbol": "EXC",
+     "market_value": 8000.0,
+     "weight": 0.08
+    }
+   ],
+   "notes": [
+    "synthetic fixture; every figure is invented for tests"
+   ],
+   "distinct_from": [
+    "schwab-rollover"
+   ]
+  },
+  {
+   "portfolio_id": "schwab-rollover",
+   "label": "Synthetic Rollover IRA",
+   "custodian": "synthetic custodian",
+   "account_kind": "Rollover IRA",
+   "as_of": "2026-09-10T17:13:00Z",
+   "source": "screenshot",
+   "verification": "screenshot-verified",
+   "total_value": 25000.0,
+   "cash_value": 300.0,
+   "cash_weight": 0.012,
+   "positions": [
+    {
+     "asset_id": "eq:XNAS:EXA",
+     "symbol": "EXA",
+     "market_value": 3500.0,
+     "weight": 0.14
+    },
+    {
+     "asset_id": "eq:XNAS:EXC",
+     "symbol": "EXC",
+     "market_value": 2000.0,
+     "weight": 0.08
+    }
+   ],
+   "notes": [
+    "synthetic fixture"
+   ],
+   "distinct_from": [
+    "schwab-roth"
+   ]
+  },
+  {
+   "portfolio_id": "exchange-synthetic",
+   "label": "Synthetic exchange account",
+   "custodian": "synthetic exchange",
+   "account_kind": "crypto",
+   "as_of": "2026-09-10T17:13:00Z",
+   "source": "screenshot",
+   "verification": "screenshot-verified",
+   "total_value": 1000.0,
+   "cash_value": 100.0,
+   "cash_weight": 0.1,
+   "positions": [
+    {
+     "asset_id": "cx:pulsechain:0x000000000000000000000000000000000000abcd",
+     "symbol": "SYNTH",
+     "market_value": 400.0,
+     "weight": 0.4
+    }
+   ],
+   "notes": [
+    "synthetic fixture"
+   ],
+   "distinct_from": []
+  }
+ ],
+ "universe": {
+  "mandate": [
+   "eq:XNAS:EXD",
+   "eq:XNYS:EXE"
+  ],
+  "screened": [
+   "eq:XNAS:EXF"
+  ],
+  "mentions": [
+   "cx:solana:SyntheticMintAddress111111111111111111111111",
+   "eq:XNAS:EXA"
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "ev-syn-001",
+   "asset_id": "eq:XNAS:EXA",
+   "kind": "filing",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXA quarterly filing: revenue grew and cash conversion held",
+   "claims": [
+    {
+     "text": "EXA quarterly filing: revenue grew and cash conversion held",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-002",
+   "asset_id": "eq:XNAS:EXA",
+   "kind": "news",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXA analyst day set for October (synthetic)",
+   "claims": [
+    {
+     "text": "EXA analyst day set for October (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-003",
+   "asset_id": "eq:XNAS:EXA",
+   "kind": "market_data",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXA price and volume series (synthetic)",
+   "claims": [
+    {
+     "text": "EXA price and volume series (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-004",
+   "asset_id": "eq:XNYS:EXB",
+   "kind": "filing",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXB annual report: net cash balance sheet (synthetic)",
+   "claims": [
+    {
+     "text": "EXB annual report: net cash balance sheet (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-005",
+   "asset_id": "eq:XNYS:EXB",
+   "kind": "news",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXB buyback announced (synthetic)",
+   "claims": [
+    {
+     "text": "EXB buyback announced (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-006",
+   "asset_id": "eq:XNAS:EXC",
+   "kind": "filing",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXC quarterly filing (synthetic)",
+   "claims": [
+    {
+     "text": "EXC quarterly filing (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-007",
+   "asset_id": "eq:XNAS:EXD",
+   "kind": "filing",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXD quarterly filing (synthetic)",
+   "claims": [
+    {
+     "text": "EXD quarterly filing (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-008",
+   "asset_id": "eq:XNAS:EXD",
+   "kind": "press_release",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "EXD contract award (synthetic)",
+   "claims": [
+    {
+     "text": "EXD contract award (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  },
+  {
+   "evidence_id": "ev-syn-009",
+   "asset_id": "cx:pulsechain:0x000000000000000000000000000000000000abcd",
+   "kind": "onchain",
+   "source": "synthetic fixture",
+   "url": null,
+   "observed_at": "2026-09-10T22:00:00Z",
+   "published_at": "2026-09-09T12:00:00Z",
+   "summary": "SYNTH router quote and holder distribution (synthetic)",
+   "claims": [
+    {
+     "text": "SYNTH router quote and holder distribution (synthetic)",
+     "label": "source-backed"
+    }
+   ]
+  }
+ ],
+ "securities": [
+  {
+   "asset_id": "eq:XNAS:EXA",
+   "symbol": "EXA",
+   "asset_class": "equity",
+   "identity": {
+    "canonical": "eq:XNAS:EXA",
+    "exchange": "XNAS",
+    "name": "Example A (synthetic)"
+   },
+   "factors": {
+    "fundamentals": 0.9,
+    "valuation": 0.7,
+    "catalysts_revisions": 0.8,
+    "downside_protection": 0.8,
+    "portfolio_fit": 0.6,
+    "technicals_liquidity": 0.9
+   },
+   "evidence": {
+    "fundamentals": [
+     "ev-syn-001",
+     "ev-syn-002",
+     "ev-syn-003"
+    ],
+    "valuation": [
+     "ev-syn-001",
+     "ev-syn-002",
+     "ev-syn-003"
+    ],
+    "catalysts_revisions": [
+     "ev-syn-001",
+     "ev-syn-002",
+     "ev-syn-003"
+    ],
+    "downside_protection": [
+     "ev-syn-001",
+     "ev-syn-002",
+     "ev-syn-003"
+    ],
+    "portfolio_fit": [
+     "ev-syn-001",
+     "ev-syn-002",
+     "ev-syn-003"
+    ],
+    "technicals_liquidity": [
+     "ev-syn-001",
+     "ev-syn-002",
+     "ev-syn-003"
+    ]
+   },
+   "price": {
+    "price": 100.0,
+    "observed_at": "2026-09-10T20:00:00Z"
+   },
+   "scenarios": {
+    "entry": 100.0,
+    "costs": 0.5,
+    "cases": [
+     {
+      "name": "bear",
+      "probability": 0.25,
+      "end_value": 80.0
+     },
+     {
+      "name": "base",
+      "probability": 0.5,
+      "end_value": 118.0,
+      "distributions": 1.0
+     },
+     {
+      "name": "bull",
+      "probability": 0.25,
+      "end_value": 150.0
+     }
+    ]
+   },
+   "fatal_flags": {},
+   "facts": [
+    {
+     "key": "net cash",
+     "value": "positive",
+     "label": "source-backed",
+     "evidence_id": "ev-syn-001"
+    }
+   ],
+   "catalysts": [
+    {
+     "date": "2026-10-15",
+     "text": "analyst day (synthetic)",
+     "evidence_id": "ev-syn-002"
+    }
+   ],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "eq:XNYS:EXB",
+   "symbol": "EXB",
+   "asset_class": "equity",
+   "identity": {
+    "canonical": "eq:XNYS:EXB"
+   },
+   "factors": {
+    "fundamentals": 0.8,
+    "valuation": 0.8,
+    "catalysts_revisions": 0.7,
+    "downside_protection": 0.9,
+    "portfolio_fit": 0.8,
+    "technicals_liquidity": 0.7
+   },
+   "evidence": {
+    "fundamentals": [
+     "ev-syn-004",
+     "ev-syn-005"
+    ],
+    "valuation": [
+     "ev-syn-004",
+     "ev-syn-005"
+    ],
+    "catalysts_revisions": [
+     "ev-syn-004",
+     "ev-syn-005"
+    ],
+    "downside_protection": [
+     "ev-syn-004",
+     "ev-syn-005"
+    ],
+    "portfolio_fit": [
+     "ev-syn-004",
+     "ev-syn-005"
+    ],
+    "technicals_liquidity": [
+     "ev-syn-004",
+     "ev-syn-005"
+    ]
+   },
+   "price": {
+    "price": 50.0,
+    "observed_at": "2026-09-10T20:00:00Z"
+   },
+   "scenarios": {
+    "entry": 50.0,
+    "costs": 0.25,
+    "cases": [
+     {
+      "name": "bear",
+      "probability": 0.3,
+      "end_value": 42.0
+     },
+     {
+      "name": "base",
+      "probability": 0.5,
+      "end_value": 60.0
+     },
+     {
+      "name": "bull",
+      "probability": 0.2,
+      "end_value": 80.0
+     }
+    ]
+   },
+   "fatal_flags": {},
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "eq:XNAS:EXC",
+   "symbol": "EXC",
+   "asset_class": "equity",
+   "identity": {
+    "canonical": "eq:XNAS:EXC"
+   },
+   "factors": {
+    "fundamentals": 0.6,
+    "valuation": 0.5,
+    "catalysts_revisions": 0.5,
+    "downside_protection": 0.6,
+    "portfolio_fit": null,
+    "technicals_liquidity": null
+   },
+   "evidence": {
+    "fundamentals": [
+     "ev-syn-006"
+    ],
+    "valuation": [
+     "ev-syn-006"
+    ],
+    "catalysts_revisions": [],
+    "downside_protection": [
+     "ev-syn-006"
+    ]
+   },
+   "price": {
+    "price": 30.0,
+    "observed_at": "2026-09-10T20:00:00Z"
+   },
+   "scenarios": {
+    "entry": 30.0,
+    "costs": 0.1,
+    "cases": [
+     {
+      "name": "bear",
+      "probability": 0.4,
+      "end_value": 25.0
+     },
+     {
+      "name": "base",
+      "probability": 0.4,
+      "end_value": 33.0
+     },
+     {
+      "name": "bull",
+      "probability": 0.2,
+      "end_value": 38.0
+     }
+    ]
+   },
+   "fatal_flags": {},
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "eq:XNAS:EXD",
+   "symbol": "EXD",
+   "asset_class": "equity",
+   "identity": {
+    "canonical": "eq:XNAS:EXD"
+   },
+   "factors": {
+    "fundamentals": 0.85,
+    "valuation": 0.8,
+    "catalysts_revisions": 0.9,
+    "downside_protection": 0.75,
+    "portfolio_fit": 0.9,
+    "technicals_liquidity": 0.8
+   },
+   "evidence": {
+    "fundamentals": [
+     "ev-syn-007",
+     "ev-syn-008"
+    ],
+    "valuation": [
+     "ev-syn-007",
+     "ev-syn-008"
+    ],
+    "catalysts_revisions": [
+     "ev-syn-007",
+     "ev-syn-008"
+    ],
+    "downside_protection": [
+     "ev-syn-007",
+     "ev-syn-008"
+    ],
+    "portfolio_fit": [
+     "ev-syn-007",
+     "ev-syn-008"
+    ],
+    "technicals_liquidity": [
+     "ev-syn-007",
+     "ev-syn-008"
+    ]
+   },
+   "price": {
+    "price": 20.0,
+    "observed_at": "2026-09-10T20:00:00Z"
+   },
+   "scenarios": {
+    "entry": 20.0,
+    "costs": 0.1,
+    "cases": [
+     {
+      "name": "bear",
+      "probability": 0.25,
+      "end_value": 16.0
+     },
+     {
+      "name": "base",
+      "probability": 0.5,
+      "end_value": 24.0
+     },
+     {
+      "name": "bull",
+      "probability": 0.25,
+      "end_value": 30.0
+     }
+    ]
+   },
+   "fatal_flags": {},
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "eq:XNYS:EXE",
+   "symbol": "EXE",
+   "asset_class": "equity",
+   "identity": {
+    "canonical": "eq:XNYS:EXE"
+   },
+   "factors": {
+    "fundamentals": 0.2,
+    "valuation": 0.9,
+    "catalysts_revisions": 0.3,
+    "downside_protection": 0.1,
+    "portfolio_fit": 0.5,
+    "technicals_liquidity": 0.4
+   },
+   "evidence": {},
+   "price": {
+    "price": 3.0,
+    "observed_at": "2026-09-10T20:00:00Z"
+   },
+   "scenarios": null,
+   "fatal_flags": {
+    "going_concern": true,
+    "liquidity_cliff_in_horizon": true
+   },
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "eq:XNAS:EXF",
+   "symbol": "EXF",
+   "asset_class": "equity",
+   "identity": {
+    "canonical": "eq:XNAS:EXF"
+   },
+   "factors": {
+    "fundamentals": 0.7,
+    "valuation": null,
+    "catalysts_revisions": 0.6,
+    "downside_protection": 0.6,
+    "portfolio_fit": 0.5,
+    "technicals_liquidity": 0.6
+   },
+   "evidence": {},
+   "price": {
+    "price": 12.0,
+    "observed_at": "2026-09-10T20:00:00Z"
+   },
+   "scenarios": null,
+   "fatal_flags": {},
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "cx:pulsechain:0x000000000000000000000000000000000000abcd",
+   "symbol": "SYNTH",
+   "asset_class": "crypto",
+   "identity": {
+    "canonical": "cx:pulsechain:0x000000000000000000000000000000000000abcd",
+    "chain": "pulsechain",
+    "contract": "0x000000000000000000000000000000000000abcd",
+    "name": "Synthetic token"
+   },
+   "factors": {
+    "liquidity_realizability": 0.6,
+    "supply_integrity": 0.7,
+    "holder_structure": 0.5,
+    "trend_entry": 0.5,
+    "venue_quality": 0.4,
+    "catalyst": null
+   },
+   "evidence": {
+    "liquidity_realizability": [
+     "ev-syn-009"
+    ],
+    "supply_integrity": [
+     "ev-syn-009"
+    ],
+    "holder_structure": [
+     "ev-syn-009"
+    ],
+    "trend_entry": [],
+    "venue_quality": []
+   },
+   "price": {
+    "price": 0.0125,
+    "observed_at": "2026-09-11T10:30:00Z"
+   },
+   "scenarios": null,
+   "fatal_flags": {},
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  },
+  {
+   "asset_id": "cx:solana:SyntheticMintAddress111111111111111111111111",
+   "symbol": "MOCK",
+   "asset_class": "crypto",
+   "identity": {
+    "canonical": "cx:solana:SyntheticMintAddress111111111111111111111111"
+   },
+   "factors": {
+    "liquidity_realizability": 0.3,
+    "supply_integrity": 0.1,
+    "holder_structure": 0.2,
+    "trend_entry": 0.8,
+    "venue_quality": 0.2,
+    "catalyst": 0.5
+   },
+   "evidence": {},
+   "price": {
+    "price": 0.5,
+    "observed_at": "2026-09-11T10:30:00Z"
+   },
+   "scenarios": null,
+   "fatal_flags": {
+    "open_mint_authority": true
+   },
+   "facts": [],
+   "catalysts": [],
+   "risks": [
+    "synthetic risk: demand slows"
+   ],
+   "invalidation": [
+    "synthetic: close below the stated level"
+   ],
+   "notes": []
+  }
+ ],
+ "prior_recommendations": [
+  {
+   "recommendation_id": "rec-prior-exa-buy",
+   "asset_id": "eq:XNAS:EXA",
+   "stance": "BUY",
+   "issued_at": "2026-05-01T11:00:00Z",
+   "horizon_days": 90
+  },
+  {
+   "recommendation_id": "rec-prior-exb-avoid",
+   "asset_id": "eq:XNYS:EXB",
+   "stance": "AVOID",
+   "issued_at": "2026-05-01T11:00:00Z",
+   "horizon_days": 90
+  },
+  {
+   "recommendation_id": "rec-prior-exc-hold",
+   "asset_id": "eq:XNAS:EXC",
+   "stance": "HOLD",
+   "issued_at": "2026-09-01T11:00:00Z",
+   "horizon_days": 120
+  },
+  {
+   "recommendation_id": "rec-prior-exd-void",
+   "asset_id": "eq:XNAS:EXD",
+   "stance": "BUY",
+   "issued_at": "2026-05-01T11:00:00Z",
+   "horizon_days": 30
+  }
+ ],
+ "observations": {
+  "benchmark": [
+   {
+    "at": "2026-05-04T13:30:00Z",
+    "price": 500.0,
+    "kind": "open"
+   },
+   {
+    "at": "2026-08-03T13:30:00Z",
+    "price": 520.0,
+    "kind": "open"
+   },
+   {
+    "at": "2026-09-02T13:30:00Z",
+    "price": 530.0,
+    "kind": "open"
+   }
+  ],
+  "eq:XNAS:EXA": [
+   {
+    "at": "2026-05-04T13:30:00Z",
+    "price": 80.0,
+    "kind": "open"
+   },
+   {
+    "at": "2026-08-03T13:30:00Z",
+    "price": 96.0,
+    "kind": "open"
+   }
+  ],
+  "eq:XNYS:EXB": [
+   {
+    "at": "2026-05-04T13:30:00Z",
+    "price": 40.0,
+    "kind": "open"
+   },
+   {
+    "at": "2026-08-03T13:30:00Z",
+    "price": 48.0,
+    "kind": "open"
+   }
+  ],
+  "eq:XNAS:EXC": [
+   {
+    "at": "2026-09-02T13:30:00Z",
+    "price": 31.0,
+    "kind": "open"
+   }
+  ],
+  "eq:XNAS:EXD": []
+ }
+}
