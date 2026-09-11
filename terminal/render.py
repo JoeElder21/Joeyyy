@@ -32,15 +32,19 @@ VIEWS: list[tuple[str, str]] = [
     ("health", "Sources / health"),
 ]
 LEGACY_CRYPTO_BOARDS = (
+    "pulse",
+    "fomo",
     "crypto",
     "memes",
     "pumpfun",
     "ton",
-    "pulse",
     "allcoins",
     "allentry",
     "allcall",
 )
+# Header names that label the row's own symbol rather than a data column. A board whose
+# columns are all data (a holdings list) has none of these, so every column is rendered.
+SYMBOL_HEADERS = frozenset({"TKR", "ASSET", "TOKEN", "POSITION", "CALL", "SYMBOL", "NAME"})
 MINUS = "−"
 
 
@@ -55,6 +59,11 @@ def money(value: float | None) -> str:
         return "n/a"
     sign = MINUS if value < 0 else ""
     return f"{sign}${abs(value):,.2f}"
+
+
+def share(value: float | None, digits: int = 2) -> str:
+    """A share of a total, rendered without a change sign."""
+    return "n/a" if value is None else f"{value * 100:.{digits}f}%"
 
 
 def pct(value: float | None, digits: int = 1) -> str:
@@ -109,13 +118,14 @@ def latest_run(docs: dict[str, dict]) -> dict | None:
 
 def board_table(doc: dict) -> str:
     columns = [c for c in doc.get("columns", []) if c not in ("#",)]
-    legacy = doc.get("rows") and doc["rows"][0].get("status") == "LEGACY_UNSCORED"
-    symbol_col = columns[0] if legacy and columns else None
-    case_col = (
-        columns[-1] if legacy and columns and columns[-1].upper().startswith("THE ") else None
-    )
+    symbol_col = columns[0] if columns and columns[0].upper() in SYMBOL_HEADERS else None
+    case_col = columns[-1] if columns and columns[-1].upper().startswith("THE ") else None
     data_cols = [c for c in columns if c not in (symbol_col, case_col)]
-    header = ["#", "ASSET", *data_cols, "STATUS"] + (["THE CASE"] if case_col else [])
+    header = ["#", "ASSET", *data_cols]
+    if doc.get("kind") != "portfolio":
+        header.append("STATUS")
+    if case_col:
+        header.append("THE CASE")
     rows = []
     for row in doc.get("rows", []):
         cells = row.get("cells", {})
@@ -132,6 +142,11 @@ def board_table(doc: dict) -> str:
             )
         status = row.get("status")
         zone = row.get("legacy_zone")
+        if doc.get("kind") == "portfolio":
+            if case_col:
+                line.append(f"<div class='case'>{esc(row.get('case'))}</div>")
+            rows.append(line)
+            continue
         line.append(
             pill(zone) + " <span class='muted'>legacy zone</span>"
             if status == "LEGACY_UNSCORED" and zone
@@ -310,6 +325,25 @@ def view_today(docs: dict[str, dict]) -> str:
                 "warn",
             )
         )
+    by_view = [
+        (r.get("label", r["portfolio_id"]), r.get("breaches", []))
+        for r in (run or {}).get("risk", [])
+    ]
+    by_view = [(label, items) for label, items in by_view if items]
+    if by_view:
+        out.append("<h3>Limit breaches</h3>")
+        for label, items in by_view:
+            out.append(f"<h4>{esc(label)}</h4>")
+            out.append(
+                "<ul class='todos'>" + "".join(f"<li><b>{esc(b)}</b></li>" for b in items) + "</ul>"
+            )
+        out.append(
+            note(
+                "A breach is a review trigger, never an automatic sale. The mandate is explicit: an "
+                "existing breach produces REVIEW, a new purchase that would breach produces REJECT.",
+                "muted",
+            )
+        )
     if run and run.get("risk"):
         out.append("<h3>Portfolio limits</h3>")
         out.append(
@@ -321,11 +355,11 @@ def view_today(docs: dict[str, dict]) -> str:
                         pill(r["status"]),
                         esc(r["positions"]),
                         esc(
-                            f"{r['largest']['asset']} {pct(r['largest']['weight'])}"
+                            f"{r['largest']['asset']} {share(r['largest']['weight'])}"
                             if r["largest"]["asset"]
                             else "n/a"
                         ),
-                        esc(pct(r.get("cash_weight"))),
+                        esc(share(r.get("cash_weight"))),
                         esc("; ".join(r["breaches"]) or "none"),
                     ]
                     for r in run["risk"]
@@ -370,6 +404,9 @@ def view_today(docs: dict[str, dict]) -> str:
 
 def view_stocks(docs: dict[str, dict]) -> str:
     out = []
+    holdings = docs.get("boards/holdings-equity")
+    if holdings:
+        out.append(board_section(holdings))
     ranking = docs.get("boards/rankings-equity")
     out.append(
         board_section(ranking)
@@ -417,7 +454,7 @@ def portfolio_block(docs: dict[str, dict], portfolio_id: str) -> str:
             f"{esc(doc.get('custodian'))} · {esc(doc.get('account_kind'))}",
         )
     )
-    out.append(card("Cash", esc(money(doc.get("cash_value"))), esc(pct(doc.get("cash_weight")))))
+    out.append(card("Cash", esc(money(doc.get("cash_value"))), esc(share(doc.get("cash_weight")))))
     out.append(
         card(
             "Marked",
@@ -448,7 +485,7 @@ def portfolio_block(docs: dict[str, dict], portfolio_id: str) -> str:
                     [
                         esc(p["symbol"]),
                         esc(money(p.get("market_value"))),
-                        esc(pct(p.get("weight"))),
+                        esc(share(p.get("weight"))),
                         pill(p.get("legacy_zone")) if p.get("legacy_zone") else "n/a",
                         esc(p.get("note", "")),
                     ]
@@ -597,11 +634,11 @@ def view_risk(docs: dict[str, dict]) -> str:
                         esc(r["label"]),
                         pill(r["status"]),
                         esc(
-                            f"{r['largest']['asset']} {pct(r['largest']['weight'])}"
+                            f"{r['largest']['asset']} {share(r['largest']['weight'])}"
                             if r["largest"]["asset"]
                             else "n/a"
                         ),
-                        esc(pct(r.get("cash_weight"))),
+                        esc(share(r.get("cash_weight"))),
                         esc("; ".join(r["breaches"]) or "none"),
                         esc(r.get("verification")),
                     ]
@@ -1101,9 +1138,16 @@ def render(docs: dict[str, dict], *, title: str = TITLE, description: str | None
         f'<section class="view" id="view-{vid}"><h2>{esc(label)}</h2>{parts[vid]}</section>'
         for vid, label in VIEWS
     )
-    # Every "<" in the payload is written as \u003c so no stored text can end the script
-    # element or open a comment inside it; JSON.parse restores the character.
-    payload = json.dumps(docs, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    # The page is rendered server-side, so the embedded payload exists only for the
+    # store-sync check: it needs the snapshot pointer and nothing else. Embedding every
+    # document instead doubled the page and pushed it through the size gate.
+    # Every "<" is written as a unicode escape so no stored text can end the script element
+    # or open a comment inside it; JSON.parse restores the character.
+    payload = json.dumps(
+        {"snapshots/current": snap} if snap else {},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).replace("<", "\\u003c")
     noscript = "<noscript><style>section.view{display:block}</style></noscript>"
     return (
         f"<title>{esc(title)}</title><style>{CSS}</style>{noscript}"

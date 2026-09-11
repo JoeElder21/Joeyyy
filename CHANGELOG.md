@@ -21,7 +21,7 @@ approval-gated step recorded in `docs/TERMINAL_MIGRATION.md`.
   manifests with an idempotency ledger and hash chain, the two-round critic,
   store adapters, the daily pipeline, the legacy migration, the renderer, the
   command line, ten role briefs and a synthetic fixture.
-- `tests/test_terminal_*.py` — 117 tests over the package.
+- `tests/test_terminal_*.py` — 126 tests over the package.
 - `docs/TERMINAL_AUDIT.md`, `docs/TERMINAL_ARCHITECTURE.md`,
   `docs/TERMINAL_RUNBOOK.md`, `docs/TERMINAL_MIGRATION.md`,
   `docs/TERMINAL_HANDOFF.md`, `docs/TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md`.
