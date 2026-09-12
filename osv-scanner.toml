@@ -238,6 +238,9 @@ as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
 # workstation, downgraded by no upstream fix and by that host not being
 # internet-exposed. Owner: Joe. Revisit at expiry or when nltk publishes a
 # version OSV marks as fixed.
+#
+# Ignore the GHSA id only. osv-scanner treats PYSEC-2026-3740 as an alias of
+# this advisory and fails the job on unused ignores if both are listed.
 
 [[IgnoredVulns]]
 id = "GHSA-8mgp-746c-j5xp"
@@ -248,12 +251,3 @@ roots. OSV last-affected is 3.10.3 with no fixed version. The 3.10.2 -> 3.10.3
 bump is PorterStemmer hygiene only and does not clear this advisory. Transitive
 via llama-index-core on the workstation full stack, not the CI AutoGen install.
 Accepted until upstream publishes a release OSV marks as fixed. Owner: Joe."""
-
-[[IgnoredVulns]]
-id = "PYSEC-2026-3740"
-ignoreUntil = 2026-10-12
-reason = """Same nltk pathsec bypass as GHSA-8mgp-746c-j5xp / CVE-2026-81726,
-listed separately so fixing one identifier does not silence the other. No
-fixed version through 3.10.3. Workstation full-stack transitive via
-llama-index-core. Owner: Joe. Revisit at expiry or when a patched release
-exists."""
