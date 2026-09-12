@@ -1712,9 +1712,7 @@ class MissionPipelineTests(unittest.TestCase):
     )
 
     def test_mission_form_maps_one_to_one_to_the_packet_schema(self):
-        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(
-            encoding="utf-8"
-        )
+        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(encoding="utf-8")
         for field_id in self.PACKET_FIELDS:
             with self.subTest(field=field_id):
                 self.assertIn(f"id: {field_id}", form)
@@ -1729,9 +1727,7 @@ class MissionPipelineTests(unittest.TestCase):
         # body. The Action only starts when the submitted body or title
         # contains @claude, so the trigger must live in a field that is
         # submitted — the start-prompt default and the required checkbox.
-        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(
-            encoding="utf-8"
-        )
+        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(encoding="utf-8")
         start = form.split("id: start-prompt", 1)[1].split("\n  - type:", 1)[0]
         self.assertIn("@claude", start)
         trigger = form.split("id: trigger", 1)[1]
@@ -1741,9 +1737,7 @@ class MissionPipelineTests(unittest.TestCase):
     def test_existing_claude_workflow_still_owns_the_interactive_job(self):
         # Option A: document and reuse claude.yml. A second interactive
         # job on issues:opened would race two checkouts.
-        workflow = (ROOT / ".github" / "workflows" / "claude.yml").read_text(
-            encoding="utf-8"
-        )
+        workflow = (ROOT / ".github" / "workflows" / "claude.yml").read_text(encoding="utf-8")
         self.assertIn("contains(github.event.issue.body, '@claude')", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertNotIn("allowedTools:", workflow)
