@@ -239,17 +239,29 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
 
         The paired probes below are the whole point -- a bare-name assertion
         alone would still pass if the prefixed form regressed.
+
+        The bracketed forms are here for a second reason. Covering the name
+        fixed `NAME = "..."` but not `os.environ["NAME"] = "..."`, which is the
+        idiomatic way to set a credential in Python: the delimiter clause
+        allowed an optional closing quote before `=` and nothing else, so the
+        `"]` broke the match and the same assignment exited 0. Both shapes are
+        pinned so neither can regress alone.
         """
         pattern = PATTERNS["credential assignment"]
         value = "aRealLookingSecretValue"
         for name in ("API_KEY", "FINANCIAL_DATASETS_API_KEY"):
-            with self.subTest(env=name):
-                self.assertTrue(
-                    pattern.search(f"export {name}='{value}'"),
-                    f"{name} assignment is invisible to the credential pattern; "
-                    "an operator following the connector document would commit a "
-                    "real key past a green gate",
-                )
+            for label, probe in (
+                ("bare", f"export {name}='{value}'"),
+                ("bracketed", f'os.environ["{name}"] = "{value}"'),
+                ("bracketed, single-quoted", f"os.environ['{name}'] = '{value}'"),
+            ):
+                with self.subTest(env=name, form=label):
+                    self.assertTrue(
+                        pattern.search(probe),
+                        f"the {label} assignment of {name} is invisible to the "
+                        "credential pattern; an operator following the connector "
+                        "document would commit a real key past a green gate",
+                    )
 
     def test_the_connector_document_spells_out_no_assignment_of_its_own(self):
         """Covering the name is only half of it. Once the guard flags that
@@ -258,6 +270,14 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
         turned docs/FINANCIAL_DATASETS_CONNECTOR.md itself into a finding.
         The document now reads the value in rather than assigning a literal,
         which is better advice anyway: nothing reaches shell history.
+
+        Asserted as properties rather than as one literal command line. An
+        earlier version pinned the exact string `read -rs
+        FINANCIAL_DATASETS_API_KEY`, and then failed for the right reason when
+        review pointed out that a plain `export` leaks the key into every
+        later command in that shell and the document switched to a
+        command-prefixed assignment. The properties below are what actually
+        matter; the spelling of the placeholder variable is not.
         """
         doc = (ROOT / "docs" / "FINANCIAL_DATASETS_CONNECTOR.md").read_text(encoding="utf-8")
         self.assertNotRegex(
@@ -266,7 +286,32 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
             "the connector document spells out an assignment of the very name "
             "the guard now flags, so the guard fails on this repository",
         )
-        self.assertIn("read -rs FINANCIAL_DATASETS_API_KEY", doc)
+        # A bare `export NAME` with no value does not trip the guard, but it
+        # is the shape that leaves the key set for the rest of the shell.
+        self.assertNotRegex(
+            doc,
+            r"export\s+FINANCIAL_DATASETS_API_KEY\s*$",
+            "the document tells the operator to export the key into their "
+            "interactive shell, where every later command inherits it",
+        )
+        self.assertIn(
+            "read -rs",
+            doc,
+            "the document no longer reads the key in silently, so following it "
+            "puts the credential in shell history",
+        )
+        # Split the way tests/test_trusted_launcher.py splits its fixtures.
+        # Spelled out, this pattern IS a credential assignment as far as the
+        # guard is concerned -- it cannot tell a regex literal from a real one,
+        # and it flagged this file when the name and the `="..."` sat adjacent
+        # in source. That is the guard behaving correctly, so the fixture
+        # yields rather than the rule.
+        scoped_to_claude = "FINANCIAL_DATASETS" + r'_API_KEY="\$[A-Z_]+" claude'
+        self.assertRegex(
+            doc,
+            scoped_to_claude,
+            "the primary path no longer scopes the key to the claude process",
+        )
 
     def test_intake_scan_applies_name_checks_to_the_destination(self):
         """`--as` declares where a candidate is bound for. Keying the
