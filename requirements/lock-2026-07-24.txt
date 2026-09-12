@@ -75,7 +75,7 @@ appdirs==1.4.4
     #   crewai
     #   crewai-cli
     #   crewai-core
-apprise==1.12.0
+apprise==1.13.1
     # via prefect
 arize-phoenix-otel==0.16.1
     # via -r requirements/runtime-observability.txt
@@ -178,8 +178,9 @@ crewai-core==1.15.9
     #   crewai-cli
 cronsim==2.7
     # via pydocket
-cryptography==50.0.0
+cryptography==50.0.1
     # via
+    #   -r requirements/runtime-contracts.txt
     #   crewai-cli
     #   crewai-core
     #   pdfminer-six
@@ -421,7 +422,7 @@ langchain-protocol==0.0.18
     # via
     #   langchain-core
     #   langgraph-sdk
-langgraph==1.2.10
+langgraph==1.2.11
     # via
     #   -r requirements/runtime-orchestration.txt
     #   langchain
@@ -493,10 +494,13 @@ nest-asyncio==1.6.0
     # via llama-index-core
 networkx==3.6.1
     # via llama-index-core
-nltk==3.10.2
-    # via llama-index-core
+nltk==3.10.3
+    # via
+    #   -r requirements/runtime-full.txt
+    #   llama-index-core
 numpy==1.26.4
     # via
+    #   -r requirements/runtime-full.txt
     #   autogen-agentchat
     #   chromadb
     #   dspy
@@ -512,6 +516,7 @@ onnxruntime==1.28.0
     # via chromadb
 openai==2.50.0
     # via
+    #   -r requirements/runtime-full.txt
     #   autogen-agentchat
     #   crewai
     #   dspy
@@ -640,7 +645,7 @@ posthog==5.4.0
     #   chromadb
     #   graphiti-core
     #   mem0ai
-prefect==3.8.0
+prefect==3.8.5
     # via -r requirements/runtime-orchestration.txt
 prometheus-client==0.26.0
     # via

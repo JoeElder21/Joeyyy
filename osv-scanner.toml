@@ -224,3 +224,36 @@ id = "GHSA-v3r7-h72x-cjcm"
 ignoreUntil = 2026-09-30
 reason = """undici 8.5.0, CVSS 4.8, fixed in 8.9.0. Same shrinkwrap-pinned copy
 as GHSA-4cwx-7wf7-3272; listed separately per advisory."""
+
+# --- PyPI / nltk: GHSA-8mgp-746c-j5xp (CVE-2026-81726 / PYSEC-2026-3740) ---
+#
+# Dependabot #90 bumped nltk 3.10.2 -> 3.10.3. That patch is PorterStemmer /
+# CVE-style hygiene for findings at <=3.10.2. It does NOT clear this advisory:
+# OSV last-affected is 3.10.3, and the GitHub advisory says "Patched versions:
+# Not yet patched". Claiming 3.10.3 is a cure would be false.
+#
+# nltk is transitive via llama-index-core on the workstation full stack
+# (requirements/lock-2026-07-24.txt), not on the CI AutoGen / contracts
+# install. Exposure is the same class as chromadb: real on the governed
+# workstation, downgraded by no upstream fix and by that host not being
+# internet-exposed. Owner: Joe. Revisit at expiry or when nltk publishes a
+# version OSV marks as fixed.
+
+[[IgnoredVulns]]
+id = "GHSA-8mgp-746c-j5xp"
+ignoreUntil = 2026-10-12
+reason = """nltk through 3.10.3, GHSA-8mgp-746c-j5xp / CVE-2026-81726, CVSS 7.0
+(8.3 v4): model-artifact APIs bypass pathsec and touch files outside allowed
+roots. OSV last-affected is 3.10.3 with no fixed version. The 3.10.2 -> 3.10.3
+bump is PorterStemmer hygiene only and does not clear this advisory. Transitive
+via llama-index-core on the workstation full stack, not the CI AutoGen install.
+Accepted until upstream publishes a release OSV marks as fixed. Owner: Joe."""
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-3740"
+ignoreUntil = 2026-10-12
+reason = """Same nltk pathsec bypass as GHSA-8mgp-746c-j5xp / CVE-2026-81726,
+listed separately so fixing one identifier does not silence the other. No
+fixed version through 3.10.3. Workstation full-stack transitive via
+llama-index-core. Owner: Joe. Revisit at expiry or when a patched release
+exists."""
