@@ -5,10 +5,10 @@ All-encompassing overview and technical breakdown of this repository, written as
 | Field | Value |
 | --- | --- |
 | Repository | `JoeElder21/Joeyyy` (public) |
-| Generated | 2026-07-26 |
-| Head commit analysed | `b321448` — merge of PR #31: repository-engineering substrate, forty rounds of review closed |
+| Generated | 2026-09-12 |
+| Head commit analysed | `eb5f5c9` — PR #86: the financial-datasets connector document, and the privacy-guard coverage its own claims turned out to require |
 | Primary language | Python 3.11 / 3.12 (plus Node 18+ for the APS connector) |
-| Scale | 338 tracked files, ~111,200 lines of source, config, schema and docs |
+| Scale | 363 tracked files, ~115,800 lines of source, config, schema and docs |
 | Test suite | 1152 tests, 0 failures, 24 dependency-gated skips. PyYAML is required: without it the privacy guard fails closed and 5 tests fail, by design |
 | Validation | `privacy_guard` PASS; `validate_specialist_corps` PASS (10 contract packets, 10 boundary rejections) |
 

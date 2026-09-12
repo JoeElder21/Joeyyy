@@ -117,12 +117,21 @@ An assignment of this variable is a finding for `scripts/privacy_guard.py` as
 of this change, which is why no such line is spelled out here — see section 6.
 
 **Or** register the server at local scope with the header baked in, which
-stores the key in `~/.claude.json` on your machine, outside this repository:
+stores the key in `~/.claude.json` on your machine, outside this repository.
+Read it in here too, and pass the variable rather than the value — history
+records the line you typed, not what it expanded to, so the key stays out of
+it:
 
 ```bash
+read -rs FD_KEY
 claude mcp add --transport http --scope local financial-datasets \
-  https://mcp.financialdatasets.ai/api --header "X-API-KEY: <key>"
+  https://mcp.financialdatasets.ai/api --header "X-API-KEY: $FD_KEY"
+unset FD_KEY
 ```
+
+Typing the key directly into that command instead would put the whole
+credential in your shell history, which is a second persistent copy on top of
+the one `~/.claude.json` already holds.
 
 Local scope outranks project scope, so this entry wins over `.mcp.json`
 without editing it. Use one form or the other, not both.
@@ -213,16 +222,26 @@ good — section 2 is the whole reason those are different questions.
 - The connector is read-only market data. It places no orders and holds no
   account identity; it is unrelated to the Schwab connector, which reads
   holdings and is separately credentialed.
-- No key, and no fragment of one, belongs in this repository. As of this
-  change `scripts/privacy_guard.py` enforces that for this variable
-  mechanically rather than by convention: `FINANCIAL_DATASETS_API_KEY` is in
-  the credential-assignment alternation, and
+- **No key, and no fragment of one, belongs in this repository.** That is the
+  policy. What is *mechanically enforced* is narrower than the policy, and the
+  difference is worth stating rather than glossing:
+
+  | Written into a tracked file | `privacy_guard.py` |
+  |---|---|
+  | `FINANCIAL_DATASETS_API_KEY` assigned a value of 8+ characters | **Blocked** — exit 1, `possible credential assignment` |
+  | The same name assigned 7 characters or fewer | Passes. The value clause requires 8+, so a short fragment is invisible |
+  | Any other `<PREFIX>_API_KEY`, `<PREFIX>_ACCESS_TOKEN`, `<PREFIX>_CLIENT_SECRET` | Passes. `\b` cannot match after `_`, so only the name spelled out in the alternation is covered |
+
+  Measured at the boundary, not reasoned: a 7-character value exits 0 and an
+  8-character one exits 1. So the guard is a backstop against the whole-key
+  mistake, which is the one that actually leaks a usable credential — not a
+  proof that no fragment can land. Treat "no fragment" as a rule you follow,
+  not a rule the gate keeps for you.
+
+  This much *is* pinned:
   `tests/test_privacy.py::test_documented_but_unmounted_credential_names_are_detectable`
-  fails if it is removed. It was **not** enforced when this document was
-  first written — `\b` cannot match after the `_` in `..._API_KEY`, so the
-  exact export line this page used to print sailed past the guard while the
-  identical value assigned to a bare `API_KEY` was caught. Scope that
-  honestly: the underlying anchor still misses every other
-  `<PREFIX>_API_KEY`, `<PREFIX>_ACCESS_TOKEN` and `<PREFIX>_CLIENT_SECRET`.
-  Closing that is a change to the shared guard, not to this connector, and
-  is left as its own.
+  fails if the name is dropped from the alternation. None of it was enforced
+  when this document was first written — the exact export line this page used
+  to print sailed past the guard while the identical value assigned to a bare
+  `API_KEY` was caught. Widening the anchor to cover every prefixed name is a
+  change to the shared guard, not to this connector, and is left as its own.
