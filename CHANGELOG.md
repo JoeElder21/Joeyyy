@@ -3,6 +3,29 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-09-12 — First APEX slice and Bird sample
+
+One executable APEX path, specialists still shadow, plus a keyless Bird
+TypeScript sample.
+
+### Added
+
+- `runtime/specialist_dispatch.py` — packet-only worker for
+  `apex_delivery_commander` / `technical_qa`. Other modes still raise
+  `DispatchUnavailable` / `NotImplementedError`.
+- `runtime/first_apex_slice.py` and `scripts/run_first_apex_slice.py` — PREPARE
+  → EXECUTE → VERIFY (`MissionRunner.complete`) → REPORT. Synthetic evidence;
+  `qualifies_mode` stays false.
+- `connectors/bird/` — `@messagebird/sdk` `BirdClient` sample. Key from
+  `BIRD_API_KEY` only. Hello World email and `bird_otp_verification` are
+  env-gated and never auto-sent. Order reference `MT1FL8M9VY`.
+- `docs/FIRST_APEX_SLICE.md` — slice contract, honesty bounds, rollback.
+
+### Changed
+
+- `_invoke_specialist` in `evals/test_specialist_modes.py` calls the governed
+  dispatch for the wired mode and still raises for every other mode.
+
 ## 2026-08-30 — The daily briefing becomes a verified schedule
 
 Briefings were produced by hand on 2026-07-30 through 2026-08-04 — one new
