@@ -59,8 +59,10 @@ def run_first_apex_slice(
     ledger_dir: Path | None = None,
 ) -> SliceRun:
     """Execute PREPARE -> EXECUTE -> VERIFY -> REPORT for the wired mode."""
-    workdir = Path(ledger_dir) if ledger_dir is not None else Path(
-        tempfile.mkdtemp(prefix="joeyyy-first-slice-")
+    workdir = (
+        Path(ledger_dir)
+        if ledger_dir is not None
+        else Path(tempfile.mkdtemp(prefix="joeyyy-first-slice-"))
     )
     workdir.mkdir(parents=True, exist_ok=True)
     working = runner or MissionRunner(

@@ -95,12 +95,16 @@ def invoke_specialist(
     return _technical_qa_handoff(delegation)
 
 
-def invoke_prepared(prepared: PreparedMission, *, runner: MissionRunner | None = None) -> dict[str, Any]:
+def invoke_prepared(
+    prepared: PreparedMission, *, runner: MissionRunner | None = None
+) -> dict[str, Any]:
     """Run the wired worker against a MissionRunner-prepared delegation."""
     return invoke_specialist(prepared.delegation, runner=runner)
 
 
-def invoke_eval_case(mode: Any, case: dict[str, Any]) -> tuple[str, dict[str, Any], list[Any], list[dict[str, Any]]]:
+def invoke_eval_case(
+    mode: Any, case: dict[str, Any]
+) -> tuple[str, dict[str, Any], list[Any], list[dict[str, Any]]]:
     """Harness adapter: case JSON -> prepare -> packet worker -> observations.
 
     Returns the four-tuple ``_invoke_specialist`` must supply. Unwired modes

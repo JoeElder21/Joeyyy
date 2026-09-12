@@ -23,8 +23,6 @@ _ROOT = _EVALS.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_EVALS))
 
-from runtime.specialist_dispatch import DispatchUnavailable, invoke_eval_case  # noqa: E402
-
 from harness import (  # noqa: E402
     artifact_errors,
     artifact_records,
@@ -40,6 +38,8 @@ from harness import (  # noqa: E402
 )
 from packet_validity import build_metric as build_packet_metric  # noqa: E402
 from packet_validity import score_packet  # noqa: E402
+
+from runtime.specialist_dispatch import DispatchUnavailable, invoke_eval_case  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     not deepeval_available(),
