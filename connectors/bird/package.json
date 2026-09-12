@@ -1,0 +1,21 @@
+{
+  "name": "@joeyyy/bird-sample",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bird TypeScript client sample. API key from BIRD_API_KEY only; nothing is sent unless an explicit send env is set.",
+  "type": "module",
+  "scripts": {
+    "hello": "tsx src/hello-world.ts",
+    "otp": "tsx src/otp-example.ts"
+  },
+  "engines": {
+    "node": ">=20.3"
+  },
+  "dependencies": {
+    "@messagebird/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

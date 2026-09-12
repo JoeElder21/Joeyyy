@@ -18,7 +18,10 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_EVALS = Path(__file__).resolve().parent
+_ROOT = _EVALS.parent
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_EVALS))
 
 from harness import (  # noqa: E402
     artifact_errors,
@@ -35,6 +38,8 @@ from harness import (  # noqa: E402
 )
 from packet_validity import build_metric as build_packet_metric  # noqa: E402
 from packet_validity import score_packet  # noqa: E402
+
+from runtime.specialist_dispatch import DispatchUnavailable, invoke_eval_case  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     not deepeval_available(),
@@ -307,13 +312,17 @@ def _invoke_specialist(mode, case):
     metric handed only expectations, with no observation, cannot fail; and a
     handoff handed no delegation can only ever fail.
 
-    Deliberately unimplemented. Wiring this to `scripts/agent_runtime.py` or
-    `scripts/claude_runtime.py` requires a verified model credential and a
-    connector-isolation decision that is not made in this repository. Failing
-    loudly is correct: a stub that returned canned text would produce green
-    evaluations that attest to nothing, which is worse than no harness at all.
+    The first APEX slice wires ``apex/apex_delivery_commander/technical_qa``
+    through ``runtime.specialist_dispatch`` and ``MissionRunner``. That worker
+    is packet-only and derives findings from delegated evidence; it is not a
+    canned always-pass stub. Every other mode still raises
+    ``NotImplementedError``: a model-backed runtime is still required before
+    those results can be treated as gate evidence.
     """
-    raise NotImplementedError(
-        f"specialist dispatch not wired for {mode.key}; "
-        "connect a verified runtime before treating any result as gate evidence"
-    )
+    try:
+        return invoke_eval_case(mode, case)
+    except DispatchUnavailable as exc:
+        raise NotImplementedError(
+            f"specialist dispatch not wired for {mode.key}; "
+            "connect a verified runtime before treating any result as gate evidence"
+        ) from exc

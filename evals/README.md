@@ -49,12 +49,12 @@ they have one.
 
 ## Two deliberate refusals
 
-**Specialist dispatch is unimplemented.** `_invoke_specialist` raises
-`NotImplementedError`. Wiring it to `scripts/agent_runtime.py` or
-`scripts/claude_runtime.py` needs a verified model credential and a
-connector-isolation decision that is not made in this repository. A stub
-returning canned text would produce green evaluations that attest to nothing —
-worse than no harness, because it would look like evidence.
+**Specialist dispatch is wired for one mode only.**
+`apex/apex_delivery_commander/technical_qa` runs through
+`runtime.specialist_dispatch` and `MissionRunner`. That worker reads delegated
+evidence and refuses to seal; it is not a canned always-pass stub. Every other
+mode still raises `NotImplementedError`. A model-backed runtime is still
+required before those results can be treated as gate evidence.
 
 **The runner will not fabricate a pass.** With no evaluation runtime installed,
 `run_evaluations.py` exits 2 and prints the inventory. An unproven mode reads as

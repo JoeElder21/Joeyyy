@@ -1,6 +1,6 @@
 # Documentation index
 
-47 records, grouped by purpose. Start at the top of each section.
+56 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -35,6 +35,7 @@
 | [`WSL_UBUNTU_SETUP.md`](WSL_UBUNTU_SETUP.md) | WSL Ubuntu layer of the governed execution host: from bare Windows to `wsl -d Ubuntu --cd /root/Joeyyy -- claude` |
 | [`RUNTIME_NATIVE_LAYERS.md`](RUNTIME_NATIVE_LAYERS.md) | Anthropic SDK, MCP, pydantic layers; gated LangChain absorption |
 | [`AGENT_RUNTIME_BRIDGE.md`](AGENT_RUNTIME_BRIDGE.md) | Governed-handoff bridge on the OpenAI Agents SDK |
+| [`FIRST_APEX_SLICE.md`](FIRST_APEX_SLICE.md) | One executable APEX path: Agent 007 → Delivery Commander technical QA, VERIFY/REPORT, specialists remain shadow |
 | [`DATA_MEMORY_LAYERS.md`](DATA_MEMORY_LAYERS.md) | llama_index, mem0, crewAI |
 | [`ORCHESTRATION_AND_CONNECTORS.md`](ORCHESTRATION_AND_CONNECTORS.md) | AutoGen, LangGraph, MCP servers, APS, Logseq |
 | [`AUTOGEN_INTEGRATION.md`](AUTOGEN_INTEGRATION.md) | Bounded AutoGen runtime-adapter contract |
