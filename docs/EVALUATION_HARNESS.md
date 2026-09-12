@@ -108,14 +108,15 @@ context and publishes only its scored result.
 These are the load-bearing design decisions, and both make the harness *less*
 capable on purpose.
 
-**Specialist dispatch is unimplemented.** `_invoke_specialist` raises
-`NotImplementedError`. Wiring it to `scripts/agent_runtime.py` or
-`scripts/claude_runtime.py` requires a verified model credential and a
-connector-isolation decision not made in this repository. A stub returning canned
+**Specialist dispatch is wired for one mode only.**
+`apex/apex_delivery_commander/technical_qa` runs through
+`runtime.specialist_dispatch` and `MissionRunner`. The worker is packet-only and
+derives findings from delegated evidence — including a hard refusal to seal.
+Every other mode still raises `NotImplementedError`. A stub returning canned
 text would produce green evaluations that attest to nothing — worse than no
 harness, because it would look like evidence.
-`tests/test_evaluation_harness.py` asserts the refusal is still in place, so it
-cannot be quietly replaced with a stub later.
+`tests/test_evaluation_harness.py` asserts unwired modes still refuse and that
+the wired path goes through the governed dispatch, not a hardcoded string.
 
 **The runner will not fabricate a pass.** With no evaluation runtime installed,
 `run_evaluations.py` exits 2 and prints the coverage inventory. An unproven mode

@@ -985,6 +985,8 @@ class ContributorSurfaceTests(unittest.TestCase):
             ".github/pull_request_template.md",
             ".github/ISSUE_TEMPLATE/agent-intake.yml",
             ".github/ISSUE_TEMPLATE/absorption-candidate.yml",
+            ".github/ISSUE_TEMPLATE/mission.yml",
+            "docs/MISSION_PACKET.md",
         ]:
             with self.subTest(path=relative):
                 self.assertTrue((ROOT / relative).is_file(), f"missing {relative}")
@@ -1735,6 +1737,89 @@ class LocalClaudeSettingsAreIgnoredTests(unittest.TestCase):
             f"{self.LOCAL_SETTINGS} is tracked; ignoring it does not untrack it, "
             "so any secret it holds is already public",
         )
+
+
+class MissionPipelineTests(unittest.TestCase):
+    """Canon→Forge→Claude Code: form fields, trigger, and docs stay aligned."""
+
+    PACKET_FIELDS = (
+        "objective",
+        "mode",
+        "constraints",
+        "acceptance",
+        "drive-source-ids",
+        "start-prompt",
+        "owner",
+        "due",
+    )
+
+    def test_mission_form_maps_one_to_one_to_the_packet_schema(self):
+        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(encoding="utf-8")
+        for field_id in self.PACKET_FIELDS:
+            with self.subTest(field=field_id):
+                self.assertIn(f"id: {field_id}", form)
+        self.assertIn('title: "[mission] "', form)
+        self.assertIn('"mission"', form)
+        self.assertIn('"claude"', form)
+        self.assertIn("JEOS", form)
+        self.assertIn("APEX", form)
+
+    def test_submitted_fields_contain_the_claude_trigger(self):
+        # GitHub issue-form markdown blocks are not copied into the issue
+        # body. The Action only starts when the submitted body or title
+        # contains @claude, so the trigger must live in a field that is
+        # submitted — the start-prompt default and the required checkbox.
+        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(encoding="utf-8")
+        start = form.split("id: start-prompt", 1)[1].split("\n  - type:", 1)[0]
+        self.assertIn("@claude", start)
+        trigger = form.split("id: trigger", 1)[1]
+        self.assertIn("@claude", trigger)
+        self.assertIn("required: true", trigger)
+
+    def test_existing_claude_workflow_still_owns_the_interactive_job(self):
+        # Option A: document and reuse claude.yml. A second interactive
+        # job on issues:opened would race two checkouts.
+        workflow = (ROOT / ".github" / "workflows" / "claude.yml").read_text(encoding="utf-8")
+        self.assertIn("contains(github.event.issue.body, '@claude')", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertNotIn("allowedTools:", workflow)
+        self.assertNotIn("claude_args:", workflow)
+        extras = [
+            path
+            for path in (ROOT / ".github" / "workflows").glob("*.yml")
+            if path.name not in {"claude.yml", "claude-code-review.yml"}
+            and "claude-code-action@" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(
+            extras,
+            [],
+            "mission issues reuse claude.yml; extra Claude Action workflows "
+            f"were added: {[path.name for path in extras]}",
+        )
+
+    def test_readme_and_index_point_at_the_packet_doc(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+        packet = (ROOT / "docs" / "MISSION_PACKET.md").read_text(encoding="utf-8")
+        self.assertIn("docs/MISSION_PACKET.md", readme)
+        self.assertIn("Canon", readme)
+        self.assertIn("Forge", readme)
+        self.assertIn("MISSION_PACKET.md", index)
+        for heading in (
+            "Objective",
+            "Mode",
+            "Constraints",
+            "Acceptance",
+            "Drive source IDs",
+            "Claude Code start prompt",
+            "Owner",
+            "Due",
+        ):
+            with self.subTest(heading=heading):
+                self.assertIn(f"### {heading}", packet)
+        self.assertIn("none — no Drive source", packet)
+        self.assertIn("ANTHROPIC_API_KEY", packet)
+        self.assertIn("CLAUDE_CODE_OAUTH_TOKEN", packet)
 
 
 # Last statement in the file, deliberately. This guard used to sit mid-module,
