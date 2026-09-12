@@ -194,6 +194,59 @@ class OverviewSnapshotTests(unittest.TestCase):
                     f"{tracked}; the snapshot has split from the tree",
                 )
 
+    def test_the_document_inventory_matches_the_directory(self):
+        """The overview states the same document count three times -- as prose
+        ("a N-document architectural record"), as a row in the layout table,
+        and as section 13's "N records ... plus the index README.md -- N+1
+        files". Nothing asserted any of them, so all three drifted together:
+        they read 47/48/48 against a directory holding 51 records and 52 files,
+        having been left behind by several changes that each added a document.
+
+        Exact, not the ten-percent tolerance used for the tracked-file figure
+        above. That figure moves on almost every commit, so policing it exactly
+        would make routine work a documentation edit. A document is added
+        deliberately, in a change that is already editing docs/ -- so exactness
+        costs the one commit that should be updating the number anyway, and is
+        the only thing that would have caught this drift.
+        """
+        records = sorted(
+            path.name for path in (ROOT / "docs").glob("*.md") if path.name != "README.md"
+        )
+        actual_records = len(records)
+        actual_files = actual_records + 1  # the records plus the index itself
+        overview = self._overview()
+
+        prose = re.findall(r"a (\d+)-document architectural record", overview)
+        self.assertTrue(prose, "the overview states no architectural-record count")
+        for figure in set(prose):
+            with self.subTest(figure="prose record count", published=figure):
+                self.assertEqual(
+                    int(figure),
+                    actual_records,
+                    f"the overview claims {figure} documents against an actual "
+                    f"{actual_records} in docs/ excluding README.md",
+                )
+
+        section = re.search(
+            r"records in `docs/`, plus the index `README\.md` — (\d+) files in the directory",
+            overview,
+        )
+        self.assertIsNotNone(section, "section 13 no longer states the directory file count")
+        self.assertEqual(
+            int(section.group(1)),
+            actual_files,
+            f"section 13 claims {section.group(1)} files in docs/ against an actual {actual_files}",
+        )
+
+        layout = re.search(r"\| `docs/` \|[^|]*\| (\d+) \|", overview)
+        self.assertIsNotNone(layout, "the layout table no longer counts docs/")
+        self.assertEqual(
+            int(layout.group(1)),
+            actual_files,
+            f"the layout table claims {layout.group(1)} files in docs/ against "
+            f"an actual {actual_files}; it must agree with section 13",
+        )
+
     def test_the_head_commit_is_an_ancestor_of_the_current_one(self):
         import subprocess
 

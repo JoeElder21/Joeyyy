@@ -227,6 +227,47 @@ class PublicRepositoryPrivacyTests(unittest.TestCase):
                     )
         self.assertGreater(seen, 0, "no mount credential names were checked")
 
+    def test_documented_but_unmounted_credential_names_are_detectable(self):
+        """A credential name only this repository's DOCUMENTATION names is not
+        reached by the mount sweep above, which reads config/mcp_mounts.toml.
+        docs/FINANCIAL_DATASETS_CONNECTOR.md tells an operator to set
+        FINANCIAL_DATASETS_API_KEY and claims the guard keeps it out of the
+        tree mechanically. That claim was false when the document was written:
+        the alternation is anchored with `\b`, and `_` is a word character, so
+        `api[_-]?key` cannot match inside `..._API_KEY`. The same synthetic
+        value was flagged as API_KEY and passed as FINANCIAL_DATASETS_API_KEY.
+
+        The paired probes below are the whole point -- a bare-name assertion
+        alone would still pass if the prefixed form regressed.
+        """
+        pattern = PATTERNS["credential assignment"]
+        value = "aRealLookingSecretValue"
+        for name in ("API_KEY", "FINANCIAL_DATASETS_API_KEY"):
+            with self.subTest(env=name):
+                self.assertTrue(
+                    pattern.search(f"export {name}='{value}'"),
+                    f"{name} assignment is invisible to the credential pattern; "
+                    "an operator following the connector document would commit a "
+                    "real key past a green gate",
+                )
+
+    def test_the_connector_document_spells_out_no_assignment_of_its_own(self):
+        """Covering the name is only half of it. Once the guard flags that
+        assignment, a document that prints one trips the guard on the very
+        tree it ships in -- which is how this was caught: adding the name
+        turned docs/FINANCIAL_DATASETS_CONNECTOR.md itself into a finding.
+        The document now reads the value in rather than assigning a literal,
+        which is better advice anyway: nothing reaches shell history.
+        """
+        doc = (ROOT / "docs" / "FINANCIAL_DATASETS_CONNECTOR.md").read_text(encoding="utf-8")
+        self.assertNotRegex(
+            doc,
+            r"export\s+FINANCIAL_DATASETS_API_KEY\s*=",
+            "the connector document spells out an assignment of the very name "
+            "the guard now flags, so the guard fails on this repository",
+        )
+        self.assertIn("read -rs FINANCIAL_DATASETS_API_KEY", doc)
+
     def test_intake_scan_applies_name_checks_to_the_destination(self):
         """`--as` declares where a candidate is bound for. Keying the
         prohibited-name and suffix checks on the temp source name let the

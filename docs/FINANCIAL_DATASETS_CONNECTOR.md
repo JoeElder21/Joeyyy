@@ -98,17 +98,23 @@ should be rotated, not reused.
 
 This is the supported path, and both forms keep the key out of the tree.
 
-**Either** export it before launching Claude Code:
+**Either** export it before launching Claude Code. Read it in rather than
+typing it on the command line, so it never reaches your shell history:
 
 ```bash
-export FINANCIAL_DATASETS_API_KEY='<key from the dashboard>'
+read -rs FINANCIAL_DATASETS_API_KEY && export FINANCIAL_DATASETS_API_KEY
 claude
 ```
 
-Add that line to `~/.bashrc`, `~/.zshrc`, or your shell's equivalent to make
-it persist. The variable must exist in the environment that launches
-`claude`; setting it inside a running session is too late for a connection
-already made.
+To make it persist, set the same variable from your shell profile —
+`~/.bashrc`, `~/.zshrc`, or your shell's equivalent. A profile holding the
+literal key is a file on your machine like any other: readable by anything
+running as you, and worth `chmod 600` if the machine is shared. The variable
+must exist in the environment that launches `claude`; setting it inside a
+running session is too late for a connection already made.
+
+An assignment of this variable is a finding for `scripts/privacy_guard.py` as
+of this change, which is why no such line is spelled out here — see section 6.
 
 **Or** register the server at local scope with the header baked in, which
 stores the key in `~/.claude.json` on your machine, outside this repository:
@@ -163,6 +169,7 @@ one. Per `AGENTS.md` §9, a credential change is Joe's call to make.
 | `.mcp.json` | Tracked and public. `scripts/privacy_guard.py` fails the build on a literal here, and `tests/test_repo_hygiene.py` asserts every header value stays a `${VAR}` reference. A key committed once is published; deleting the line later does not unpublish it, so the only remedy is rotation |
 | `.env` | **Silently useless.** Nothing loads it into Claude Code. `.env` in this repository is read by `connectors/schwab/config.py` alone, for the Schwab connector's own settings; MCP header expansion reads the process environment and never opens the file. The key would sit there looking configured while every call failed |
 | `.claude/settings.local.json` | Git-ignored as of this change, but it was not before, and Claude Code only auto-ignores it when it writes the file itself. Verify it is ignored before putting anything sensitive in it |
+| Any tracked file in this repository | An assignment of `FINANCIAL_DATASETS_API_KEY` is a `scripts/privacy_guard.py` finding as of this change, so the gate fails rather than the key publishing. That is new — see section 8 for what was true before, and for the limits of what the guard covers now |
 | Any chat, issue, or commit message | `AGENTS.md` §10. Rotate anything that lands in one |
 
 ---
@@ -184,12 +191,38 @@ good — section 2 is the whole reason those are different questions.
 
 ## 8. Boundaries
 
-- Project scope configures **Claude Code sessions only**.
-  `config/mcp_mounts.toml` — the specialist-corps launcher plane — is
-  deliberately untouched, so no governed agent gains a tool surface from
-  this connector.
+- `config/mcp_mounts.toml` — the trusted-launcher plane — is deliberately
+  untouched by this change. That is **not** the same as saying no governed
+  agent can reach the connector, and an earlier draft of this section made
+  that inference and was wrong. The two planes are separate:
+
+  | Plane | Reads | Reaches this server? |
+  |---|---|---|
+  | Trusted launcher | `config/mcp_mounts.toml` | No — no entry exists |
+  | Claude Code projection | `.claude/agents/*.md` frontmatter | **Agent 007 does.** `scripts/generate_claude_agents.py` grants `CHIEF_TOOLS`, which includes the `mcp__*` wildcard, so any server the session has connected — this one included — is in its surface |
+
+  Specialists are denied that wildcard (`SPECIALIST_TOOLS` in the same
+  generator), so the chief remains the only connector holder. The practical
+  reading: a Claude Code session with this server configured gives Agent 007
+  read-only market data it did not have before, without any mount entry
+  recording that. Whether that should be registered and gated in the mount
+  policy, or the wildcard narrowed, is a governance decision for Joe under
+  `AGENTS.md` §9 — this document records the position rather than changing
+  it. `.claude/agents/apex_chief_of_staff.md` is generated; it is not
+  hand-editable and is not edited here.
 - The connector is read-only market data. It places no orders and holds no
   account identity; it is unrelated to the Schwab connector, which reads
   holdings and is separately credentialed.
-- No key, and no fragment of one, belongs in this repository. The privacy
-  guard enforces that mechanically rather than by convention.
+- No key, and no fragment of one, belongs in this repository. As of this
+  change `scripts/privacy_guard.py` enforces that for this variable
+  mechanically rather than by convention: `FINANCIAL_DATASETS_API_KEY` is in
+  the credential-assignment alternation, and
+  `tests/test_privacy.py::test_documented_but_unmounted_credential_names_are_detectable`
+  fails if it is removed. It was **not** enforced when this document was
+  first written — `\b` cannot match after the `_` in `..._API_KEY`, so the
+  exact export line this page used to print sailed past the guard while the
+  identical value assigned to a bare `API_KEY` was caught. Scope that
+  honestly: the underlying anchor still misses every other
+  `<PREFIX>_API_KEY`, `<PREFIX>_ACCESS_TOKEN` and `<PREFIX>_CLIENT_SECRET`.
+  Closing that is a change to the shared guard, not to this connector, and
+  is left as its own.
