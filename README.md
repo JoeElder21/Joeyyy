@@ -12,6 +12,17 @@ Say:
 
 The personal Agent 007 skill makes that phrase portable across chats where the skill is available. In this repository, the native custom-agent name remains `apex_chief_of_staff` for compatibility.
 
+## Mission pipeline (Canon → Forge → Claude Code)
+
+Public-safe GitHub missions, not PacketGuard delegations. Schema and dry-run: [`docs/MISSION_PACKET.md`](docs/MISSION_PACKET.md).
+
+1. **Canon** (Drive brain librarian) drafts a mission packet only.
+2. **Forge** (human repo/CI operator) opens a GitHub Issue from `.github/ISSUE_TEMPLATE/mission.yml` (`[mission]` title; labels `mission`, `claude`).
+3. The submitted body includes `@claude` plus the start prompt, so the existing `.github/workflows/claude.yml` job runs.
+4. **Claude Code GitHub Action** implements on a branch and opens a PR. It does not merge.
+
+**Local fallback:** if `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) or the Claude GitHub App is missing, paste the start prompt into Claude Code locally, or comment `@claude` on the issue after the secret and App are set.
+
 ## What changed
 
 - Universal Agent 007 activation phrase and operating identity.

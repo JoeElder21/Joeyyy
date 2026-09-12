@@ -12,6 +12,11 @@ on:
     # request. `assigned` is only useful alongside the action's
     # assignee_trigger input, which this workflow does not set.
     types: [opened]
+    # Mission issues use this same job. `.github/ISSUE_TEMPLATE/mission.yml`
+    # writes `@claude` into a submitted field (start prompt + required
+    # checkbox) so this path runs. Do not add a second interactive Claude
+    # job for `issues: [opened]` — that would race two checkouts and
+    # double-spend the key. Schema: docs/MISSION_PACKET.md.
   pull_request_review:
     types: [submitted]
 

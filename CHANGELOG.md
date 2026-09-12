@@ -3,6 +3,24 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-09-12 — Canon→Forge→Claude Code mission pipeline
+
+A public-safe GitHub mission brief, filed by Forge, executed by the
+existing `@claude` Action. Not a PacketGuard packet and not a
+shadow-to-active promotion.
+
+### Added
+
+- `docs/MISSION_PACKET.md` — eight-field schema, roles, example packet,
+  secrets/App checklist, dry-mission, local fallback.
+- `.github/ISSUE_TEMPLATE/mission.yml` — issue form mapped 1:1 to that
+  schema. Submitted body keeps `@claude` so `claude.yml` runs.
+
+### Changed
+
+- README pointer and docs index. `claude.yml` comments record that
+  mission issues reuse the existing interactive job (Option A).
+
 ## 2026-09-12 — First APEX slice and Bird sample
 
 One executable APEX path, specialists still shadow, plus a keyless Bird
