@@ -1697,6 +1697,48 @@ class McpClientConfigTests(unittest.TestCase):
         )
 
 
+class LocalClaudeSettingsAreIgnoredTests(unittest.TestCase):
+    """The one Claude Code config path that legitimately holds a secret must never be tracked."""
+
+    LOCAL_SETTINGS = ".claude/settings.local.json"
+
+    def test_local_settings_are_git_ignored(self):
+        # `.claude/settings.local.json` carries an `env` block, which is one of
+        # the documented places an operator puts a credential -- see
+        # docs/FINANCIAL_DATASETS_CONNECTOR.md. Claude Code adds the path to
+        # git's excludes only when it writes the file itself; a hand-written
+        # one, or one written with the Write tool, would be tracked. This
+        # repository is public, so that path must be ignored here rather than
+        # relying on a tool-managed global exclude that a fresh clone or a
+        # different machine would not have.
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--quiet", self.LOCAL_SETTINGS],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        self.assertEqual(
+            ignored.returncode,
+            0,
+            f"{self.LOCAL_SETTINGS} is not git-ignored, so a credential written "
+            "there would be committed to a public repository",
+        )
+
+    def test_local_settings_are_not_tracked(self):
+        # Ignoring a path does nothing once it is already tracked: git keeps
+        # honouring the index entry. Assert the stronger property directly.
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", self.LOCAL_SETTINGS],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        self.assertNotEqual(
+            tracked.returncode,
+            0,
+            f"{self.LOCAL_SETTINGS} is tracked; ignoring it does not untrack it, "
+            "so any secret it holds is already public",
+        )
+
+
 class MissionPipelineTests(unittest.TestCase):
     """Canon→Forge→Claude Code: form fields, trigger, and docs stay aligned."""
 

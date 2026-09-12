@@ -1,6 +1,6 @@
 # Documentation index
 
-43 records, grouped by purpose. Start at the top of each section.
+44 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -39,6 +39,7 @@
 | [`FIRST_APEX_SLICE.md`](FIRST_APEX_SLICE.md) | One executable APEX path: Agent 007 → Delivery Commander technical QA, VERIFY/REPORT, specialists remain shadow |
 | [`DATA_MEMORY_LAYERS.md`](DATA_MEMORY_LAYERS.md) | llama_index, mem0, crewAI |
 | [`ORCHESTRATION_AND_CONNECTORS.md`](ORCHESTRATION_AND_CONNECTORS.md) | AutoGen, LangGraph, MCP servers, APS, Logseq |
+| [`FINANCIAL_DATASETS_CONNECTOR.md`](FINANCIAL_DATASETS_CONNECTOR.md) | Supplying the financial-datasets MCP key: where it goes, where it silently does not, and why cloud sessions differ |
 | [`AUTOGEN_INTEGRATION.md`](AUTOGEN_INTEGRATION.md) | Bounded AutoGen runtime-adapter contract |
 | [`AUTOGEN_CHALLENGE_PAIR_TRIAL.md`](AUTOGEN_CHALLENGE_PAIR_TRIAL.md) | Challenge-pair preflight trial |
 
