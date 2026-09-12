@@ -1,0 +1,115 @@
+name: Mission
+description: Canon→Forge packet. Opens a governed GitHub mission for Claude Code.
+title: "[mission] "
+labels: ["mission", "claude"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Public-safe mission packet. Schema and roles live in
+        `docs/MISSION_PACKET.md`. This is **not** a PacketGuard 2.1
+        delegation.
+
+        GitHub does not copy this markdown block into the submitted issue.
+        The start prompt and the trigger checkbox below must keep the
+        literal `@claude` so `.github/workflows/claude.yml` runs.
+
+        Do not paste live Drive file ids, credentials, or private facts.
+        Default Drive source IDs to `none — no Drive source`.
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: One sentence. The outcome, not the method.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      description: >
+        Authorized brain for this issue. Cross-brain work still needs
+        Agent 007 and a PacketGuard transfer; do not encode that here.
+      options:
+        - JEOS
+        - APEX
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: >
+        What must not change. Name locks, Dependabot PRs, lifecycle,
+        privacy class, and merge policy when they apply.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: >
+        Observable definition of done. A skipped checker is skipped,
+        never passed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: drive-source-ids
+    attributes:
+      label: Drive source IDs
+      description: >
+        Public Issues are public. Write `none — no Drive source` unless
+        Joe has accepted a redacted public-safe handle. Never paste a
+        live Drive file id or folder URL.
+      value: "none — no Drive source"
+    validations:
+      required: true
+
+  - type: textarea
+    id: start-prompt
+    attributes:
+      label: Claude Code start prompt
+      description: >
+        The instruction Claude executes. Must contain the literal
+        `@claude` so the existing Action fires on issues:opened.
+      value: |
+        @claude
+
+        Execute this mission from the packet fields in this issue.
+        Follow AGENTS.md. Open a PR if the acceptance criteria require
+        one. Do not merge. Do not commit secrets.
+    validations:
+      required: true
+
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      description: Accountable human. Usually Joe. Not an agent name.
+    validations:
+      required: true
+
+  - type: input
+    id: due
+    attributes:
+      label: Due
+      description: ISO date YYYY-MM-DD, or `none`.
+      placeholder: none
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: trigger
+    attributes:
+      label: Claude Code trigger
+      description: >
+        Required so the submitted body contains `@claude` even if the
+        start prompt is edited. Forge may also comment `@claude` later.
+      options:
+        - label: This issue mentions @claude so `.github/workflows/claude.yml` runs on open
+          required: true

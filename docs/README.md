@@ -1,6 +1,6 @@
 # Documentation index
 
-42 records, grouped by purpose. Start at the top of each section.
+43 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -23,6 +23,7 @@
 | [`PRIVACY_AND_DATA_BOUNDARIES.md`](PRIVACY_AND_DATA_BOUNDARIES.md) | Public-repository and runtime-data rules |
 | [`BRAIN_CADENCE_RUNBOOK.md`](BRAIN_CADENCE_RUNBOOK.md) | Daily, weekly, and monthly brain-specific orchestration |
 | [`DAILY_EXECUTIVE_BRIEFING.md`](DAILY_EXECUTIVE_BRIEFING.md) | The 6:00 AM daily briefing workflow: schedule contract, section spec, boundaries, failure diagnosis |
+| [`MISSION_PACKET.md`](MISSION_PACKET.md) | Canon→Forge→Claude Code mission packet schema, issue form, Action trigger, secrets checklist |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, reporting, supply-chain posture |
 | [`SECRET_HISTORY_SWEEP_2026-07-25.md`](SECRET_HISTORY_SWEEP_2026-07-25.md) | Full-history secret sweep: method, coverage proof, clean result |
 | [`DEPENDENCY_AUDIT_2026-07-25.md`](DEPENDENCY_AUDIT_2026-07-25.md) | Known-vulnerability scan of the pinned dependencies, and the lockfile resolution failure it surfaced |
