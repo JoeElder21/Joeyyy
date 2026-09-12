@@ -50,7 +50,7 @@ PENALISE = "PENALISE"  # absence is itself bad news; score the worst observed
 
 @dataclass(frozen=True)
 class Feature:
-    key: str
+    feature_id: str
     family: str
     group: str
     label: str
@@ -72,7 +72,7 @@ class Feature:
 
     def as_dict(self) -> dict:
         return {
-            "key": self.key,
+            "feature_id": self.feature_id,
             "family": self.family,
             "group": self.group,
             "label": self.label,
@@ -99,7 +99,7 @@ ONLY_EQUITY = frozenset({EQUITY})
 _FEATURES: tuple[Feature, ...] = (
     # ---- A. Relative strength and trend -------------------------------
     Feature(
-        key="residual_momentum",
+        feature_id="residual_momentum",
         family=TREND,
         group="trend",
         label="Beta-adjusted residual momentum",
@@ -123,7 +123,7 @@ _FEATURES: tuple[Feature, ...] = (
         ),
     ),
     Feature(
-        key="relative_strength_vs_market",
+        feature_id="relative_strength_vs_market",
         family=TREND,
         group="trend",
         label="Excess return versus the eligible market",
@@ -142,7 +142,7 @@ _FEATURES: tuple[Feature, ...] = (
         asset_classes=BOTH,
     ),
     Feature(
-        key="trend_persistence",
+        feature_id="trend_persistence",
         family=TREND,
         group="trend",
         label="Trend persistence",
@@ -162,7 +162,7 @@ _FEATURES: tuple[Feature, ...] = (
     ),
     # ---- B. Downside and volatility -----------------------------------
     Feature(
-        key="downside_deviation",
+        feature_id="downside_deviation",
         family=RISK,
         group="risk",
         label="Downside deviation",
@@ -182,7 +182,7 @@ _FEATURES: tuple[Feature, ...] = (
         note="Missing risk data must never help a score: absence scores worst.",
     ),
     Feature(
-        key="max_drawdown",
+        feature_id="max_drawdown",
         family=RISK,
         group="risk",
         label="Historical maximum drawdown",
@@ -201,7 +201,7 @@ _FEATURES: tuple[Feature, ...] = (
         asset_classes=BOTH,
     ),
     Feature(
-        key="ewma_volatility",
+        feature_id="ewma_volatility",
         family=RISK,
         group="risk",
         label="EWMA volatility",
@@ -218,7 +218,7 @@ _FEATURES: tuple[Feature, ...] = (
     ),
     # ---- C. Entry and execution ---------------------------------------
     Feature(
-        key="liquidity_depth",
+        feature_id="liquidity_depth",
         family=ENTRY,
         group="liquidity",
         label="Executable depth against the research notional",
@@ -238,7 +238,7 @@ _FEATURES: tuple[Feature, ...] = (
         note="A hard block: no depth reading means no actionable rank.",
     ),
     Feature(
-        key="spread_cost",
+        feature_id="spread_cost",
         family=ENTRY,
         group="liquidity",
         label="Quoted round-trip spread",
@@ -254,7 +254,7 @@ _FEATURES: tuple[Feature, ...] = (
         asset_classes=BOTH,
     ),
     Feature(
-        key="turnover_ratio",
+        feature_id="turnover_ratio",
         family=ENTRY,
         group="liquidity",
         label="Volume to liquidity turnover",
@@ -278,7 +278,7 @@ _FEATURES: tuple[Feature, ...] = (
         ),
     ),
     Feature(
-        key="extension_from_support",
+        feature_id="extension_from_support",
         family=ENTRY,
         group="entry_timing",
         label="Volatility-normalised extension above support",
@@ -300,7 +300,7 @@ _FEATURES: tuple[Feature, ...] = (
     ),
     # ---- D. Derivatives and positioning --------------------------------
     Feature(
-        key="funding_rate_8h",
+        feature_id="funding_rate_8h",
         family=POSITIONING,
         group="positioning",
         label="Perpetual funding, normalised to 8h",
@@ -324,7 +324,7 @@ _FEATURES: tuple[Feature, ...] = (
         ),
     ),
     Feature(
-        key="open_interest_change",
+        feature_id="open_interest_change",
         family=POSITIONING,
         group="positioning",
         label="Open interest change",
@@ -341,7 +341,7 @@ _FEATURES: tuple[Feature, ...] = (
     ),
     # ---- E. Fundamentals and token economics ---------------------------
     Feature(
-        key="holder_accrual",
+        feature_id="holder_accrual",
         family=FUNDAMENTAL,
         group="value_capture",
         label="Value accruing to token holders",
@@ -365,7 +365,7 @@ _FEATURES: tuple[Feature, ...] = (
         ),
     ),
     Feature(
-        key="float_ratio",
+        feature_id="float_ratio",
         family=FUNDAMENTAL,
         group="supply",
         label="Circulating share of total supply",
@@ -384,7 +384,7 @@ _FEATURES: tuple[Feature, ...] = (
         asset_classes=ONLY_CRYPTO,
     ),
     Feature(
-        key="unlock_overhang",
+        feature_id="unlock_overhang",
         family=FUNDAMENTAL,
         group="supply",
         label="Scheduled unlocks against credible liquidity",
@@ -403,7 +403,7 @@ _FEATURES: tuple[Feature, ...] = (
         asset_classes=ONLY_CRYPTO,
     ),
     Feature(
-        key="earnings_yield",
+        feature_id="earnings_yield",
         family=FUNDAMENTAL,
         group="value_capture",
         label="Trailing earnings yield",
@@ -423,7 +423,7 @@ _FEATURES: tuple[Feature, ...] = (
         asset_classes=ONLY_EQUITY,
     ),
     Feature(
-        key="balance_sheet_quality",
+        feature_id="balance_sheet_quality",
         family=FUNDAMENTAL,
         group="solvency",
         label="Net debt to EBITDA",
@@ -440,7 +440,7 @@ _FEATURES: tuple[Feature, ...] = (
     ),
     # ---- F. Verified events --------------------------------------------
     Feature(
-        key="event_risk",
+        feature_id="event_risk",
         family=EVENT,
         group="events",
         label="Verified adverse event pressure",
@@ -465,7 +465,7 @@ _FEATURES: tuple[Feature, ...] = (
     ),
 )
 
-REGISTRY: dict[str, Feature] = {f.key: f for f in _FEATURES}
+REGISTRY: dict[str, Feature] = {f.feature_id: f for f in _FEATURES}
 
 
 def for_asset_class(asset_class: str) -> dict[str, Feature]:
