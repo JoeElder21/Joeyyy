@@ -77,6 +77,14 @@ Use the issue forms — `.github/ISSUE_TEMPLATE/agent-intake.yml` and
 that the FakeGit finding made mandatory. Then follow `docs/AGENT_COMMUNITY_PROTOCOL.md` and
 register the result in `docs/AGENT_REGISTRY.md`.
 
+## Opening a governed mission
+
+Use `.github/ISSUE_TEMPLATE/mission.yml`. Canon drafts the packet
+(`docs/MISSION_PACKET.md`); Forge, a human with write access, opens the
+issue. The submitted start prompt and trigger checkbox must contain
+`@claude` so `.github/workflows/claude.yml` runs. This does not admit a
+specialist or move anyone from shadow to active.
+
 ## Branches and pull requests
 
 Work on a topic branch and open a pull request against `main`. Fill in the PR template; the

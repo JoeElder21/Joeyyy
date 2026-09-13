@@ -1,9 +1,13 @@
 # Optional runtime integrations. Install only the adapters enabled in deployment.
 # No credentials, connector identifiers, or private source data belong here.
 -r requirements.txt
-langgraph>=0.2
+# Floors kept inside one resolvable set. Dependabot #90 raised crewai to
+# 1.15.18 (chromadb<1.2 → posthog<6, pydantic<2.13) in the same group as
+# mem0ai 2.0.19 (posthog>=7.14) and pydantic 2.13.5; `uv pip compile` of
+# runtime-full.txt rejects that pair. Those stay at the previous floors.
+langgraph>=1.2.11
 crewai>=0.80
-prefect>=3.0
+prefect>=3.8.4
 mem0ai>=2.0.14
 llama-index>=0.14.23
 langchain>=0.3
