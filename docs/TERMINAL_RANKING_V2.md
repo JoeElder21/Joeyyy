@@ -163,8 +163,9 @@ published edition; validation becomes possible once enough have matured.
 ## 7. Acceptance gates
 
 All 12 gates from section 14 are covered by `tests/test_terminal_ranking.py`
-(47 tests, passing). Each `test_gate_*` is written adversarially — it attempts
-the dishonest behaviour and asserts the refusal.
+(48 tests, passing). Each `test_gate_*` is written adversarially — it attempts
+the dishonest behaviour and asserts the refusal. Section 8 records what these
+gates do **not** reach.
 
 | Gate | Test class |
 |---|---|
@@ -181,7 +182,66 @@ the dishonest behaviour and asserts the refusal.
 | Horizons never averaged | `GateHorizonSeparation` |
 | Asset classes kept separate | `GateAssetClassSeparation` |
 
-## 8. Status summary
+## 8. Where the gates stop: the feed boundary
+
+The gates above constrain **the engine**. They cannot constrain what is handed
+to it, and that distinction turned out to matter in practice rather than in
+principle.
+
+A live crypto feed built on a DexScreener snapshot was found to be doing two
+things the registry forbids, neither of which any gate could see:
+
+1. **Substituting a value the declared formula cannot produce.**
+   `ewma_volatility` declares `sqrt(EWMA variance of log returns, half-life 10
+   bars)` over a trailing window and carries the largest single group weight at
+   25%. It was being fed the absolute value of one 24-hour price change. One
+   observation is not an EWMA over ten bars. `residual_momentum` declares a
+   beta-adjusted return and was being fed the raw return with no market leg,
+   which additionally made it rank-identical to
+   `relative_strength_vs_market` — two features casting one vote, inside the
+   group budget designed to prevent exactly that.
+
+2. **Substituting `0.0` for an absent observation.** Where the venue published
+   no 24-hour change, the feed supplied a zero. Because `ewma_volatility` is
+   lower-is-better, a fabricated zero is the *best possible* reading; in a
+   falling cross-section the asset with the least data was scored the calmest
+   and the strongest, and ranked first. Just over half its composite rested on
+   an observation that did not exist.
+
+The engine behaved correctly throughout. It received floats and scored floats.
+`GateMissingDataNeverHelps` passes, and passed while this was happening,
+because the fabricated value never presented as missing.
+
+**The obligation therefore sits on the feed, and it is not optional:**
+
+- A feature may only be supplied when its **declared formula and lookback are
+  actually computable** from the available inputs. If they are not, the feed
+  passes `None` and the feature is absent. A value that shares a feature's name
+  but not its definition is worse than no value, because it is unfalsifiable
+  once it reaches a score.
+- An absent observation is passed as `None`. **Never** `0.0`, never a neutral
+  midpoint, never a carried-forward previous reading. `None` routes to the
+  declared missing policy (`OMIT` / `PENALISE` / `BLOCK`), costs coverage, and
+  raises a risk flag. A substituted value does none of that and leaves the
+  reader no signal that anything was wrong.
+- The horizon label must match the observations behind it. A ranking built
+  entirely from 24h inputs is a 24h ranking, whatever horizon the caller
+  prefers to publish.
+
+`GateMissingDataNeverHelps::test_gate_substituted_zero_is_indistinguishable_from_a_measurement`
+pins this hazard: it asserts that a substituted zero **outranks** an honest
+`None` and raises no flag. It is deliberately not a test that the engine is
+wrong — it is the standing evidence for why the rule above exists, so the
+obligation stays visible to whoever writes the next feed, including the
+production job in §5 that does not exist yet.
+
+The consequence of applying the rule to that snapshot feed was that the whole
+risk group emptied, coverage fell to 50%, the 60% floor fired, and every crypto
+composite was withheld. That is the correct outcome for a snapshot with no
+return series, and it is the same outcome the equity view already had for the
+same reason.
+
+## 9. Status summary
 
 - **IMPLEMENTED and TESTED** — quant primitives, feature registry, entry
   economics, decision functional, forecast/outcome ledger, deterministic V1
@@ -191,6 +251,10 @@ the dishonest behaviour and asserts the refusal.
   models. Blocked on point-in-time history that does not exist yet.
 - **NOT VERIFIED** — the 06:00 scheduler and the phone push. No such code exists
   in this package.
+- **KNOWN LIMIT** — the gates constrain the engine, not what is fed to it. The
+  feed-boundary obligations in §8 are enforced by discipline and one pinning
+  test, not by the type system. A caller that fabricates an input can still
+  produce a confident wrong number.
 - **BLOCKED, needs Joe** — the timezone identifier change; the fixed-UTC versus
   ET-anchored cron decision; connecting a price-history and fundamentals feed,
   without which the equity view stays coverage-gated.

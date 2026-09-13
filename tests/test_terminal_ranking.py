@@ -174,6 +174,58 @@ class GateMissingDataNeverHelps(unittest.TestCase):
             "an asset with no tail estimate must not out-score one with a measured tail",
         )
 
+    def test_gate_substituted_zero_is_indistinguishable_from_a_measurement(self):
+        """The gate above protects the engine. It cannot protect the boundary.
+
+        A feed that fills an absent observation with 0.0 hands the engine a
+        number, and the engine has no way to know it was fabricated. This test
+        does not assert the engine is wrong -- it pins the hazard, so the
+        obligation stays visible to whoever writes the next feed: absent inputs
+        are passed as ``None``, never as a stand-in value.
+
+        This is not hypothetical. A live crypto feed substituted 0.0 for a
+        missing 24h change on an asset whose venue published none. Because a
+        zero volatility reading is the *best* one in a falling cross-section,
+        the substitution scored that asset the calmest and strongest of its
+        universe and ranked it first, on a return that did not exist.
+        """
+        # The volatility cross-section has to genuinely separate assets, or the
+        # feature is dropped as ZERO_DISPERSION and the substitution has nothing
+        # to act on -- which would make this test pass for the wrong reason.
+        assets = universe(5)
+        for i, aid in enumerate(sorted(assets)):
+            assets[aid]["features"]["ewma_volatility"] = 0.02 + 0.01 * i
+        honest = crypto_asset(liquidity=300_000.0, momentum=0.03)
+        honest["features"]["ewma_volatility"] = None
+        fabricated = crypto_asset(liquidity=300_000.0, momentum=0.03)
+        fabricated["features"]["ewma_volatility"] = 0.0
+        assets["sol:HONEST"] = honest
+        assets["sol:FABRICATED"] = fabricated
+
+        result = ranking.rank_universe(assets, ranking.config_for("crypto"))
+        by_id = {a.asset_id: a for a in result.ranked}
+
+        # ewma_volatility is lower-is-better, so a fabricated 0.0 is the best
+        # possible reading. The engine scores it as such, because to the engine
+        # it is simply a measurement.
+        self.assertGreater(
+            by_id["sol:FABRICATED"].composite or 0.0,
+            by_id["sol:HONEST"].composite or 0.0,
+            "a substituted zero outranks an honest None -- which is exactly why "
+            "a feed must never substitute one",
+        )
+        # The honest asset pays for the absence: PENALISE scores it worst and
+        # flags it. The fabricated one is flagged nowhere at all.
+        self.assertTrue(
+            any("ewma_volatility" in f for f in by_id["sol:HONEST"].risk_flags),
+            "an absent reading passed as None must be flagged",
+        )
+        self.assertEqual(
+            [f for f in by_id["sol:FABRICATED"].risk_flags if "ewma_volatility" in f],
+            [],
+            "a fabricated reading raises no flag, leaving the reader no signal",
+        )
+
 
 class GateEntryEconomics(unittest.TestCase):
     """A worse entry cannot improve net opportunity, payoff held fixed."""
