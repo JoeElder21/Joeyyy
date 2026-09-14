@@ -8,6 +8,6 @@
     "node": ">=22.22.0"
   },
   "dependencies": {
-    "agent-relay": "^11.2.0"
+    "agent-relay": "^11.10.3"
   }
 }
