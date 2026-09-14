@@ -39,7 +39,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Audit workflows
-        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+        uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
         with:
           # This repository has no code-scanning ingestion configured; fail the
           # job directly rather than uploading SARIF that nothing would read.
@@ -152,7 +152,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Scan pinned dependencies
-        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
         with:
           # `requirements.txt:` names the extractor explicitly. Without it the
           # scanner cannot infer one from the filename `lock-2026-07-24.txt` and
@@ -194,7 +194,7 @@ jobs:
             --lockfile=connectors/aps/package-lock.json
             --lockfile=connectors/relay/package-lock.json
       - name: Scan the generated locks for the floating install manifests
-        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
         with:
           # These are the resolved forms of the sets CI and the workstation
           # actually install, generated with `uv pip compile` and committed.
