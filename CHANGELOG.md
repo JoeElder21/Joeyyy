@@ -3,6 +3,52 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-09-14 — Ranking learns to tell a trend from a spike that stopped
+
+The V1 composite scores how good an asset looks. It has no way to ask whether
+the move it is making is still running, because that question cannot be
+answered from a level: an asset 30% above its base because it is trending and
+one 30% above its base because it spiked and stopped present identically. They
+differ in rate of change, and nothing in the engine measured rate of change.
+
+### Added
+
+- `terminal/continuation.py` — persistence scored against exhaustion at 3d, 7d
+  and 30d. Trend alignment, range position, up-day volume share, Wilder RSI and
+  today's direction on the persistence side; normalised extension above the 50-
+  and 200-day bases, overbought, the crack of an uptrend name falling today, and
+  `decay` — the recent window's daily pace against the trend window's — on the
+  exhaustion side. Exhaustion carries 1.40 at 3d and 0.50 at 30d, persistence
+  the reverse, encoding short-horizon reversal and intermediate-horizon
+  momentum as the opposite-signed effects they are. Labelled HEURISTIC /
+  NOT_YET_VALIDATED and, per the §3 rule, it produces an ordering and a band
+  label — never an expected return.
+- `tests/test_continuation.py` — 28 tests.
+
+### Fixed
+
+- Exhaustion is now divided by the full weight in play rather than the weight
+  measured. Averaging over only the terms present meant each additional
+  zero-valued term diluted the average and *raised* the score, so a feed could
+  improve any asset by reporting `0.0` for readings it never took — and a
+  missing input scored ten points **better** than the worst real measurement,
+  inverting the feed-boundary rule it was written to obey. Caught because the
+  first version of the phantom-zero test passed trivially: both sides rounded
+  to the same value, so it asserted nothing. It now asserts monotonicity —
+  the score never rises as an exhaustion input worsens — which fails against
+  the old arithmetic.
+
+### Changed
+
+- Missing exhaustion inputs are charged as the worst case, matching the
+  `terminal/ranking.py` rule that absence in a risk feature scores worst rather
+  than neutral. `score()` takes `systemic_gaps` for terms absent across the
+  whole cross-section, which are dropped instead of charged: a feed outage is a
+  fact about the pipeline, not about the asset, and charging it as the latter
+  ranks an entire asset class below another for a missing API key. Coverage
+  still records the gap either way.
+- `docs/TERMINAL_RANKING_V2.md` gains §9; the status summary is now §10.
+
 ## 2026-09-13 — The ranking path becomes reproducible, and learns where it ends
 
 Ranking previously ran on hand-assigned `[0, 1]` judgment values with nothing

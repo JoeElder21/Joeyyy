@@ -241,12 +241,60 @@ composite was withheld. That is the correct outcome for a snapshot with no
 return series, and it is the same outcome the equity view already had for the
 same reason.
 
-## 9. Status summary
+## 9. Continuation scoring: persistence against exhaustion
+
+`terminal/continuation.py` answers a question the composite in §2 does not:
+not *how good is this asset* but *is the move it is making still running*.
+The distinction is the one a level cannot make. An asset 30% above its base
+because it is trending and an asset 30% above its base because it spiked and
+stopped show the same extension and differ only in their rate of change. The
+`decay` term measures that rate directly — the recent window's daily pace
+against the trend window's — and it is the input that most reorders a ranking
+relative to one built on current state.
+
+Three commitments, each of which had a concrete alternative that was rejected:
+
+**Persistence and exhaustion are scored separately, then netted.** A single
+blended number cannot distinguish "nothing happening" from "strong trend
+fighting a stretched tape", and those call for opposite actions. `Score`
+returns both component lists so a caller can display the disagreement rather
+than average it away.
+
+**Horizon reweights the same inputs; it does not change them.** Short-horizon
+reversal and intermediate-horizon momentum are separately documented effects
+with opposite signs, so exhaustion carries 1.40 at 3d and 0.50 at 30d while
+persistence runs the other way. A name reading PULLBACK at 3d and CONTINUE at
+30d is the model working. These weights are asserted for economic plausibility
+and have not been fitted or tested out of sample — the ordering is the claim,
+the number is a label on it, and §3 governs: no expected return is produced.
+
+**Exhaustion is divided by the full weight in play, not by the weight
+present.** This is not a stylistic choice. Averaging exhaustion over only the
+terms that were measured means each additional zero-valued term dilutes the
+average and *raises* the score — so a feed could improve any asset by
+reporting `0.0` for readings it never took. Under the earlier arithmetic a
+missing input scored ten points **better** than the worst real measurement,
+which inverts §8 exactly. Two tests pin it: one asserting the score never rises
+as any exhaustion input worsens, one asserting a gap is charged as the worst
+case.
+
+The last point needs a distinction §8 does not draw. An asset that alone cannot
+produce a reading has told you something about itself; a feed outage has told
+you something about your pipeline. Charging the second as if it were the first
+ranks a whole asset class below another for the analyst's missing API key. So
+`score()` takes `systemic_gaps` — terms the caller has established are absent
+for the entire cross-section — and drops those for everyone instead of
+charging them, while still counting them against coverage. Establishing that a
+gap is systemic is the caller's obligation and is not checkable here; naming a
+merely inconvenient gap as systemic silently restores the failure this guards.
+
+## 10. Status summary
 
 - **IMPLEMENTED and TESTED** — quant primitives, feature registry, entry
   economics, decision functional, forecast/outcome ledger, deterministic V1
-  ranking, all acceptance gates.
-- **IMPLEMENTED, NOT VALIDATED** — the V1 weights. They are hypotheses.
+  ranking, continuation scoring (§9), all acceptance gates.
+- **IMPLEMENTED, NOT VALIDATED** — the V1 weights and the §9 horizon weights.
+  They are hypotheses.
 - **NOT RUN** — walk-forward validation, paper portfolio, calibration, challenger
   models. Blocked on point-in-time history that does not exist yet.
 - **NOT VERIFIED** — the 06:00 scheduler and the phone push. No such code exists
