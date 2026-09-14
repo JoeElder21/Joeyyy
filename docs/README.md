@@ -45,6 +45,7 @@
 | Document | What it is |
 | --- | --- |
 | [`CIVIL3D_MCP_BUILDOUT.md`](CIVIL3D_MCP_BUILDOUT.md) | Civil 3D MCP connector build and validation guide |
+| [`DEFILLAMA_MCP_MOUNT.md`](DEFILLAMA_MCP_MOUNT.md) | DefiLlama MCP mount: stdio-bridge shape, grant scope, activation, rollback |
 | [`CIVIL3D_FIRST_WRITE_TEST.md`](CIVIL3D_FIRST_WRITE_TEST.md) | Separately-approved synthetic disposable DWG first-write protocol |
 | [`APS_SDK_BUILDOUT.md`](APS_SDK_BUILDOUT.md) | Autodesk Platform Services validation-gate buildout |
 | [`DOTNET_SELF_LEARNING_ARCHITECT.md`](DOTNET_SELF_LEARNING_ARCHITECT.md) | .NET self-learning architect agent |

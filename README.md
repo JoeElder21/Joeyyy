@@ -95,6 +95,7 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `scripts/group_debate.py` — AutoGen challenge-pair debates, cadence chats, and the dynamic selector over each brain.
 - `scripts/jeos_knowledge.py` — governed JEOS knowledge graph in Logseq format: writer-locked targets, brain-locked reads, tag queries, backlinks.
 - `config/mcp_mounts.toml` + `scripts/verify_mcp_mounts.py` — approved MCP server mounts per the connector policy, with live stdio verification.
+- `docs/DEFILLAMA_MCP_MOUNT.md` — the DefiLlama mount: why a remote HTTP server is registered through an `mcp-remote` stdio bridge, its grant scope, and its rollback. **Registered, not verified** — it requires OAuth and a paid subscription, so `verify_mcp_mounts.py` reports it as registered with its activation requirement, and `expected_tools` stays a declaration until the first authenticated probe.
 - `scripts/aps_credential_check.mjs` — APS readiness check completing validation-gate steps 2–3 once credentials exist.
 - `docs/ORCHESTRATION_AND_CONNECTORS.md` — orchestration and connectors record: AutoGen, LangGraph, MCP servers, APS, Logseq.
 - `scripts/cadence_flows.py` — cadence routes as Prefect flows with cron deployment specs; steps audit-logged.
