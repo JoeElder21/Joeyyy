@@ -988,7 +988,12 @@ class ContributorSurfaceTests(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/mission.yml",
             "docs/MISSION_PACKET.md",
             "docs/FORGE_CI_LOOP.md",
+            "docs/CURSOR_TEAM_KIT_INTEGRATION.md",
             ".agents/skills/forge-ci-loop/SKILL.md",
+            ".agents/skills/fix-ci/SKILL.md",
+            ".agents/skills/loop-on-ci/SKILL.md",
+            ".agents/skills/get-pr-comments/SKILL.md",
+            ".agents/skills/make-pr-easy-to-review/SKILL.md",
         ]:
             with self.subTest(path=relative):
                 self.assertTrue((ROOT / relative).is_file(), f"missing {relative}")
@@ -1823,11 +1828,21 @@ class MissionPipelineTests(unittest.TestCase):
         self.assertIn("ANTHROPIC_API_KEY", packet)
         self.assertIn("CLAUDE_CODE_OAUTH_TOKEN", packet)
 
+    TEAM_KIT_SKILLS = (
+        "fix-ci",
+        "loop-on-ci",
+        "get-pr-comments",
+        "make-pr-easy-to-review",
+    )
+
     def test_ci_loop_recipe_is_wired_without_a_second_workflow(self):
         skill = (ROOT / ".agents" / "skills" / "forge-ci-loop" / "SKILL.md").read_text(
             encoding="utf-8"
         )
         docs = (ROOT / "docs" / "FORGE_CI_LOOP.md").read_text(encoding="utf-8")
+        intake = (ROOT / "docs" / "CURSOR_TEAM_KIT_INTEGRATION.md").read_text(
+            encoding="utf-8"
+        )
         form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(
             encoding="utf-8"
         )
@@ -1840,13 +1855,16 @@ class MissionPipelineTests(unittest.TestCase):
         )
 
         self.assertIn("name: forge-ci-loop", skill)
-        self.assertIn("Never merge", skill)
-        self.assertIn("gh pr checks", skill)
-        self.assertIn("mcp", skill)
-        self.assertIn("connectors/relay", skill)
-        self.assertIn("5bf2b1544db739998121a306340631963c2ff3de", docs)
+        self.assertIn("loop-on-ci", skill)
+        self.assertIn("fix-ci", skill)
+        self.assertIn("Do not merge", skill)
+        self.assertIn("5bf2b1544db739998121a306340631963c2ff3de", intake)
+        self.assertIn("shadow", intake.lower())
+        self.assertIn("never merge", intake.lower())
+        self.assertIn("CURSOR_API_KEY", intake)
         self.assertIn("continuous background operation", docs.lower())
         self.assertIn("issue- or pr-triggered", docs.lower())
+        self.assertIn("CURSOR_TEAM_KIT_INTEGRATION.md", docs)
         self.assertIn("CI loop / babysit PR", form)
         self.assertIn("id: recipe", form)
         self.assertIn(".agents/skills/forge-ci-loop/SKILL.md", form)
@@ -1858,7 +1876,9 @@ class MissionPipelineTests(unittest.TestCase):
         self.assertIn("JEOS", form)
         self.assertIn("APEX", form)
         self.assertIn("docs/FORGE_CI_LOOP.md", readme)
+        self.assertIn("docs/CURSOR_TEAM_KIT_INTEGRATION.md", readme)
         self.assertIn("FORGE_CI_LOOP.md", index)
+        self.assertIn("CURSOR_TEAM_KIT_INTEGRATION.md", index)
         self.assertIn("forge-ci-loop", contributing)
         self.assertIn("docs/FORGE_CI_LOOP.md", packet)
         self.assertIn("docs/FORGE_CI_LOOP.md", workflow)
@@ -1874,6 +1894,22 @@ class MissionPipelineTests(unittest.TestCase):
             "CI-loop missions reuse claude.yml; extra Claude Action "
             f"workflows were added: {[path.name for path in extras]}",
         )
+
+    def test_four_team_kit_skills_are_separate_shadow_files(self):
+        intake = (ROOT / "docs" / "CURSOR_TEAM_KIT_INTEGRATION.md").read_text(
+            encoding="utf-8"
+        )
+        for name in self.TEAM_KIT_SKILLS:
+            path = ROOT / ".agents" / "skills" / name / "SKILL.md"
+            with self.subTest(skill=name):
+                self.assertTrue(path.is_file(), f"missing {path}")
+                text = path.read_text(encoding="utf-8")
+                self.assertIn(f"name: {name}", text)
+                self.assertIn("shadow", text.lower())
+                self.assertIn("AGENTS.md", text)
+                self.assertIn("CURSOR_TEAM_KIT_INTEGRATION.md", text)
+                self.assertNotIn("CURSOR_API_KEY", text)
+                self.assertIn(name, intake)
 
 
 # Last statement in the file, deliberately. This guard used to sit mid-module,

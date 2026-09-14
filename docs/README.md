@@ -1,6 +1,6 @@
 # Documentation index
 
-45 records, grouped by purpose. Start at the top of each section.
+46 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -24,7 +24,8 @@
 | [`BRAIN_CADENCE_RUNBOOK.md`](BRAIN_CADENCE_RUNBOOK.md) | Daily, weekly, and monthly brain-specific orchestration |
 | [`DAILY_EXECUTIVE_BRIEFING.md`](DAILY_EXECUTIVE_BRIEFING.md) | The 6:00 AM daily briefing workflow: schedule contract, section spec, boundaries, failure diagnosis |
 | [`MISSION_PACKET.md`](MISSION_PACKET.md) | Canon→Forge→Claude Code mission packet schema, issue form, Action trigger, secrets checklist |
-| [`FORGE_CI_LOOP.md`](FORGE_CI_LOOP.md) | Optional mission Recipe: babysit one PR's CI until green; skill + Option A reuse, no merge |
+| [`FORGE_CI_LOOP.md`](FORGE_CI_LOOP.md) | Optional mission Recipe: babysit one PR's CI until green; orchestrates loop-on-ci + fix-ci |
+| [`CURSOR_TEAM_KIT_INTEGRATION.md`](CURSOR_TEAM_KIT_INTEGRATION.md) | Four shadow cursor-team-kit skills: pin SHA, hard stops, shadow→active, rollback |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, reporting, supply-chain posture |
 | [`SECRET_HISTORY_SWEEP_2026-07-25.md`](SECRET_HISTORY_SWEEP_2026-07-25.md) | Full-history secret sweep: method, coverage proof, clean result |
 | [`DEPENDENCY_AUDIT_2026-07-25.md`](DEPENDENCY_AUDIT_2026-07-25.md) | Known-vulnerability scan of the pinned dependencies, and the lockfile resolution failure it surfaced |

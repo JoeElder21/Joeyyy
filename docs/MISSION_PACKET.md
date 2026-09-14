@@ -43,10 +43,11 @@ separate PacketGuard transfer; do not encode that transfer here.
 
 Not a ninth required packet field and not a brain. The issue form may
 set **Standard implementation** (default) or **CI loop / babysit PR**.
-The CI-loop recipe lives in `docs/FORGE_CI_LOOP.md` and
-`.agents/skills/forge-ci-loop/SKILL.md`. It still requires `@claude` and
-still reuses `.github/workflows/claude.yml`. Do not add a second
-interactive Claude job.
+The CI-loop recipe lives in `docs/FORGE_CI_LOOP.md`. The four shadow
+skills and pin SHA live in `docs/CURSOR_TEAM_KIT_INTEGRATION.md`.
+`forge-ci-loop` orchestrates `loop-on-ci` and `fix-ci`. It still
+requires `@claude` and still reuses `.github/workflows/claude.yml`. Do
+not add a second interactive Claude job.
 
 ### Constraints
 
@@ -229,7 +230,7 @@ App is still missing.
   fork-reachable `--allowedTools`)
 - Review job unchanged: `.github/workflows/claude-code-review.yml`
 - Optional Recipe: **CI loop / babysit PR** — start-prompt overlay in
-  `docs/FORGE_CI_LOOP.md`, skill at `.agents/skills/forge-ci-loop/SKILL.md`
+  `docs/FORGE_CI_LOOP.md`; intake in `docs/CURSOR_TEAM_KIT_INTEGRATION.md`
 
 ## Rollback
 
