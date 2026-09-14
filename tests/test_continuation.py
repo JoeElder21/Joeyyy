@@ -26,8 +26,16 @@ from terminal.continuation import (
 
 def trending(**over) -> Features:
     """A clean, fully-covered uptrend: aligned, mid-upper range, buying."""
-    base = dict(align=1, stretch=0.4, far200=0.3, range_pos=0.75,
-                day_pct=1.0, flow=0.62, rsi=60.0, decay=0.1)
+    base = {
+        "align": 1,
+        "stretch": 0.4,
+        "far200": 0.3,
+        "range_pos": 0.75,
+        "day_pct": 1.0,
+        "flow": 0.62,
+        "rsi": 60.0,
+        "decay": 0.1,
+    }
     base.update(over)
     return Features(**base)
 
@@ -113,8 +121,9 @@ class HorizonBehaviour(unittest.TestCase):
         running = trending(decay=-0.5)
         stalled = trending(decay=1.0)
         for h in HORIZONS:
-            self.assertGreater(score(running, h).value, score(stalled, h).value,
-                               "deceleration ignored at %s" % h)
+            self.assertGreater(
+                score(running, h).value, score(stalled, h).value, f"deceleration ignored at {h}"
+            )
 
     def test_broken_trend_is_BREAK_at_every_horizon_whatever_the_score(self):
         broken = trending(align=-1, flow=0.95, rsi=68.0, decay=-1.0)
@@ -127,10 +136,16 @@ class HorizonBehaviour(unittest.TestCase):
             s = score(trending(decay=decay), "7d")
             if s.value is None or s.verdict == BREAK:
                 continue
-            expect = (CONTINUE if s.value >= 62 else
-                      "MIXED" if s.value >= 45 else
-                      "PULLBACK RISK" if s.value >= 30 else "PULLBACK")
-            self.assertEqual(s.verdict, expect, "value %s labelled %s" % (s.value, s.verdict))
+            expect = (
+                CONTINUE
+                if s.value >= 62
+                else "MIXED"
+                if s.value >= 45
+                else "PULLBACK RISK"
+                if s.value >= 30
+                else "PULLBACK"
+            )
+            self.assertEqual(s.verdict, expect, f"value {s.value} labelled {s.verdict}")
 
     def test_unknown_horizon_raises_rather_than_defaulting(self):
         with self.assertRaises(ValueError):
@@ -167,17 +182,23 @@ class MissingNeverHelps(unittest.TestCase):
         # LIFTS the score, so a feed could improve any asset by reporting 0.0
         # for things it never measured. With a fixed divisor the score can only
         # fall -- check that across every exhaustion input.
-        for field_name, worse in (("stretch", [0.0, 0.5, 1.5, 3.0, 6.0]),
-                                  ("far200", [0.0, 0.5, 1.5, 3.0, 6.0]),
-                                  ("decay", [-1.0, 0.0, 0.5, 1.0, 2.0]),
-                                  ("rsi", [70.0, 75.0, 85.0, 95.0])):
+        for field_name, worse in (
+            ("stretch", [0.0, 0.5, 1.5, 3.0, 6.0]),
+            ("far200", [0.0, 0.5, 1.5, 3.0, 6.0]),
+            ("decay", [-1.0, 0.0, 0.5, 1.0, 2.0]),
+            ("rsi", [70.0, 75.0, 85.0, 95.0]),
+        ):
             for horizon in HORIZONS:
                 vals = [score(trending(**{field_name: v}), horizon).value for v in worse]
-                for earlier, later in zip(vals, vals[1:]):
+                # strict=False is required, not laziness: the two operands are
+                # deliberately offset by one, so strict=True would raise.
+                for earlier, later in zip(vals, vals[1:], strict=False):
                     self.assertLessEqual(
-                        later, earlier,
-                        "%s at %s: score rose from %s to %s as the input worsened"
-                        % (field_name, horizon, earlier, later))
+                        later,
+                        earlier,
+                        f"{field_name} at {horizon}: score rose from {earlier} "
+                        f"to {later} as the input worsened",
+                    )
 
     def test_coverage_records_the_gap_either_way(self):
         honest = score(trending(stretch=None, far200=None), "7d")

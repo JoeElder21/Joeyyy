@@ -33,10 +33,17 @@ Two structural commitments:
   30d, and persistence the other way round. A name reading PULLBACK at 3d and
   CONTINUE at 30d is the model working, not contradicting itself.
 
-Missing data never helps, as everywhere else in this package: a feature the
-feed cannot supply is ``None``, is excluded from the earned score AND from
-coverage, and a substituted zero or neutral midpoint is never accepted in its
-place. Below ``MIN_COVERAGE`` the score is withheld rather than reported thin.
+Missing data never helps, as everywhere else in this package, and the two
+sides enforce that differently. A missing PERSISTENCE input is dropped from
+the earned score while still counting against coverage, so the asset simply
+fails to earn it. A missing EXHAUSTION input is a missing risk reading, so it
+is charged the worst case (``MISSING_EXHAUST``) rather than dropped -- absence
+of evidence about risk is not evidence of safety. Either way a substituted
+zero or neutral midpoint is never accepted in place of a reading, and below
+``MIN_COVERAGE`` the score is withheld rather than reported thin.
+
+The one exception is a gap the caller has established is systemic rather than
+asset-specific; see ``systemic_gaps`` on :func:`score`.
 """
 
 from __future__ import annotations
@@ -76,7 +83,13 @@ MISSING_EXHAUST = 100.0
 # Verdict bands, applied to the ROUNDED score so that a published number and
 # the label beside it can never disagree.
 CONTINUE, MIXED, PULLBACK_RISK, PULLBACK, BREAK, NO_SCORE = (
-    "CONTINUE", "MIXED", "PULLBACK RISK", "PULLBACK", "BREAK", "NO SCORE")
+    "CONTINUE",
+    "MIXED",
+    "PULLBACK RISK",
+    "PULLBACK",
+    "BREAK",
+    "NO SCORE",
+)
 
 
 def clamp(x: float, lo: float, hi: float) -> float:
@@ -132,8 +145,9 @@ def up_volume_share(closes: list[float], volumes: list[float | None], n: int) ->
     return (up / total) if total > 0 else None
 
 
-def deceleration(ret_short: float | None, n_short: int,
-                 ret_long: float | None, n_long: int) -> float | None:
+def deceleration(
+    ret_short: float | None, n_short: int, ret_long: float | None, n_long: int
+) -> float | None:
     """How far the recent pace has fallen below the trend's pace.
 
     ``0`` means the short window is running at the long window's daily rate;
@@ -226,8 +240,9 @@ def _verdict(value: int | None, align: int | None) -> str:
     return PULLBACK
 
 
-def score(features: Features, horizon: str,
-          systemic_gaps: frozenset[str] | set[str] = frozenset()) -> Score:
+def score(
+    features: Features, horizon: str, systemic_gaps: frozenset[str] | set[str] = frozenset()
+) -> Score:
     """Score one asset at one horizon.
 
     ``systemic_gaps`` names exhaustion terms the caller has established are
@@ -244,7 +259,7 @@ def score(features: Features, horizon: str,
     label, which is worse than an error.
     """
     if horizon not in PERSIST_WEIGHT:
-        raise ValueError("unknown horizon: %r" % (horizon,))
+        raise ValueError(f"unknown horizon: {horizon!r}")
 
     f = features
     persist: list[tuple[str, float, float]] = []
@@ -298,22 +313,33 @@ def score(features: Features, horizon: str,
         # A systemic gap is dropped: no charge, and no weight in the divisor.
 
     # Wilder's own overbought threshold, not a fitted one.
-    charge("overbought",
-           None if f.rsi is None else 100.0 * clamp((f.rsi - 70.0) / 15.0, 0.0, 1.0), 1.0)
-    charge("stretch",
-           None if f.stretch is None else 100.0 * clamp(f.stretch / 3.0, 0.0, 1.0), 1.3)
-    charge("decay",
-           None if f.decay is None else 100.0 * clamp(f.decay, 0.0, 1.0), DECAY_WEIGHT[horizon])
-    charge("far200",
-           None if f.far200 is None else 100.0 * clamp(f.far200 / 3.0, 0.0, 1.0),
-           FAR200_WEIGHT[horizon])
-    charge("topped",
-           None if f.range_pos is None else 100.0 * clamp((f.range_pos - 0.95) / 0.05, 0.0, 1.0),
-           0.9)
+    charge(
+        "overbought", None if f.rsi is None else 100.0 * clamp((f.rsi - 70.0) / 15.0, 0.0, 1.0), 1.0
+    )
+    charge("stretch", None if f.stretch is None else 100.0 * clamp(f.stretch / 3.0, 0.0, 1.0), 1.3)
+    charge(
+        "decay",
+        None if f.decay is None else 100.0 * clamp(f.decay, 0.0, 1.0),
+        DECAY_WEIGHT[horizon],
+    )
+    charge(
+        "far200",
+        None if f.far200 is None else 100.0 * clamp(f.far200 / 3.0, 0.0, 1.0),
+        FAR200_WEIGHT[horizon],
+    )
+    charge(
+        "topped",
+        None if f.range_pos is None else 100.0 * clamp((f.range_pos - 0.95) / 0.05, 0.0, 1.0),
+        0.9,
+    )
     # An uptrend name falling today is the crack that precedes the break.
-    charge("crack",
-           None if (f.day_pct is None or f.align is None) else
-           (100.0 * clamp(-f.day_pct / 5.0, 0.0, 1.0) if f.align >= 0 else 0.0), 1.0)
+    charge(
+        "crack",
+        None
+        if (f.day_pct is None or f.align is None)
+        else (100.0 * clamp(-f.day_pct / 5.0, 0.0, 1.0) if f.align >= 0 else 0.0),
+        1.0,
+    )
 
     coverage = have / total if total else 0.0
     if not persist or coverage < MIN_COVERAGE:
@@ -335,6 +361,7 @@ def score(features: Features, horizon: str,
     return Score(horizon, value, _verdict(value, f.align), coverage, persist, exhaust)
 
 
-def score_all(features: Features,
-              systemic_gaps: frozenset[str] | set[str] = frozenset()) -> dict[str, Score]:
+def score_all(
+    features: Features, systemic_gaps: frozenset[str] | set[str] = frozenset()
+) -> dict[str, Score]:
     return {h: score(features, h, systemic_gaps) for h in HORIZONS}
