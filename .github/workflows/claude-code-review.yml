@@ -53,7 +53,7 @@ jobs:
         # object is 12310e4417c34730 and whose commit (`v1.0.99^{}`) is
         # c3d45e8e941e1b2a. A tag object is mutable, so pinning one preserves
         # the mutability SHA-pinning exists to remove.
-        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
+        uses: anthropics/claude-code-action@9c5ddab2e6d17b83ea679153b31f1d5f023cf636 # v1.0.217
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true
