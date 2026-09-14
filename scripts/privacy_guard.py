@@ -178,7 +178,26 @@ PATTERNS = {
         r"|aws[_-]?secret[_-]?access[_-]?key|npm[_-]?token"
         r"|tfe?[_-]?token|terraform[_-]?token"
         r"|gh[_-]?token|github[_-]?token|github[_-]?personal[_-]?access[_-]?token"
-        r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret)"
+        r"|azure[_-]?client[_-]?secret|aps[_-]?client[_-]?secret"
+        # `\b` above cannot fire after an underscore -- `_` is a word character
+        # -- so `api[_-]?key` never matches inside FINANCIAL_DATASETS_API_KEY,
+        # and docs/FINANCIAL_DATASETS_CONNECTOR.md tells operators to export
+        # exactly that name. Measured, not reasoned: the same synthetic value
+        # assigned to API_KEY is flagged and to FINANCIAL_DATASETS_API_KEY is
+        # not. Spelled out here because this connector's key is documented but
+        # unmounted, so test_every_mount_credential_name_is_detectable -- which
+        # reads config/mcp_mounts.toml -- does not reach it.
+        #
+        # The general form of this gap is wider than one name: every
+        # `<PREFIX>_API_KEY`, `<PREFIX>_ACCESS_TOKEN`, `<PREFIX>_CLIENT_SECRET`
+        # and `<PREFIX>_PASSWORD` is equally invisible. Closing it means
+        # replacing `\b` with `(?<![A-Za-z0-9])`, which flags 16 further lines
+        # in the tracked tree -- vendored agent guides carrying illustrative
+        # `POSTGRES_PASSWORD: postgres`, and launcher fixtures that split names
+        # across a `+` precisely to dodge this scan. Those need exemptions
+        # curated one at a time, which is a change to the shared guard rather
+        # than to this connector, so it is left as its own.
+        r"|financial[_-]?datasets[_-]?api[_-]?key)"
         # As above: allow the closing quote of a JSON key before the delimiter.
         # An f-string interpolation is not a literal secret. A test that probes
         # this very pattern writes `"{secret}"`, which is exactly eight

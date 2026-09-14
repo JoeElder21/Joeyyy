@@ -1,6 +1,6 @@
 # Documentation index
 
-41 records, grouped by purpose. Start at the top of each section.
+45 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -23,6 +23,7 @@
 | [`PRIVACY_AND_DATA_BOUNDARIES.md`](PRIVACY_AND_DATA_BOUNDARIES.md) | Public-repository and runtime-data rules |
 | [`BRAIN_CADENCE_RUNBOOK.md`](BRAIN_CADENCE_RUNBOOK.md) | Daily, weekly, and monthly brain-specific orchestration |
 | [`DAILY_EXECUTIVE_BRIEFING.md`](DAILY_EXECUTIVE_BRIEFING.md) | The 6:00 AM daily briefing workflow: schedule contract, section spec, boundaries, failure diagnosis |
+| [`MISSION_PACKET.md`](MISSION_PACKET.md) | Canon→Forge→Claude Code mission packet schema, issue form, Action trigger, secrets checklist |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, reporting, supply-chain posture |
 | [`SECRET_HISTORY_SWEEP_2026-07-25.md`](SECRET_HISTORY_SWEEP_2026-07-25.md) | Full-history secret sweep: method, coverage proof, clean result |
 | [`DEPENDENCY_AUDIT_2026-07-25.md`](DEPENDENCY_AUDIT_2026-07-25.md) | Known-vulnerability scan of the pinned dependencies, and the lockfile resolution failure it surfaced |
@@ -35,8 +36,11 @@
 | [`WSL_UBUNTU_SETUP.md`](WSL_UBUNTU_SETUP.md) | WSL Ubuntu layer of the governed execution host: from bare Windows to `wsl -d Ubuntu --cd /root/Joeyyy -- claude` |
 | [`RUNTIME_NATIVE_LAYERS.md`](RUNTIME_NATIVE_LAYERS.md) | Anthropic SDK, MCP, pydantic layers; gated LangChain absorption |
 | [`AGENT_RUNTIME_BRIDGE.md`](AGENT_RUNTIME_BRIDGE.md) | Governed-handoff bridge on the OpenAI Agents SDK |
+| [`FIRST_APEX_SLICE.md`](FIRST_APEX_SLICE.md) | One executable APEX path: Agent 007 → Delivery Commander technical QA, VERIFY/REPORT, specialists remain shadow |
 | [`DATA_MEMORY_LAYERS.md`](DATA_MEMORY_LAYERS.md) | llama_index, mem0, crewAI |
 | [`ORCHESTRATION_AND_CONNECTORS.md`](ORCHESTRATION_AND_CONNECTORS.md) | AutoGen, LangGraph, MCP servers, APS, Logseq |
+| [`FINANCIAL_DATASETS_CONNECTOR.md`](FINANCIAL_DATASETS_CONNECTOR.md) | Supplying the financial-datasets MCP key: where it goes, where it silently does not, and why cloud sessions differ |
+| [`DEFILLAMA_MCP_MOUNT.md`](DEFILLAMA_MCP_MOUNT.md) | DefiLlama MCP mount: why a remote HTTP server is bridged onto a stdio-only registry, grant scope, activation, rollback |
 | [`AUTOGEN_INTEGRATION.md`](AUTOGEN_INTEGRATION.md) | Bounded AutoGen runtime-adapter contract |
 | [`AUTOGEN_CHALLENGE_PAIR_TRIAL.md`](AUTOGEN_CHALLENGE_PAIR_TRIAL.md) | Challenge-pair preflight trial |
 
@@ -45,7 +49,6 @@
 | Document | What it is |
 | --- | --- |
 | [`CIVIL3D_MCP_BUILDOUT.md`](CIVIL3D_MCP_BUILDOUT.md) | Civil 3D MCP connector build and validation guide |
-| [`DEFILLAMA_MCP_MOUNT.md`](DEFILLAMA_MCP_MOUNT.md) | DefiLlama MCP mount: stdio-bridge shape, grant scope, activation, rollback |
 | [`CIVIL3D_FIRST_WRITE_TEST.md`](CIVIL3D_FIRST_WRITE_TEST.md) | Separately-approved synthetic disposable DWG first-write protocol |
 | [`APS_SDK_BUILDOUT.md`](APS_SDK_BUILDOUT.md) | Autodesk Platform Services validation-gate buildout |
 | [`DOTNET_SELF_LEARNING_ARCHITECT.md`](DOTNET_SELF_LEARNING_ARCHITECT.md) | .NET self-learning architect agent |

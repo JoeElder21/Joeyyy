@@ -12,6 +12,17 @@ Say:
 
 The personal Agent 007 skill makes that phrase portable across chats where the skill is available. In this repository, the native custom-agent name remains `apex_chief_of_staff` for compatibility.
 
+## Mission pipeline (Canon → Forge → Claude Code)
+
+Public-safe GitHub missions, not PacketGuard delegations. Schema and dry-run: [`docs/MISSION_PACKET.md`](docs/MISSION_PACKET.md).
+
+1. **Canon** (Drive brain librarian) drafts a mission packet only.
+2. **Forge** (human repo/CI operator) opens a GitHub Issue from `.github/ISSUE_TEMPLATE/mission.yml` (`[mission]` title; labels `mission`, `claude`).
+3. The submitted body includes `@claude` plus the start prompt, so the existing `.github/workflows/claude.yml` job runs.
+4. **Claude Code GitHub Action** implements on a branch and opens a PR. It does not merge.
+
+**Local fallback:** if `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) or the Claude GitHub App is missing, paste the start prompt into Claude Code locally, or comment `@claude` on the issue after the secret and App are set.
+
 ## What changed
 
 - Universal Agent 007 activation phrase and operating identity.
@@ -54,7 +65,9 @@ Runtime permissions, connected-service permissions, administrator policies, prof
 - `runtime/mission_runner.py` — controlled-mission harness: validated delegation, typed return, connector-isolation check, hash-chained evidence, per-mode promotion coverage.
 - `config/value_policy.toml` + `runtime/value_meter.py` — the section 17 value policy and its meter: net saving after review, correction, incident, and maintenance, against a binding 35% threshold.
 - `docs/REPO_OPTIMIZATION_2026-07-25.md` — repository-engineering review: substrate gaps, evaluation and supply-chain candidates, and the five resolved decisions.
-- `evals/` + `docs/EVALUATION_HARNESS.md` — behavioral evaluation harness: 39 material modes derived from the brain manifests, a metric contract traced to recorded gates, and a publication path to the Evaluations folder on Drive rather than this repository. **Built and tested, not yet wired** — `_invoke_specialist()` raises `NotImplementedError`, so no mission is dispatched, no output is judged, and no behavioral evidence exists yet. It makes the shadow-to-active backlog *measurable* (39 modes, 3 with authored cases); it does not yet close the output-quality gate. Wiring dispatch needs a model credential and a connector-isolation decision.
+- `evals/` + `docs/EVALUATION_HARNESS.md` — behavioral evaluation harness: 39 material modes derived from the brain manifests, a metric contract traced to recorded gates, and a publication path to the Evaluations folder on Drive rather than this repository. **First APEX slice wired** for `technical_qa` through `runtime/specialist_dispatch.py` and `MissionRunner` (VERIFY/REPORT). Other modes still raise `NotImplementedError`. The wired worker is packet-only and evidence-derived, not a canned always-pass stub. It does not close the output-quality gate for the rest of the corps and does not promote anyone out of shadow.
+- `runtime/first_apex_slice.py` + `scripts/run_first_apex_slice.py` — one executable APEX path: Agent 007 prepares a catalog `sheet_qa_review` packet, `apex_delivery_commander` returns a typed `qa_risk_packet`, VERIFY runs `MissionRunner.complete()`, REPORT prints isolation, criteria, and lifecycle-still-shadow. Synthetic evidence on purpose: this run cannot qualify a mode.
+- `connectors/bird/` — TypeScript `@messagebird/sdk` `BirdClient` sample. API key from `BIRD_API_KEY` only. Hello World email and `bird_otp_verification` OTP examples are env-gated and never auto-sent. Setup in `connectors/bird/README.md`; order reference `MT1FL8M9VY`.
 - `docs/SECRET_HISTORY_SWEEP_2026-07-25.md` — full-history secret sweep: clean across all 95 commits, with coverage verified independently of the tool's own summary.
 - `docs/DEPENDENCY_AUDIT_2026-07-25.md` — known-vulnerability scan of the pinned dependency set, plus the lockfile resolution conflict it exposed; now a standing weekly CI job.
 - `scripts/policy_enforcement.py` — the single policy-enforcement point: eight rules (roster, brain lock, connector policy, packet admission, writer lease, lifecycle stage, high-impact boundary, launch grant) in one call a caller cannot partially perform. **Built and tested, not yet wired** — `enforce()` has no call sites, so it constrains nothing at runtime today. Connecting it is the top follow-up in `docs/REPO_OPTIMIZATION_2026-07-25.md`; until then this module is a specification with a test suite, not an active gate.

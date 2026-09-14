@@ -12,6 +12,13 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Machine-local Claude Code settings. Its `env` block is one of the documented
+# places an operator puts a credential (docs/FINANCIAL_DATASETS_CONNECTOR.md),
+# and Claude Code only auto-ignores this path when it writes the file itself --
+# a hand-written one would be tracked. Ignored here so that cannot happen in a
+# public tree.
+.claude/settings.local.json
 *.pem
 *.key
 *.p12

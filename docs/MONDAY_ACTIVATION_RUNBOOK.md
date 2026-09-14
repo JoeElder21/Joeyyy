@@ -57,7 +57,12 @@ the whole verification surface in one pass. After that:
 
 ```bash
 python scripts/generate_claude_agents.py --check
+python scripts/run_first_apex_slice.py
 ```
+
+The first-slice command runs Agent 007 → `apex_delivery_commander` /
+`technical_qa` through `MissionRunner` and prints VERIFY / REPORT. It uses
+synthetic evidence and does not promote the specialist.
 
 Expect `OK: 11 generated agents match their canonical sources.` If it reports
 stale files, run it without `--check` to regenerate.

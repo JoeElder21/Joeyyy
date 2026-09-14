@@ -264,10 +264,14 @@ class HonestyContractTests(unittest.TestCase):
 
     def test_specialist_dispatch_is_not_stubbed_with_canned_output(self):
         # A stub returning fixed text would make every evaluation pass while
-        # attesting to nothing. Assert the refusal is still in place.
+        # attesting to nothing. The first APEX slice may be wired, but unwired
+        # modes must still raise and the wired path must go through the
+        # governed dispatch, not a hardcoded string.
         source = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
         self.assertIn("NotImplementedError", source)
         self.assertIn("_invoke_specialist", source)
+        self.assertIn("invoke_eval_case", source)
+        self.assertIn("runtime.specialist_dispatch", source)
 
     def test_dispatch_contract_supplies_observations_not_just_expectations(self):
         # packet_validity needs the emitted packet and tool_correctness needs the
@@ -857,24 +861,26 @@ class DocumentedProcedureTests(unittest.TestCase):
                 )
 
     def test_the_readme_claim_tracks_whether_dispatch_is_actually_wired(self):
-        # Both directions. The README calls the harness built-but-unwired; that
-        # is true only while `_invoke_specialist` refuses to dispatch. Tied to
-        # the exception the source actually raises, so wiring it up forces the
-        # claim to be rewritten -- and, equally, nobody can quietly downgrade
-        # the caveat while the dispatch is still a stub.
+        # Both directions. The README used to call the harness built-but-unwired
+        # for every mode. The first APEX slice wires one mode through
+        # specialist_dispatch; other modes still raise. The bullet must name
+        # the wired mode and still mention NotImplementedError for the rest.
         suite = (EVALS / "test_specialist_modes.py").read_text(encoding="utf-8")
-        unwired = "raise NotImplementedError" in suite
+        still_refuses_unwired = "raise NotImplementedError" in suite
+        wired = "invoke_eval_case" in suite
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         bullet = next(line for line in readme.splitlines() if line.startswith("- `evals/` +"))
-        if unwired:
-            self.assertIn("NotImplementedError", bullet)
-            self.assertIn("not yet wired", bullet)
-        else:
+        self.assertTrue(still_refuses_unwired, "unwired modes must still raise")
+        self.assertIn("NotImplementedError", bullet)
+        if wired:
+            self.assertIn("technical_qa", bullet)
             self.assertNotIn(
                 "not yet wired",
                 bullet,
-                "dispatch is wired but the README still calls the harness unwired",
+                "a mode is wired but the README still calls the harness unwired",
             )
+        else:
+            self.assertIn("not yet wired", bullet)
 
 
 class RecordAgreesWithImplementationTests(unittest.TestCase):
