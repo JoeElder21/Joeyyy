@@ -288,7 +288,53 @@ charging them, while still counting them against coverage. Establishing that a
 gap is systemic is the caller's obligation and is not checkable here; naming a
 merely inconvenient gap as systemic silently restores the failure this guards.
 
-## 10. Status summary
+## 10. Source policy: DefiLlama first for crypto, and where that stops
+
+The owner's standing instruction is to pull most of the refresh from
+DefiLlama. This section records what that means precisely, because a source
+policy stated loosely becomes a source policy quietly broken.
+
+**Why it earns the primary slot.** Not breadth — the property that matters is
+how it fails. Asked for an address it does not know, `coins.llama.fi` returns
+`{"coins":{}}`: empty, not a fabricated price. That is §8's requirement
+imposed by the source itself rather than by the caller's discipline, and it is
+the opposite of the behaviour observed from a DEX aggregator's search endpoint
+earlier in this work, which returned invented chain names and volumes for real
+tickers. A source that answers "I don't know" is worth more than a source with
+wider coverage that answers anyway.
+
+**What it supplies** (verified live against the full twelve-coin universe):
+current price batched, 12/12 covered including two the exchange feed does not
+list at all; current price **by contract address**, which prices the memecoin
+wallet without touching the aggregator above; up to 300 daily price points per
+coin, which is enough for the 50- and 200-day averages, RSI, range position,
+extension and `decay`; and upstream N-day percentage change. Every quote
+carries a `confidence` field, which the terminal reports and which gates
+scoring below 0.90.
+
+**Where it stops, and what must NOT happen there.** Two hard limits:
+
+* **No per-coin volume.** `coins.llama.fi/chart` returns `{price, timestamp}`
+  and nothing more; the DEX endpoints aggregate by protocol, not by asset. So
+  the up-day volume share — the volume-weighted buys-versus-sells — cannot
+  come from DefiLlama. It stays on exchange candles, and for a coin no
+  exchange in the set lists, the feature is `None` and coverage falls. It must
+  never be approximated from price alone: a price-derived stand-in wearing a
+  volume-weighted label is precisely the substitution §8 forbids.
+* **No equities.** DefiLlama is crypto-only. The stock board takes nothing
+  from it, and "most of the data" cannot be read as "all of it" without
+  inventing coverage that does not exist.
+
+**Changing the primary source moves numbers, and that is not a defect.** On
+the first parallel run, one asset's trend alignment read `0` against DefiLlama
+and `1` against the exchange series, because the two carry different history
+depths — 235 daily points versus 300 for that coin — so the 200-day window
+spans different dates. Derived values are a function of their series, so every
+board states which source produced it and how many points backed it. Two
+sources disagreeing is information; presenting either as *the* number without
+naming it is not.
+
+## 11. Status summary
 
 - **IMPLEMENTED and TESTED** — quant primitives, feature registry, entry
   economics, decision functional, forecast/outcome ledger, deterministic V1
@@ -305,6 +351,8 @@ merely inconvenient gap as systemic silently restores the failure this guards.
   produce a confident wrong number.
 - **BLOCKED, needs Joe** — the timezone identifier change; the fixed-UTC versus
   ET-anchored cron decision; connecting a price-history and fundamentals feed,
-  without which the equity view stays coverage-gated.
+  without which the equity view stays coverage-gated. §10 does not relieve
+  this: DefiLlama is crypto-only, so the equity gap it names is exactly the
+  gap that remains.
 - **NEEDS APPROVAL** — any production cutover. The 2.0 page is published as a
   separate versioned artifact; the existing terminals are untouched.

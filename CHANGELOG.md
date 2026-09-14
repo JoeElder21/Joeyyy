@@ -47,7 +47,16 @@ differ in rate of change, and nothing in the engine measured rate of change.
   fact about the pipeline, not about the asset, and charging it as the latter
   ranks an entire asset class below another for a missing API key. Coverage
   still records the gap either way.
-- `docs/TERMINAL_RANKING_V2.md` gains §9; the status summary is now §10.
+- `docs/TERMINAL_RANKING_V2.md` gains §9 and §10; the status summary is now §11.
+- §10 records a source policy: DefiLlama is primary for the crypto refresh.
+  It earns that slot on how it FAILS rather than on coverage — an address it
+  does not know returns an empty object instead of a fabricated price, which
+  is §8's rule enforced by the source rather than by the caller. The section
+  is equally explicit about the two places it stops: it serves no per-coin
+  volume, so the volume-weighted up-day share stays on exchange candles and is
+  `None` where none exists; and it is crypto-only, so the equity board takes
+  nothing from it and the equity feed gap in the status summary is unchanged.
+  Verified live across the full universe before being written down.
 
 ## 2026-09-13 — The ranking path becomes reproducible, and learns where it ends
 
