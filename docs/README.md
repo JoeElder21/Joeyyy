@@ -1,6 +1,6 @@
 # Documentation index
 
-44 records, grouped by purpose. Start at the top of each section.
+45 records, grouped by purpose. Start at the top of each section.
 
 ## Start here
 
@@ -40,6 +40,7 @@
 | [`DATA_MEMORY_LAYERS.md`](DATA_MEMORY_LAYERS.md) | llama_index, mem0, crewAI |
 | [`ORCHESTRATION_AND_CONNECTORS.md`](ORCHESTRATION_AND_CONNECTORS.md) | AutoGen, LangGraph, MCP servers, APS, Logseq |
 | [`FINANCIAL_DATASETS_CONNECTOR.md`](FINANCIAL_DATASETS_CONNECTOR.md) | Supplying the financial-datasets MCP key: where it goes, where it silently does not, and why cloud sessions differ |
+| [`DEFILLAMA_MCP_MOUNT.md`](DEFILLAMA_MCP_MOUNT.md) | DefiLlama MCP mount: why a remote HTTP server is bridged onto a stdio-only registry, grant scope, activation, rollback |
 | [`AUTOGEN_INTEGRATION.md`](AUTOGEN_INTEGRATION.md) | Bounded AutoGen runtime-adapter contract |
 | [`AUTOGEN_CHALLENGE_PAIR_TRIAL.md`](AUTOGEN_CHALLENGE_PAIR_TRIAL.md) | Challenge-pair preflight trial |
 
