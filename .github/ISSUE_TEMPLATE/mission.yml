@@ -38,6 +38,23 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: recipe
+    attributes:
+      label: Recipe
+      description: >
+        Optional execution overlay. This is not a brain and does not
+        replace Mode. CI loop / babysit PR uses
+        `.agents/skills/forge-ci-loop/SKILL.md` and the start-prompt
+        recipe in `docs/FORGE_CI_LOOP.md`. Keep `@claude` in the start
+        prompt either way. Reuses `.github/workflows/claude.yml`
+        (Option A) — do not add a second interactive Claude job.
+      options:
+        - Standard implementation
+        - CI loop / babysit PR
+    validations:
+      required: false
+
   - type: textarea
     id: constraints
     attributes:
@@ -77,6 +94,9 @@ body:
       description: >
         The instruction Claude executes. Must contain the literal
         `@claude` so the existing Action fires on issues:opened.
+        If Recipe is CI loop / babysit PR, replace the default with
+        the recipe in docs/FORGE_CI_LOOP.md (still requires @claude
+        and .agents/skills/forge-ci-loop/SKILL.md).
       value: |
         @claude
 

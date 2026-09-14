@@ -987,6 +987,8 @@ class ContributorSurfaceTests(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/absorption-candidate.yml",
             ".github/ISSUE_TEMPLATE/mission.yml",
             "docs/MISSION_PACKET.md",
+            "docs/FORGE_CI_LOOP.md",
+            ".agents/skills/forge-ci-loop/SKILL.md",
         ]:
             with self.subTest(path=relative):
                 self.assertTrue((ROOT / relative).is_file(), f"missing {relative}")
@@ -1820,6 +1822,58 @@ class MissionPipelineTests(unittest.TestCase):
         self.assertIn("none — no Drive source", packet)
         self.assertIn("ANTHROPIC_API_KEY", packet)
         self.assertIn("CLAUDE_CODE_OAUTH_TOKEN", packet)
+
+    def test_ci_loop_recipe_is_wired_without_a_second_workflow(self):
+        skill = (ROOT / ".agents" / "skills" / "forge-ci-loop" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        docs = (ROOT / "docs" / "FORGE_CI_LOOP.md").read_text(encoding="utf-8")
+        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(
+            encoding="utf-8"
+        )
+        packet = (ROOT / "docs" / "MISSION_PACKET.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "claude.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("name: forge-ci-loop", skill)
+        self.assertIn("Never merge", skill)
+        self.assertIn("gh pr checks", skill)
+        self.assertIn("mcp", skill)
+        self.assertIn("connectors/relay", skill)
+        self.assertIn("5bf2b1544db739998121a306340631963c2ff3de", docs)
+        self.assertIn("continuous background operation", docs.lower())
+        self.assertIn("issue- or pr-triggered", docs.lower())
+        self.assertIn("CI loop / babysit PR", form)
+        self.assertIn("id: recipe", form)
+        self.assertIn(".agents/skills/forge-ci-loop/SKILL.md", form)
+        start = form.split("id: start-prompt", 1)[1].split("\n  - type:", 1)[0]
+        self.assertIn("@claude", start)
+        trigger = form.split("id: trigger", 1)[1]
+        self.assertIn("@claude", trigger)
+        self.assertIn("required: true", trigger)
+        self.assertIn("JEOS", form)
+        self.assertIn("APEX", form)
+        self.assertIn("docs/FORGE_CI_LOOP.md", readme)
+        self.assertIn("FORGE_CI_LOOP.md", index)
+        self.assertIn("forge-ci-loop", contributing)
+        self.assertIn("docs/FORGE_CI_LOOP.md", packet)
+        self.assertIn("docs/FORGE_CI_LOOP.md", workflow)
+        extras = [
+            path
+            for path in (ROOT / ".github" / "workflows").glob("*.yml")
+            if path.name not in {"claude.yml", "claude-code-review.yml"}
+            and "claude-code-action@" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(
+            extras,
+            [],
+            "CI-loop missions reuse claude.yml; extra Claude Action "
+            f"workflows were added: {[path.name for path in extras]}",
+        )
 
 
 # Last statement in the file, deliberately. This guard used to sit mid-module,

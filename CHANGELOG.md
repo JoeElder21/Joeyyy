@@ -3,6 +3,27 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-09-14 — Forge CI loop / babysit-PR mission recipe
+
+Optional Recipe on the Mission form. Claude Code (or an Agent 007
+wrapper) loops on failing PR checks until green or a hard stop. Not a
+second Claude workflow, not a merge, not a specialist promotion, and not
+a continuous background claim.
+
+### Added
+
+- `.agents/skills/forge-ci-loop/SKILL.md` — procedure, `gh` source of
+  truth, hard stops, fallback if `gh` is unavailable.
+- `docs/FORGE_CI_LOOP.md` — intake pin
+  `5bf2b1544db739998121a306340631963c2ff3de` (cursor-team-kit
+  `loop-on-ci` / `fix-ci` patterns, rewritten), start-prompt recipe,
+  rollback.
+
+### Changed
+
+- Mission form Recipe dropdown. README / docs index / CONTRIBUTING
+  pointers. `claude.yml` comment records CI-loop reuse of Option A.
+
 ## 2026-09-12 — Canon→Forge→Claude Code mission pipeline
 
 A public-safe GitHub mission brief, filed by Forge, executed by the

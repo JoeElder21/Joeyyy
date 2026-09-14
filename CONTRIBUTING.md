@@ -83,7 +83,12 @@ Use `.github/ISSUE_TEMPLATE/mission.yml`. Canon drafts the packet
 (`docs/MISSION_PACKET.md`); Forge, a human with write access, opens the
 issue. The submitted start prompt and trigger checkbox must contain
 `@claude` so `.github/workflows/claude.yml` runs. This does not admit a
-specialist or move anyone from shadow to active.
+specialist or move anyone from shadow to active. For failing CI on an
+already-open mission / Dependabot-supersede / Cloud Agent PR, set Recipe
+to **CI loop / babysit PR** and use the start prompt in
+`docs/FORGE_CI_LOOP.md` (skill:
+`.agents/skills/forge-ci-loop/SKILL.md`). That path still reuses
+`claude.yml` and does not merge.
 
 ## Branches and pull requests
 

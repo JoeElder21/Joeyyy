@@ -16,7 +16,9 @@ on:
     # writes `@claude` into a submitted field (start prompt + required
     # checkbox) so this path runs. Do not add a second interactive Claude
     # job for `issues: [opened]` — that would race two checkouts and
-    # double-spend the key. Schema: docs/MISSION_PACKET.md.
+    # double-spend the key. Schema: docs/MISSION_PACKET.md. CI loop /
+    # babysit-PR missions are a Recipe on that form, not a second
+    # workflow; see docs/FORGE_CI_LOOP.md.
   pull_request_review:
     types: [submitted]
 

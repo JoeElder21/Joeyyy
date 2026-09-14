@@ -39,6 +39,15 @@ Exactly one of `JEOS` or `APEX`. This is the authorized brain for the work,
 not a specialist identity. Cross-brain work still requires Agent 007 and a
 separate PacketGuard transfer; do not encode that transfer here.
 
+### Recipe (optional overlay)
+
+Not a ninth required packet field and not a brain. The issue form may
+set **Standard implementation** (default) or **CI loop / babysit PR**.
+The CI-loop recipe lives in `docs/FORGE_CI_LOOP.md` and
+`.agents/skills/forge-ci-loop/SKILL.md`. It still requires `@claude` and
+still reuses `.github/workflows/claude.yml`. Do not add a second
+interactive Claude job.
+
 ### Constraints
 
 What must not change. Name locks, Dependabot PRs, lifecycle stages, privacy
@@ -219,6 +228,8 @@ App is still missing.
   `anthropics/claude-code-action`, `persist-credentials: false`, no
   fork-reachable `--allowedTools`)
 - Review job unchanged: `.github/workflows/claude-code-review.yml`
+- Optional Recipe: **CI loop / babysit PR** — start-prompt overlay in
+  `docs/FORGE_CI_LOOP.md`, skill at `.agents/skills/forge-ci-loop/SKILL.md`
 
 ## Rollback
 

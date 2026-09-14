@@ -14,7 +14,7 @@ The personal Agent 007 skill makes that phrase portable across chats where the s
 
 ## Mission pipeline (Canon → Forge → Claude Code)
 
-Public-safe GitHub missions, not PacketGuard delegations. Schema and dry-run: [`docs/MISSION_PACKET.md`](docs/MISSION_PACKET.md).
+Public-safe GitHub missions, not PacketGuard delegations. Schema and dry-run: [`docs/MISSION_PACKET.md`](docs/MISSION_PACKET.md). Optional CI loop / babysit-PR recipe: [`docs/FORGE_CI_LOOP.md`](docs/FORGE_CI_LOOP.md) and `.agents/skills/forge-ci-loop/SKILL.md` (reuses `claude.yml`; does not merge).
 
 1. **Canon** (Drive brain librarian) drafts a mission packet only.
 2. **Forge** (human repo/CI operator) opens a GitHub Issue from `.github/ISSUE_TEMPLATE/mission.yml` (`[mission]` title; labels `mission`, `claude`).
