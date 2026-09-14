@@ -241,6 +241,62 @@ composite was withheld. That is the correct outcome for a snapshot with no
 return series, and it is the same outcome the equity view already had for the
 same reason.
 
+### 8.1 The period that has not closed
+
+A second feed defect of the same family was found twice in one refresh cycle,
+and reached a published ranking both times. It is not a substituted value: the
+number is real, computed by the declared formula, from the venue's own data.
+The problem is that **the market has not finished producing it**.
+
+A calendar-aligned daily bar opens at a fixed time and is stamped with that
+open. Requested part-way through its day, a feed returns it alongside closed
+bars, indistinguishable in shape — same fields, same spacing, a plausible
+close. It is not a session. Its close is the last trade, not the day's close.
+
+Features computed over sessions ask a **categorical** question of each bar —
+was this an up day or a down day? — and a forming bar has no settled answer.
+`up_volume_share`, the volume-weighted read on buyers against sellers, is
+computed by exactly that bucketing. In the observed case one asset's forming
+bar crossed its open mid-session, its up-volume share moved nine points, and it
+moved nine places in the published ranking. No new information arrived; only
+the clock moved.
+
+What makes this a ranking defect rather than noise is its direction. A forming
+bar is **systematically biased toward the session's drift so far, across the
+whole cross-section at once**. On a broad up day every asset's forming bar
+lands in the up bucket together and every up-volume share is inflated together,
+so the error does not cancel between assets — the ranking reads a market-wide
+intraday drift as though it were thirty sessions of evidence.
+
+**The rule:** a period that has not closed is not a session, and is excluded
+from any feature computed over sessions. `terminal/sessions.py` implements it
+and `tests/test_sessions.py` pins it, including
+`ExhaustsTheClock::test_a_forming_bar_can_flip_the_feature_it_feeds`, which
+asserts the hazard rather than the fix: a one-cent difference in a bar the
+market can still reverse moves the feature by more than forty points.
+
+Two boundaries on the rule, both of which have bitten:
+
+- **Not every feed is exposed.** The rule is about calendar-aligned periods. A
+  rolling series of samples spaced one period apart, each taken at the same
+  offset from request time, has **no** forming member — every point closes a
+  full window ending at the sample. Both shapes are in use in this repository's
+  crypto sources and they look alike in a list of timestamps. `completed()`
+  therefore takes the period explicitly and refuses to infer it.
+- **The stamp convention must be established, not assumed.** Reading a bar
+  stamped with its *close* as though it were stamped with its *open* discards
+  good bars — conservative and wrong. The mirror error, subtracting a period
+  from stamps that were already opens, readmits precisely the forming bar the
+  rule exists to remove. `start_of` exists to make the choice explicit, and
+  both directions are tested.
+
+Correcting a live crypto board under this rule moved 3 of 14 names and changed
+no verdict, so the effect is bounded — but it is bounded *on that day's tape*,
+and the FIL episode is what it looks like when it is not. The correction was
+also gated: the rebuild was required to reproduce the published numbers exactly
+with the forming bar left in before its output was trusted. A recomputation
+that cannot reproduce what it claims to be correcting is not a correction.
+
 ## 9. Continuation scoring: persistence against exhaustion
 
 `terminal/continuation.py` answers a question the composite in §2 does not:
