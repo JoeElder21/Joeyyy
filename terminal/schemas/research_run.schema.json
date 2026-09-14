@@ -1,0 +1,157 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Research run manifest",
+ "type": "object",
+ "required": [
+  "run_id",
+  "kind",
+  "idempotency_key",
+  "writer",
+  "scheduled_at",
+  "started_at",
+  "status"
+ ],
+ "properties": {
+  "run_id": {
+   "type": "string"
+  },
+  "kind": {
+   "enum": [
+    "daily",
+    "sentinel",
+    "weekly",
+    "chat",
+    "migration",
+    "dryrun"
+   ]
+  },
+  "idempotency_key": {
+   "type": "string"
+  },
+  "writer": {
+   "type": "string"
+  },
+  "scheduled_at": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "started_at": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "ready_at": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "base_sha": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "result_sha": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "inputs_sha": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "status": {
+   "enum": [
+    "STARTED",
+    "PUBLISHED",
+    "SKIPPED",
+    "FAILED",
+    "BLOCKED"
+   ]
+  },
+  "rows": {
+   "type": "integer",
+   "minimum": 0
+  },
+  "notes": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "stages": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "name",
+     "status"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "OK",
+       "DEGRADED",
+       "FAILED",
+       "SKIPPED"
+      ]
+     },
+     "detail": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "gates": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "name",
+     "passed",
+     "detail"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "passed": {
+      "type": "boolean"
+     },
+     "detail": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "boards": {
+   "type": "object",
+   "additionalProperties": {
+    "enum": [
+     "LIVE",
+     "STALE",
+     "DEGRADED"
+    ]
+   }
+  },
+  "starts_vs_ready": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "failure_injected": {
+   "type": [
+    "string",
+    "null"
+   ]
+  }
+ }
+}

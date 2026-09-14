@@ -1,0 +1,62 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Atomic snapshot pointer",
+ "type": "object",
+ "required": [
+  "version",
+  "generated_at",
+  "parts",
+  "sha"
+ ],
+ "properties": {
+  "version": {
+   "type": "string"
+  },
+  "generated_at": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "base_sha": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "sha": {
+   "type": "string"
+  },
+  "parts": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "sha",
+     "keys"
+    ],
+    "properties": {
+     "sha": {
+      "type": "string"
+     },
+     "keys": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "run_id": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "starts_vs_ready": {
+   "type": [
+    "string",
+    "null"
+   ]
+  }
+ }
+}

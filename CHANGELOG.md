@@ -3,6 +3,125 @@
 Repository-level changes. Agent-contract and roster history lives in
 `docs/AGENT_REGISTRY.md` and the dated records in `docs/`.
 
+## 2026-09-14 — Ranking learns to tell a trend from a spike that stopped
+
+The V1 composite scores how good an asset looks. It has no way to ask whether
+the move it is making is still running, because that question cannot be
+answered from a level: an asset 30% above its base because it is trending and
+one 30% above its base because it spiked and stopped present identically. They
+differ in rate of change, and nothing in the engine measured rate of change.
+
+### Added
+
+- `terminal/continuation.py` — persistence scored against exhaustion at 3d, 7d
+  and 30d. Trend alignment, range position, up-day volume share, Wilder RSI and
+  today's direction on the persistence side; normalised extension above the 50-
+  and 200-day bases, overbought, the crack of an uptrend name falling today, and
+  `decay` — the recent window's daily pace against the trend window's — on the
+  exhaustion side. Exhaustion carries 1.40 at 3d and 0.50 at 30d, persistence
+  the reverse, encoding short-horizon reversal and intermediate-horizon
+  momentum as the opposite-signed effects they are. Labelled HEURISTIC /
+  NOT_YET_VALIDATED and, per the §3 rule, it produces an ordering and a band
+  label — never an expected return.
+- `tests/test_continuation.py` — 28 tests.
+
+### Fixed
+
+- Exhaustion is now divided by the full weight in play rather than the weight
+  measured. Averaging over only the terms present meant each additional
+  zero-valued term diluted the average and *raised* the score, so a feed could
+  improve any asset by reporting `0.0` for readings it never took — and a
+  missing input scored ten points **better** than the worst real measurement,
+  inverting the feed-boundary rule it was written to obey. Caught because the
+  first version of the phantom-zero test passed trivially: both sides rounded
+  to the same value, so it asserted nothing. It now asserts monotonicity —
+  the score never rises as an exhaustion input worsens — which fails against
+  the old arithmetic.
+
+### Changed
+
+- Missing exhaustion inputs are charged as the worst case, matching the
+  `terminal/ranking.py` rule that absence in a risk feature scores worst rather
+  than neutral. `score()` takes `systemic_gaps` for terms absent across the
+  whole cross-section, which are dropped instead of charged: a feed outage is a
+  fact about the pipeline, not about the asset, and charging it as the latter
+  ranks an entire asset class below another for a missing API key. Coverage
+  still records the gap either way.
+- `docs/TERMINAL_RANKING_V2.md` gains §9 and §10; the status summary is now §11.
+- §10 records a source policy: DefiLlama is primary for the crypto refresh.
+  It earns that slot on how it FAILS rather than on coverage — an address it
+  does not know returns an empty object instead of a fabricated price, which
+  is §8's rule enforced by the source rather than by the caller. The section
+  is equally explicit about the two places it stops: it serves no per-coin
+  volume, so the volume-weighted up-day share stays on exchange candles and is
+  `None` where none exists; and it is crypto-only, so the equity board takes
+  nothing from it and the equity feed gap in the status summary is unchanged.
+  Verified live across the full universe before being written down.
+
+## 2026-09-13 — The ranking path becomes reproducible, and learns where it ends
+
+Ranking previously ran on hand-assigned `[0, 1]` judgment values with nothing
+deriving them from an observation, entry price played no part in the score,
+there was one score and no horizons, and no forecast ledger existed. Five
+modules replace that path with a deterministic, entry-aware engine that is
+labelled HEURISTIC / NOT_YET_VALIDATED and enforces the label: with no
+validated return model it declines to convert a composite of percentile ranks
+into an expected return, so net edge stays null and nothing reaches ACTIONABLE.
+
+The first live run against market data then found a defect in the *feed* rather
+than the engine, and the record now carries both.
+
+### Added
+
+- `terminal/quant.py` — rank and median/MAD normalisation one outlier cannot
+  drag, expected shortfall as a non-negative magnitude with a sample-size gate,
+  EWMA volatility, downside deviation, drawdown, James-Stein shrinkage, and a
+  standard error of the mean kept deliberately distinct from volatility.
+- `terminal/features.py` — the feature registry. Every input declares formula,
+  units, lookback, rationale, direction, dependencies, availability lag,
+  missing-data policy and evidence status, and names the asset classes it is
+  meaningful for. Correlated indicators share a group, so three flavours of
+  momentum cannot vote three times.
+- `terminal/entry.py` — round-trip cost itemised into spread, fees, square-root
+  impact against a stated notional, gas and financing, with the spread not
+  charged twice when executable quotes embed it. Missing risk inputs are
+  charged conservative stand-ins rather than treated as zero risk.
+- `terminal/ledger.py` — the forecast and outcome ledger, append-only across 39
+  declared columns. Corrections append with lineage; grading refuses any fill
+  earlier than `published_at` plus an execution latency, which makes back-dated
+  evidence structurally impossible rather than merely discouraged.
+- `terminal/ranking.py` — deterministic V1 across 24h, 7d and 30d held separate
+  rather than averaged. Weight is budgeted to correlation groups and split
+  within them, so a dropped feature returns weight to its own group.
+- `tests/test_terminal_ranking.py` — 48 tests, one `test_gate_*` class per
+  acceptance gate, each written adversarially.
+- `docs/TERMINAL_RANKING_V2.md` — the audit and the implementation status by
+  category.
+
+### Changed
+
+- `docs/TERMINAL_RANKING_V2.md` gains section 8, **the feed boundary**. The
+  acceptance gates constrain the engine and cannot constrain what is handed to
+  it. A live crypto feed was found supplying `ewma_volatility` — declared as an
+  EWMA over a trailing window, and the largest single group weight at 25% —
+  with the absolute value of one 24-hour price change, and supplying `0.0`
+  where the venue published no change at all. Because that feature is
+  lower-is-better, the fabricated zero read as the best possible volatility:
+  the asset with the least data scored the calmest and strongest of its
+  universe and ranked first, on a return that did not exist. The engine was not
+  wrong — it received floats and scored floats. The rule now recorded is that a
+  feed supplies a feature only when its declared formula and lookback are
+  computable, passes `None` for anything absent, and labels the horizon its
+  observations actually support.
+- `tests/test_terminal_ranking.py` gains
+  `test_gate_substituted_zero_is_indistinguishable_from_a_measurement`, which
+  pins the hazard by asserting that a substituted zero **outranks** an honest
+  `None` and raises no risk flag. It is not a claim that the engine
+  misbehaves; it is the standing evidence for why the rule exists.
+- `docs/REPOSITORY_OVERVIEW.md` — suite size remeasured, 1316 → 1317.
+  `tests/test_governance_docs.py` caught the stale figure on the first run
+  after the new test landed, which is what that test exists for.
+
 ## 2026-09-14 — DefiLlama registered as a governed mount
 
 Joe connected DefiLlama's hosted MCP server to his personal session. This
@@ -61,6 +180,29 @@ TypeScript sample.
 
 - `_invoke_specialist` in `evals/test_specialist_modes.py` calls the governed
   dispatch for the wired mode and still raises for every other mode.
+
+## 2026-09-11 — The stocks terminal gets a durable, testable research workflow
+
+The daily research terminal ran as one page republished by three cloud
+Routines, with its only structured state embedded in the page and its build
+pipeline living in a chat session's scratchpad. This change audits that system
+as built and adds `terminal/`, a stdlib-only package that holds the workflow's
+calculations, document schemas, store adapters, migration, renderer and role
+definitions, with a synthetic dry run that exercises every stage and six
+failure paths. The live page and its Routines are not modified; cutover is an
+approval-gated step recorded in `docs/TERMINAL_MIGRATION.md`.
+
+### Added
+
+- `terminal/` — schemas, identity, market clock, freshness, the 100-point
+  equity scorecard, scenario mathematics, outcome grading, gates, tiers, run
+  manifests with an idempotency ledger and hash chain, the two-round critic,
+  store adapters, the daily pipeline, the legacy migration, the renderer, the
+  command line, ten role briefs and a synthetic fixture.
+- `tests/test_terminal_*.py` — 126 tests over the package.
+- `docs/TERMINAL_AUDIT.md`, `docs/TERMINAL_ARCHITECTURE.md`,
+  `docs/TERMINAL_RUNBOOK.md`, `docs/TERMINAL_MIGRATION.md`,
+  `docs/TERMINAL_HANDOFF.md`, `docs/TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md`.
 
 ## 2026-08-30 — The daily briefing becomes a verified schedule
 

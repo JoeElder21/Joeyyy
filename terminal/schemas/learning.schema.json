@@ -1,0 +1,128 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Learning ledger",
+ "type": "object",
+ "required": [
+  "as_of",
+  "windows",
+  "hit_rates",
+  "lessons",
+  "model_changes"
+ ],
+ "properties": {
+  "as_of": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$"
+  },
+  "windows": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "board",
+     "window",
+     "buckets",
+     "verdict"
+    ],
+    "properties": {
+     "board": {
+      "type": "string"
+     },
+     "window": {
+      "type": "string"
+     },
+     "buckets": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "object",
+       "required": [
+        "mean_return",
+        "n"
+       ],
+       "properties": {
+        "mean_return": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "n": {
+         "type": "integer"
+        }
+       }
+      }
+     },
+     "verdict": {
+      "type": "string"
+     },
+     "streak": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    }
+   }
+  },
+  "hit_rates": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object"
+   }
+  },
+  "brier": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "lessons": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "date",
+     "text"
+    ],
+    "properties": {
+     "date": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "evidence_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "model_changes": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "date",
+     "change"
+    ],
+    "properties": {
+     "date": {
+      "type": "string"
+     },
+     "change": {
+      "type": "string"
+     },
+     "approved_by": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   }
+  }
+ }
+}
