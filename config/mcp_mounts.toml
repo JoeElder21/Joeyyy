@@ -145,3 +145,43 @@ env = ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_CONFI
 purpose = "Azure resource discovery and management through the official Microsoft MCP server; the cloud target Terraform plans against. Agent 007 only while the APEX specialists remain in shadow; see docs/TERRAFORM_AZURE_MCP_BUILDOUT.md."
 verify_offline = false
 activation = "`az login` on Joe's machine (DefaultAzureCredential), or AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET in the runtime env store for headless use."
+
+[[mounts]]
+name = "defillama"
+require_grant = true
+# Every tool here is a read, so this mount cannot mutate a DeFi protocol, a
+# position, or anything else. That is worth stating plainly AND worth not
+# overstating: what a grant actually hands over is the subscription itself --
+# the credits it carries and the ability to spend them -- and, because the
+# bridge below holds a bearer token for Joe's DefiLlama account, whatever that
+# account can reach. Read-only is a property of the tool surface, not a reason
+# to skip the grant.
+grant_scope = "Every tool the DefiLlama MCP server exposes under Joe's authenticated subscription, including account usage (`get_my_usage`). All tools are reads against DefiLlama's dataset — there is no write or order-placement path — but a grant does not narrow the mount to any subset of them, and the subscription's own entitlements and credit balance are the only limit."
+network = true
+# A REMOTE HTTP server reached through a stdio bridge, because this registry is
+# stdio-only: scripts/verify_mcp_mounts.py probes a mount with
+# StdioServerParameters(mount["command"]) and has no transport or URL field.
+# `mcp-remote` is the bridge DefiLlama itself documents for stdio-only clients.
+# Recorded here rather than left for a reader to rediscover, because the URL in
+# the command is the only thing that looks like an HTTP mount.
+#
+# Version-pinned for exactly the reason the filesystem mount above records:
+# `npx -y mcp-remote` with no `@<version>` fetches and executes whatever the
+# registry serves at launch, so an unchanged commit could run different code on
+# every run and on Joe's workstation. Bumping this pin is a reviewed change.
+command = ["npx", "-y", "mcp-remote@0.14.2", "https://mcp.defillama.com/mcp"]
+# The subset this mount exists to provide, not the full 24 the server ships.
+# Deliberately a floor: DefiLlama owns this release, so naming every tool it
+# happens to offer would turn any additive upstream change into a CI failure.
+# `tools_are_exhaustive` is left off for that reason, per the header rule.
+expected_tools = [
+  "get_market_totals",
+  "get_protocol_metrics",
+  "get_token_prices",
+  "get_yield_pools",
+  "resolve_entity",
+]
+agents = ["apex_chief_of_staff"]
+purpose = "DeFi market data — TVL, yields, token prices, protocol fundamentals, ETF and bridge flows — through one governed MCP interface instead of ad-hoc web reads. Agent 007 only: `connector_stages` admits `active` and `value-proven`, and all ten specialists are still `shadow`, so market-operator — the natural consumer — cannot hold this mount until it is promoted. See docs/DEFILLAMA_MCP_MOUNT.md."
+verify_offline = false
+activation = "A DefiLlama account with an active API subscription (https://defillama.com/subscribe), plus a one-time OAuth login on Joe's machine; `mcp-remote` caches the token and refreshes it every 24 hours. No API key and no environment variable — the credential lives in mcp-remote's own token store, which is why this mount declares no `env`."

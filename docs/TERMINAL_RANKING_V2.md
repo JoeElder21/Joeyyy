@@ -325,6 +325,16 @@ scoring below 0.90.
   from it, and "most of the data" cannot be read as "all of it" without
   inventing coverage that does not exist.
 
+**Two different doors, and only one of them is open.** `docs/DEFILLAMA_MCP_MOUNT.md`
+registers DefiLlama's hosted *MCP server* as a governed mount. This section
+describes its *public REST API* (`coins.llama.fi`, `api.llama.fi`), and the two
+are not interchangeable: the mount is registered but **not verified**, because
+the endpoint requires OAuth and a paid subscription and answers the probe with
+HTTP 401, while the REST path needs no credential and is what the verification
+above actually exercised. So the refresh runs on REST today. If the mount is
+ever authenticated, this section is what has to be revisited — not silently
+superseded, because the two paths do not serve identical data.
+
 **Changing the primary source moves numbers, and that is not a defect.** On
 the first parallel run, one asset's trend alignment read `0` against DefiLlama
 and `1` against the exchange series, because the two carry different history

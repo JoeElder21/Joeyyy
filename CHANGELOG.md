@@ -122,6 +122,24 @@ than the engine, and the record now carries both.
   `tests/test_governance_docs.py` caught the stale figure on the first run
   after the new test landed, which is what that test exists for.
 
+## 2026-09-14 — DefiLlama registered as a governed mount
+
+Joe connected DefiLlama's hosted MCP server to his personal session. This
+registers it for the corps as well, through the only shape the registry
+supports: `scripts/verify_mcp_mounts.py` probes mounts over stdio and has no
+transport or URL field, so the remote HTTP server is bridged with a pinned
+`mcp-remote@0.14.2` rather than the registry being widened to carry an HTTP
+transport — a change that would alter how every mount launches.
+
+Scoped to `apex_chief_of_staff` alone. `connector_stages` admits `active` and
+`value-proven`; all ten specialists are still `shadow`, so `market-operator` —
+the natural consumer — cannot hold it yet. Registered, **not** verified: the
+server requires OAuth and a paid subscription, so the probe reports it as
+registered with its activation requirement, and the declared `expected_tools`
+contract becomes enforceable only at the first authenticated probe. What was
+confirmed is narrower and stated in `docs/DEFILLAMA_MCP_MOUNT.md`: the endpoint
+answers `initialize` with HTTP 401, and the pinned bridge version exists.
+
 ## 2026-09-12 — Canon→Forge→Claude Code mission pipeline
 
 A public-safe GitHub mission brief, filed by Forge, executed by the
