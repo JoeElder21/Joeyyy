@@ -1840,19 +1840,13 @@ class MissionPipelineTests(unittest.TestCase):
             encoding="utf-8"
         )
         docs = (ROOT / "docs" / "FORGE_CI_LOOP.md").read_text(encoding="utf-8")
-        intake = (ROOT / "docs" / "CURSOR_TEAM_KIT_INTEGRATION.md").read_text(
-            encoding="utf-8"
-        )
-        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(
-            encoding="utf-8"
-        )
+        intake = (ROOT / "docs" / "CURSOR_TEAM_KIT_INTEGRATION.md").read_text(encoding="utf-8")
+        form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "mission.yml").read_text(encoding="utf-8")
         packet = (ROOT / "docs" / "MISSION_PACKET.md").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
         contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
-        workflow = (ROOT / ".github" / "workflows" / "claude.yml").read_text(
-            encoding="utf-8"
-        )
+        workflow = (ROOT / ".github" / "workflows" / "claude.yml").read_text(encoding="utf-8")
 
         self.assertIn("name: forge-ci-loop", skill)
         self.assertIn("loop-on-ci", skill)
@@ -1896,9 +1890,7 @@ class MissionPipelineTests(unittest.TestCase):
         )
 
     def test_four_team_kit_skills_are_separate_shadow_files(self):
-        intake = (ROOT / "docs" / "CURSOR_TEAM_KIT_INTEGRATION.md").read_text(
-            encoding="utf-8"
-        )
+        intake = (ROOT / "docs" / "CURSOR_TEAM_KIT_INTEGRATION.md").read_text(encoding="utf-8")
         for name in self.TEAM_KIT_SKILLS:
             path = ROOT / ".agents" / "skills" / name / "SKILL.md"
             with self.subTest(skill=name):
