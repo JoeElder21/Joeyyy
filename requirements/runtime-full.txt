@@ -27,8 +27,8 @@
 # Safety caps. Dependabot #90's grouped bump crossed these majors and broke
 # the official AutoGen 0.2 install CI uses (`numpy` 1->2, `openai` 2->3).
 # Those ports are out of this hygiene PR.
-numpy<2
-openai<3
+numpy<3
+openai<4
 # PorterStemmer / CVE-style findings at nltk<=3.10.2 justify 3.10.3 as
 # partial hygiene. GHSA-8mgp-746c-j5xp / CVE-2026-81726 still hits 3.10.3
 # with no fixed version; that remaining risk is accepted in osv-scanner.toml.
