@@ -102,16 +102,24 @@ This is the supported path, and both forms keep the key out of the tree.
 typing it on the command line, so it never reaches your shell history:
 
 ```bash
-read -rs FINANCIAL_DATASETS_API_KEY && export FINANCIAL_DATASETS_API_KEY
-claude
+read -rs FD_KEY
+FINANCIAL_DATASETS_API_KEY="$FD_KEY" claude
+unset FD_KEY
 ```
 
-To make it persist, set the same variable from your shell profile —
-`~/.bashrc`, `~/.zshrc`, or your shell's equivalent. A profile holding the
-literal key is a file on your machine like any other: readable by anything
-running as you, and worth `chmod 600` if the machine is shared. The variable
-must exist in the environment that launches `claude`; setting it inside a
-running session is too late for a connection already made.
+The prefixed form matters. A plain `export` would leave the key in the
+environment of *every* command you run in that shell afterwards, for as long
+as the shell lives; a command-prefixed assignment scopes it to the `claude`
+process and nothing else. The variable must exist in the environment that
+launches `claude` — setting it inside a running session is too late for a
+connection already made.
+
+Persisting it from `~/.bashrc`, `~/.zshrc` or your shell's equivalent works,
+and the trade is real rather than avoidable: an exported profile variable is
+inherited by everything you run, and the profile itself is a file on your
+machine holding the literal key — readable by anything running as you, and
+worth `chmod 600` on a shared machine. Convenience against a broader blast
+radius; pick deliberately rather than by default.
 
 An assignment of this variable is a finding for `scripts/privacy_guard.py` as
 of this change, which is why no such line is spelled out here — see section 6.
@@ -229,7 +237,9 @@ good — section 2 is the whole reason those are different questions.
   | Written into a tracked file | `privacy_guard.py` |
   |---|---|
   | `FINANCIAL_DATASETS_API_KEY` assigned a value of 8+ characters | **Blocked** — exit 1, `possible credential assignment` |
+  | `os.environ["FINANCIAL_DATASETS_API_KEY"] = "…"` and the single-quoted form | **Blocked** as of this change. It was not before: the delimiter clause allowed a closing quote before `=` but not a closing bracket, so the most idiomatic Python spelling exited 0 |
   | The same name assigned 7 characters or fewer | Passes. The value clause requires 8+, so a short fragment is invisible |
+  | `os.environ.setdefault("FINANCIAL_DATASETS_API_KEY", "…")` and other comma-delimited call forms | Passes. Admitting `,` as a delimiter is a much wider change than admitting `]` |
   | Any other `<PREFIX>_API_KEY`, `<PREFIX>_ACCESS_TOKEN`, `<PREFIX>_CLIENT_SECRET` | Passes. `\b` cannot match after `_`, so only the name spelled out in the alternation is covered |
 
   Measured at the boundary, not reasoned: a 7-character value exits 0 and an

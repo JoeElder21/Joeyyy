@@ -237,7 +237,21 @@ PATTERNS = {
         # a separate alternative rather than folded into the brace exemption
         # above: making the `$` optional there would also excuse a bare
         # `{IDENTIFIER}`, widening a second rule while repairing this one.
-        r"[\"']?\s*[:=]\s*"
+        # The `]?` admits the bracketed form. `os.environ["API_KEY"] = "..."`
+        # is the most idiomatic way to set a credential in Python, and it was
+        # invisible: after the name came `"]`, and the delimiter clause allowed
+        # only an optional closing quote before `=`. Measured -- the bare
+        # `API_KEY = "..."` exited 1 while the `os.environ[...]` form of the
+        # same assignment exited 0. This repairs it for every name in the
+        # alternation above, not just the connector one, and newly matches
+        # nothing in the tracked tree, so it needs no exemptions.
+        #
+        # Still uncovered, and deliberately: `os.environ.setdefault("API_KEY",
+        # "...")` and other comma-delimited call forms. Admitting `,` as a
+        # delimiter would match a credential name anywhere in an argument list
+        # followed by any 8-character token, which is a different and much
+        # wider change than closing a bracket.
+        r"[\"']?\]?\s*[:=]\s*"
         r"(?!\s*[\"']\{[A-Za-z_][A-Za-z0-9_]*\}[\"']" + QUOTED_VALUE_END + NOT_CONTINUED + r")"
         r"(?!\s*[\"']\$\{[A-Za-z_][A-Za-z0-9_]*\}[\"']" + QUOTED_VALUE_END + NOT_CONTINUED + r")"
         r"(?:[\"'][^\"']{8,}[\"']|[^\s#\"',}]{8,})"
