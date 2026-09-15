@@ -1,0 +1,1430 @@
+{
+  "source": "DefiLlama equities table (Twelve Data market data; SEC EDGAR filings). Screenshots Joe sent to Drippy.",
+  "updated": "2026-09-14T19:59:00Z",
+  "updated_note": "UI footer: Updated Sep 14, 2026, 7:59 PM UTC",
+  "image_count": 10,
+  "total_pngs_in_batch": 26,
+  "crypto_pngs_in_same_batch": 16,
+  "batch_note": "Of 26 PNGs newer than 2026-09-15 05:12: 10 are US equity mcap rankings (Page 1-2 of 33); 16 are DefiLlama crypto coin rankings (not equities).",
+  "row_count": 200,
+  "unique_tickers": 200,
+  "rank_min": 1,
+  "rank_max": 200,
+  "missing_ranks_in_range": [],
+  "page_coverage": "Page 1 of 33 (ranks ~1-100) and Page 2 of 33 (ranks ~101-200) visible. Pages 3-33 not in this screenshot set.",
+  "conflicts": [],
+  "equity_image_hashes": [
+    "3a7123166d890d5b367df49dada936bd6f747c5d97b61353578743c7f38cc1c6",
+    "9d2569e8241afdd9724e9fcf1e6b534214dbd98a2c3270ac3f7700939b6ece89",
+    "7ca4a6b9976cc30f4783877621976aaf432670b4157eb82d7bafd5260958c7db",
+    "7e11d6c008ce6e905f3519f293c4ce92be2615cc36795fb72894d9d62af46b23",
+    "2fdc7a6b94f543df822597ac7d7f9b82654d1cf5b54a9cadcfa9216ef818f594",
+    "2ff27f35399ed0b24828c59c456717bb53dcb2b1b2beba14ae16f247d40b9bb1",
+    "71f8a880ac7c4554a1f0e953d64b0c7b1ab4935ae6ad3b23ba30c1b6d74847b1",
+    "d63679147de4a4a3fddd4748673d87e122d2d8c08858b84d5388e2ee7f5662df",
+    "30e2ac82adfc9d8b49091e853efb45581b0239d4d476dcc7b6b016e25115bd1e",
+    "3a95bdfeb654cfcfbbafc0ba4ca621682e03be2a25054c825a0dc7445b8d8bb1"
+  ],
+  "rows": [
+    {
+      "rank": 1,
+      "ticker": "NVDA",
+      "region": "US",
+      "mcap": "$5.108T",
+      "price": "$210.88"
+    },
+    {
+      "rank": 2,
+      "ticker": "AAPL",
+      "region": "US",
+      "mcap": "$4.891T",
+      "price": "$333"
+    },
+    {
+      "rank": 3,
+      "ticker": "GOOGL",
+      "region": "US",
+      "mcap": "$4.274T",
+      "price": "$349.45"
+    },
+    {
+      "rank": 4,
+      "ticker": "MSFT",
+      "region": "US",
+      "mcap": "$3.756T",
+      "price": "$505.72"
+    },
+    {
+      "rank": 5,
+      "ticker": "AMZN",
+      "region": "US",
+      "mcap": "$2.735T",
+      "price": "$253.57"
+    },
+    {
+      "rank": 6,
+      "ticker": "SPCX",
+      "region": "US",
+      "mcap": "$1.952T",
+      "price": "$148.15"
+    },
+    {
+      "rank": 7,
+      "ticker": "META",
+      "region": "US",
+      "mcap": "$1.696T",
+      "price": "$665.64"
+    },
+    {
+      "rank": 8,
+      "ticker": "AVGO",
+      "region": "US",
+      "mcap": "$1.641T",
+      "price": "$344.93"
+    },
+    {
+      "rank": 9,
+      "ticker": "TSLA",
+      "region": "US",
+      "mcap": "$1.418T",
+      "price": "$359.02"
+    },
+    {
+      "rank": 10,
+      "ticker": "BRK.A",
+      "region": "US",
+      "mcap": "$1.097T",
+      "price": "$766K"
+    },
+    {
+      "rank": 11,
+      "ticker": "MU",
+      "region": "US",
+      "mcap": "$1.043T",
+      "price": "$923.88"
+    },
+    {
+      "rank": 12,
+      "ticker": "LLY",
+      "region": "US",
+      "mcap": "$1.015T",
+      "price": "$1.14K"
+    },
+    {
+      "rank": 13,
+      "ticker": "JPM",
+      "region": "US",
+      "mcap": "$938.204B",
+      "price": "$350.14"
+    },
+    {
+      "rank": 14,
+      "ticker": "WMT",
+      "region": "US",
+      "mcap": "$868.575B",
+      "price": "$109.09"
+    },
+    {
+      "rank": 15,
+      "ticker": "AMD",
+      "region": "US",
+      "mcap": "$805.849B",
+      "price": "$493.78"
+    },
+    {
+      "rank": 16,
+      "ticker": "V",
+      "region": "US",
+      "mcap": "$705.229B",
+      "price": "$375.32"
+    },
+    {
+      "rank": 17,
+      "ticker": "XOM",
+      "region": "US",
+      "mcap": "$678.753B",
+      "price": "$165.07"
+    },
+    {
+      "rank": 18,
+      "ticker": "JNJ",
+      "region": "US",
+      "mcap": "$641.492B",
+      "price": "$266.38"
+    },
+    {
+      "rank": 19,
+      "ticker": "MA",
+      "region": "US",
+      "mcap": "$504.288B",
+      "price": "$574.36"
+    },
+    {
+      "rank": 20,
+      "ticker": "INTC",
+      "region": "US",
+      "mcap": "$487.934B",
+      "price": "$97.14"
+    },
+    {
+      "rank": 21,
+      "ticker": "ABBV",
+      "region": "US",
+      "mcap": "$462.504B",
+      "price": "$261.74"
+    },
+    {
+      "rank": 22,
+      "ticker": "CSCO",
+      "region": "US",
+      "mcap": "$434.336B",
+      "price": "$110.07"
+    },
+    {
+      "rank": 23,
+      "ticker": "ORCL",
+      "region": "US",
+      "mcap": "$416.707B",
+      "price": "$144.69"
+    },
+    {
+      "rank": 24,
+      "ticker": "PLTR",
+      "region": "US",
+      "mcap": "$416.494B",
+      "price": "$173.33"
+    },
+    {
+      "rank": 25,
+      "ticker": "CVX",
+      "region": "US",
+      "mcap": "$416.164B",
+      "price": "$212.16"
+    },
+    {
+      "rank": 26,
+      "ticker": "BAC",
+      "region": "US",
+      "mcap": "$415.824B",
+      "price": "$59.47"
+    },
+    {
+      "rank": 27,
+      "ticker": "COST",
+      "region": "US",
+      "mcap": "$407.424B",
+      "price": "$918.7"
+    },
+    {
+      "rank": 28,
+      "ticker": "KO",
+      "region": "US",
+      "mcap": "$384.538B",
+      "price": "$89.37"
+    },
+    {
+      "rank": 29,
+      "ticker": "CAT",
+      "region": "US",
+      "mcap": "$360.105B",
+      "price": "$783.39"
+    },
+    {
+      "rank": 30,
+      "ticker": "MRK",
+      "region": "US",
+      "mcap": "$357.735B",
+      "price": "$144.85"
+    },
+    {
+      "rank": 31,
+      "ticker": "UNH",
+      "region": "US",
+      "mcap": "$347.153B",
+      "price": "$383.6"
+    },
+    {
+      "rank": 32,
+      "ticker": "LRCX",
+      "region": "US",
+      "mcap": "$342.16B",
+      "price": "$273.61"
+    },
+    {
+      "rank": 33,
+      "ticker": "DELL",
+      "region": "US",
+      "mcap": "$341.907B",
+      "price": "$534.15"
+    },
+    {
+      "rank": 34,
+      "ticker": "PG",
+      "region": "US",
+      "mcap": "$339.632B",
+      "price": "$146.15"
+    },
+    {
+      "rank": 35,
+      "ticker": "AMAT",
+      "region": "US",
+      "mcap": "$336.929B",
+      "price": "$424.37"
+    },
+    {
+      "rank": 36,
+      "ticker": "NFLX",
+      "region": "US",
+      "mcap": "$334.489B",
+      "price": "$80.33"
+    },
+    {
+      "rank": 37,
+      "ticker": "GE",
+      "region": "US",
+      "mcap": "$329.488B",
+      "price": "$317.56"
+    },
+    {
+      "rank": 38,
+      "ticker": "MS",
+      "region": "US",
+      "mcap": "$324.759B",
+      "price": "$206.59"
+    },
+    {
+      "rank": 39,
+      "ticker": "HD",
+      "region": "US",
+      "mcap": "$309.987B",
+      "price": "$310.92"
+    },
+    {
+      "rank": 40,
+      "ticker": "PANW",
+      "region": "US",
+      "mcap": "$304.786B",
+      "price": "$373.97"
+    },
+    {
+      "rank": 41,
+      "ticker": "PM",
+      "region": "US",
+      "mcap": "$303.733B",
+      "price": "$194.88"
+    },
+    {
+      "rank": 42,
+      "ticker": "GS",
+      "region": "US",
+      "mcap": "$291.129B",
+      "price": "$988.31"
+    },
+    {
+      "rank": 43,
+      "ticker": "WFC",
+      "region": "US",
+      "mcap": "$271.822B",
+      "price": "$88.71"
+    },
+    {
+      "rank": 44,
+      "ticker": "RTX",
+      "region": "US",
+      "mcap": "$263.088B",
+      "price": "$195.36"
+    },
+    {
+      "rank": 45,
+      "ticker": "CRWD",
+      "region": "US",
+      "mcap": "$240.998B",
+      "price": "$235.39"
+    },
+    {
+      "rank": 46,
+      "ticker": "TXN",
+      "region": "US",
+      "mcap": "$240.463B",
+      "price": "$263.35"
+    },
+    {
+      "rank": 47,
+      "ticker": "ANET",
+      "region": "US",
+      "mcap": "$236.866B",
+      "price": "$187.81"
+    },
+    {
+      "rank": 48,
+      "ticker": "IBM",
+      "region": "US",
+      "mcap": "$234.097B",
+      "price": "$249.07"
+    },
+    {
+      "rank": 49,
+      "ticker": "GEV",
+      "region": "US",
+      "mcap": "$232.95B",
+      "price": "$874.66"
+    },
+    {
+      "rank": 50,
+      "ticker": "C",
+      "region": "US",
+      "mcap": "$228.467B",
+      "price": "$136.2"
+    },
+    {
+      "rank": 51,
+      "ticker": "TMO",
+      "region": "US",
+      "mcap": "$228.107B",
+      "price": "$613.82"
+    },
+    {
+      "rank": 52,
+      "ticker": "SNDK",
+      "region": "US",
+      "mcap": "$226.534B",
+      "price": "$1.55K"
+    },
+    {
+      "rank": 53,
+      "ticker": "AXP",
+      "region": "US",
+      "mcap": "$223.539B",
+      "price": "$327.77"
+    },
+    {
+      "rank": 54,
+      "ticker": "KLAC",
+      "region": "US",
+      "mcap": "$220.998B",
+      "price": "$169.09"
+    },
+    {
+      "rank": 55,
+      "ticker": "LIN",
+      "region": "US",
+      "mcap": "$214.834B",
+      "price": "$464.41"
+    },
+    {
+      "rank": 56,
+      "ticker": "VZ",
+      "region": "US",
+      "mcap": "$214.206B",
+      "price": "$51.3"
+    },
+    {
+      "rank": 57,
+      "ticker": "CRM",
+      "region": "US",
+      "mcap": "$212.383B",
+      "price": "$259.32"
+    },
+    {
+      "rank": 58,
+      "ticker": "AMGN",
+      "region": "US",
+      "mcap": "$205.944B",
+      "price": "$381.59"
+    },
+    {
+      "rank": 59,
+      "ticker": "TMUS",
+      "region": "US",
+      "mcap": "$196.627B",
+      "price": "$182.94"
+    },
+    {
+      "rank": 60,
+      "ticker": "APH",
+      "region": "US",
+      "mcap": "$193.8B",
+      "price": "$78.59"
+    },
+    {
+      "rank": 61,
+      "ticker": "MRVL",
+      "region": "US",
+      "mcap": "$191.589B",
+      "price": "$218.82"
+    },
+    {
+      "rank": 62,
+      "ticker": "QCOM",
+      "region": "US",
+      "mcap": "$190.736B",
+      "price": "$180.11"
+    },
+    {
+      "rank": 63,
+      "ticker": "DIS",
+      "region": "US",
+      "mcap": "$188.786B",
+      "price": "$108.59"
+    },
+    {
+      "rank": 64,
+      "ticker": "T",
+      "region": "US",
+      "mcap": "$186.67B",
+      "price": "$26.53"
+    },
+    {
+      "rank": 65,
+      "ticker": "PEP",
+      "region": "US",
+      "mcap": "$186.318B",
+      "price": "$136.32"
+    },
+    {
+      "rank": 66,
+      "ticker": "SCHW",
+      "region": "US",
+      "mcap": "$185.61B",
+      "price": "$107.33"
+    },
+    {
+      "rank": 67,
+      "ticker": "DE",
+      "region": "US",
+      "mcap": "$183.981B",
+      "price": "$681.57"
+    },
+    {
+      "rank": 68,
+      "ticker": "STX",
+      "region": "US",
+      "mcap": "$182.862B",
+      "price": "$805.56"
+    },
+    {
+      "rank": 69,
+      "ticker": "MCD",
+      "region": "US",
+      "mcap": "$182.232B",
+      "price": "$257.52"
+    },
+    {
+      "rank": 70,
+      "ticker": "GILD",
+      "region": "US",
+      "mcap": "$181.72B",
+      "price": "$146.43"
+    },
+    {
+      "rank": 71,
+      "ticker": "ABT",
+      "region": "US",
+      "mcap": "$179.564B",
+      "price": "$103.09"
+    },
+    {
+      "rank": 72,
+      "ticker": "ADI",
+      "region": "US",
+      "mcap": "$175.19B",
+      "price": "$361.54"
+    },
+    {
+      "rank": 73,
+      "ticker": "NEE",
+      "region": "US",
+      "mcap": "$170.247B",
+      "price": "$81.64"
+    },
+    {
+      "rank": 74,
+      "ticker": "UNP",
+      "region": "US",
+      "mcap": "$169.307B",
+      "price": "$285.05"
+    },
+    {
+      "rank": 75,
+      "ticker": "COP",
+      "region": "US",
+      "mcap": "$166.504B",
+      "price": "$136.67"
+    },
+    {
+      "rank": 76,
+      "ticker": "BA",
+      "region": "US",
+      "mcap": "$166.211B",
+      "price": "$210.3"
+    },
+    {
+      "rank": 77,
+      "ticker": "BLK",
+      "region": "US",
+      "mcap": "$165.203B",
+      "price": "$1.07K"
+    },
+    {
+      "rank": 78,
+      "ticker": "WELL",
+      "region": "US",
+      "mcap": "$165.115B",
+      "price": "$234.31"
+    },
+    {
+      "rank": 79,
+      "ticker": "SCCO",
+      "region": "US",
+      "mcap": "$159.099B",
+      "price": "$188.43"
+    },
+    {
+      "rank": 80,
+      "ticker": "PFE",
+      "region": "US",
+      "mcap": "$158.033B",
+      "price": "$27.73"
+    },
+    {
+      "rank": 81,
+      "ticker": "WDC",
+      "region": "US",
+      "mcap": "$153.971B",
+      "price": "$427.06"
+    },
+    {
+      "rank": 82,
+      "ticker": "ETN",
+      "region": "US",
+      "mcap": "$152.705B",
+      "price": "$393.27"
+    },
+    {
+      "rank": 83,
+      "ticker": "UBER",
+      "region": "US",
+      "mcap": "$148.175B",
+      "price": "$72.64"
+    },
+    {
+      "rank": 84,
+      "ticker": "NOW",
+      "region": "US",
+      "mcap": "$147.17B",
+      "price": "$142.35"
+    },
+    {
+      "rank": 85,
+      "ticker": "DHR",
+      "region": "US",
+      "mcap": "$142.871B",
+      "price": "$203.26"
+    },
+    {
+      "rank": 86,
+      "ticker": "TJX",
+      "region": "US",
+      "mcap": "$139.214B",
+      "price": "$125.98"
+    },
+    {
+      "rank": 87,
+      "ticker": "BKNG",
+      "region": "US",
+      "mcap": "$136.761B",
+      "price": "$175.34"
+    },
+    {
+      "rank": 88,
+      "ticker": "ISRG",
+      "region": "US",
+      "mcap": "$133.764B",
+      "price": "$377.97"
+    },
+    {
+      "rank": 89,
+      "ticker": "CB",
+      "region": "US",
+      "mcap": "$132.821B",
+      "price": "$341.89"
+    },
+    {
+      "rank": 90,
+      "ticker": "NEM",
+      "region": "US",
+      "mcap": "$132.033B",
+      "price": "$123.05"
+    },
+    {
+      "rank": 91,
+      "ticker": "VRTX",
+      "region": "US",
+      "mcap": "$131.672B",
+      "price": "$519.73"
+    },
+    {
+      "rank": 92,
+      "ticker": "BMY",
+      "region": "US",
+      "mcap": "$130.875B",
+      "price": "$64.1"
+    },
+    {
+      "rank": 93,
+      "ticker": "PGR",
+      "region": "US",
+      "mcap": "$128.489B",
+      "price": "$221"
+    },
+    {
+      "rank": 94,
+      "ticker": "COF",
+      "region": "US",
+      "mcap": "$126.813B",
+      "price": "$206.71"
+    },
+    {
+      "rank": 95,
+      "ticker": "PLD",
+      "region": "US",
+      "mcap": "$126.071B",
+      "price": "$135.22"
+    },
+    {
+      "rank": 96,
+      "ticker": "FTNT",
+      "region": "US",
+      "mcap": "$124.697B",
+      "price": "$170.2"
+    },
+    {
+      "rank": 97,
+      "ticker": "SPGI",
+      "region": "US",
+      "mcap": "$123.997B",
+      "price": "$418.91"
+    },
+    {
+      "rank": 98,
+      "ticker": "GLW",
+      "region": "US",
+      "mcap": "$123.464B",
+      "price": "$143.72"
+    },
+    {
+      "rank": 99,
+      "ticker": "CVS",
+      "region": "US",
+      "mcap": "$122.113B",
+      "price": "$95.55"
+    },
+    {
+      "rank": 100,
+      "ticker": "LMT",
+      "region": "US",
+      "mcap": "$122.025B",
+      "price": "$529.48"
+    },
+    {
+      "rank": 101,
+      "ticker": "MDT",
+      "region": "US",
+      "mcap": "$120.132B",
+      "price": "$93.85"
+    },
+    {
+      "rank": 102,
+      "ticker": "ACN",
+      "region": "US",
+      "mcap": "$119.328B",
+      "price": "$195.03"
+    },
+    {
+      "rank": 103,
+      "ticker": "MO",
+      "region": "US",
+      "mcap": "$117.917B",
+      "price": "$70.62"
+    },
+    {
+      "rank": 104,
+      "ticker": "NET",
+      "region": "US",
+      "mcap": "$117.626B",
+      "price": "$330.48"
+    },
+    {
+      "rank": 105,
+      "ticker": "PH",
+      "region": "US",
+      "mcap": "$117.103B",
+      "price": "$929.04"
+    },
+    {
+      "rank": 106,
+      "ticker": "SNOW",
+      "region": "US",
+      "mcap": "$115.085B",
+      "price": "$332.04"
+    },
+    {
+      "rank": 107,
+      "ticker": "VLO",
+      "region": "US",
+      "mcap": "$113.664B",
+      "price": "$382.79"
+    },
+    {
+      "rank": 108,
+      "ticker": "SBUX",
+      "region": "US",
+      "mcap": "$112.909B",
+      "price": "$99.06"
+    },
+    {
+      "rank": 109,
+      "ticker": "APP",
+      "region": "US",
+      "mcap": "$112.376B",
+      "price": "$334.16"
+    },
+    {
+      "rank": 110,
+      "ticker": "MPC",
+      "region": "US",
+      "mcap": "$112.215B",
+      "price": "$396.52"
+    },
+    {
+      "rank": 111,
+      "ticker": "BK",
+      "region": "US",
+      "mcap": "$111.646B",
+      "price": "$162.66"
+    },
+    {
+      "rank": 112,
+      "ticker": "LOW",
+      "region": "US",
+      "mcap": "$111.201B",
+      "price": "$198.22"
+    },
+    {
+      "rank": 113,
+      "ticker": "ADP",
+      "region": "US",
+      "mcap": "$110.053B",
+      "price": "$276.65"
+    },
+    {
+      "rank": 114,
+      "ticker": "MCK",
+      "region": "US",
+      "mcap": "$109.325B",
+      "price": "$911.04"
+    },
+    {
+      "rank": 115,
+      "ticker": "SYK",
+      "region": "US",
+      "mcap": "$108.129B",
+      "price": "$281.9"
+    },
+    {
+      "rank": 116,
+      "ticker": "ADBE",
+      "region": "US",
+      "mcap": "$105.968B",
+      "price": "$265.58"
+    },
+    {
+      "rank": 117,
+      "ticker": "PSX",
+      "region": "US",
+      "mcap": "$103.06B",
+      "price": "$257.05"
+    },
+    {
+      "rank": 118,
+      "ticker": "HOOD",
+      "region": "US",
+      "mcap": "$102.792B",
+      "price": "$114.34"
+    },
+    {
+      "rank": 119,
+      "ticker": "BX",
+      "region": "US",
+      "mcap": "$102.632B",
+      "price": "$128.3"
+    },
+    {
+      "rank": 120,
+      "ticker": "ABNB",
+      "region": "US",
+      "mcap": "$102.234B",
+      "price": "$170.68"
+    },
+    {
+      "rank": 121,
+      "ticker": "SO",
+      "region": "US",
+      "mcap": "$100.087B",
+      "price": "$87.01"
+    },
+    {
+      "rank": 122,
+      "ticker": "FCX",
+      "region": "US",
+      "mcap": "$99.649B",
+      "price": "$69.35"
+    },
+    {
+      "rank": 123,
+      "ticker": "EQIX",
+      "region": "US",
+      "mcap": "$98.491B",
+      "price": "$998.66"
+    },
+    {
+      "rank": 124,
+      "ticker": "PNC",
+      "region": "US",
+      "mcap": "$97.576B",
+      "price": "$242.7"
+    },
+    {
+      "rank": 125,
+      "ticker": "USB",
+      "region": "US",
+      "mcap": "$97.467B",
+      "price": "$62.68"
+    },
+    {
+      "rank": 126,
+      "ticker": "GD",
+      "region": "US",
+      "mcap": "$96.492B",
+      "price": "$356.81"
+    },
+    {
+      "rank": 127,
+      "ticker": "MELI",
+      "region": "US",
+      "mcap": "$96.279B",
+      "price": "$1.9K"
+    },
+    {
+      "rank": 128,
+      "ticker": "CEG",
+      "region": "US",
+      "mcap": "$95.779B",
+      "price": "$264.59"
+    },
+    {
+      "rank": 129,
+      "ticker": "TT",
+      "region": "US",
+      "mcap": "$94.152B",
+      "price": "$425.92"
+    },
+    {
+      "rank": 130,
+      "ticker": "PWR",
+      "region": "US",
+      "mcap": "$93.461B",
+      "price": "$621.94"
+    },
+    {
+      "rank": 131,
+      "ticker": "HCA",
+      "region": "US",
+      "mcap": "$92.728B",
+      "price": "$425.43"
+    },
+    {
+      "rank": 132,
+      "ticker": "DUK",
+      "region": "US",
+      "mcap": "$92.643B",
+      "price": "$119.05"
+    },
+    {
+      "rank": 133,
+      "ticker": "ELV",
+      "region": "US",
+      "mcap": "$92.223B",
+      "price": "$424.27"
+    },
+    {
+      "rank": 134,
+      "ticker": "KKR",
+      "region": "US",
+      "mcap": "$91.843B",
+      "price": "$102.3"
+    },
+    {
+      "rank": 135,
+      "ticker": "VRT",
+      "region": "US",
+      "mcap": "$91.396B",
+      "price": "$237.43"
+    },
+    {
+      "rank": 136,
+      "ticker": "INTU",
+      "region": "US",
+      "mcap": "$91.052B",
+      "price": "$339.26"
+    },
+    {
+      "rank": 137,
+      "ticker": "CSX",
+      "region": "US",
+      "mcap": "$90.919B",
+      "price": "$48.93"
+    },
+    {
+      "rank": 138,
+      "ticker": "HWM",
+      "region": "US",
+      "mcap": "$90.86B",
+      "price": "$227.15"
+    },
+    {
+      "rank": 139,
+      "ticker": "ICE",
+      "region": "US",
+      "mcap": "$89.303B",
+      "price": "$157.78"
+    },
+    {
+      "rank": 140,
+      "ticker": "MAR",
+      "region": "US",
+      "mcap": "$89.159B",
+      "price": "$340.56"
+    },
+    {
+      "rank": 141,
+      "ticker": "CMCSA",
+      "region": "US",
+      "mcap": "$88.288B",
+      "price": "$24.9"
+    },
+    {
+      "rank": 142,
+      "ticker": "DASH",
+      "region": "US",
+      "mcap": "$88.181B",
+      "price": "$203.53"
+    },
+    {
+      "rank": 143,
+      "ticker": "WMB",
+      "region": "US",
+      "mcap": "$88.105B",
+      "price": "$72.04"
+    },
+    {
+      "rank": 144,
+      "ticker": "WM",
+      "region": "US",
+      "mcap": "$87.265B",
+      "price": "$218.18"
+    },
+    {
+      "rank": 145,
+      "ticker": "UPS",
+      "region": "US",
+      "mcap": "$87.166B",
+      "price": "$102.44"
+    },
+    {
+      "rank": 146,
+      "ticker": "MRSH",
+      "region": "US",
+      "mcap": "$87.037B",
+      "price": "$180.51"
+    },
+    {
+      "rank": 147,
+      "ticker": "MNST",
+      "region": "US",
+      "mcap": "$86.587B",
+      "price": "$44.2"
+    },
+    {
+      "rank": 148,
+      "ticker": "MMM",
+      "region": "US",
+      "mcap": "$84.499B",
+      "price": "$162.01"
+    },
+    {
+      "rank": 149,
+      "ticker": "JCI",
+      "region": "US",
+      "mcap": "$84.037B",
+      "price": "$137.74"
+    },
+    {
+      "rank": 150,
+      "ticker": "MCO",
+      "region": "US",
+      "mcap": "$83.497B",
+      "price": "$478.01"
+    },
+    {
+      "rank": 151,
+      "ticker": "REGN",
+      "region": "US",
+      "mcap": "$83.338B",
+      "price": "$793.57"
+    },
+    {
+      "rank": 152,
+      "ticker": "EMR",
+      "region": "US",
+      "mcap": "$83.057B",
+      "price": "$148.29"
+    },
+    {
+      "rank": 153,
+      "ticker": "DDOG",
+      "region": "US",
+      "mcap": "$82.589B",
+      "price": "$230.08"
+    },
+    {
+      "rank": 154,
+      "ticker": "AMT",
+      "region": "US",
+      "mcap": "$82.513B",
+      "price": "$177.07"
+    },
+    {
+      "rank": 155,
+      "ticker": "TRV",
+      "region": "US",
+      "mcap": "$80.404B",
+      "price": "$378.12"
+    },
+    {
+      "rank": 156,
+      "ticker": "CTAS",
+      "region": "US",
+      "mcap": "$80.37B",
+      "price": "$200.85"
+    },
+    {
+      "rank": 157,
+      "ticker": "MDLZ",
+      "region": "US",
+      "mcap": "$80.1B",
+      "price": "$62.4"
+    },
+    {
+      "rank": 158,
+      "ticker": "SHW",
+      "region": "US",
+      "mcap": "$80.033B",
+      "price": "$324.5"
+    },
+    {
+      "rank": 159,
+      "ticker": "EOG",
+      "region": "US",
+      "mcap": "$79.457B",
+      "price": "$148.56"
+    },
+    {
+      "rank": 160,
+      "ticker": "SLB",
+      "region": "US",
+      "mcap": "$79.135B",
+      "price": "$53.32"
+    },
+    {
+      "rank": 161,
+      "ticker": "MSI",
+      "region": "US",
+      "mcap": "$78.83B",
+      "price": "$474.31"
+    },
+    {
+      "rank": 162,
+      "ticker": "CVNA",
+      "region": "US",
+      "mcap": "$77.923B",
+      "price": "$70.87"
+    },
+    {
+      "rank": 163,
+      "ticker": "ECL",
+      "region": "US",
+      "mcap": "$77.544B",
+      "price": "$275.53"
+    },
+    {
+      "rank": 164,
+      "ticker": "ITW",
+      "region": "US",
+      "mcap": "$77.424B",
+      "price": "$269.12"
+    },
+    {
+      "rank": 165,
+      "ticker": "CDNS",
+      "region": "US",
+      "mcap": "$76.983B",
+      "price": "$279.11"
+    },
+    {
+      "rank": 166,
+      "ticker": "GM",
+      "region": "US",
+      "mcap": "$76.496B",
+      "price": "$87.18"
+    },
+    {
+      "rank": 167,
+      "ticker": "CI",
+      "region": "US",
+      "mcap": "$76.488B",
+      "price": "$290.13"
+    },
+    {
+      "rank": 168,
+      "ticker": "APO",
+      "region": "US",
+      "mcap": "$75.784B",
+      "price": "$128.33"
+    },
+    {
+      "rank": 169,
+      "ticker": "BE",
+      "region": "US",
+      "mcap": "$75.401B",
+      "price": "$257.03"
+    },
+    {
+      "rank": 170,
+      "ticker": "FDX",
+      "region": "US",
+      "mcap": "$75.026B",
+      "price": "$312.61"
+    },
+    {
+      "rank": 171,
+      "ticker": "NOC",
+      "region": "US",
+      "mcap": "$74.9B",
+      "price": "$527.34"
+    },
+    {
+      "rank": 172,
+      "ticker": "CMI",
+      "region": "US",
+      "mcap": "$74.648B",
+      "price": "$540.97"
+    },
+    {
+      "rank": 173,
+      "ticker": "BAM",
+      "region": "US",
+      "mcap": "$74.503B",
+      "price": "$46.65"
+    },
+    {
+      "rank": 174,
+      "ticker": "LITE",
+      "region": "US",
+      "mcap": "$73.974B",
+      "price": "$834.92"
+    },
+    {
+      "rank": 175,
+      "ticker": "ROST",
+      "region": "US",
+      "mcap": "$73.848B",
+      "price": "$230.03"
+    },
+    {
+      "rank": 176,
+      "ticker": "HPE",
+      "region": "US",
+      "mcap": "$73.367B",
+      "price": "$55.41"
+    },
+    {
+      "rank": 177,
+      "ticker": "SNPS",
+      "region": "US",
+      "mcap": "$73.039B",
+      "price": "$381.52"
+    },
+    {
+      "rank": 178,
+      "ticker": "ORLY",
+      "region": "US",
+      "mcap": "$72.601B",
+      "price": "$87.23"
+    },
+    {
+      "rank": 179,
+      "ticker": "TGT",
+      "region": "US",
+      "mcap": "$72.087B",
+      "price": "$158.72"
+    },
+    {
+      "rank": 180,
+      "ticker": "NSC",
+      "region": "US",
+      "mcap": "$71.879B",
+      "price": "$320.02"
+    },
+    {
+      "rank": 181,
+      "ticker": "HLT",
+      "region": "US",
+      "mcap": "$70.91B",
+      "price": "$310.56"
+    },
+    {
+      "rank": 182,
+      "ticker": "WBD",
+      "region": "US",
+      "mcap": "$70.49B",
+      "price": "$28.12"
+    },
+    {
+      "rank": 183,
+      "ticker": "CL",
+      "region": "US",
+      "mcap": "$70.071B",
+      "price": "$87.9"
+    },
+    {
+      "rank": 184,
+      "ticker": "B",
+      "region": "US",
+      "mcap": "$69.81B",
+      "price": "$42.42"
+    },
+    {
+      "rank": 185,
+      "ticker": "RSG",
+      "region": "US",
+      "mcap": "$69.424B",
+      "price": "$225.86"
+    },
+    {
+      "rank": 186,
+      "ticker": "KMI",
+      "region": "US",
+      "mcap": "$68.892B",
+      "price": "$30.97"
+    },
+    {
+      "rank": 187,
+      "ticker": "RCL",
+      "region": "US",
+      "mcap": "$68.274B",
+      "price": "$255.28"
+    },
+    {
+      "rank": 188,
+      "ticker": "WPM",
+      "region": "US",
+      "mcap": "$67.978B",
+      "price": "$149.7"
+    },
+    {
+      "rank": 189,
+      "ticker": "ALL",
+      "region": "US",
+      "mcap": "$66.631B",
+      "price": "$258.46"
+    },
+    {
+      "rank": 190,
+      "ticker": "AON",
+      "region": "US",
+      "mcap": "$66.536B",
+      "price": "$311.5"
+    },
+    {
+      "rank": 191,
+      "ticker": "AEP",
+      "region": "US",
+      "mcap": "$66.495B",
+      "price": "$122.24"
+    },
+    {
+      "rank": 192,
+      "ticker": "SPG",
+      "region": "US",
+      "mcap": "$66.47B",
+      "price": "$204.97"
+    },
+    {
+      "rank": 193,
+      "ticker": "DLR",
+      "region": "US",
+      "mcap": "$66.272B",
+      "price": "$179.11"
+    },
+    {
+      "rank": 194,
+      "ticker": "BSX",
+      "region": "US",
+      "mcap": "$65.174B",
+      "price": "$45.05"
+    },
+    {
+      "rank": 195,
+      "ticker": "AJG",
+      "region": "US",
+      "mcap": "$64.934B",
+      "price": "$253.31"
+    },
+    {
+      "rank": 196,
+      "ticker": "PCAR",
+      "region": "US",
+      "mcap": "$64.656B",
+      "price": "$122.85"
+    },
+    {
+      "rank": 197,
+      "ticker": "APD",
+      "region": "US",
+      "mcap": "$63.923B",
+      "price": "$287.06"
+    },
+    {
+      "rank": 198,
+      "ticker": "HON",
+      "region": "US",
+      "mcap": "$63.809B",
+      "price": "$201.4"
+    },
+    {
+      "rank": 199,
+      "ticker": "TFC",
+      "region": "US",
+      "mcap": "$62.419B",
+      "price": "$50.1"
+    },
+    {
+      "rank": 200,
+      "ticker": "MET",
+      "region": "US",
+      "mcap": "$62.359B",
+      "price": "$97.78"
+    }
+  ]
+}

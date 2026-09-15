@@ -297,6 +297,40 @@ also gated: the rebuild was required to reproduce the published numbers exactly
 with the forming bar left in before its output was trusted. A recomputation
 that cannot reproduce what it claims to be correcting is not a correction.
 
+### 8.2 The range that is not the range
+
+A 52-week high is an **intraday print**. Computing it as `max(closes)` — the
+only thing a close-only feed permits — names a different, always-smaller number
+the same thing, and a position measured inside that narrowed band always reads
+higher than the truth. Across 200 US equities the inflation had a median of
+**+0.70 percentage points**, which would be cosmetic anywhere else.
+
+It is not cosmetic here, because `continuation.py` charges a `topped` term that
+climbs from nothing to its maximum across the band from 0.95 to 1.00. A name
+whose close-based position reads 1.00 and whose real position is 0.9529 collects
+a charge of 100 against a true charge of 5.8. Three of 201 names crossed that
+threshold on the definition alone, and three of seven positions on a live
+holdings board fell a whole verdict band because of it — MIXED to PULLBACK RISK,
+published, on a measurement artefact.
+
+The rule, in both directions:
+
+* **Where a feed serves intraday high and low, use them.** `connectors/schwab/
+  indicators.trading_range` does, and falls back to a candle's close only for
+  the candles that lack detail, so a partial feed still yields the widest range
+  its own data supports. An incomplete bar's high and low are dropped with the
+  rest of it, per §8.1 — a forming bar's extremes are as partial as its close.
+* **Where a feed serves no intraday range at all, say so.** DefiLlama returns a
+  price series and nothing else, so a crypto board measured this way is using
+  the definition the equity board was corrected away from. The honest response
+  is to record it as a known asymmetry between boards, not to substitute a
+  number from somewhere else: the direction of the bias is knowable even where
+  its size is not, so the disclosure is specific rather than a general caveat.
+
+The general form is the one §8 already states. A feature is defined by what the
+feed can actually measure, and a definition silently swapped for the nearest
+available one is a measurement error wearing the right label.
+
 ## 9. Continuation scoring: persistence against exhaustion
 
 `terminal/continuation.py` answers a question the composite in §2 does not:
