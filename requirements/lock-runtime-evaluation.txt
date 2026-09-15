@@ -22,7 +22,7 @@ annotated-doc==0.0.5
     # via typer
 annotated-types==0.8.0
     # via pydantic
-anyio==4.14.2
+anyio==4.15.1
     # via
     #   httpx
     #   openai
@@ -35,9 +35,9 @@ certifi==2026.7.22
     #   httpcore
     #   httpx
     #   requests
-charset-normalizer==3.4.9
+charset-normalizer==3.5.1
     # via requests
-click==8.3.3
+click==8.5.0
     # via deepeval
 deepeval==4.2.2
     # via -r requirements/runtime-evaluation.txt
@@ -51,7 +51,7 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-grpcio==1.83.0
+grpcio==1.83.1
     # via deepeval
 h11==0.16.0
     # via httpcore
@@ -59,7 +59,7 @@ httpcore==1.0.9
     # via httpx
 httpx==0.28.1
     # via openai
-idna==3.18
+idna==3.19
     # via
     #   anyio
     #   httpx
@@ -83,7 +83,7 @@ multidict==6.7.1
     #   yarl
 nest-asyncio==1.6.0
     # via deepeval
-openai==2.51.0
+openai==3.6.0
     # via deepeval
 opentelemetry-api==1.44.0
     # via
@@ -94,16 +94,16 @@ opentelemetry-sdk==1.44.0
     # via deepeval
 opentelemetry-semantic-conventions==0.65b0
     # via opentelemetry-sdk
-packaging==26.2
+packaging==26.3
     # via
     #   pytest
     #   pytest-rerunfailures
     #   wheel
 pluggy==1.6.0
     # via pytest
-portalocker==3.2.0
+portalocker==4.3.0
     # via deepeval
-posthog==7.35.0
+posthog==7.45.1
     # via deepeval
 prompt-toolkit==3.0.53
     # via questionary
@@ -111,18 +111,18 @@ propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
-pydantic==2.13.4
+pydantic==2.13.5
     # via
     #   deepeval
     #   openai
     #   pydantic-settings
-pydantic-core==2.46.4
+pydantic-core==2.48.0
     # via pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via deepeval
 pyfiglet==1.0.4
     # via deepeval
-pygments==2.20.0
+pygments==2.21.0
     # via
     #   pytest
     #   rich
@@ -138,11 +138,11 @@ pytest-asyncio==1.4.0
     # via deepeval
 pytest-repeat==0.9.4
     # via deepeval
-pytest-rerunfailures==16.4
+pytest-rerunfailures==16.6.1
     # via deepeval
 pytest-xdist==3.8.0
     # via deepeval
-python-dotenv==1.2.2
+python-dotenv==1.2.3
     # via
     #   deepeval
     #   pydantic-settings
@@ -152,17 +152,17 @@ requests==2.34.2
     # via
     #   deepeval
     #   posthog
-rich==14.3.4
+rich==15.0.0
     # via
     #   deepeval
     #   typer
-setuptools==83.0.0
+setuptools==84.0.0
     # via deepeval
 shellingham==1.5.4
     # via typer
 sniffio==1.3.1
     # via openai
-tabulate==0.9.0
+tabulate==0.10.0
     # via deepeval
 tenacity==9.1.4
     # via deepeval
@@ -170,7 +170,7 @@ tqdm==4.70.0
     # via
     #   deepeval
     #   openai
-typer==0.27.0
+typer==0.27.2
     # via deepeval
 typing-extensions==4.16.0
     # via
@@ -187,15 +187,15 @@ typing-extensions==4.16.0
     #   pydantic-core
     #   pytest-asyncio
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.4
     # via
     #   pydantic
     #   pydantic-settings
 urllib3==2.7.0
     # via requests
-wcwidth==0.8.2
+wcwidth==0.8.3
     # via prompt-toolkit
-wheel==0.47.0
+wheel==0.48.0
     # via deepeval
 yarl==1.24.5
     # via aiohttp

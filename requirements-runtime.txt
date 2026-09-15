@@ -6,10 +6,10 @@
 # mem0ai 2.0.19 (posthog>=7.14) and pydantic 2.13.5; `uv pip compile` of
 # runtime-full.txt rejects that pair. Those stay at the previous floors.
 langgraph>=1.2.11
-crewai>=0.80
+crewai>=1.15.20
 prefect>=3.8.4
-mem0ai>=2.0.14
-llama-index>=0.14.23
-langchain>=0.3
+mem0ai>=2.0.20
+llama-index>=0.14.24
+langchain>=1.4.0
 jsonschema>=4.23
-pydantic>=2.13.4
+pydantic>=2.13.5
