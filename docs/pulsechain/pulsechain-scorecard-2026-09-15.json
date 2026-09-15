@@ -1,0 +1,190 @@
+{
+  "title": "JEOS PulseChain 2027 Thesis Tracker — Baseline Scorecard",
+  "review_date": "2026-09-15",
+  "as_of": "2026-09-15 02:55 America/New_York (EDT)",
+  "as_of_utc": "2026-09-15T06:55:00Z",
+  "prepared_for": "Joe Elder / JEOS",
+  "stance_locked": true,
+  "metrics": {
+    "stablecoin_supply": {
+      "value": "~$34.74m DefiLlama circulating USD (asset sum ~$34.87m); 30d ~+2.1% (~+$0.70m). USDC~$16.13m / DAI~$12.52m / USDT~$4.39m / USDL~$1.25m. As of 2026-09-15 02:55 America/New_York (EDT).",
+      "numeric_usd": 34737341.21,
+      "numeric_asset_sum_usd": 34869061.39,
+      "change_30d_usd": 700894.21,
+      "change_30d_pct": 2.06,
+      "breakdown_usd": {
+        "USDC": 16130768.58,
+        "DAI": 12519363.36,
+        "USDT": 4390807.71,
+        "USDL": 1249922.73,
+        "PXDC": 527586.24,
+        "HEXDC": 50612.78
+      },
+      "status": "KNOWN",
+      "sources": [
+        "https://defillama.com/stablecoins/pulsechain",
+        "https://stablecoins.llama.fi/stablecoincharts/PulseChain",
+        "https://stablecoins.llama.fi/stablecoins?includePrices=true",
+        "https://defillama.com/chain/pulsechain"
+      ]
+    },
+    "net_bridge_flows_30d": {
+      "value": "UNKNOWN — no reliable free 30d in-vs-out net verified. DefiLlama bridge APIs paywalled (402); PulseChain absent/unclear on free bridges/chains 30d table; Dune OmniBridge dashboards exist but no clean 2026-09 extractable 30d net. Weak non-bridge proxies only: DefiLlama chain DeFi TVL ~$68.8m vs ~$72.9m ~30d prior (−~$4.1m); stables +~$0.7m.",
+      "status": "UNKNOWN",
+      "notes": "Preferred DefiLlama bridge volume endpoints returned HTTP 402 (paid). No audited free 30d in/out net published for PulseChain as of pull.",
+      "weak_proxies": {
+        "defi_tvl_30d_change_usd": -4098205,
+        "stablecoin_30d_change_usd": 700894.21,
+        "bridged_tvl_snapshot_usd": 45960000
+      },
+      "sources_checked": [
+        "https://defillama.com/bridges/chains",
+        "https://defillama.com/bridged/pulsechain",
+        "https://bridges.llama.fi/bridgevolume/PulseChain?id=all",
+        "https://dune.com/dereek69/pulsechain-bridge",
+        "https://dune.com/bhagirathnath18/pulsechain-tvl",
+        "https://www.pulsechainstats.com/bridge-stats",
+        "https://github.com/openpulsechain/public"
+      ]
+    },
+    "dex_volume_30d": {
+      "value": "~$215.55m 30d DEX volume (DefiLlama); 7d ~$40.08m (+5.69% WoW); 24h ~$4.38–$4.51m. As of 2026-09-15 02:55 America/New_York (EDT).",
+      "numeric_usd": 215546205,
+      "volume_7d_usd": 40077468,
+      "volume_24h_usd": 4514866,
+      "wow_change_pct": 5.69,
+      "status": "KNOWN",
+      "sources": [
+        "https://defillama.com/dexs/chain/pulsechain",
+        "https://api.llama.fi/overview/dexs/PulseChain?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true",
+        "https://defillama.com/chain/pulsechain"
+      ]
+    },
+    "non_pulsex_volume": {
+      "value": "~$36.50m non-PulseX (16.9% of 30d DEX); PulseX V1+V2+StableSwap ~$179.05m (83.1%). Top non-PulseX: 9mm ~$20.94m; SwitchX ~$11.34m; PHUX ~$4.22m.",
+      "non_pulsex_30d_usd": 36495437,
+      "non_pulsex_share_pct": 16.93,
+      "pulsex_30d_usd": 179050768,
+      "pulsex_share_pct": 83.07,
+      "breakdown_30d_usd": {
+        "PulseX V1": 86270705,
+        "PulseX V2": 79157719,
+        "PulseX StableSwap": 13622344,
+        "9mm V3": 20922280,
+        "SwitchX": 11336253,
+        "PHUX": 4220569,
+        "9mm V2": 16335
+      },
+      "status": "KNOWN",
+      "sources": [
+        "https://defillama.com/dexs/chain/pulsechain",
+        "https://api.llama.fi/overview/dexs/PulseChain?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true"
+      ]
+    },
+    "returning_funded_users": {
+      "value": "PROXY (not returning-funded-users cohort): PulseChain explorer ~502k avg daily txs over Aug16–Sep14 (~15.05m txs / 30d; range ~341k–704k/day) via api.scan.pulsechain.com. PulseChainStats holder adds (page): HEX +1,245 / PLSX +850 / INC +450 'this month' — new holders, not retention. No verified returning funded-wallet metric found.",
+      "status": "PROXY",
+      "proxy_label": "daily tx activity + monthly new token holders (NOT returning funded users)",
+      "proxy_metrics": {
+        "avg_daily_tx_30d": 501674,
+        "tx_sum_30d": 15050218,
+        "tx_window": "2026-08-16 to 2026-09-14",
+        "holder_adds_month_pulsechainstats": {
+          "HEX": 1245,
+          "PLSX": 850,
+          "INC": 450
+        }
+      },
+      "sources": [
+        "https://api.scan.pulsechain.com/api/v2/stats/charts/transactions",
+        "https://api.scan.pulsechain.com/api/v2/stats",
+        "https://www.pulsechainstats.com/pulse-stats",
+        "https://www.pulsechainstats.com/ecosystem"
+      ]
+    },
+    "independent_releases_apps": {
+      "value": "Non-core ~last 30d: SwitchX (CLAMM ve(3,3) DEX) DefiLlama TVL from ~2026-08-25, ~$11.34m 30d vol / ~$0.25m TVL; Liberty Swap DefiLlama listed/TVL from ~2026-08-24, ~$0.90m TVL. Piteas aggregator press 2026-08-28 (existing venue; ~$23.9m 30d agg vol). Core PulseX/HEX stack excluded.",
+      "status": "KNOWN_PARTIAL",
+      "items": [
+        {
+          "name": "SwitchX",
+          "type": "non-core DEX (CLAMM ve(3,3))",
+          "defillama_tvl_start_approx": "2026-08-25",
+          "tvl_usd": 246629,
+          "dex_volume_30d_usd": 11336253,
+          "url": "https://defillama.com/protocol/switchx"
+        },
+        {
+          "name": "Liberty Swap",
+          "type": "non-core DEX / swap ecosystem",
+          "defillama_listed_approx": "2026-08-24",
+          "tvl_usd": 896965,
+          "dex_volume_30d_usd_note": "NOT PROVIDED in source data",
+          "url": "https://defillama.com/protocol/liberty-swap"
+        },
+        {
+          "name": "Piteas",
+          "type": "existing DEX aggregator (press/coverage in window)",
+          "press_date": "2026-08-28",
+          "agg_volume_30d_usd": 23946169,
+          "urls": [
+            "https://techbullion.com/piteas-simplifying-defi-trading-on-pulsechain/",
+            "https://defillama.com/dex-aggregators/chain/pulsechain"
+          ]
+        }
+      ],
+      "sources": [
+        "https://defillama.com/protocol/switchx",
+        "https://defillama.com/protocol/liberty-swap",
+        "https://techbullion.com/piteas-simplifying-defi-trading-on-pulsechain/",
+        "https://api.llama.fi/overview/aggregators/PulseChain?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true"
+      ]
+    },
+    "net_exit_quote": {
+      "value": "UNKNOWN for Joe-specific holdings (no position sizes provided). Liquidity context: PulseX V1+V2+StableSwap TVL ~$51.2m; chain DeFi TVL ~$68.8–$69.5m; PLS ~$0.0000106 (scan). Exit cost highly size/route dependent; majors deeper than long-tail; no net exit quote computed.",
+      "status": "UNKNOWN",
+      "liquidity_context": {
+        "pulsex_v1_tvl_usd": 23446180,
+        "pulsex_v2_tvl_usd": 26791605,
+        "pulsex_stableswap_tvl_usd": 935520,
+        "pulsex_combined_tvl_usd": 51173305,
+        "chain_defi_tvl_usd": 68802853,
+        "pls_price_usd_scan": 1.058e-05
+      },
+      "sources": [
+        "https://defillama.com/chain/pulsechain",
+        "https://api.llama.fi/protocol/pulsex-v1",
+        "https://api.llama.fi/protocol/pulsex-v2",
+        "https://api.llama.fi/protocol/pulsex-stableswap",
+        "https://api.scan.pulsechain.com/api/v2/stats"
+      ]
+    },
+    "thesis_status": {
+      "value": "NICHE SURVIVAL CREDIBLE / NOT HIGH-CONVICTION CORE — Keep 'network will survive' SEPARATE from 'these holdings deserve more capital.' Current momentum not strong enough to elevate to high-conviction long-term thesis. (Joe stance 2026-09-15; data does not clearly force upgrade/downgrade)",
+      "bucket": "WATCH NICHE / NICHE SURVIVAL CREDIBLE",
+      "upgrade_or_downgrade": "NONE — Joe stance retained; data mixed/incomplete, not a clear force",
+      "rationale": [
+        "Stables modestly up (~+2% 30d) — mild positive, not adoption surge",
+        "DEX ~$216m/30d exists but remains niche vs major L1/L2s; PulseX concentration ~83%",
+        "Some non-core venue activity (SwitchX, Liberty Swap, 9mm) — breadth better than zero, still small",
+        "Bridge net UNKNOWN; returning funded users UNKNOWN (only proxies)",
+        "No exit-quote blowout measurable without holdings; liquidity depth finite (~$51m PulseX)",
+        "Consistent with: network can continue as niche; not enough momentum for high-conviction core capital thesis"
+      ]
+    }
+  },
+  "unknowns": [
+    "30-day net bridge flows (in vs out) — no reliable free primary source",
+    "Returning funded users (true retention cohort) — only activity/holder proxies",
+    "Net exit quote for Joe's specific Pulse holdings — position sizes not provided"
+  ],
+  "sources_primary": [
+    "https://defillama.com/stablecoins/pulsechain",
+    "https://defillama.com/dexs/chain/pulsechain",
+    "https://defillama.com/chain/pulsechain",
+    "https://defillama.com/bridged/pulsechain",
+    "https://api.scan.pulsechain.com/api/v2/stats/charts/transactions",
+    "https://defillama.com/protocol/switchx",
+    "https://defillama.com/protocol/liberty-swap"
+  ]
+}
