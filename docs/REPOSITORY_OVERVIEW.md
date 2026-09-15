@@ -58,7 +58,7 @@ The repository systematically refuses to claim capability it cannot demonstrate.
 
 ### What exists today, in one paragraph
 
-A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 62-document architectural record, and 1379 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
+A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 63-document architectural record, and 1379 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
 
 ---
 
@@ -94,7 +94,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 | `runtime/` | **Contract enforcement logic.** Stdlib-pure, CI-provable: lifecycle gates, cadence engine, writer-lease registry, mutation admission. Optional graph/queue/flow layers import lazily. | 10 |
 | `scripts/` | **SDK and service integration.** Governed dispatch bridges, PacketGuard, privacy guard, memory/evidence gateways, MCP server, observability, trusted launcher, validators. | 20 |
 | `tests/` | 60 unittest modules, 1379 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 60 |
-| `docs/` | Architectural records: protocols, registries, absorption records, build-out guides, migration and reconciliation records, and the market-scan knowledge set. This is where *why* lives. | 63 |
+| `docs/` | Architectural records: protocols, registries, absorption records, build-out guides, migration and reconciliation records, and the market-scan knowledge set. This is where *why* lives. | 64 |
 | `connectors/` | `aps/` — a Node 18+ harness running the Autodesk Platform Services validation gate, with a synthetic DXF test model and its generator. `bird/` — TypeScript `@messagebird/sdk` sample; key from `BIRD_API_KEY` only. | 7 |
 | `templates/` | Human-readable operating templates: agent intake, project intake, specialist handoff, daily brief, weekly agent audit. | 5 |
 | `trial/` | Fixed five-ticket task set for the execution-layer bake-off (codex-autorunner vs. multica), plus an append-only cadence log. | 7 |
@@ -472,7 +472,7 @@ The rationale follows from the repository being public: a binary blob cannot be 
 
 ## 13. Documentation index
 
-Sixty-two records in `docs/`, plus the index `README.md` — 63 files in the directory, matching the layout table above. Documentation here is a primary artefact, not commentary — `tests/test_governance_docs.py` and `tests/test_reconciliation.py` assert against it.
+Sixty-three records in `docs/`, plus the index `README.md` — 64 files in the directory, matching the layout table above. Documentation here is a primary artefact, not commentary — `tests/test_governance_docs.py` and `tests/test_reconciliation.py` assert against it.
 
 ### Operating contracts — read these first
 
