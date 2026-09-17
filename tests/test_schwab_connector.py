@@ -578,6 +578,42 @@ class IndicatorTests(unittest.TestCase):
         self.assertEqual(indicators.range_position(100, 0, 100), 1.0)
         self.assertIsNone(indicators.range_position(50, 50, 50))
 
+    def test_trading_range_uses_intraday_extremes_not_closes(self):
+        bars = candles([100.0, 120.0, 90.0])
+        low, high = indicators.trading_range(bars)
+        # The bar shape puts the real high 1% above the highest close and the
+        # real low 1% below the lowest one. Neither is any close in the series.
+        self.assertAlmostEqual(high, 121.2)
+        self.assertAlmostEqual(low, 89.1)
+        self.assertGreater(high, max(indicators.closes(bars)))
+        self.assertLess(low, min(indicators.closes(bars)))
+
+    def test_a_close_based_range_overstates_position_at_the_high(self):
+        # The defect this exists to prevent: a name that closed at its highest
+        # CLOSE is not at its 52-week high, because the high is an intraday
+        # print. Reading the band off closes pins it at 1.00 regardless.
+        bars = candles([90.0, 95.0, 100.0])
+        closes = indicators.closes(bars)
+        naive = indicators.range_position(closes[-1], min(closes), max(closes))
+        low, high = indicators.trading_range(bars)
+        real = indicators.range_position(closes[-1], low, high)
+        self.assertEqual(naive, 1.0)
+        self.assertLess(real, 1.0)
+        self.assertGreater(naive - real, 0.02)
+
+    def test_trading_range_falls_back_per_candle_when_detail_is_missing(self):
+        bars = candles([100.0, 120.0, 90.0])
+        del bars[1]["high"], bars[1]["low"]
+        low, high = indicators.trading_range(bars)
+        # The detailed bars still contribute their real extremes; the stripped
+        # one contributes its close, which is the widest its data supports.
+        self.assertAlmostEqual(high, 120.0)
+        self.assertAlmostEqual(low, 89.1)
+
+    def test_trading_range_is_none_when_no_candle_carries_a_price(self):
+        self.assertIsNone(indicators.trading_range([]))
+        self.assertIsNone(indicators.trading_range([{"datetime": 1, "volume": 10.0}]))
+
     def test_max_drawdown_finds_the_worst_peak_to_trough(self):
         self.assertAlmostEqual(indicators.max_drawdown([100, 120, 60, 90]), -0.5)
         self.assertAlmostEqual(indicators.max_drawdown([1, 2, 3]), 0.0)

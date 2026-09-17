@@ -154,12 +154,16 @@ def compute_metrics(candles: Sequence[Candle], policy: Policy) -> Metrics:
         series, int(ind["volatility_window"])
     )
 
-    window = series[-252:] if len(series) >= 252 else series
-    metrics.high_52w = max(window)
-    metrics.low_52w = min(window)
-    metrics.range_position = indicators.range_position(
-        metrics.last_close, metrics.low_52w, metrics.high_52w
-    )
+    # The 52-week band is measured over the same window of CANDLES, using
+    # their intraday extremes. Reading it off the close series would name the
+    # highest close a 52-week high; it is not, and it is always lower.
+    window_candles = candles[-252:] if len(candles) >= 252 else candles
+    band = indicators.trading_range(window_candles)
+    if band is not None:
+        metrics.low_52w, metrics.high_52w = band
+        metrics.range_position = indicators.range_position(
+            metrics.last_close, metrics.low_52w, metrics.high_52w
+        )
     if metrics.high_52w:
         metrics.drawdown_from_high = (metrics.last_close / metrics.high_52w) - 1.0
     metrics.max_drawdown = indicators.max_drawdown(series)
