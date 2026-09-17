@@ -5,6 +5,14 @@ few hours for 24/7 venues); a fundamental is fresh for a quarter plus filing
 lag; a screenshot balance is fresh for a few days and then must be re-marked.
 The terminal never leaves an old number standing unlabelled: every board is
 LIVE, STALE or DEGRADED, and the label is computed, not typed.
+
+Freshness of the *new* observation is only half the question. A source that
+reports a change also reports the value it changed FROM, and that baseline can
+silently be an observation this terminal already superseded -- in which case
+the stated change steps over everything that happened in between while looking
+perfectly well-formed. ``baseline_match`` answers which held observation a
+stated baseline actually is, so a stale baseline is caught by arithmetic
+rather than by whether the resulting number looks plausible.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ from terminal import clock
 
 FRESH, STALE, MISSING = "FRESH", "STALE", "MISSING"
 LIVE, STALE_BOARD, DEGRADED = "LIVE", "STALE", "DEGRADED"
+CURRENT, SUPERSEDED, UNKNOWN = "CURRENT", "SUPERSEDED", "UNKNOWN"
 
 # Wall-clock limits for fields that do not follow the equity session.
 LIMITS: dict[str, timedelta] = {
@@ -73,6 +82,81 @@ def board_status(items: list[Freshness]) -> str:
     if stale * 2 > len(items):
         return DEGRADED
     return STALE_BOARD
+
+
+@dataclass(frozen=True)
+class Baseline:
+    """Which held observation a source's stated prior value turned out to be."""
+
+    state: str
+    matched_at: datetime | None
+    latest_at: datetime | None
+    stated: float
+    latest_value: float | None
+    drift: float | None
+    note: str = ""
+
+
+def baseline_match(
+    stated: float,
+    observations: dict[datetime, float],
+    *,
+    tolerance: float = 0.005,
+) -> Baseline:
+    """Locate a source's stated prior value among the observations we hold.
+
+    ``observations`` maps the moment each reading was taken to its value. The
+    answer is CURRENT when the stated baseline is the latest reading we hold,
+    SUPERSEDED when it is an earlier one, and UNKNOWN when it is neither -- and
+    UNKNOWN is not a lesser result than SUPERSEDED, only a different one: a
+    baseline we cannot place is a baseline we cannot check.
+
+    ``drift`` is what the stated baseline misses by: the distance from the
+    latest held reading to the stated one, so a SUPERSEDED baseline carries the
+    exact amount of change the source's own figure steps over. It is signed
+    from the source's point of view -- positive when the source is measuring
+    from a higher value than the one we hold.
+
+    The tolerance is absolute and defaults to half a cent, because these are
+    currency amounts that should agree to the cent when they agree at all. A
+    baseline that matches only loosely has not been identified.
+    """
+    if tolerance < 0:
+        raise ValueError("tolerance must not be negative")
+    if not observations:
+        return Baseline(UNKNOWN, None, None, stated, None, None, "no observations held")
+    stamps = sorted(observations)
+    latest_at = stamps[-1]
+    latest_value = observations[latest_at]
+    # Latest first: when one value was read more than once, the most recent
+    # reading of it is the one the source is entitled to be measuring from.
+    matched_at = next(
+        (at for at in reversed(stamps) if abs(observations[at] - stated) <= tolerance),
+        None,
+    )
+    if matched_at is None:
+        return Baseline(
+            UNKNOWN,
+            None,
+            latest_at,
+            stated,
+            latest_value,
+            None,
+            "stated baseline matches no observation held for this venue",
+        )
+    drift = round(stated - latest_value, 10)
+    if matched_at == latest_at:
+        return Baseline(CURRENT, matched_at, latest_at, stated, latest_value, drift)
+    return Baseline(
+        SUPERSEDED,
+        matched_at,
+        latest_at,
+        stated,
+        latest_value,
+        drift,
+        f"stated baseline is the {matched_at.isoformat()} reading, "
+        f"superseded by {latest_at.isoformat()}",
+    )
 
 
 def banner(status: str, board: str, stamp: str) -> str:

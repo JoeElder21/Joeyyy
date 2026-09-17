@@ -9,7 +9,7 @@ All-encompassing overview and technical breakdown of this repository, written as
 | Head commit analysed | `1c7d395` — continuation scoring and the DefiLlama source policy, with `main` merged in after PRs #95, #98 and #99 |
 | Primary language | Python 3.11 / 3.12 (plus Node 18+ for the APS connector) |
 | Scale | 444 tracked files, ~111,200 lines of source, config, schema and docs |
-| Test suite | 1379 tests, 0 failures, 37 dependency-gated skips. PyYAML is required: without it the privacy guard fails closed, 13 test cases become uncollectable, and the run reports 53 skips, 6 failures and 1 error, by design |
+| Test suite | 1385 tests, 0 failures, 37 dependency-gated skips. PyYAML is required: without it the privacy guard fails closed, 13 test cases become uncollectable, and the run reports 53 skips, 6 failures and 1 error, by design |
 | Validation | `privacy_guard` PASS; `validate_specialist_corps` PASS (10 contract packets, 10 boundary rejections) |
 
 Every status claim below was read from the repository or produced by running its own tooling, not inferred from the README.
@@ -58,7 +58,7 @@ The repository systematically refuses to claim capability it cannot demonstrate.
 
 ### What exists today, in one paragraph
 
-A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 63-document architectural record, and 1379 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
+A complete, tested contract-and-enforcement layer with two runtime implementations on top of it (`runtime/` for stdlib-pure enforcement, `scripts/` for SDK integration), adapters written against ten major agent frameworks, one Node connector harness for Autodesk Platform Services, a 63-document architectural record, and 1385 passing tests. What does *not* exist: a live deployment. No agent has been promoted past shadow, no connector has been credentialed, no memory backend has been selected, and no real mission has been run.
 
 ---
 
@@ -93,7 +93,7 @@ This repository uses a dense, self-consistent vocabulary. These twelve terms are
 | `schemas/` | The seven canonical JSON Schemas. Single source of truth for packet structure; Pydantic models are generated from these at import time. | 7 |
 | `runtime/` | **Contract enforcement logic.** Stdlib-pure, CI-provable: lifecycle gates, cadence engine, writer-lease registry, mutation admission. Optional graph/queue/flow layers import lazily. | 10 |
 | `scripts/` | **SDK and service integration.** Governed dispatch bridges, PacketGuard, privacy guard, memory/evidence gateways, MCP server, observability, trusted launcher, validators. | 20 |
-| `tests/` | 60 unittest modules, 1379 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 60 |
+| `tests/` | 60 unittest modules, 1385 tests. Optional-dependency tests skip cleanly, but PyYAML is not optional: the guard fails closed without it, so the tests that assert a clean tree fail rather than skip. That is the intended reading of a missing parser. | 60 |
 | `docs/` | Architectural records: protocols, registries, absorption records, build-out guides, migration and reconciliation records, and the market-scan knowledge set. This is where *why* lives. | 64 |
 | `connectors/` | `aps/` — a Node 18+ harness running the Autodesk Platform Services validation gate, with a synthetic DXF test model and its generator. `bird/` — TypeScript `@messagebird/sdk` sample; key from `BIRD_API_KEY` only. | 7 |
 | `templates/` | Human-readable operating templates: agent intake, project intake, specialist handoff, daily brief, weekly agent audit. | 5 |
@@ -373,7 +373,7 @@ The lock file pins `autogen-agentchat==0.7.5` and `autogen-core==0.7.5`, while `
 
 ## 11. Testing and CI
 
-**1379 tests across 60 modules; 0 failures; 37 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent 13 test cases no longer import at all and the run reports 53 skips, 6 failures and 1 error — the guard refusing to certify a tree it could not fully read, plus the suite self-check correctly objecting that a short run does not match the published figure. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
+**1385 tests across 60 modules; 0 failures; 37 skipped** on Python 3.11 with `requirements.txt` installed. PyYAML is a hard requirement of the privacy gate, not a coverage nicety: with it absent 13 test cases no longer import at all and the run reports 53 skips, 6 failures and 1 error — the guard refusing to certify a tree it could not fully read, plus the suite self-check correctly objecting that a short run does not match the published figure. `tests/test_governance_docs.py` asserts the suite size against a live run, so a stale count fails the suite rather than being published as evidence.
 
 | Module | Tests | Coverage focus |
 | --- | --- | --- |
@@ -631,6 +631,6 @@ Agent 007's contract carries a standing instruction: *"Preserve the current reco
 
 ## Summary
 
-Joeyyy is a contract-first, enforcement-backed multi-agent governance system with two sealed data domains and eleven agents, of which one is active. Its distinguishing property is that it refuses to claim capability it cannot demonstrate — and it has 1379 tests, a privacy scanner, a fail-closed packet validator and a denial-first launcher to keep that refusal honest.
+Joeyyy is a contract-first, enforcement-backed multi-agent governance system with two sealed data domains and eleven agents, of which one is active. Its distinguishing property is that it refuses to claim capability it cannot demonstrate — and it has 1385 tests, a privacy scanner, a fail-closed packet validator and a denial-first launcher to keep that refusal honest.
 
 When working in it: read `AGENTS.md` and `docs/RECONCILIATION_2026-07-24.md` before touching code, keep enforcement in `runtime/` and integration in `scripts/`, move contract + docs + registry + tests as one unit, and never let a change make the system sound more capable than it is.
