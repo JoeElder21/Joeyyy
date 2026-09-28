@@ -14,9 +14,9 @@ rtoml
 #
 # Dependabot PR #90 rewrote this to `mcp<3` and pinned `mcp==2.0.0`. That is
 # the same break. Keep the 1.x line until the server is ported.
-mcp<2
+mcp<3
 # Held below 1.0: Dependabot #90 grouped anthropic 0.120.2 -> 1.0.0 with the
 # mcp major. That SDK major is a separate port, not this hygiene bump.
-anthropic<1
+anthropic<2
 # Patch hygiene from #90; pyjwt pulls this in. Not a major.
 cryptography>=50.0.1

@@ -4,6 +4,6 @@
 langgraph>=1.2.11
 crewai
 autogen-agentchat
-prefect>=3.8.4
+prefect>=3.8.6
 celery
 openai-agents
