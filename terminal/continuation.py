@@ -33,13 +33,17 @@ Two structural commitments:
   30d, and persistence the other way round. A name reading PULLBACK at 3d and
   CONTINUE at 30d is the model working, not contradicting itself.
 
-Missing data never helps, as everywhere else in this package, and the two
-sides enforce that differently. A missing PERSISTENCE input is dropped from
-the earned score while still counting against coverage, so the asset simply
-fails to earn it. A missing EXHAUSTION input is a missing risk reading, so it
-is charged the worst case (``MISSING_EXHAUST``) rather than dropped -- absence
-of evidence about risk is not evidence of safety. Either way a substituted
-zero or neutral midpoint is never accepted in place of a reading, and below
+Missing data never helps, as everywhere else in this package, and both sides
+enforce that the same way: an unmeasured term keeps its WEIGHT and earns or is
+charged the worst value for its side. A missing PERSISTENCE input earns
+nothing (``MISSING_PERSIST``); a missing EXHAUSTION input is charged the worst
+case (``MISSING_EXHAUST``), because absence of evidence about risk is not
+evidence of safety. What neither side does is shrink its divisor, and that is
+the load-bearing detail: averaging over only the terms that happened to be
+present lets a dropped below-average term RAISE the mean, which is how a gap
+comes to outscore a measurement. Both halves had that bug and both are fixed;
+``tests/test_continuation.py`` pins each direction. A substituted zero or
+neutral midpoint is never accepted in place of a reading, and below
 ``MIN_COVERAGE`` the score is withheld rather than reported thin.
 
 The one exception is a gap the caller has established is systemic rather than
@@ -72,13 +76,17 @@ MIN_COVERAGE = 0.60
 # readings, and ``terminal.ranking``'s rule for risk is that absence scores
 # worst rather than neutral -- so a gap can never flatter an asset.
 #
-# Persistence is averaged over the weights PRESENT; exhaustion is divided by
-# the full weight of every term still in play. That asymmetry is deliberate:
-# averaging exhaustion over present weights would let each additional
-# zero-valued term dilute the average and raise the score, so substituting
-# 0.0 for an unmeasured reading would mechanically pay. It is the precise
-# failure the feed-boundary rule exists to prevent.
+# Both sides divide by the full weight of every term still in play, never by
+# the weights that happened to be present. Averaging over present weights lets
+# a dropped term move the mean toward the survivors, which pays whenever the
+# dropped reading was the weak one -- the precise failure the feed-boundary
+# rule exists to prevent, and one that appeared here twice, once per side.
 MISSING_EXHAUST = 100.0
+
+# The persistence mirror of MISSING_EXHAUST. An unmeasured persistence term
+# earns nothing while still occupying its weight, so absence can never be
+# worth more than the weakest real reading.
+MISSING_PERSIST = 0.0
 
 # Verdict bands, applied to the ROUNDED score so that a published number and
 # the label beside it can never disagree.
@@ -266,33 +274,48 @@ def score(
     exhaust: list[tuple[str, float, float]] = []
     have = total = 0
 
-    total += 1
-    if f.align is not None:
-        have += 1
-        persist.append(("trend", {1: 100.0, 0: 55.0, -1: 0.0}[f.align], 1.0))
+    def earn(name: str, value: float | None, weight: float) -> None:
+        """Place one persistence term, or account for its absence.
 
-    total += 1
-    if f.range_pos is not None:
-        have += 1
-        # The upper range is where momentum regimes live -- but past ~0.95 the
-        # same reading is exhaustion, and it is charged there instead.
-        v = 100.0 * clamp((f.range_pos - 0.35) / 0.45, 0.0, 1.0) if f.range_pos <= 0.95 else 70.0
-        persist.append(("range", v, 0.8))
+        The mirror image of :func:`charge`, and for the same reason. A present
+        reading earns its value. An absent one earns ``MISSING_PERSIST`` --
+        nothing -- while KEEPING its weight in the divisor, so the asset fails
+        to earn those points instead of having them renormalised away.
 
-    total += 1
-    if f.flow is not None:
-        have += 1
-        persist.append(("flow", 100.0 * clamp((f.flow - 0.35) / 0.30, 0.0, 1.0), 1.1))
+        Averaging over only the terms that happened to be present is the
+        defect this replaces: it let a missing reading outscore a real weak
+        one, because dropping a below-average term from both numerator and
+        denominator raises the mean. A ``flow`` of 0.35 scored 51 at 7d while
+        no flow at all scored 61, which inverted the module's own contract.
+        """
+        nonlocal have, total
+        total += 1
+        if value is not None:
+            have += 1
+            persist.append((name, value, weight))
+        elif name not in systemic_gaps:
+            persist.append((name, MISSING_PERSIST, weight))
+        # A systemic gap is dropped: nothing earned, and no weight either.
 
-    total += 1
-    if f.day_pct is not None:
-        have += 1
-        persist.append(("today", 100.0 * clamp((f.day_pct + 2.0) / 4.0, 0.0, 1.0), 0.9))
-
-    total += 1
-    if f.rsi is not None:
-        have += 1
-        persist.append(("rsi", 100.0 * clamp((f.rsi - 40.0) / 30.0, 0.0, 1.0), 0.9))
+    earn("trend", None if f.align is None else {1: 100.0, 0: 55.0, -1: 0.0}[f.align], 1.0)
+    # The upper range is where momentum regimes live -- but past ~0.95 the
+    # same reading is exhaustion, and it is charged there instead.
+    earn(
+        "range",
+        None
+        if f.range_pos is None
+        else (
+            100.0 * clamp((f.range_pos - 0.35) / 0.45, 0.0, 1.0) if f.range_pos <= 0.95 else 70.0
+        ),
+        0.8,
+    )
+    earn("flow", None if f.flow is None else 100.0 * clamp((f.flow - 0.35) / 0.30, 0.0, 1.0), 1.1)
+    earn(
+        "today",
+        None if f.day_pct is None else 100.0 * clamp((f.day_pct + 2.0) / 4.0, 0.0, 1.0),
+        0.9,
+    )
+    earn("rsi", None if f.rsi is None else 100.0 * clamp((f.rsi - 40.0) / 30.0, 0.0, 1.0), 0.9)
 
     total += 1
     if f.stretch is not None:
@@ -345,12 +368,14 @@ def score(
     if not persist or coverage < MIN_COVERAGE:
         return Score(horizon, None, NO_SCORE, coverage, persist, exhaust)
 
-    pv = sum(v * w for _, v, w in persist) / sum(w for _, _, w in persist)
-    # Every non-systemic term carries weight here whether or not it was
-    # measured, so the divisor does not shrink when a reading is missing.
-    # Without that, each additional zero-valued term would dilute the average
-    # and raise the score -- making a substituted 0.0 strictly better than an
-    # honest gap.
+    # Both sides now divide by every non-systemic term's weight, present or
+    # not. The divisor must not shrink when a reading is missing: on the
+    # exhaustion side a shrinking divisor let each zero-valued term dilute the
+    # average and raise the score, and on the persistence side it let a
+    # dropped below-average term raise the mean. Same arithmetic, opposite
+    # signs, and both made missing data worth more than a measurement.
+    pw = sum(w for _, _, w in persist)
+    pv = (sum(v * w for _, v, w in persist) / pw) if pw else 0.0
     ew = sum(w for _, _, w in exhaust)
     ev = (sum(v * w for _, v, w in exhaust) / ew) if ew else 0.0
     raw = 50.0 + (PERSIST_WEIGHT[horizon] * (pv - 50.0) - EXHAUST_WEIGHT[horizon] * ev) / 2.0

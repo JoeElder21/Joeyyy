@@ -96,7 +96,8 @@ class Completed(unittest.TestCase):
         leaked = completed(open_stamped, now, start_of=lambda b: b["t"] - DAY_SECONDS)
         self.assertEqual(len(leaked), 3)
         self.assertIn(
-            WEDNESDAY, [b["t"] for b in leaked],
+            WEDNESDAY,
+            [b["t"] for b in leaked],
             "a mis-set start_of readmitted the forming bar",
         )
 
@@ -108,9 +109,9 @@ class Completed(unittest.TestCase):
 class UpVolumeShare(unittest.TestCase):
     def test_share_is_volume_weighted_not_bar_counted(self):
         bars = [
-            bar(MONDAY, 10.0, 11.0, 900.0),    # up, heavy
-            bar(TUESDAY, 11.0, 10.0, 50.0),    # down, light
-            bar(WEDNESDAY, 10.0, 9.0, 50.0),   # down, light
+            bar(MONDAY, 10.0, 11.0, 900.0),  # up, heavy
+            bar(TUESDAY, 11.0, 10.0, 50.0),  # down, light
+            bar(WEDNESDAY, 10.0, 9.0, 50.0),  # down, light
         ]
         # Two of three bars are down, but 90% of the volume traded up.
         self.assertAlmostEqual(up_volume_share(bars, 3), 0.90)
@@ -142,9 +143,9 @@ class ExhaustsTheClock(unittest.TestCase):
     """Why the module exists, asserted rather than described."""
 
     CLOSED = [
-        bar(MONDAY - 2 * DAY_SECONDS, 10.0, 9.0, 100.0),   # down
-        bar(MONDAY - DAY_SECONDS, 9.0, 8.0, 100.0),        # down
-        bar(MONDAY, 8.0, 7.0, 100.0),                      # down
+        bar(MONDAY - 2 * DAY_SECONDS, 10.0, 9.0, 100.0),  # down
+        bar(MONDAY - DAY_SECONDS, 9.0, 8.0, 100.0),  # down
+        bar(MONDAY, 8.0, 7.0, 100.0),  # down
     ]
 
     def test_a_forming_bar_can_flip_the_feature_it_feeds(self):
@@ -156,7 +157,8 @@ class ExhaustsTheClock(unittest.TestCase):
         self.assertAlmostEqual(up, 0.50)
         self.assertAlmostEqual(down, 0.0)
         self.assertGreater(
-            up - down, 0.40,
+            up - down,
+            0.40,
             "a forming bar moved the feature by more than 40 points on a "
             "one-cent difference that the session can still reverse",
         )
@@ -180,15 +182,15 @@ class ExhaustsTheClock(unittest.TestCase):
         }
         before = {k: up_volume_share(v, 2) for k, v in assets.items()}
         drifting_up = {
-            k: [*v, bar(TUESDAY, v[-1]["c"], v[-1]["c"] * 1.01, 100.0)]
-            for k, v in assets.items()
+            k: [*v, bar(TUESDAY, v[-1]["c"], v[-1]["c"] * 1.01, 100.0)] for k, v in assets.items()
         }
         after = {k: up_volume_share(v, 2) for k, v in drifting_up.items()}
         self.assertEqual(set(before.values()), {0.0})
         self.assertEqual(set(after.values()), {0.5})
         for name in assets:
             self.assertGreater(
-                after[name], before[name],
+                after[name],
+                before[name],
                 f"{name} was inflated by the forming bar, as was every other "
                 "asset -- a common-mode error, not noise that cancels",
             )

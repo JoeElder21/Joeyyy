@@ -297,6 +297,86 @@ also gated: the rebuild was required to reproduce the published numbers exactly
 with the forming bar left in before its output was trusted. A recomputation
 that cannot reproduce what it claims to be correcting is not a correction.
 
+### 8.2 The range that is not the range
+
+A 52-week high is an **intraday print**. Computing it as `max(closes)` — the
+only thing a close-only feed permits — names a different, always-smaller number
+the same thing, and a position measured inside that narrowed band always reads
+higher than the truth. Across 200 US equities the inflation had a median of
+**+0.70 percentage points**, which would be cosmetic anywhere else.
+
+It is not cosmetic here, because `continuation.py` charges a `topped` term that
+climbs from nothing to its maximum across the band from 0.95 to 1.00. A name
+whose close-based position reads 1.00 and whose real position is 0.9529 collects
+a charge of 100 against a true charge of 5.8. Three of 201 names crossed that
+threshold on the definition alone, and three of seven positions on a live
+holdings board fell a whole verdict band because of it — MIXED to PULLBACK RISK,
+published, on a measurement artefact.
+
+The rule, in both directions:
+
+* **Where a feed serves intraday high and low, use them.** `connectors/schwab/
+  indicators.trading_range` does, and falls back to a candle's close only for
+  the candles that lack detail, so a partial feed still yields the widest range
+  its own data supports. An incomplete bar's high and low are dropped with the
+  rest of it, per §8.1 — a forming bar's extremes are as partial as its close.
+* **Where a feed serves no intraday range at all, say so.** DefiLlama returns a
+  price series and nothing else, so a crypto board measured this way is using
+  the definition the equity board was corrected away from. The honest response
+  is to record it as a known asymmetry between boards, not to substitute a
+  number from somewhere else: the direction of the bias is knowable even where
+  its size is not, so the disclosure is specific rather than a general caveat.
+
+The general form is the one §8 already states. A feature is defined by what the
+feed can actually measure, and a definition silently swapped for the nearest
+available one is a measurement error wearing the right label.
+
+### 8.3 The baseline that is the wrong capture
+
+§8.1 and §8.2 are both about the *new* observation. This one is about the old
+one, and it is harder to see because nothing in the arriving data is wrong.
+
+A source that reports a change reports two numbers: the value now, and the value
+it changed from. The second is the one nobody checks. When a source is read more
+than once in a day — as a screenshot-fed venue routinely is — its own stated
+prior value can be a reading that has already been **superseded** by a later one
+this terminal holds. The arriving figures are then all individually correct, the
+change is internally consistent with them, and the comparison still steps
+straight over a capture.
+
+The case that produced this rule had an update state a prior value for **eight
+of eight venues**, and all eight matched an *earlier* same-day capture rather
+than the later one that had replaced it sixteen hours before. The stated
+portfolio change was two orders of magnitude smaller than the change against the
+marks actually held, and the largest single component of the difference was one
+venue's own published day change — a figure that had been reconciled, recorded
+and carried on the terminal for three days.
+
+Two properties made it invisible to every check that existed:
+
+* **Nothing is out of range.** A superseded baseline is a real reading. It fails
+  no bounds test, no type check, no reconciliation between the figures the
+  source itself supplies, because internally the source is consistent.
+* **The error is in the comparison, not the data.** Both endpoints can be
+  correct and the interval between them still be wrong, which is why freshness
+  grading of the arriving observation cannot catch it: the new reading was
+  perfectly fresh.
+
+The rule: **a stated baseline is an input and gets checked like one.** Before
+any change figure is reported, locate the stated prior value among the
+observations held for that venue and say which one it is.
+`terminal/freshness.baseline_match` returns `CURRENT`, `SUPERSEDED` or
+`UNKNOWN`, matching to the cent, and on `SUPERSEDED` it carries the drift — the
+exact amount of change the source's own figure steps over. `UNKNOWN` is a
+distinct answer and not a softer `SUPERSEDED`: a baseline that matches nothing
+held is one we cannot check at all, and saying so is the finding.
+
+On a mismatch the terminal keeps **its own later marks on both sides** and
+restates the change. The source's figure is not corrected in place and not
+discarded — it is reported beside the restated one with the reason, because a
+reader who has seen the source's number needs to know why this page shows a
+different one.
+
 ## 9. Continuation scoring: persistence against exhaustion
 
 `terminal/continuation.py` answers a question the composite in §2 does not:

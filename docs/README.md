@@ -94,6 +94,7 @@ Read in date order — each supersedes nothing, but later records assume earlier
 | [`TERMINAL_AUDIT.md`](TERMINAL_AUDIT.md) | Audit matrix of the live research terminal with VERIFIED / INFERRED / UNAVAILABLE labels and the findings that shaped the redesign |
 | [`TERMINAL_ARCHITECTURE.md`](TERMINAL_ARCHITECTURE.md) | Development workflow versus daily research workflow, the store's collections, identity, freshness, rankings, views |
 | [`TERMINAL_RUNBOOK.md`](TERMINAL_RUNBOOK.md) | Commands, the production run step by step, failure diagnosis order, republish rules, always-gated actions |
+| [`DAILY_BALANCE_REPORT.md`](DAILY_BALANCE_REPORT.md) | One-page daily balance report: generic generator and PDF renderer, sourcing rules (primary/secondary price check, no invented numbers), private ledger schema, scheduled-run procedure |
 | [`TERMINAL_MIGRATION.md`](TERMINAL_MIGRATION.md) | What the legacy migration does, what it refuses to invent, and the approval-gated cutover steps |
 | [`TERMINAL_HANDOFF.md`](TERMINAL_HANDOFF.md) | Milestone status by deliverable, state locations, test results, remaining tasks, next commands |
 | [`TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md`](TERMINAL_CRYPTO_RUBRIC_PROPOSAL.md) | The proposed crypto scorecard, awaiting approval |

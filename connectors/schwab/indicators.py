@@ -29,6 +29,34 @@ def volumes(candles: Sequence[Candle]) -> list[float]:
     return [float(c.get("volume") or 0.0) for c in candles]
 
 
+def trading_range(candles: Sequence[Candle]) -> tuple[float, float] | None:
+    """The real high and low of ``candles``: intraday extremes, not closes.
+
+    A 52-week high is an intraday print. Taking ``max(closes)`` instead names
+    a different number the same thing, and it is always the smaller one --
+    the true high is a price no close ever reached. The understatement looks
+    harmless until it meets a threshold: :func:`range_position` feeds score
+    bands, and a name whose close-based position reads 1.00 while its real
+    position is 0.95 gets treated as pinned at its high when it is not.
+
+    Falls back to closes only when a candle carries no high or low, and only
+    for the candles that are missing them, so a partially-detailed feed still
+    yields the widest range its data actually supports. Returns ``None``
+    rather than a degenerate band when nothing usable is present.
+    """
+    highs: list[float] = []
+    lows: list[float] = []
+    for candle in candles:
+        high, low, close = candle.get("high"), candle.get("low"), candle.get("close")
+        if high is None and low is None and close is None:
+            continue
+        highs.append(float(high if high is not None else close))
+        lows.append(float(low if low is not None else close))
+    if not highs or not lows:
+        return None
+    return min(lows), max(highs)
+
+
 def sma(values: Sequence[float], window: int) -> float | None:
     if window <= 0 or len(values) < window:
         return None
