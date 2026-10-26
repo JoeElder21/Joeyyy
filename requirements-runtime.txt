@@ -5,11 +5,11 @@
 # 1.15.18 (chromadb<1.2 → posthog<6, pydantic<2.13) in the same group as
 # mem0ai 2.0.19 (posthog>=7.14) and pydantic 2.13.5; `uv pip compile` of
 # runtime-full.txt rejects that pair. Those stay at the previous floors.
-langgraph>=1.2.11
-crewai>=0.80
-prefect>=3.8.4
-mem0ai>=2.0.14
-llama-index>=0.14.23
-langchain>=0.3
+langgraph>=1.2.16
+crewai>=1.15.28
+prefect>=3.8.8
+mem0ai>=2.2.1
+llama-index>=0.14.25
+langchain>=1.4.6
 jsonschema>=4.23
-pydantic>=2.13.4
+pydantic>=2.14.1
