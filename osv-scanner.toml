@@ -67,30 +67,6 @@ Surfaced 2026-08-30; affected through current 1.5.9 with no fixed version. Same
 position as GHSA-36p7-vc44-83pf; listed separately per advisory."""
 
 [[IgnoredVulns]]
-id = "PYSEC-2026-2132"
-ignoreUntil = 2026-09-30
-reason = """click 8.2.0, CVSS 7.2, fixed in 8.3.3. Genuinely blocked, and the
-blocker is now measured rather than assumed: guardrails-ai 0.10.2 — the
-current release, entering via requirements/runtime-guards.txt — declares
-click<=8.2.0, so no resolution of runtime-full.txt can carry a fixed click.
-Forcing click>=8.3.3 was tried on 2026-08-05, and the resolver satisfied it
-by retreating guardrails-ai to 0.1.8, which carries PYSEC-2026-206 (CVSS 9.6)
-and PYSEC-2026-347 (CVSS 9.8) with no fix available — strictly worse than the
-finding this entry acknowledges. The contracts and evaluation locks carry
-fixed click (8.4.2 / 8.3.3); the exposure is the workstation full stack only.
-Clears when guardrails-ai widens its click range; at expiry this becomes a
-manifest decision about the guards tier rather than a version bump.
-
-RE-CHECKED 2026-08-30 at expiry: the clearing condition has occurred --
-guardrails-ai 0.11.0 (current on PyPI) declares click<9.0.0. Clearing now
-means bumping guardrails-ai 0.10.2 -> 0.11.0 in its tier and re-resolving the
-full lock, a measured dependency change in the sense of abba0cf (the last
-click move was reverted because the cure measured worse), deliberately kept
-out of this expiry renewal. Renewed short so that bump lands as its own
-change rather than this entry quietly persisting past a fix that now
-exists."""
-
-[[IgnoredVulns]]
 id = "PYSEC-2026-2447"
 ignoreUntil = 2026-09-30
 reason = """diskcache 5.6.3, CVSS 5.2, no fix available upstream. Transitive via
